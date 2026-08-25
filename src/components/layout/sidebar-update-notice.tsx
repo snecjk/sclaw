@@ -72,6 +72,7 @@ function SyncIcon({ spinning = false, className }: { spinning?: boolean; classNa
     <span
       className={cn(
         'flex shrink-0 items-center justify-center rounded-[8px] bg-[#E7F3EB] text-[#1D2129]',
+        'dark:bg-emerald-400/15 dark:text-emerald-200',
         className,
       )}
       style={{ width: UPDATE_ICON_BOX_PX, height: UPDATE_ICON_BOX_PX }}
@@ -107,14 +108,14 @@ const updateSecondaryBtnClass = cn(
   'inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] px-3.5',
   'border border-[#E5E6EB] bg-white text-[12px] font-medium leading-none whitespace-nowrap text-[#1D2129]',
   'hover:bg-[#FAFBFC]',
-  'dark:border-[var(--sto-sidebar-border)] dark:bg-card dark:hover:bg-muted/40',
+  'dark:border-[var(--sto-sidebar-border)] dark:bg-white/[0.04] dark:text-foreground dark:hover:bg-white/[0.08]',
 );
 
 const updateViewBtnClass = cn(
   'inline-flex h-7 shrink-0 items-center justify-center rounded-[8px]',
   'border border-[#E5E6EB] bg-white px-3.5 text-[12px] font-medium leading-none whitespace-nowrap text-[#1D2129]',
   'hover:bg-[#FAFBFC]',
-  'dark:border-[var(--sto-sidebar-border)] dark:bg-card dark:hover:bg-muted/40',
+  'dark:border-[var(--sto-sidebar-border)] dark:bg-white/[0.04] dark:text-foreground dark:hover:bg-white/[0.08]',
 );
 
 export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
@@ -247,9 +248,9 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
             <div className="mt-2 flex items-center gap-1.5">
               <Progress
                 value={percent}
-                className="h-[5px] min-h-[5px] flex-1 overflow-hidden rounded-full bg-[#F0F2F5] [&>div]:rounded-full [&>div]:bg-[#00B54B]"
+                className="h-[5px] min-h-[5px] flex-1 overflow-hidden rounded-full bg-[#F0F2F5] dark:bg-white/10 [&>div]:rounded-full [&>div]:bg-[#00B54B] dark:[&>div]:bg-emerald-400"
               />
-              <span className="w-9 shrink-0 text-right text-[12px] font-normal tabular-nums leading-[17px] text-[#86909C]">
+              <span className="w-9 shrink-0 text-right text-[12px] font-normal tabular-nums leading-[17px] text-[#86909C] dark:text-muted-foreground">
                 {percent}%
               </span>
             </div>
@@ -293,7 +294,7 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="mx-auto flex items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-[#E7F3EB] shadow-sm dark:bg-[#E7F3EB]"
+                  className="mx-auto flex items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-[#E7F3EB] shadow-sm dark:bg-emerald-400/15 dark:text-emerald-200"
                   style={{ width: UPDATE_ICON_BOX_PX, height: UPDATE_ICON_BOX_PX }}
                   aria-label={previewCollapsedLabel}
                   onClick={() => {
@@ -354,7 +355,7 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
               <button
                 type="button"
                 onClick={() => setModalOpen(true)}
-                className="mx-auto flex items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-[#E7F3EB] shadow-sm dark:bg-[#E7F3EB]"
+                className="mx-auto flex items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-[#E7F3EB] shadow-sm dark:bg-emerald-400/15 dark:text-emerald-200"
                 style={{ width: UPDATE_ICON_BOX_PX, height: UPDATE_ICON_BOX_PX }}
                 aria-label={collapsedLabel}
               >

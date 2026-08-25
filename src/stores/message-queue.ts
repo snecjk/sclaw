@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { useChatStore } from './chat';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { getAgentIdFromSessionKey } from './chat/session-identity';
@@ -27,6 +28,10 @@ export interface QueuedMessage {
   dingTalkMentions?: DingTalkMention[];
   workflowId?: string | null;
   skillMeta?: SkillMeta;
+  skillMetas?: SkillMeta[];
+  workflows?: Array<{ id: string; name: string; source?: string }>;
+  composerSegments?: PersistedComposerSegment[];
+  gatewayText?: string;
   queuedAt: number;
 }
 
@@ -36,7 +41,21 @@ interface SessionQueue {
 
 interface MessageQueueState {
   queues: Map<string, SessionQueue>; // keyed by sessionKey
-  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: DingTalkMention[], workflowId?: string | null, skillMeta?: SkillMeta) => void;
+  enqueue: (
+    sessionKey: string,
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
+    workflowId?: string | null,
+    skillMeta?: SkillMeta,
+    extras?: {
+      skillMetas?: SkillMeta[];
+      workflows?: Array<{ id: string; name: string; source?: string }>;
+      composerSegments?: PersistedComposerSegment[];
+      gatewayText?: string;
+    },
+  ) => void;
   remove: (sessionKey: string, id: string) => void;
   updateText: (sessionKey: string, id: string, text: string) => void;
   takeById: (sessionKey: string, id: string) => QueuedMessage | null;
@@ -59,7 +78,7 @@ function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
-  enqueue: (sessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId, skillMeta) => {
+  enqueue: (sessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId, skillMeta, extras) => {
     const { queues } = get();
     const session = getOrCreateSessionQueue(queues, sessionKey);
     if (session.queue.length >= QUEUE_MAX_PER_SESSION) return;
@@ -71,6 +90,10 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       dingTalkMentions,
       workflowId,
       skillMeta,
+      skillMetas: extras?.skillMetas,
+      workflows: extras?.workflows,
+      composerSegments: extras?.composerSegments,
+      gatewayText: extras?.gatewayText,
       queuedAt: Date.now(),
     };
     // Immutable update: new array + new session object so `getQueue` selectors
@@ -288,12 +311,17 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
             await chatState.sendMessage({
               text: textToSend,
               sessionKey,
+              gatewayText: msg.gatewayText,
               attachments: mapQueuedAttachments(msg.attachments),
               targetAgentId: msg.targetAgentId,
               dingTalkMentions: msg.dingTalkMentions,
               workflowId: wfId ?? undefined,
               runId: runId ?? undefined,
               workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
+              skillMeta: msg.skillMeta,
+              skillMetas: msg.skillMetas,
+              workflows: msg.workflows,
+              composerSegments: msg.composerSegments,
             });
           },
         ),
@@ -304,10 +332,14 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
         void chatState.sendMessage({
           text: msg.text,
           sessionKey,
+          gatewayText: msg.gatewayText,
           attachments: mapQueuedAttachments(msg.attachments),
           targetAgentId: msg.targetAgentId,
           dingTalkMentions: msg.dingTalkMentions,
           skillMeta: msg.skillMeta,
+          skillMetas: msg.skillMetas,
+          workflows: msg.workflows,
+          composerSegments: msg.composerSegments,
         });
       });
     return;
@@ -316,11 +348,15 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
   void chatState.sendMessage({
     text: msg.text,
     sessionKey,
+    gatewayText: msg.gatewayText,
     attachments: mapQueuedAttachments(msg.attachments),
     targetAgentId: msg.targetAgentId,
     dingTalkMentions: msg.dingTalkMentions,
     workflowId: msg.workflowId,
     skillMeta: msg.skillMeta,
+    skillMetas: msg.skillMetas,
+    workflows: msg.workflows,
+    composerSegments: msg.composerSegments,
   });
 }
 

@@ -20,7 +20,8 @@ const SESSION_ID_PARAM = Type.Optional(
 const BRIDGE_SYSTEM_PROMPT = [
 	"浏览器桥接工具（bridge_*，重要）：",
 	"- **应用广场内嵌预览（左侧 webview）**：必须用 bridge_*，且每次调用传 sessionId（embed-<runtimeId>）。禁止 browser / shell:openExternal。",
-	"- 流程：bridge_snapshot({ sessionId }) → bridge_click({ sessionId, name: \"菜单名\" }) 或 bridge_click({ sessionId, ref: \"@e5\" })。",
+	"- **简单点击/打开**：直接 bridge_click({ sessionId, name: \"菜单名\" })，返回 url 与 navigated；无需先 snapshot，无需 ba_wait。",
+	"- 需要定位 ref 时：bridge_snapshot({ sessionId }) → bridge_click({ sessionId, ref: \"@e5\" })。",
 	"- **外部 Chrome 已登录标签**：可用 bridge_*（无需 sessionId，自动选扩展会话）；需安装 StoClaw Browser Bridge 扩展。",
 	"- 无登录态爬取、自动化测试 → 使用原生 browser 工具（托管浏览器），不要用 bridge_*。",
 	"- 仅打开链接给用户看（非操作页面）→ shell:openExternal。",
@@ -60,7 +61,7 @@ export default definePluginEntry({
 			resultType: "browser_click",
 			label: "点击页面元素",
 			description:
-				"点击页面元素。ref 来自 bridge_snapshot；也可用 name 按可见文案匹配（如「客户管理」）。内嵌预览须传 sessionId。",
+				"点击页面元素。可直接传 name 按可见文案匹配；ref 来自 bridge_snapshot。返回 url/navigated。内嵌预览须传 sessionId。",
 			parameters: Type.Object({
 				sessionId: SESSION_ID_PARAM,
 				ref: Type.Optional(Type.String({ description: "元素 ref，如 @e5" })),
@@ -79,7 +80,7 @@ export default definePluginEntry({
 			domain: "browser-bridge",
 			resultType: "browser_fill",
 			label: "填写表单字段",
-			description: "在输入框中填写内容。ref 来自 bridge_snapshot；内嵌预览须传 sessionId。",
+			description: "在输入框中填写内容（CDP 真实输入 + 填后校验）。ref 来自 bridge_snapshot；内嵌预览须传 sessionId。失败时返回 error。",
 			parameters: Type.Object({
 				sessionId: SESSION_ID_PARAM,
 				ref: Type.Optional(Type.String({ description: "元素 ref，如 @e3" })),

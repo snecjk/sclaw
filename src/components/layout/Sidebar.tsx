@@ -7,7 +7,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Wrench,
-  Clock,
   Settings as SettingsIcon,
   ChevronRight,
   Bookmark,
@@ -17,13 +16,14 @@ import {
   Bot,
   Radio,
   ChevronDown,
-  Workflow,
   Check,
   LayoutGrid,
   Database,
+  BookOpen,
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
+import { SidebarTimerIcon } from '@/components/layout/sidebar-timer-icon';
 
 import {
   DropdownMenu,
@@ -46,12 +46,14 @@ import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { useChatRuntimeIndicators } from '@/stores/chat/runtime-selectors';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAuthStore, isSiteUser } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
+import { SidebarMobileConnectTooltip } from '@/components/layout/SidebarMobileConnectTooltip';
+import { AccountSwitchMenuItems } from '@/components/layout/AccountSwitchMenuItems';
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
@@ -97,6 +99,7 @@ import {
 } from '@/lib/task-group-first-trigger-delete';
 import { resolveTaskGroupKeyFromSessionKey, stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
+import { useCronStore } from '@/stores/cron';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import {
   type SidebarSubitemDeletePayload,
@@ -115,6 +118,7 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
+import { pageLearningDomains } from '@/lib/learning-center-api';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -187,12 +191,6 @@ const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
 const SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT = 8;
 /** 旧版按日期分桶渲染（today/yesterday/…）— 保留逻辑，UI 已合并为「最近」单列表 */
 const USE_LEGACY_SESSION_DATE_BUCKETS = false;
-const DATA_CENTER_DEFAULT_SECTION = 'qa_artifact';
-const DATA_CENTER_SECTIONS = [
-  { id: 'qa_artifact', labelKey: 'dataCenterPage.sections.qaArtifact' },
-  { id: 'drive', labelKey: 'dataCenterPage.sections.drive' },
-] as const;
-
 /** 侧栏收起态：展开按钮 */
 const SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card';
@@ -202,7 +200,7 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
-  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
+  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0';
 /**
  * 任务二级子项容器 — 与项目二级水平对齐：
  * 层级竖线 25px（滚动区 8 + ml 17）；选中背景起点 32px（17 + 1px 边框 + pl-1.5）；
@@ -663,8 +661,8 @@ function SidebarNavLink({
           'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-sm font-normal leading-5',
           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
           isActive
-            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
-            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
+            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
+            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:text-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
       : cn(
           'shrink-0 gap-[10px] text-[13px] leading-5',
@@ -721,10 +719,47 @@ export function Sidebar() {
   const isGatewayRunning = gatewayStatus.state === 'running';
 
   const authUser = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLogout = useAuthStore((s) => s.logout);
-  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
-  const isSite =
-    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
+  const learningCenterAccountKey = isAuthenticated && authUser
+    ? [authUser.userName, authUser.companyCode, authUser.departmentCode, authUser.categoryCode].join('\u0000')
+    : null;
+  const [learningCenterAccess, setLearningCenterAccess] = useState({
+    accountKey: null as string | null,
+    visible: false,
+  });
+  const learningCenterVisible = learningCenterAccountKey !== null
+    && learningCenterAccess.accountKey === learningCenterAccountKey
+    && learningCenterAccess.visible;
+
+  useEffect(() => {
+    let active = true;
+
+    if (!learningCenterAccountKey) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void pageLearningDomains({ pageNum: 1, pageSize: 1 })
+      .then((page) => {
+        if (active) {
+          setLearningCenterAccess({
+            accountKey: learningCenterAccountKey,
+            visible: page.items.length > 0,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLearningCenterAccess({ accountKey: learningCenterAccountKey, visible: false });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [learningCenterAccountKey]);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -753,7 +788,11 @@ export function Sidebar() {
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [taskListShowAll, setTaskListShowAll] = useState(false);
   const [taskGroupFirstTriggeredAt, setTaskGroupFirstTriggeredAt] = useState<Record<string, number>>({});
-  const scheduledTaskNameMaps = useScheduledTaskNameMaps(!sidebarCollapsed, sessions.length);
+  const nameMapsRefreshKey = useCronStore((s) => s.nameMapsRefreshKey);
+  const scheduledTaskNameMaps = useScheduledTaskNameMaps(
+    !sidebarCollapsed,
+    sessions.length + nameMapsRefreshKey,
+  );
   const stoEntriesByTask = useStoTaskSubitemsStore((s) => s.entriesByTask);
   const stoSessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   /** 任务组多开：Record 与项目同构；模块收起不清空 */
@@ -761,7 +800,6 @@ export function Sidebar() {
   const [recentOpen, setRecentOpen] = useState(true);
   const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
-  const [dataCenterSectionOpen, setDataCenterSectionOpen] = useState(false);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
     yesterday: true,
@@ -1009,6 +1047,7 @@ export function Sidebar() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportQrOpen, setSupportQrOpen] = useState(false);
+  const [mobileConnectOpen, setMobileConnectOpen] = useState(false);
 
   const catalogByKey = allCatalogByKey;
 
@@ -1680,20 +1719,24 @@ export function Sidebar() {
       badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
-      { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
-      { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
+      {
+        to: '/my-tasks',
+        icon: <SidebarTimerIcon />,
+        label: t('common:sidebar.myTasks'),
+      },
+      // 工作流列表已并入「我的任务」一级 Tab；编辑路由仍为 /workflow/*
       { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
       { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
+      { to: '/learning-center', icon: <BookOpen className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.learningCenter') },
     ];
     return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
       primaryMyData: sidebarVis.primaryMyData,
-      siteDepartmentTypesLoaded: siteDepartmentTypes !== null,
-      isSite,
+      learningCenterVisible,
       isProduction: getCurrentEnvConfig().isProduction,
     }));
-  }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
+  }, [learningCenterVisible, sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -1785,56 +1828,11 @@ export function Sidebar() {
       }
     : undefined;
   
-  const dataCenterSection = new URLSearchParams(location.search).get('section') || DATA_CENTER_DEFAULT_SECTION;
-  const isDataCenterItem = item.to === '/data-center';
-  const itemActiveOverride = isDataCenterItem
-    ? false
-    : homeIsActiveOverride;
-
-  if (isDataCenterItem && !sidebarCollapsed) {
-    return (
-      <div key={item.to} className="min-w-0">
-        <button
-          type="button"
-          aria-expanded={dataCenterSectionOpen}
-          onClick={() => setDataCenterSectionOpen((open) => !open)}
-          className={cn(
-            'relative flex w-full shrink-0 items-center justify-start gap-[10px] text-left text-[13px] leading-5 transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
-            sidebarNavExpandedIdleClass,
-          )}
-        >
-          <span className="flex shrink-0 items-center justify-center">{item.icon}</span>
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-          <ChevronDown
-            className={cn(
-              'h-3.5 w-3.5 text-muted-foreground transition-transform',
-              !dataCenterSectionOpen && '-rotate-90',
-            )}
-          />
-        </button>
-        {dataCenterSectionOpen ? (
-          <div className="ml-[17px] mt-0.5 flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border">
-            {DATA_CENTER_SECTIONS.map((section) => {
-              const active = location.pathname === '/data-center' && dataCenterSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => navigate(`/data-center?section=${section.id}`)}
-                  className={cn(
-                    'relative inline-flex h-8 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
-                    active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate">{t(`common:${section.labelKey}`)}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
+  const myTasksActiveOverride =
+    item.to === '/my-tasks' && location.pathname.startsWith('/workflow')
+      ? true
+      : undefined;
+  const itemActiveOverride = myTasksActiveOverride ?? homeIsActiveOverride;
 
   return (
     <div key={item.to} className="min-w-0">
@@ -1847,13 +1845,7 @@ export function Sidebar() {
         onClick={
           item.to === '/'
             ? () => handleHomeClick?.()
-            : isDataCenterItem
-              ? (e) => {
-                  e.preventDefault();
-                  setSidebarCollapsed(false);
-                  setDataCenterSectionOpen(true);
-                }
-              : undefined
+            : undefined
         }
         isActiveOverride={itemActiveOverride}
         badge={item.badge}
@@ -2172,12 +2164,13 @@ export function Sidebar() {
               setAccountMenuOpen(open);
               if (open) {
                 setSupportQrOpen(false);
+                setMobileConnectOpen(false);
               }
             }}
           >
             {accountFooterMode === 'expanded-hotzone' ? (
               <div className="flex w-full min-w-0 items-center gap-3">
-                {/* 展开态：整块账号信息为菜单热区，无齿轮；问号独立（MasterGo 39:35844） */}
+                {/* 展开态：整块账号信息为菜单热区，无齿轮；PC/手机联通与问号独立 */}
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
@@ -2188,8 +2181,14 @@ export function Sidebar() {
                         ? t('common:status.connected')
                         : t('common:status.disconnected')
                     }
-                    onPointerEnter={() => setSupportQrOpen(false)}
-                    onPointerDown={() => setSupportQrOpen(false)}
+                    onPointerEnter={() => {
+                      setSupportQrOpen(false);
+                      setMobileConnectOpen(false);
+                    }}
+                    onPointerDown={() => {
+                      setSupportQrOpen(false);
+                      setMobileConnectOpen(false);
+                    }}
                   >
                     <span className={sidebarFooterNameClass}>
                       {authUser.realName?.trim() || authUser.userName}
@@ -2201,12 +2200,24 @@ export function Sidebar() {
                     ) : null}
                   </button>
                 </DropdownMenuTrigger>
+                <SidebarMobileConnectTooltip
+                  className={sidebarAccountHelpTriggerClass}
+                  open={mobileConnectOpen}
+                  onOpenChange={(open) => {
+                    setMobileConnectOpen(open);
+                    if (open) {
+                      setSupportQrOpen(false);
+                      setAccountMenuOpen(false);
+                    }
+                  }}
+                />
                 <SidebarSupportQrTooltip
                   className={sidebarAccountHelpTriggerClass}
                   open={supportQrOpen}
                   onOpenChange={(open) => {
                     setSupportQrOpen(open);
                     if (open) {
+                      setMobileConnectOpen(false);
                       setAccountMenuOpen(false);
                     }
                   }}
@@ -2225,8 +2236,14 @@ export function Sidebar() {
                           SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS,
                         ),
                   )}
-                  onPointerEnter={() => setSupportQrOpen(false)}
-                  onPointerDown={() => setSupportQrOpen(false)}
+                  onPointerEnter={() => {
+                    setSupportQrOpen(false);
+                    setMobileConnectOpen(false);
+                  }}
+                  onPointerDown={() => {
+                    setSupportQrOpen(false);
+                    setMobileConnectOpen(false);
+                  }}
                   title={
                     accountFooterMode === 'collapsed-avatar'
                       ? isGatewayRunning
@@ -2349,6 +2366,19 @@ export function Sidebar() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
+              <DropdownMenuItem
+                onClick={() => navigate('/settings/models')}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+              >
+                {t('common:sidebar.tokenBalance')}
+              </DropdownMenuItem>
+
+              <AccountSwitchMenuItems
+                itemClassName={SIDEBAR_ACCOUNT_MENU_ITEM_CLASS}
+                itemHoverClassName={SIDEBAR_ACCOUNT_MENU_ITEM_HOVER}
+                subContentClassName={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}
+              />
+
               <div className={SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS} aria-hidden="true" />
 
               <DropdownMenuItem
@@ -2360,15 +2390,28 @@ export function Sidebar() {
             </DropdownMenuContent>
           </DropdownMenu>
           {accountFooterMode !== 'expanded-hotzone' ? (
-            <SidebarSupportQrTooltip
-              open={supportQrOpen}
-              onOpenChange={(open) => {
-                setSupportQrOpen(open);
-                if (open) {
-                  setAccountMenuOpen(false);
-                }
-              }}
-            />
+            <>
+              <SidebarMobileConnectTooltip
+                open={mobileConnectOpen}
+                onOpenChange={(open) => {
+                  setMobileConnectOpen(open);
+                  if (open) {
+                    setSupportQrOpen(false);
+                    setAccountMenuOpen(false);
+                  }
+                }}
+              />
+              <SidebarSupportQrTooltip
+                open={supportQrOpen}
+                onOpenChange={(open) => {
+                  setSupportQrOpen(open);
+                  if (open) {
+                    setMobileConnectOpen(false);
+                    setAccountMenuOpen(false);
+                  }
+                }}
+              />
+            </>
           ) : null}
           </div>
         </div>

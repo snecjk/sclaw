@@ -3,9 +3,12 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRightLeft,
+  CheckCircle2,
   Database,
   FilePenLine,
   GitBranch,
+  Globe,
+  Hand,
   Save,
   Send,
   ShieldCheck,
@@ -25,7 +28,8 @@ export type NodeTemplateAccent =
   | 'condition'
   | 'approval'
   | 'action'
-  | 'output';
+  | 'output'
+  | 'browser';
 
 export type NodeTemplate = {
   type: string;
@@ -47,6 +51,9 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
   { type: 'agent_output', label: '智能结果输出', icon: Save, accent: 'agent', summary: '让云端 Agent 生成最终结果、摘要或报告产物。' },
   { type: 'condition', label: '按结果分流', icon: GitBranch, accent: 'condition', summary: '根据上一步结果决定接下来往哪一步走。' },
   { type: 'human_approval', label: '人工审核', icon: ShieldCheck, accent: 'approval', summary: '在关键步骤暂停，等待人工确认后继续。' },
+  { type: 'browser_task', label: '浏览器任务', icon: Globe, accent: 'browser', summary: '在应用内浏览器中自动完成多步页面操作。' },
+  { type: 'browser_validate', label: '浏览器校验', icon: CheckCircle2, accent: 'browser', summary: '确定性检查页面 URL、标题或元素文本。' },
+  { type: 'browser_human_gate', label: '浏览器人工确认', icon: Hand, accent: 'browser', summary: '浏览器操作暂停，等待人工处理验证码或确认提交。' },
   { type: 'action', label: '执行动作', icon: Send, accent: 'action', summary: '对外部系统执行一个确定性动作。' },
   { type: 'output', label: '保存结果', icon: Save, accent: 'output', summary: '把流程结果保存、导出或归档。' },
 ];
@@ -56,6 +63,8 @@ export const BASIC_NODE_TEMPLATES = NODE_TEMPLATES.filter((t) =>
 );
 
 export const SMART_NODE_TEMPLATES = NODE_TEMPLATES.filter((t) => t.type.startsWith('agent_'));
+
+export const BROWSER_NODE_TEMPLATES = NODE_TEMPLATES.filter((t) => t.type.startsWith('browser_'));
 
 export const AGENT_OUTPUT_TEMPLATES = [
   { id: 'generic_data_result', label: '通用数据结果' },

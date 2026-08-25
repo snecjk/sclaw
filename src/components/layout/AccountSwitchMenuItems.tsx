@@ -1,0 +1,115 @@
+/**
+ * 侧栏账号下拉内的「切换网点账号 / 切回总部账号」菜单项。
+ * 可见性与切换逻辑与原 AccountSwitchFab 一致。
+ */
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Check, ChevronRight } from 'lucide-react';
+import {
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth';
+
+type AccountSwitchMenuItemsProps = {
+  itemClassName: string;
+  itemHoverClassName: string;
+  subContentClassName: string;
+};
+
+export function AccountSwitchMenuItems({
+  itemClassName,
+  itemHoverClassName,
+  subContentClassName,
+}: AccountSwitchMenuItemsProps) {
+  const { t } = useTranslation('auth');
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const impersonationOrigin = useAuthStore((s) => s.impersonationOrigin);
+  const accountSwitchOptions = useAuthStore((s) => s.accountSwitchOptions);
+  const accountSwitchOptionsStatus = useAuthStore((s) => s.accountSwitchOptionsStatus);
+  const loadAccountSwitchOptions = useAuthStore((s) => s.loadAccountSwitchOptions);
+  const switchToAccount = useAuthStore((s) => s.switchToAccount);
+  const switchBackToOrigin = useAuthStore((s) => s.switchBackToOrigin);
+  const [switching, setSwitching] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated && !user) return;
+    if (impersonationOrigin) return;
+    if (accountSwitchOptionsStatus === 'idle') {
+      void loadAccountSwitchOptions();
+    }
+  }, [
+    isAuthenticated,
+    user,
+    impersonationOrigin,
+    accountSwitchOptionsStatus,
+    loadAccountSwitchOptions,
+  ]);
+
+  const showSwitchBack = impersonationOrigin != null;
+  const showSwitchMenu =
+    !showSwitchBack
+    && accountSwitchOptionsStatus === 'loaded'
+    && accountSwitchOptions.length > 0;
+
+  if (!showSwitchBack && !showSwitchMenu) {
+    return null;
+  }
+
+  if (showSwitchBack) {
+    return (
+      <DropdownMenuItem
+        disabled={switching}
+        onClick={() => {
+          setSwitching(true);
+          void switchBackToOrigin()
+            .catch(() => {})
+            .finally(() => setSwitching(false));
+        }}
+        className={cn(itemClassName, itemHoverClassName)}
+      >
+        {switching ? t('accountSwitch.switching') : t('accountSwitch.backToHq')}
+      </DropdownMenuItem>
+    );
+  }
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger
+        disabled={switching}
+        className={cn(itemClassName, itemHoverClassName, 'gap-2')}
+      >
+        <span className="flex-1 truncate">
+          {switching ? t('accountSwitch.switching') : t('accountSwitch.menu')}
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent sideOffset={4} className={subContentClassName}>
+        {accountSwitchOptions.map((option) => (
+          <DropdownMenuItem
+            key={option.code}
+            disabled={switching || user?.code === option.code}
+            onClick={() => {
+              setSwitching(true);
+              void switchToAccount(option.code)
+                .catch(() => {})
+                .finally(() => setSwitching(false));
+            }}
+            className={cn(itemClassName, itemHoverClassName, 'gap-2')}
+          >
+            {user?.code === option.code ? (
+              <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
+            ) : (
+              <span className="w-3.5 shrink-0" />
+            )}
+            <span className="truncate">{option.label || option.code}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}

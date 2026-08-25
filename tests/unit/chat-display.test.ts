@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildChatDisplayItems,
   buildTurnStableKey,
+  collectTurnAssistantSources,
   isRedundantThinking,
   mergeWorkflowCardsIntoDisplayItems,
   mergeThinkingTimelines,
@@ -294,6 +295,55 @@ describe('buildTurnStableKey', () => {
     expect(resolveActiveTurnStableKey([user, snapshot])).toBe('turn-user-user-weather-1');
     expect(resolveActiveTurnStableKey([user, snapshot, finalReply])).toBe('turn-user-user-weather-1');
     expect(buildTurnStableKey(user, 1)).toBe('turn-user-user-weather-1');
+  });
+});
+
+describe('collectTurnAssistantSources', () => {
+  it('keeps live assistant messages that have not reached persisted history yet', () => {
+    const user = { id: 'user-1', role: 'user' as const, content: '生成报告' };
+    const persisted = {
+      id: 'assistant-history-1',
+      role: 'assistant' as const,
+      content: [{ type: 'text', text: '开始获取数据。' }],
+    };
+    const committedLive = {
+      id: 'assistant-live-2',
+      role: 'assistant' as const,
+      content: [{ type: 'text', text: '数据已获取，开始生成报告。' }],
+    };
+    const partialTool = {
+      id: 'run-1',
+      role: 'assistant' as const,
+      content: [{
+        type: 'tool_use',
+        id: 'tool-write-1',
+        name: 'Write',
+        input: '{"file_path":"report.html","content":"partial',
+      }],
+    };
+    const latestTool = {
+      ...partialTool,
+      content: [{
+        type: 'tool_use',
+        id: 'tool-write-1',
+        name: 'Write',
+        input: '{"file_path":"report.html","content":"partial content growing',
+      }],
+    };
+
+    const sources = collectTurnAssistantSources(
+      [user, persisted],
+      [persisted, committedLive, partialTool],
+      user,
+      latestTool,
+    );
+
+    expect(sources.map((message) => message.id)).toEqual([
+      'assistant-history-1',
+      'assistant-live-2',
+      'run-1',
+    ]);
+    expect(sources[2]?.content).toEqual(latestTool.content);
   });
 });
 

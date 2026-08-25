@@ -46,7 +46,10 @@
   --ma-shadow-panel: 0 2px 16px rgba(15, 23, 42, 0.04);
   --ma-shadow-dialog: 0 24px 48px rgba(15, 23, 42, 0.16);
   --ma-shadow-card: 0 4px 14px rgba(15, 23, 42, 0.06);
-  --ma-shadow-card-hover: 0 10px 24px rgba(15, 23, 42, 0.08);
+  --ma-shadow-card-hover: 0 0 16px 0 rgba(0, 0, 0, 0.12);
+  /* 与首页推荐卡 hover 一致 */
+  --ma-list-card-hover-border: #c9cdd4;
+  --ma-list-card-hover-shadow: 0 0 16px 0 rgba(0, 0, 0, 0.12);
   --ma-icon-btn: #94a3b8;
   --ma-icon-btn-hover: #475569;
   --ma-icon-btn-hover-bg: rgba(15, 23, 42, 0.06);
@@ -127,6 +130,7 @@
   --ma-add-button-fill: rgba(255, 255, 255, 0.08);
   --ma-add-button-fill-hover: rgba(255, 255, 255, 0.12);
   --ma-shadow-panel: 0 6px 20px rgba(0, 0, 0, 0.24);
+  --ma-list-card-hover-border: hsl(var(--border));
 }
 
 /* ── Hero header ── */
@@ -868,9 +872,8 @@
 }
 
 .page-more-apps .app-market__row:hover {
-  background: var(--ma-card-hover);
-  border-color: color-mix(in srgb, var(--ma-focus) 28%, var(--ma-card-border));
-  box-shadow: var(--ma-shadow-panel);
+  border-color: var(--ma-list-card-hover-border);
+  box-shadow: var(--ma-list-card-hover-shadow);
 }
 
 .page-more-apps .app-market__row:focus-visible {
@@ -1138,12 +1141,12 @@
   border-radius: 14px;
   background: var(--ma-featured-card-bg);
   box-shadow: var(--ma-shadow-card);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .page-more-apps .app-plaza-featured__card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--ma-shadow-card-hover);
+  border-color: var(--ma-list-card-hover-border);
+  box-shadow: var(--ma-list-card-hover-shadow);
 }
 
 .page-more-apps .app-plaza-featured__body {
@@ -1251,8 +1254,8 @@
 }
 
 .page-more-apps .more-apps-card:hover {
-  border-color: var(--ma-border-strong);
-  box-shadow: var(--ma-shadow-panel);
+  border-color: var(--ma-list-card-hover-border);
+  box-shadow: var(--ma-list-card-hover-shadow);
 }
 
 .page-more-apps .more-apps-card__top {
@@ -1678,7 +1681,9 @@
   --ma-shadow-panel: 0 2px 16px rgba(0, 0, 0, 0.28);
   --ma-shadow-dialog: 0 24px 48px rgba(0, 0, 0, 0.45);
   --ma-shadow-card: 0 4px 14px rgba(0, 0, 0, 0.28);
-  --ma-shadow-card-hover: 0 10px 24px rgba(0, 0, 0, 0.36);
+  --ma-shadow-card-hover: 0 0 16px 0 rgba(0, 0, 0, 0.12);
+  --ma-list-card-hover-border: hsl(var(--border));
+  --ma-list-card-hover-shadow: 0 0 16px 0 rgba(0, 0, 0, 0.12);
   --ma-icon-btn: #9aa5b8;
   --ma-icon-btn-hover: #e5e6eb;
   --ma-icon-btn-hover-bg: rgba(255, 255, 255, 0.06);

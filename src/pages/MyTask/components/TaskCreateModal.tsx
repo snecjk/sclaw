@@ -1,39 +1,51 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, ChevronDown, Check, Sparkles, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
+import { X, Loader2, ChevronDown, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { AiBeautifyButton } from '@/components/ai-beautify/AiBeautifyButton';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import {
   scheduleValueToCron,
-  cronToScheduleValue,
+  tryCronToScheduleValue,
   defaultScheduleValue,
+  validateScheduleMonthDays,
+  validateScheduleTimes,
 } from '../lib/schedule-utils';
-import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
-import { useMyTaskStore } from '../store';
-import { cn } from '@/lib/utils';
-import {
-  dropdownOptionClass,
-  dropdownPanelClass,
-  formFieldFocusClass,
-  formFieldHoverBorderClass,
-  formFieldOpenClass,
-  invertedPrimarySurfaceClass,
-  modalPrimarySubmitButtonClass,
-} from '@/lib/surfaces';
 import {
   stripInstructionFromTaskMessage,
   resolveScheduledTaskMentions,
 } from '@/lib/scheduled-task-recipients';
+import { useMyTaskStore } from '../store';
+import { cn } from '@/lib/utils';
+import {
+  formFieldFocusClass,
+  invertedPrimarySurfaceClass,
+  modalPrimarySubmitButtonClass,
+  taskCreateFormControlClass,
+  taskCreateFormLabelClass,
+} from '@/lib/surfaces';
 import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
 import type { ManagedLocalTask } from '@/stores/cron';
-import { hostApiFetch } from '@/lib/host-api';
 import { createDataCenterFolder, deleteDataCenterEntry, getDataCenterEntry, getDataCenterSpaces, listDataCenterEntries, renameDataCenterEntry } from '@/lib/data-center-api';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
+import { IconCheckbox } from '@/components/icon-checkbox';
+import { TaskInstructionComposer, type TaskComposerSnapshot, type TaskInstructionComposerHandle } from './TaskInstructionComposer';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
+import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
+import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
+import { extractDingTalkMentionsFromComposerSegments } from '../../../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
+import {
+  composerSegmentsHaveBogusSkills,
+  composerSegmentsLookNlStacked,
+  isPlausibleSkillLabel,
+  reconstructComposerSegmentsFromPrompt,
+} from '../../../../shared/scheduled-task-composer-segments';
+import { unescapeLiteralNewlines } from '../../../../shared/text-escape';
 
 type TaskEngineType = 'openclaw' | 'claude';
 
@@ -41,6 +53,9 @@ export type TaskCreateInputWithRun = CronJobCreateInput & {
   engineType: TaskEngineType;
   claudeWorkspacePath?: string;
   claudePermissionProfile?: ClaudeTaskPermissionProfile;
+  /** @deprecated extra 真源；保存时不再写 skill_code 列 */
+  skillCode?: string | null;
+  extra?: Record<string, unknown> | null;
 };
 
 interface TaskCreateModalProps {
@@ -48,14 +63,15 @@ interface TaskCreateModalProps {
   open: boolean;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
-  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string };
+  /** workflowCode：从工作流页入口打开时，seed 为 composer workflow token（不再用表单下拉） */
+  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string };
 }
 
 interface TaskCreateModalInnerProps {
   job?: ManagedLocalTask | null;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
-  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string };
+  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string };
 }
 
 function buildWorkflowInstructions(workflowCode: string, label?: string, t?: (key: string, options?: Record<string, unknown>) => string): string {
@@ -69,20 +85,136 @@ function buildWorkflowInstructions(workflowCode: string, label?: string, t?: (ke
     : `帮我执行 id 为：${workflowCode} 的工作流`;
 }
 
+function seedWorkflowSegment(
+  workflowCode: string | undefined,
+  workflowName?: string,
+): PersistedComposerSegment[] | null {
+  const id = workflowCode?.trim();
+  if (!id) return null;
+  return [{
+    type: 'workflow',
+    id,
+    name: workflowName?.trim() || id,
+    source: 'mine',
+  }];
+}
+
 function computeInitialValues(
   job: ManagedLocalTask | null | undefined,
-  initialValues: { name?: string; message?: string; schedule?: string; workflowCode?: string } | undefined
+  initialValues: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string } | undefined,
+  workflowLabelResolver?: (code: string) => string | undefined,
 ) {
 
   if (job) {
+    const fromExtra = extractDingTalkMentionsFromComposerSegments(job.extra);
+    const fromPrompt = resolveScheduledTaskMentions(job.prompt || '');
+    const recipients = fromExtra?.length
+      ? fromExtra
+      : fromPrompt.length > 0
+        ? fromPrompt
+        : (job.dingtalkRecipients ?? []);
+    const composerSegments = Array.isArray(job.extra?.composerSegments)
+      ? (job.extra!.composerSegments as PersistedComposerSegment[])
+      : null;
+    const composerAttachments = Array.isArray(job.extra?.composerAttachments)
+      ? (job.extra!.composerAttachments as Array<{
+        fileName?: string;
+        mimeType?: string;
+        persistentPath?: string;
+        provenance?: unknown;
+      }>)
+      : [];
+    // 用持久路径补齐 file segment，便于编辑回填附件 token
+    let enrichedSegments = composerSegments;
+    if (composerSegments && composerAttachments.length > 0) {
+      let fileIdx = 0;
+      enrichedSegments = composerSegments.map((seg) => {
+        if (seg.type !== 'file') return seg;
+        const att = composerAttachments[fileIdx];
+        fileIdx += 1;
+        if (!att?.persistentPath) return seg;
+        return {
+          ...seg,
+          fileName: att.fileName || seg.fileName,
+          mimeType: att.mimeType || seg.mimeType,
+          filePath: att.persistentPath,
+          stagedPath: att.persistentPath,
+          provenance: (att.provenance as typeof seg.provenance) ?? seg.provenance,
+        };
+      });
+    }
+    // 历史：列有 workflow_code 但 segments 无 → 编辑时补进 composer（迁移脚本也会做）
+    if (job.workflowCode?.trim()) {
+      const code = job.workflowCode.trim();
+      const hasWf = (enrichedSegments ?? []).some(
+        (seg) => seg.type === 'workflow' && seg.id === code,
+      );
+      if (!hasWf) {
+        enrichedSegments = [
+          ...(enrichedSegments ?? []),
+          {
+            type: 'workflow',
+            id: code,
+            name: workflowLabelResolver?.(code) || code,
+            source: 'mine',
+          },
+        ];
+      }
+    }
+    const createdViaNl = (job.extra as { createdVia?: string } | null | undefined)?.createdVia === 'nl';
+    // 存量 NL：分堆 segments，或含假 skill chip（调度说明误包）→ 按 prompt 重建交错顺序
+    if (
+      createdViaNl
+      && job.prompt?.trim()
+      && (
+        composerSegmentsLookNlStacked(enrichedSegments)
+        || composerSegmentsHaveBogusSkills(enrichedSegments)
+      )
+    ) {
+      const segs = enrichedSegments ?? [];
+      const attachments = segs
+        .filter((s): s is Extract<PersistedComposerSegment, { type: 'file' }> => s.type === 'file')
+        .map((s) => ({
+          fileName: s.fileName,
+          mimeType: s.mimeType || 'application/octet-stream',
+          sourcePath: s.filePath || s.stagedPath || '',
+          persistentPath: s.filePath || s.stagedPath || '',
+          provenance: s.provenance,
+        }));
+      const skills = segs
+        .filter((s): s is Extract<PersistedComposerSegment, { type: 'skill' }> => s.type === 'skill')
+        .map((s) => ({ slug: s.slug, title: s.title }))
+        .filter((s) => isPlausibleSkillLabel(s.title || s.slug));
+      const mentions = segs
+        .filter((s): s is Extract<PersistedComposerSegment, { type: 'mention' }> => s.type === 'mention')
+        .map((s) => s.mention);
+      const wfSeg = segs.find(
+        (s): s is Extract<PersistedComposerSegment, { type: 'workflow' }> => s.type === 'workflow',
+      );
+      enrichedSegments = reconstructComposerSegmentsFromPrompt({
+        prompt: unescapeLiteralNewlines(job.prompt),
+        attachments,
+        skills,
+        mentions: mentions.length > 0 ? mentions : recipients,
+        workflowCode: wfSeg?.id || job.workflowCode,
+        workflowName: wfSeg?.name || workflowLabelResolver?.(job.workflowCode || '') || job.workflowCode,
+      }) as PersistedComposerSegment[];
+    }
+    const rawInstructions = stripInstructionFromTaskMessage(job.prompt || '', enrichedSegments);
+    // C-4：NL 创建的存量任务 prompt 可能含字面 `\n`（C-2 之前入库），读取时显示侧
+    // 归一化（幂等，不回写；用户保存时自然固化）。UI 创建任务不误转。
+    const instructions = createdViaNl ? unescapeLiteralNewlines(rawInstructions) : rawInstructions;
+    const decoded = tryCronToScheduleValue(job.cronExpr);
     return {
       name: job.name || '',
-      instructions: stripInstructionFromTaskMessage(job.prompt || ''),
-      schedule: cronToScheduleValue(job.cronExpr),
-      recipients: job.dingtalkRecipients ?? resolveScheduledTaskMentions(job.prompt || ''),
+      instructions,
+      schedule: decoded ?? defaultScheduleValue(),
+      scheduleLocked: decoded === null,
+      originalCronExpr: typeof job.cronExpr === 'string' ? job.cronExpr : null,
+      recipients,
+      composerSegments: enrichedSegments,
       engineType: job.engineType,
-      selectedWorkflow: job.workflowCode || '',
-      saveToDataCenter: !!(job.myArtifactFolderPath || job.sharedArtifactFolderPath),
+      createdViaNl,
       saveToMyArtifact: !!job.myArtifactFolderPath,
       saveToSharedArtifact: !!job.sharedArtifactFolderPath,
       myArtifactFolderPath: job.myArtifactFolderPath,
@@ -91,16 +223,35 @@ function computeInitialValues(
   }
 
   if (initialValues) {
+    const seededWorkflow = seedWorkflowSegment(
+      initialValues.workflowCode,
+      initialValues.workflowName
+        || (initialValues.workflowCode
+          ? workflowLabelResolver?.(initialValues.workflowCode)
+          : undefined),
+    );
+    const instructions = initialValues.message
+      || (initialValues.workflowCode
+        ? buildWorkflowInstructions(
+          initialValues.workflowCode,
+          initialValues.workflowName
+            || workflowLabelResolver?.(initialValues.workflowCode),
+        )
+        : '');
+    const decoded = initialValues.schedule
+      ? tryCronToScheduleValue(initialValues.schedule)
+      : defaultScheduleValue();
+    const scheduleLocked = Boolean(initialValues.schedule) && decoded === null;
     return {
       name: initialValues.name || '',
-      instructions: initialValues.message || '',
-      schedule: initialValues.schedule
-        ? cronToScheduleValue(initialValues.schedule)
-        : defaultScheduleValue(),
+      instructions,
+      schedule: decoded ?? defaultScheduleValue(),
+      scheduleLocked,
+      originalCronExpr: scheduleLocked ? initialValues.schedule ?? null : null,
       recipients: [] as DingTalkMention[],
+      composerSegments: seededWorkflow,
       engineType: 'claude' as TaskEngineType,
-      selectedWorkflow: initialValues.workflowCode || '',
-      saveToDataCenter: false,
+      createdViaNl: false,
       saveToMyArtifact: false,
       saveToSharedArtifact: false,
       myArtifactFolderPath: null,
@@ -112,10 +263,12 @@ function computeInitialValues(
     name: '',
     instructions: '',
     schedule: defaultScheduleValue(),
+    scheduleLocked: false,
+    originalCronExpr: null as string | null,
     recipients: [] as DingTalkMention[],
+    composerSegments: null as PersistedComposerSegment[] | null,
     engineType: 'claude' as TaskEngineType,
-    selectedWorkflow: '',
-    saveToDataCenter: false,
+    createdViaNl: false,
     saveToMyArtifact: false,
     saveToSharedArtifact: false,
     myArtifactFolderPath: null,
@@ -213,7 +366,7 @@ function FolderPickerDialog({
   const [parentEntryId, setParentEntryId] = useState(initialParentEntryId || 'root');
   const [folders, setFolders] = useState<DataCenterEntry[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<Array<{ entryId: string; name: string }>>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -226,16 +379,21 @@ function FolderPickerDialog({
   const [deletingFolder, setDeletingFolder] = useState<DataCenterEntry | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setParentEntryId(initialParentEntryId || 'root');
-  }, [open, initialParentEntryId]);
+  const navigateTo = (entryId: string) => {
+    setParentEntryId(entryId);
+    setLoading(true);
+    setError(null);
+  };
+
+  const reload = () => {
+    setLoading(true);
+    setError(null);
+    setRefreshKey((key) => key + 1);
+  };
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     listDataCenterEntries({
       spaceType,
       spaceId: spaceId || undefined,
@@ -276,7 +434,7 @@ function FolderPickerDialog({
       });
       setNewFolderName('');
       setCreatingFolder(false);
-      setRefreshKey((key) => key + 1);
+      reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '新建文件夹失败');
     } finally {
@@ -308,7 +466,7 @@ function FolderPickerDialog({
       await renameDataCenterEntry(renamingFolder.entryId, name);
       setRenamingFolder(null);
       setRenameName('');
-      setRefreshKey((key) => key + 1);
+      reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '重命名失败');
     } finally {
@@ -322,7 +480,7 @@ function FolderPickerDialog({
     try {
       await deleteDataCenterEntry(deletingFolder.entryId);
       setDeletingFolder(null);
-      setRefreshKey((key) => key + 1);
+      reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '删除失败');
     } finally {
@@ -362,7 +520,7 @@ function FolderPickerDialog({
           <button
             type="button"
             disabled={!canGoBack}
-            onClick={() => setParentEntryId(parentBreadcrumb?.entryId || 'root')}
+            onClick={() => navigateTo(parentBreadcrumb?.entryId || 'root')}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-45"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -370,7 +528,7 @@ function FolderPickerDialog({
           </button>
           <button
             type="button"
-            onClick={() => setParentEntryId('root')}
+            onClick={() => navigateTo('root')}
             className="h-8 rounded-lg px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             根目录
@@ -393,7 +551,7 @@ function FolderPickerDialog({
                 <button
                   key={folder.entryId}
                   type="button"
-                  onClick={() => setParentEntryId(folder.entryId)}
+                  onClick={() => navigateTo(folder.entryId)}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setContextMenu({ folder, x: event.clientX, y: event.clientY });
@@ -646,28 +804,23 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     fetchWorkflows().catch(() => {});
   }, [fetchWorkflows]);
 
-  const init = computeInitialValues(job, initialValues);
-
-  // 预选工作流但未带 instructions 时，按 dropdown 选中分支同源逻辑补模板文本，
-  // 避免 workflowDisabled 锁死空指令框导致校验失败。
-  const correctedInstructions =
-    init.selectedWorkflow && !init.instructions
-      ? buildWorkflowInstructions(
-          init.selectedWorkflow,
-          workflowOptions.find((o) => o.value === init.selectedWorkflow)?.label,
-          t,
-        )
-      : init.instructions;
+  const init = computeInitialValues(job, initialValues, (code) =>
+    workflowOptions.find((o) => o.value === code)?.label,
+  );
 
   const [name, setName] = useState(init.name);
-  const [instructions, setInstructions] = useState(correctedInstructions);
+  const [instructions, setInstructions] = useState(init.instructions);
   const [schedule, setSchedule] = useState<ScheduleValue>(init.schedule);
+  const scheduleLocked = init.scheduleLocked;
+  const originalCronExpr = init.originalCronExpr;
   const [saving, setSaving] = useState(false);
-  const [beautifying, setBeautifying] = useState(false);
-  const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
-  const [errors, setErrors] = useState<{ name?: string; instructions?: string; dataCenterTarget?: string }>({});
+  const [instructionMentions] = useState<DingTalkMention[]>(init.recipients);
+  const composerSnapshotRef = useRef<TaskComposerSnapshot | null>(null);
+  const instructionComposerRef = useRef<TaskInstructionComposerHandle>(null);
+  const initialComposerSegments = init.composerSegments;
+  const initialCreatedViaNl = init.createdViaNl;
+  const [errors, setErrors] = useState<{ name?: string; instructions?: string; schedule?: string }>({});
   const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
-  const [saveToDataCenter, setSaveToDataCenter] = useState(init.saveToDataCenter);
   const [saveToMyArtifact, setSaveToMyArtifact] = useState(init.saveToMyArtifact);
   const [saveToSharedArtifact, setSaveToSharedArtifact] = useState(init.saveToSharedArtifact);
   const [myArtifactFolderPath, setMyArtifactFolderPath] = useState<string | null>(init.myArtifactFolderPath);
@@ -689,12 +842,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     spaceId?: string | null;
     initialParentEntryId: string;
   }>(null);
-
-  const [workflowOpen, setWorkflowOpen] = useState(false);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string>(init.selectedWorkflow);
-  const workflowRef = useRef<HTMLDivElement>(null);
-
-  const workflowDisabled = !!selectedWorkflow;
 
   useEffect(() => {
     let cancelled = false;
@@ -718,7 +865,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   }, [myArtifactFolderPath, sharedArtifactFolderPath]);
 
   useEffect(() => {
-    if (!isSite || !saveToDataCenter || !saveToSharedArtifact) return;
+    if (!isSite || !saveToSharedArtifact) return;
     let cancelled = false;
     getDataCenterSpaces()
       .then((result) => {
@@ -738,85 +885,32 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     return () => {
       cancelled = true;
     };
-  }, [isSite, saveToDataCenter, saveToSharedArtifact, sharedArtifactFolderPath]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (workflowRef.current && !workflowRef.current.contains(e.target as Node)) {
-        setWorkflowOpen(false);
-      }
-    }
-    if (workflowOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [workflowOpen]);
+  }, [isSite, saveToSharedArtifact, sharedArtifactFolderPath]);
 
   const isEditing = !!job;
-
-  const handleBeautify = async () => {
-    const trimmed = instructions.trim();
-    if (!trimmed) {
-      setErrors((prev) => ({ ...prev, instructions: t('myTask.createModal.instructionsRequired') }));
-      return;
-    }
-
-    const selectedWorkflowOption = selectedWorkflow
-      ? workflowOptions.find((option) => option.value === selectedWorkflow)
-      : undefined;
-
-    setBeautifying(true);
-    try {
-      const result = await hostApiFetch<{
-        instruction: string;
-        changed: boolean;
-        source: 'model' | 'rules-fallback';
-        model?: string;
-      }>('/api/scheduled-tasks/beautify-instruction', {
-        method: 'POST',
-        body: JSON.stringify({
-          instruction: trimmed,
-          type: 'task',
-          workflowId: selectedWorkflow || undefined,
-          workflowName: selectedWorkflowOption?.label,
-        }),
-      });
-
-      setInstructions(result.instruction);
-      if (errors.instructions) {
-        setErrors((prev) => ({ ...prev, instructions: undefined }));
-      }
-
-      if (!result.changed) {
-        toast.info(t('myTask.createModal.beautifyNoChange'));
-        return;
-      }
-
-      if (result.source === 'rules-fallback') {
-        toast.warning(t('myTask.createModal.beautifyFallback'));
-        return;
-      }
-
-      toast.success(
-        result.model
-          ? t('myTask.createModal.beautifySuccessWithModel', { model: result.model })
-          : t('myTask.createModal.beautifySuccess'),
-      );
-    } catch (err) {
-      toast.error(String(err) || t('myTask.createModal.beautifyFailed'));
-    } finally {
-      setBeautifying(false);
-    }
-  };
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
     if (!name.trim()) newErrors.name = t('myTask.createModal.nameRequired');
-    if (!instructions.trim()) newErrors.instructions = t('myTask.createModal.instructionsRequired');
-    const shouldSaveToSharedArtifact = isSite && saveToSharedArtifact;
-    if (saveToDataCenter && !saveToMyArtifact && !shouldSaveToSharedArtifact) {
-      newErrors.dataCenterTarget = '请选择至少一个数据中心保存位置';
+    const snapshot = composerSnapshotRef.current;
+    const hasComposerContent = Boolean(
+      instructions.trim()
+      || (snapshot?.skills?.length ?? 0) > 0
+      || (snapshot?.workflows?.length ?? 0) > 0
+      || (snapshot?.attachments?.length ?? 0) > 0
+      || (snapshot?.mentions?.length ?? 0) > 0,
+    );
+    if (!hasComposerContent) newErrors.instructions = t('myTask.createModal.instructionsRequired');
+    if (!scheduleLocked) {
+      const timesError = validateScheduleTimes(schedule.times);
+      if (timesError === 'empty') newErrors.schedule = t('myTask.schedule.timesRequired');
+      if (schedule.frequency === 'monthly' && validateScheduleMonthDays(schedule) === 'empty') {
+        newErrors.schedule = t('myTask.schedule.monthDaysRequired');
+      }
+    } else if (!originalCronExpr?.trim()) {
+      newErrors.schedule = t('myTask.schedule.tooComplexToEdit');
     }
+    const shouldSaveToSharedArtifact = isSite && saveToSharedArtifact;
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -824,20 +918,47 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
     setSaving(true);
     try {
+      const readyAttachments = (snapshot?.attachments ?? []).filter((a) => a.status === 'ready');
+      const payload = await buildComposerGatewayPayload({
+        segments: snapshot?.segments ?? [],
+        plainText: snapshot?.plainText ?? instructions,
+        attachments: readyAttachments,
+        resolveSkillPrompt,
+      });
+
+      const composerAttachments = readyAttachments.map((att) => ({
+        id: att.id,
+        fileName: att.fileName,
+        mimeType: att.mimeType,
+        sourcePath: att.stagedPath,
+        provenance: att.provenance,
+      }));
+
       await onSave({
         name: name.trim(),
-        message: instructions.trim(),
-        schedule: scheduleValueToCron(schedule),
+        message: payload.gatewayText.trim() || instructions.trim(),
+        schedule: scheduleLocked && originalCronExpr
+          ? originalCronExpr
+          : scheduleValueToCron(schedule),
         enabled: true,
-        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
-        workflowCode: selectedWorkflow || undefined,
+        dingTalkMentions: payload.persistedSegments
+          .filter((seg): seg is Extract<PersistedComposerSegment, { type: 'mention' }> => seg.type === 'mention')
+          .map((seg) => seg.mention),
+        // extra 真源：不写 skill_code / workflow_code 列
+        skillCode: null,
+        workflowCode: undefined,
+        extra: {
+          ...(job?.extra && typeof job.extra === 'object' ? job.extra : {}),
+          composerSegments: payload.persistedSegments,
+          composerAttachments,
+        },
         engineType,
         claudeWorkspacePath: undefined,
         claudePermissionProfile: engineType === 'claude' ? 'dangerous-bypass' : undefined,
-        myArtifactFolderPath: saveToDataCenter && saveToMyArtifact
+        myArtifactFolderPath: saveToMyArtifact
           ? myArtifactFolderPath || buildDataCenterTargetUri('qa_artifact', null)
           : null,
-        sharedArtifactFolderPath: saveToDataCenter && shouldSaveToSharedArtifact
+        sharedArtifactFolderPath: shouldSaveToSharedArtifact
           ? sharedArtifactFolderPath || (selectedSharedSpaceId ? buildDataCenterTargetUri('site_shared_artifact', selectedSharedSpaceId) : null)
           : null,
       });
@@ -855,15 +976,13 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   return (
     <motion.div
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
-      onClick={onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
     >
       <motion.div
-        className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
-        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[min(728px,100%)] bg-[#FFFFFF] rounded-[18px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -888,9 +1007,9 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </button>
         </div>
 
-        <div className="px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
+        <div className="sto-hide-scrollbar px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.nameLabel')}</label>
+            <label className={taskCreateFormLabelClass}>{t('myTask.createModal.nameLabel')}</label>
             <input
               type="text"
               value={name}
@@ -899,286 +1018,201 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                 setName(e.target.value);
                 if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
               }}
-              disabled={isEditing}
               placeholder={t('myTask.createModal.namePlaceholder')}
               className={cn(
-                'h-[42px] w-full rounded-[10px] border bg-background px-3.5 text-sm transition-colors placeholder:text-muted-foreground',
+                taskCreateFormControlClass,
+                'placeholder:text-muted-foreground',
                 formFieldFocusClass,
-                isEditing ? 'border-border text-muted-foreground cursor-not-allowed opacity-70' : '',
-                errors.name ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
+                errors.name && 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]',
               )}
               autoComplete="off"
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
-          {/* 执行引擎已固定为 Claude，暂时隐藏选择器 */}
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.engineLabel')}</label>
+            <label className={taskCreateFormLabelClass}>{t('myTask.createModal.engineLabel')}</label>
             <select
               value={engineType}
-              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
               disabled={isEditing}
+              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
               className={cn(
-                'h-[42px] w-full rounded-[10px] border border-border bg-background px-3.5 text-sm transition-colors',
+                taskCreateFormControlClass,
                 formFieldFocusClass,
-                isEditing ? 'border-border text-muted-foreground cursor-not-allowed opacity-70' : 'border-border',
+                isEditing && 'cursor-not-allowed opacity-60',
               )}
             >
               <option value="openclaw">OpenClaw</option>
               <option value="claude">Claude Agent</option>
             </select>
-            <p className="text-[11.5px] text-muted-foreground">
-              {isEditing
-                ? t('myTask.createModal.engineEditHint')
-                : engineType === 'claude'
-                  ? t('myTask.createModal.engineClaudeHint')
-                  : t('myTask.createModal.engineOpenclawHint')}
-            </p>
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.workflowLabel')}</label>
-            <div className="relative w-full" ref={workflowRef}>
-              <button
-                type="button"
-                onClick={() => setWorkflowOpen(!workflowOpen)}
-                className={cn(
-                  'flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5 rounded-[10px] border bg-background px-3.5 pr-2.5 text-sm font-medium outline-none transition-colors',
-                  workflowOpen ? formFieldOpenClass : cn('border-border', formFieldHoverBorderClass),
-                )}
-              >
-                <span
-                  className={cn(
-                    'truncate',
-                    !selectedWorkflow && 'text-muted-foreground font-normal'
-                  )}
-                >
-                  {selectedWorkflow
-                    ? workflowOptions.find((o) => o.value === selectedWorkflow)?.label
-                    : t('myTask.createModal.workflowPlaceholder')}
-                </span>
-                <ChevronDown
-                  className={cn(
-                    'h-3 w-3 shrink-0 text-muted-foreground transition-transform',
-                    workflowOpen && 'rotate-180'
-                  )}
-                />
-              </button>
-              {workflowOpen && (
-                <div className="absolute top-[calc(100%+6px)] left-0 z-20 w-full min-w-[140px]">
-                  <div className={cn('flex max-h-[280px] flex-col gap-0.5 overflow-y-auto rounded-xl p-1.5', dropdownPanelClass)}>
-                    {workflowOptions.length === 0 && (
-                      <div className="px-2.5 py-3 text-sm text-muted-foreground text-center">
-                        {t('myTask.createModal.workflowEmpty')}
-                      </div>
-                    )}
-                    {workflowOptions.map((opt) => {
-                      const isSelected = selectedWorkflow === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            if (isSelected) {
-                              setSelectedWorkflow('');
-                              setInstructions('');
-                            } else {
-                              setSelectedWorkflow(opt.value);
-                              setInstructions(buildWorkflowInstructions(opt.value, opt.label, t));
-                            }
-                            setWorkflowOpen(false);
-                          }}
-                          className={cn(
-                            'flex w-full min-h-9 items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
-                            dropdownOptionClass(isSelected),
-                          )}
-                        >
-                          <span>{opt.label}</span>
-                          <Check className={cn('h-4 w-4 shrink-0 text-primary', isSelected ? 'opacity-100' : 'opacity-0')} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">
-              {t('myTask.createModal.instructionsLabel')}
-            </label>
-            <div className="relative">
-              <textarea
+            <div className="flex items-center justify-between gap-3">
+              <label className={taskCreateFormLabelClass}>
+                {t('myTask.createModal.instructionsLabel')}
+              </label>
+              <AiBeautifyButton
+                type="task"
                 value={instructions}
-                onChange={(e) => {
-                  setInstructions(e.target.value);
+                disabled={saving}
+                className="shrink-0"
+                hasStructuredChips={() =>
+                  (composerSnapshotRef.current?.segments ?? []).some(
+                    (seg) => seg.type === 'file' || seg.type === 'skill' || seg.type === 'workflow',
+                  )
+                }
+                resolveWorkflow={() => {
+                  const wf = composerSnapshotRef.current?.workflows[0];
+                  return { workflowId: wf?.id, workflowName: wf?.name };
+                }}
+                onBeautified={(next) => {
+                  if (instructionComposerRef.current) {
+                    instructionComposerRef.current.applyBeautifiedText(next);
+                  } else {
+                    setInstructions(next);
+                  }
                   if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
                 }}
-                rows={8}
-                disabled={workflowDisabled}
-                placeholder={t('myTask.createModal.instructionsPlaceholder')}
-                className={cn(
-                  'w-full resize-none rounded-[10px] border bg-background px-3.5 pt-2.5 pb-11 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground',
-                  formFieldFocusClass,
-                  errors.instructions ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
-                  workflowDisabled && 'cursor-not-allowed bg-muted opacity-70',
-                )}
+                onEmpty={() => {
+                  setErrors((p) => ({ ...p, instructions: t('myTask.createModal.instructionsRequired') }));
+                }}
               />
-              <button
-                type="button"
-                onClick={() => { void handleBeautify(); }}
-                disabled={workflowDisabled || !instructions.trim() || beautifying}
-                className={cn(
-                  'absolute bottom-2.5 right-2.5 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium transition-colors',
-                  'border border-[#FFD7A3] bg-[#FFF5E6] text-[#C2410C]',
-                  'hover:bg-[#FFEDD5] hover:border-[#FFC17A]',
-                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#FFF5E6]',
-                )}
-                aria-label={t('myTask.createModal.beautifyAria')}
-              >
-                {beautifying ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                )}
-                {beautifying
-                  ? t('myTask.createModal.beautifying')
-                  : t('myTask.createModal.beautifyButton')}
-              </button>
             </div>
+            <TaskInstructionComposer
+              ref={instructionComposerRef}
+              value={instructions}
+              initialMentions={instructionMentions}
+              initialSegments={initialComposerSegments}
+              createdViaNl={initialCreatedViaNl}
+              onChange={(text) => {
+                setInstructions(text);
+                if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
+              }}
+              onSnapshotChange={(snapshot: TaskComposerSnapshot) => {
+                // 只写 ref：勿 setState（mentions 每帧新数组引用会与下方 emitSnapshot effect 死循环）
+                composerSnapshotRef.current = snapshot;
+              }}
+              invalid={Boolean(errors.instructions)}
+              placeholder={t('myTask.createModal.instructionsPlaceholder')}
+              enableAttachments
+              enableSkill
+              enableWorkflow
+              enableQuickInput
+              enableDingTalkMention
+            />
             {errors.instructions && <p className="text-xs text-destructive">{errors.instructions}</p>}
-            {workflowDisabled ? (
-              <p className="text-xs text-muted-foreground">{t('myTask.createModal.workflowAutoHint')}</p>
-            ) : null}
           </div>
 
           <div className="flex flex-col gap-2">
-            <span className="block text-sm font-semibold text-foreground">{t('myTask.createModal.scheduleLabel')}</span>
-            <SchedulePicker value={schedule} onChange={setSchedule} />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.recipientsLabel')}</label>
-            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
-          </div>
-
-          <div
-            className={cn(
-              'flex flex-col gap-3 rounded-[10px] border bg-muted/20 p-3',
-              errors.dataCenterTarget
-                ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]'
-                : 'border-border',
-            )}
-          >
-            <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <input
-                type="checkbox"
-                checked={saveToDataCenter}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setSaveToDataCenter(checked);
-                  if (!checked) {
-                    setSaveToMyArtifact(false);
-                    setSaveToSharedArtifact(false);
-                    setMyArtifactFolderPath(null);
-                    setSharedArtifactFolderPath(null);
-                    if (errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
+            <span className={taskCreateFormLabelClass}>{t('myTask.createModal.scheduleLabel')}</span>
+            {scheduleLocked ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs text-muted-foreground">{t('myTask.schedule.tooComplexToEdit')}</p>
+                {originalCronExpr ? (
+                  <code className="block overflow-x-auto rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 py-2 text-[12px] text-foreground">
+                    {originalCronExpr}
+                  </code>
+                ) : null}
+                {errors.schedule && (
+                  <p className="text-xs text-destructive">{errors.schedule}</p>
+                )}
+              </div>
+            ) : (
+              <SchedulePicker
+                value={schedule}
+                onChange={(next) => {
+                  setSchedule(next);
+                  if (errors.schedule) {
+                    setErrors((p) => {
+                      const nextErrors = { ...p };
+                      delete nextErrors.schedule;
+                      return nextErrors;
+                    });
                   }
                 }}
-                className="h-4 w-4 rounded border-border"
               />
-              保存到数据中心
-            </label>
-            {saveToDataCenter ? (
-              <div className="flex flex-col gap-3 pl-6">
-                <label className="flex items-start gap-2 text-sm text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={saveToMyArtifact}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setSaveToMyArtifact(checked);
-                      setMyArtifactFolderPath(checked ? buildDataCenterTargetUri('qa_artifact', null) : null);
-                      if (checked) setMyArtifactPathLabel('我的产物 / 根目录');
-                      if (checked && errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
-                    }}
-                    className="mt-0.5 h-4 w-4 rounded border-border"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-medium">我的产物</span>
-                    {saveToMyArtifact ? (
-                      <span className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{myArtifactPathLabel}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const parsed = parseDataCenterTargetUri(myArtifactFolderPath);
-                            setFolderPicker({
-                              kind: 'my',
-                              title: '选择我的产物目录',
-                              rootLabel: '我的产物',
-                              spaceType: 'qa_artifact',
-                              initialParentEntryId: parsed.parentEntryId,
-                            });
-                          }}
-                          className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted"
-                        >
-                          选择目录
-                        </button>
-                      </span>
-                    ) : null}
-                  </span>
-                </label>
-                {isSite ? (
-                  <label className="flex items-start gap-2 text-sm text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={saveToSharedArtifact}
-                      onChange={(event) => {
-                        const checked = event.target.checked;
-                        setSaveToSharedArtifact(checked);
-                        if (!checked) setSharedArtifactFolderPath(null);
-                        if (checked && errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
-                      }}
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium">网点共享产物</span>
-                      {saveToSharedArtifact ? (
-                        <span className="mt-1 flex flex-wrap items-center gap-2">
-                          <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{sharedArtifactPathLabel}</span>
-                          <button
-                            type="button"
-                            disabled={!selectedSharedSpaceId}
-                            onClick={() => {
-                              const parsed = parseDataCenterTargetUri(sharedArtifactFolderPath);
-                              setFolderPicker({
-                                kind: 'shared',
-                                title: '选择网点共享产物目录',
-                                rootLabel: '网点共享产物',
-                                spaceType: 'site_shared_artifact',
-                                spaceId: selectedSharedSpaceId,
-                                initialParentEntryId: parsed.parentEntryId,
-                              });
-                            }}
-                            className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            选择目录
-                          </button>
-                        </span>
-                      ) : null}
-                    </span>
-                  </label>
-                ) : null}
-                <p className="text-xs text-muted-foreground">路径变更仅对后续执行生效，历史产物不会自动移动。</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className={taskCreateFormLabelClass}>
+              {t('myTask.createModal.resultSaveToLabel')}
+            </span>
+            <div className="flex flex-wrap items-center gap-8">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 text-[12px] text-foreground"
+                onClick={() => {
+                  const next = !saveToMyArtifact;
+                  setSaveToMyArtifact(next);
+                  setMyArtifactFolderPath(next ? buildDataCenterTargetUri('qa_artifact', null) : null);
+                  if (next) setMyArtifactPathLabel('我的产物 / 根目录');
+                }}
+              >
+                <IconCheckbox checked={saveToMyArtifact} />
+                {t('myTask.createModal.myArtifactLabel')}
+              </button>
+              {isSite ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 text-[12px] text-foreground"
+                  onClick={() => {
+                    const next = !saveToSharedArtifact;
+                    setSaveToSharedArtifact(next);
+                    if (!next) setSharedArtifactFolderPath(null);
+                  }}
+                >
+                  <IconCheckbox checked={saveToSharedArtifact} />
+                  {t('myTask.createModal.sharedArtifactLabel')}
+                </button>
+              ) : null}
+            </div>
+            {saveToMyArtifact ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{myArtifactPathLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const parsed = parseDataCenterTargetUri(myArtifactFolderPath);
+                    setFolderPicker({
+                      kind: 'my',
+                      title: '选择我的产物目录',
+                      rootLabel: '我的产物',
+                      spaceType: 'qa_artifact',
+                      initialParentEntryId: parsed.parentEntryId,
+                    });
+                  }}
+                  className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted"
+                >
+                  选择目录
+                </button>
+              </div>
+            ) : null}
+            {isSite && saveToSharedArtifact ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{sharedArtifactPathLabel}</span>
+                <button
+                  type="button"
+                  disabled={!selectedSharedSpaceId}
+                  onClick={() => {
+                    const parsed = parseDataCenterTargetUri(sharedArtifactFolderPath);
+                    setFolderPicker({
+                      kind: 'shared',
+                      title: '选择网点共享产物目录',
+                      rootLabel: '网点共享产物',
+                      spaceType: 'site_shared_artifact',
+                      spaceId: selectedSharedSpaceId,
+                      initialParentEntryId: parsed.parentEntryId,
+                    });
+                  }}
+                  className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  选择目录
+                </button>
               </div>
             ) : null}
           </div>
-          {errors.dataCenterTarget ? (
-            <p className="-mt-1 text-xs text-destructive">{errors.dataCenterTarget}</p>
-          ) : null}
         </div>
 
         <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">
@@ -1207,6 +1241,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       </motion.div>
       {folderPicker ? (
         <FolderPickerDialog
+          key={`${folderPicker.kind}:${folderPicker.spaceId ?? ''}:${folderPicker.initialParentEntryId}`}
           open
           title={folderPicker.title}
           rootLabel={folderPicker.rootLabel}

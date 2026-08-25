@@ -1,4 +1,8 @@
 import { AppError } from '@/lib/error-model';
+import {
+  formatChatRuntimeErrorMessage,
+  resolveChatRuntimeErrorCode,
+} from './runtime-error-message';
 import type {
   CanonicalChatEvent,
   ChatRunPhase,
@@ -99,7 +103,10 @@ export function isSnapshotNewer(
   const current = state.runtime;
   if (!current) return true;
   if (snapshot.epoch !== current.epoch) return snapshot.epoch > current.epoch;
-  if (snapshot.sequence <= current.sequence) return false;
+  if (snapshot.sequence < current.sequence) return false;
+  if (snapshot.sequence === current.sequence) {
+    return isTerminalChatRunPhase(snapshot.phase) && !isTerminalChatRunPhase(current.phase);
+  }
   if (isTerminalChatRunPhase(current.phase) && !isTerminalChatRunPhase(snapshot.phase)) return false;
   return true;
 }
@@ -158,11 +165,17 @@ export function reduceSessionEvent(
   event: CanonicalChatEvent,
 ): SessionEventReduction {
   const current = state.runtime;
+  const phase = phaseFromEvent(event, current);
   if (current) {
     if (event.epoch < current.epoch) return { state, accepted: false, needsHydration: false };
-    if (event.epoch === current.epoch && event.sequence <= current.sequence) {
+    if (event.epoch === current.epoch && event.sequence < current.sequence) {
       return { state, accepted: false, needsHydration: false };
     }
+    if (
+      event.epoch === current.epoch
+      && event.sequence === current.sequence
+      && (!isTerminalChatRunPhase(phase) || isTerminalChatRunPhase(current.phase))
+    ) return { state, accepted: false, needsHydration: false };
     if (event.epoch === current.epoch && event.sequence > current.sequence + 1) {
       return { state, accepted: false, needsHydration: true };
     }
@@ -178,7 +191,6 @@ export function reduceSessionEvent(
     }
   }
 
-  const phase = phaseFromEvent(event, current);
   const terminal = phase === 'completed' || phase === 'failed' || phase === 'aborted' || phase === 'interrupted';
   const payload = event.payload && typeof event.payload === 'object'
     ? event.payload as Record<string, unknown>
@@ -192,26 +204,23 @@ export function reduceSessionEvent(
     && payload?.reason === 'superseded';
   const errorMessage = (event.type === 'run.failed' || event.type === 'run.interrupted')
     && !isSupersededInterruption
-    ? String(payload?.error ?? payload?.reason ?? 'Chat run failed')
+    ? formatChatRuntimeErrorMessage(payload, 'Chat run failed')
+    : null;
+  const errorCode = (event.type === 'run.failed' || event.type === 'run.interrupted')
+    && !isSupersededInterruption
+    ? resolveChatRuntimeErrorCode(payload, 'Chat run failed')
     : null;
   const awaitingTranscript = event.type === 'message.final'
     || event.type === 'run.awaiting_transcript'
     || (phase === 'awaiting_transcript' && event.type !== 'message.delta');
   const startsNewRun = event.type === 'run.dispatching';
   const dispatchPayload = startsNewRun ? payload as ChatDispatchPayload | null : null;
-  const dispatchUserMessage = dispatchPayload?.optimisticUserMessage
-    ? {
-        ...dispatchPayload.optimisticUserMessage,
-        ...(event.runtimePolicy?.origin === 'scheduled_task'
-          ? { _scheduledTaskOptimistic: true }
-          : {}),
-      }
-    : null;
+  const dispatchUserMessage = dispatchPayload?.optimisticUserMessage ?? null;
   const currentOptimisticBelongsToRun = startsNewRun
     && Boolean(event.idempotencyKey)
     && state.overlay.optimisticUserMessage?.id === event.idempotencyKey;
   const preserveExistingOptimistic = currentOptimisticBelongsToRun
-    || (event.runtimePolicy?.origin !== 'scheduled_task' && Boolean(state.overlay.optimisticUserMessage));
+    || Boolean(state.overlay.optimisticUserMessage);
   const isToolResult = Boolean(message && isToolResultRole(message.role));
   const toolUpdates = message
     ? collectToolUpdates(message, event.type === 'message.delta' ? 'delta' : 'final')
@@ -254,7 +263,14 @@ export function reduceSessionEvent(
             : message ?? state.overlay.streamingMessage,
         streamingMessages: startsNewRun || clearOverlay
           ? []
-          : appendStreamingAssistantSnapshot(state.overlay.streamingMessages, message),
+          // Keep only committed assistant messages in the chronological buffer.
+          // The current growing delta already lives in streamingMessage. Mixing
+          // it into this array makes a reused run id jump back to its first
+          // position across multi-message runs and leaves rendering one message
+          // behind until transcript reload.
+          : event.type === 'message.final'
+            ? appendStreamingAssistantSnapshot(state.overlay.streamingMessages, message)
+            : state.overlay.streamingMessages,
         streamingToolResults: startsNewRun || clearOverlay
           ? []
           : isToolResult && message
@@ -272,7 +288,9 @@ export function reduceSessionEvent(
       error: startsNewRun
         ? null
         : errorMessage
-          ? new AppError('GATEWAY', errorMessage)
+          ? new AppError(errorCode ?? 'GATEWAY', errorMessage, undefined, {
+            reason: typeof payload?.reason === 'string' ? payload.reason : undefined,
+          })
           : terminal
             ? null
             : state.error,

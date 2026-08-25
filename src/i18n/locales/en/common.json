@@ -12,8 +12,9 @@
         "chat": "Chat",
         "newChat": "New Chat",
         "cronTasks": "Scheduled tasks",
-        "myTasks": "My Tasks",
+        "myTasks": "Automation",
         "dataCenter": "Data Center",
+        "learningCenter": "Learning Center",
         "skills": "Skills · Connectors",
         "moreApps": "More Apps",
         "workflow": "Workflows",
@@ -24,6 +25,7 @@
         "checkUpdates": "Check for Updates",
         "devConsole": "Developer Console",
         "models": "Models",
+        "tokenBalance": "Token Balance",
         "deleteSessionConfirm": "Are you sure you want to delete session \"{{label}}\"?",
         "deleteSessionFailed": "Failed to delete session",
         "deleteSessionFailedHint": "Please try again. If the problem persists, check logs in Settings.",
@@ -49,7 +51,9 @@
         "channelSource": {
             "dingtalk": "DingTalk",
             "wechat": "WeChat",
-            "app": "App"
+            "wecom": "WeCom",
+            "app": "App",
+            "qq": "QQ"
         },
         "compactAccountMenu": "Account and settings",
         "supportGroup": {
@@ -159,6 +163,10 @@
             "authorizeLocalFile": "Authorize local files",
             "authorizeLocalFileOption": "Authorize files",
             "authorizeLocalFolderOption": "Authorize folder",
+            "sharedArtifactsMobileTip": "Scan with DingTalk mobile to view branch shared artifacts in Branch VIP.",
+            "sharedArtifactsQrCode": "Branch shared artifacts QR code",
+            "sharedArtifactsQrTitle": "Scan to view shared artifacts",
+            "sharedArtifactsQrHint": "Scan with DingTalk mobile and view in Branch VIP",
             "usedQuota": "Storage used {{used}}/{{quota}}"
         },
         "drive": {

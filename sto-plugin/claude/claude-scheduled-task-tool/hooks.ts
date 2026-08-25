@@ -82,12 +82,12 @@ export function createScheduledTaskGuard(sessionKey?: string): HookCallback {
       toolName,
     });
     if (executionBlock.blocked) {
-      return deny(executionBlock.reason ?? 'Scheduled task creation is blocked during task execution.');
+      return deny(executionBlock.reason ?? '定时任务执行过程中禁止再创建或修改定时任务。');
     }
 
     if (isLegacyCronToolName(toolName)) {
       return deny(
-        'Legacy Cron tools are disabled for Claude conversations. Use the claude-scheduled-task-tool MCP tools instead.',
+        'Claude 会话已禁用旧版 Cron 工具，请改用 claude-scheduled-task-tool 的 MCP 工具。',
       );
     }
 
@@ -99,7 +99,7 @@ export function createScheduledTaskGuard(sessionKey?: string): HookCallback {
       const command = String(toolInput.command ?? '');
       if (isScheduledTaskShellCommand(command)) {
         return deny(
-          'Do not manage Claude scheduled tasks through shell commands or file edits. Use the claude-scheduled-task-tool MCP tools instead.',
+          '禁止通过 shell 或直接改文件来管理 Claude 定时任务，请改用 claude-scheduled-task-tool 的 MCP 工具。',
         );
       }
     }

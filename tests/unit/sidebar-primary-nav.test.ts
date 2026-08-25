@@ -14,6 +14,7 @@ describe('isSidebarPrimaryNavRoute', () => {
     expect(isSidebarPrimaryNavRoute('/more-apps')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/models')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/data-center')).toBe(true);
+    expect(isSidebarPrimaryNavRoute('/learning-center')).toBe(true);
   });
 
   it('does not match workspace or task routes', () => {
@@ -28,18 +29,28 @@ describe('isSidebarPrimaryNavRoute', () => {
 });
 
 describe('isSidebarPrimaryNavItemVisible', () => {
-  const nonSiteOptions = {
+  const baseOptions = {
     primaryMyData: true,
-    siteDepartmentTypesLoaded: false,
-    isSite: false,
+    learningCenterVisible: false,
     isProduction: false,
   };
 
   it('keeps More Apps visible without site identity or site configuration', () => {
-    expect(isSidebarPrimaryNavItemVisible('/more-apps', nonSiteOptions)).toBe(true);
+    expect(isSidebarPrimaryNavItemVisible('/more-apps', baseOptions)).toBe(true);
   });
 
   it('keeps Data Center visible without site identity or site configuration', () => {
-    expect(isSidebarPrimaryNavItemVisible('/data-center', nonSiteOptions)).toBe(true);
+    expect(isSidebarPrimaryNavItemVisible('/data-center', baseOptions)).toBe(true);
+  });
+
+  it('hides Learning Center without a visible learning domain', () => {
+    expect(isSidebarPrimaryNavItemVisible('/learning-center', baseOptions)).toBe(false);
+  });
+
+  it('shows Learning Center when the backend returns a visible learning domain', () => {
+    expect(isSidebarPrimaryNavItemVisible('/learning-center', {
+      ...baseOptions,
+      learningCenterVisible: true,
+    })).toBe(true);
   });
 });

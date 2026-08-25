@@ -39,6 +39,19 @@
     },
     "composer": {
         "attachFiles": "添加文件",
+        "attachLocal": "添加本地文件",
+        "attachDrive": "添加在线文件",
+        "attachQaArtifact": "添加我的产物",
+        "attachSiteShared": "添加网点共享产物",
+        "attachDriveTitle": "选择在线文件",
+        "attachQaArtifactTitle": "选择我的产物",
+        "attachSiteSharedTitle": "选择网点共享产物",
+        "attachConfirm": "确认",
+        "attachCancel": "取消",
+        "attachSearchPlaceholder": "搜索文件或文件夹",
+        "attachEmpty": "暂无文件",
+        "attachLoading": "加载中…",
+        "attachBack": "返回上一级",
         "pickAgent": "选择 Agent",
         "clearTarget": "清除目标 Agent",
         "targetChip": "@{{agent}}",
@@ -142,15 +155,7 @@
         "quickInputDeleting": "删除中…",
         "quickInputLoading": "加载中…",
         "quickInputLoadFailed": "快捷输入加载失败",
-        "quickInputSaveFailed": "操作失败，请稍后重试",
-        "quickInputBeautifyButton": "AI美化",
-        "quickInputBeautifying": "美化中…",
-        "quickInputBeautifyAria": "AI 美化输入内容",
-        "quickInputBeautifyNoChange": "内容已较规范，无需调整",
-        "quickInputBeautifyFallback": "模型暂时不可用，已使用基础规则优化",
-        "quickInputBeautifySuccess": "AI 已美化输入内容",
-        "quickInputBeautifySuccessWithModel": "AI 已美化（{{model}}）",
-        "quickInputBeautifyFailed": "AI 美化失败，请稍后重试"
+        "quickInputSaveFailed": "操作失败，请稍后重试"
     },
     "streaming": {
         "connectingModel": "连接模型中...",
@@ -326,6 +331,12 @@
             "tooLongDescription": "字符太长，无法预填分享内容。确认后将完整会话正文复制到剪贴板，并唤起钉钉选人窗口；请在消息输入框粘贴（⌘V / Ctrl+V）后发送。",
             "tooLongConfirm": "唤起钉钉",
             "tooLongPickerHint": "请在消息输入框粘贴已复制的会话正文（⌘V / Ctrl+V）"
+        }
+    },
+    "runtime": {
+        "errors": {
+            "recoveryTimeout": "运行确认超时：浏览器自动化可能仍在进行，请查看左侧页面或稍后重试。",
+            "rateLimit": "模型请求过于频繁，请稍等片刻后重试。"
         }
     }
 }

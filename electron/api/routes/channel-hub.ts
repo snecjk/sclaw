@@ -2,10 +2,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import {
+  disableMobileAppBind,
+  enableMobileAppBind,
   getChannelConnection,
   getLocalDeviceId,
   revokeDingTalkHubBind,
+  syncSharedHubRefreshToken,
   updateDingTalkBindingAgent,
+  updateMobileBindingAgent,
   upsertDingTalkHubBind,
 } from '../../channels/binding-service';
 import {
@@ -13,6 +17,7 @@ import {
   hubClaimBind,
   hubCreateBind,
   hubPollBind,
+  hubRegisterDesktop,
   hubUnbindRemote,
 } from '../../channels/hub-api';
 import { getSclawHubClient } from '../../channels/hub-client';
@@ -97,6 +102,12 @@ export async function handleChannelHubRoutes(
         refreshToken: claimed.refreshToken,
         endpointBaseUrl: resolveSclawHubBaseUrl() || null,
       });
+      // 与 App 共用一条 Hub 绑定：同步 refreshToken 到 mobile 本地行
+      await syncSharedHubRefreshToken({
+        refreshToken: claimed.refreshToken,
+        dingUserId: claimed.dingUserId,
+        endpointBaseUrl: resolveSclawHubBaseUrl() || null,
+      });
       try {
         await getSclawHubClient().connect(claimed.refreshToken);
       } catch (error) {
@@ -144,6 +155,88 @@ export async function handleChannelHubRoutes(
         return true;
       }
       const conn = await updateDingTalkBindingAgent({
+        engineType: body.engineType,
+        agentId: body.agentId,
+      });
+      sendJson(res, 200, { success: true, connection: conn });
+      return true;
+    }
+
+    // ── mobile / 企业 App 本地通道 ─────────────────────────────
+
+    if (url.pathname === '/api/channels/hub/mobile/status' && req.method === 'GET') {
+      const local = await getChannelConnection('mobile');
+      const dingTalk = await getChannelConnection('dingtalk');
+      const client = getSclawHubClient().getStatus();
+      // App / 钉钉共用一条 Desktop Hub WS + 心跳（hub-client ping）；凭证取任一本地行即可
+      const sharedToken = local?.refreshToken || dingTalk?.refreshToken || null;
+      const canConnectWs = Boolean(sharedToken);
+      sendJson(res, 200, {
+        success: true,
+        local,
+        ws: client,
+        canConnectWs,
+        deviceId: await getLocalDeviceId(),
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/channels/hub/mobile/bind/enable' && req.method === 'POST') {
+      let wsError: string | null = null;
+      let refreshToken: string | null = null;
+      try {
+        const registered = await hubRegisterDesktop();
+        refreshToken = registered.refreshToken;
+        await enableMobileAppBind({ refreshToken });
+        await syncSharedHubRefreshToken({
+          refreshToken,
+          dingUserId: registered.dingUserId ?? null,
+          endpointBaseUrl: resolveSclawHubBaseUrl() || null,
+        });
+        try {
+          // 共用一条 WS/心跳：已连接则用新 token 重连一次；未连接则新建（不另起第二套心跳）
+          const hub = getSclawHubClient();
+          if (hub.getStatus().connected) {
+            hub.disconnect();
+          }
+          await hub.connect(refreshToken);
+        } catch (error) {
+          wsError = String(error);
+          logger.warn('[ChannelHub] WS connect after mobile enable failed', error);
+        }
+      } catch (error) {
+        logger.error('[ChannelHub] mobile hub register failed', error);
+        sendJson(res, 500, { success: false, error: String(error) });
+        return true;
+      }
+      const conn = await getChannelConnection('mobile');
+      sendJson(res, 200, {
+        success: true,
+        connection: conn,
+        ws: getSclawHubClient().getStatus(),
+        wsError,
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/channels/hub/mobile/bind/disable' && req.method === 'POST') {
+      await disableMobileAppBind();
+      const dingTalk = await getChannelConnection('dingtalk');
+      // 无钉钉绑定时可断开共用 WS；仍有钉钉则保持
+      if (!dingTalk || dingTalk.bindStatus !== 'bound') {
+        getSclawHubClient().disconnect();
+      }
+      sendJson(res, 200, { success: true, ws: getSclawHubClient().getStatus() });
+      return true;
+    }
+
+    if (url.pathname === '/api/channels/hub/mobile/binding/agent' && req.method === 'POST') {
+      const body = await parseJsonBody<{ engineType?: 'claude' | 'openclaw'; agentId?: string }>(req);
+      if (!body.engineType || !body.agentId) {
+        sendJson(res, 400, { success: false, error: 'engineType and agentId required' });
+        return true;
+      }
+      const conn = await updateMobileBindingAgent({
         engineType: body.engineType,
         agentId: body.agentId,
       });

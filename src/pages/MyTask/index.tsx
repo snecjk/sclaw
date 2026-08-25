@@ -1,14 +1,17 @@
 /**
  * MyTask 页面主入口
- * 包含"定时任务"和"执行记录"双视图 Tab 切换
+ * 一级 Tab：定时任务 / 工作流（URL ?tab=workflow）
+ * 定时任务内二级 Tab：定时任务 / 执行记录
  * 定时任务 CRUD 全部走 useCronStore（Gateway），与 Cron 页面一致
  * 执行记录数据 + 工作流选项消费 useMyTaskStore
+ * 工作流 Tab 复用 WorkflowDashboard；编辑/新建仍走 /workflow/*
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { flushSync } from 'react-dom';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Search } from 'lucide-react';
 import { useCronStore } from '@/stores/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
@@ -30,12 +33,17 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
 import {
-  myTaskPageHeaderRowClass,
+  myTaskPageSubtitleClass,
   stoMainInnerShell,
   stoPageTitleClass,
+  workflowListSearchIconWrapClass,
+  workflowListSearchLabelClass,
+  myTaskSearchInputClass,
   workflowListToolbarClass,
+  workflowPageRootClass,
 } from '@/lib/surfaces';
 import { toast } from 'sonner';
+import { hostApiFetch } from '@/lib/host-api';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
 import {
@@ -44,9 +52,11 @@ import {
 } from './components/TemplateSelectModal';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
-import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
+import type { MyTaskSection, TaskView, TaskViewModel, ExecutionRecord } from './types';
+import { parseMyTaskSection } from './constants';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
 import { RECOMMEND_POSITION_KEYS, type RecommendItem } from '@/lib/recommend-api';
+import { SectionTabs } from './components/SectionTabs';
 import { ViewTabs } from './components/ViewTabs';
 import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';
@@ -56,11 +66,22 @@ import { RecordStatusNav } from './components/RecordStatusNav';
 import { RecordItem } from './components/RecordItem';
 import { RecordDetailModal } from './components/RecordDetailModal';
 import { TaskRunGuardBar } from './components/TaskRunGuardBar';
+import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboard';
+import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
+import { useWorkflowListViewState } from '@/pages/Workflow/hooks/use-workflow-list-view-state';
+import { useWorkflowUiStore } from '@/stores/workflow-ui';
 
 // ──── 工具函数 ────
 
 /** 将 ScheduleTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
+  const segments = Array.isArray(task.extra?.composerSegments)
+    ? (task.extra!.composerSegments as Array<{ type?: string }>)
+    : [];
+  const hasWorkflow = segments.some((seg) => seg?.type === 'workflow')
+    || Boolean(task.workflowCode); // 迁移前短暂兼容列
+  const hasSkill = segments.some((seg) => seg?.type === 'skill')
+    || Boolean(task.skillCode);
   return {
     id: task.id,
     name: task.name,
@@ -68,7 +89,8 @@ function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
     cronExpr: task.cronExpr,
     enabled: task.enabled,
     nextRunAt: task.nextRunAt ?? null,
-    workflowCode: task.workflowCode || undefined,
+    hasWorkflow,
+    hasSkill,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     agentId: task.agentId,
@@ -112,7 +134,12 @@ function resolvePreferredAgentByEngine(
 export default function MyTask() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation('tasks');
+
+  const activeSection = parseMyTaskSection(searchParams.get('tab'));
+  const workflowViewState = useWorkflowListViewState();
+  const setEditorActive = useWorkflowUiStore((s) => s.setEditorActive);
 
   // ── Cron Store（本地 Gateway + Claude 任务） ──
   const {
@@ -124,6 +151,7 @@ export default function MyTask() {
     toggleJob,
     deleteJob,
     triggerJob,
+    bumpNameMapsRefreshKey,
   } = useCronStore();
 
   // ── Agent 配置 ──
@@ -164,53 +192,74 @@ export default function MyTask() {
     name: string;
     message: string;
   } | null>(null);
+  const [hasCloudUpdates, setHasCloudUpdates] = useState(false);
+  const [pulling, setPulling] = useState(false);
+
+  const handlePullFromCloud = async () => {
+    if (pulling) return;
+    setPulling(true);
+    try {
+      await hostApiFetch('/api/scheduled-tasks/cloud/pull', { method: 'POST' });
+      await fetchJobs();
+      const status = await hostApiFetch<{ hasCloudUpdates?: boolean }>(
+        '/api/scheduled-tasks/cloud/sync-status',
+      );
+      setHasCloudUpdates(Boolean(status?.hasCloudUpdates));
+      toast.success(t('myTask.toolbar.pullSuccess'));
+    } catch {
+      toast.error(t('myTask.toolbar.pullFailed'));
+    } finally {
+      setPulling(false);
+    }
+  };
+
+  const handleSectionChange = (section: MyTaskSection) => {
+    if (section === 'workflow') {
+      setSearchParams({ tab: 'workflow' }, { replace: true });
+      return;
+    }
+    setSearchParams({}, { replace: true });
+  };
+
+  // 列表 Tab 不处于编辑器；切回/离开时清掉 editorActive，避免顶栏残留
+  useEffect(() => {
+    if (activeSection !== 'workflow') return;
+    setEditorActive(false);
+    return () => setEditorActive(false);
+  }, [activeSection, setEditorActive]);
 
   // ── 初始化加载 ──
   useEffect(() => {
+    if (activeSection !== 'tasks') return;
     fetchJobs().catch(() => {});
-  }, [fetchJobs]);
+  }, [activeSection, fetchJobs]);
+
+  // 仅进入 MyTask 定时任务分区时请求一次 sync-status
+  useEffect(() => {
+    if (activeSection !== 'tasks') return;
+    let cancelled = false;
+    void hostApiFetch<{ hasCloudUpdates?: boolean }>('/api/scheduled-tasks/cloud/sync-status')
+      .then((status) => {
+        if (!cancelled) setHasCloudUpdates(Boolean(status?.hasCloudUpdates));
+      })
+      .catch(() => {
+        if (!cancelled) setHasCloudUpdates(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection]);
 
   // ── 切换到执行记录 Tab 时串行加载 3 个状态桶 ──
   useEffect(() => {
-    if (activeView === 'records') {
-      fetchRecords('running')
-        .then(() => fetchRecords('success'))
-        .then(() => fetchRecords('failed'))
-        .catch(() => {});
-    }
+    if (activeSection !== 'tasks' || activeView !== 'records') return;
+    fetchRecords('running')
+      .then(() => fetchRecords('success'))
+      .then(() => fetchRecords('failed'))
+      .catch(() => {});
     // fetchRecords 是 Zustand 稳定引用，仅在视图或状态切换时触发
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeView, recordStatus]);
-
-  // ── 任务视图轮询：到点后端会推进 nextRunAt，需及时拉取以重启倒计时。
-  //     仅在页面可见时轮询；切回可见时立即补一次，避免长时间隐藏后数据陈旧 ──
-  useEffect(() => {
-    let timer: number | null = null;
-    const POLL_INTERVAL = 60_000;
-    const poll = async () => {
-      try {
-        if (document.visibilityState === 'visible' && activeView === 'tasks') {
-          await fetchJobs();
-        }
-      } catch {
-        // 轮询失败静默忽略，下一轮重试
-      } finally {
-        timer = window.setTimeout(poll, POLL_INTERVAL);
-      }
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        if (timer) window.clearTimeout(timer);
-        timer = window.setTimeout(poll, 0);
-      }
-    };
-    timer = window.setTimeout(poll, POLL_INTERVAL);
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      if (timer) window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [activeView, fetchJobs]);
+  }, [activeSection, activeView, recordStatus]);
 
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
@@ -315,8 +364,9 @@ export default function MyTask() {
 
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
-      const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
-      const isClaude = input.engineType === 'claude';
+      const engineType = editingJob?.engineType ?? input.engineType;
+      const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, engineType);
+      const isClaude = engineType === 'claude';
       try {
         if (isClaude && !selectedAgent?.id) {
           throw new Error(
@@ -325,13 +375,15 @@ export default function MyTask() {
               : t('myTask.error.claudeAgentNoWorkspaceCreate'),
           );
         }
-        // 统一模型：prompt 干净（执行期由 executor 烘焙 dingtalk），dingtalkRecipients 走列。
+        // prompt 干净；技能/工作流/收件人只进 extra.composerSegments；附件由 service 持久化。
         const base = {
           name: input.name,
           cronExpr: input.schedule,
           prompt: input.message,
-          dingtalkRecipients: input.dingTalkMentions ?? null,
-          workflowCode: input.workflowCode ?? null,
+          dingtalkRecipients: null,
+          skillCode: null,
+          workflowCode: null,
+          extra: input.extra ?? null,
           myArtifactFolderPath: input.myArtifactFolderPath ?? null,
           sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };
@@ -341,6 +393,7 @@ export default function MyTask() {
               permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
             }
           : {};
+        const nameChanged = Boolean(editingJob && input.name !== editingJob.name);
         if (editingJob) {
           await updateJob(editingJob.id, {
             ...base,
@@ -358,6 +411,7 @@ export default function MyTask() {
           toast.success(t('myTask.toast.created'));
         }
         await fetchJobs().catch(() => {});
+        if (nameChanged) bumpNameMapsRefreshKey();
       } catch (err) {
         const errStr = String(err);
         toast.error(errStr);
@@ -376,7 +430,7 @@ export default function MyTask() {
         throw err;
       }
     },
-    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs]
+    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs, bumpNameMapsRefreshKey, t]
   );
 
   const handleDelete = useCallback(() => {
@@ -404,125 +458,201 @@ export default function MyTask() {
 
   // ── 渲染 ──
   const isTasksView = activeView === 'tasks';
+  const isWorkflowSection = activeSection === 'workflow';
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col [scrollbar-gutter:stable]">
-        <div className={cn(stoMainInnerShell, 'flex flex-1 flex-col')}>
-          {/* 页面标题 + 右侧运行保障控件 */}
-          <header className="mb-6">
-            <div className={myTaskPageHeaderRowClass}>
-              <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
-							<TaskRunGuardBar />
-            </div>
-          </header>
-
-          {/* Tab 行：左侧视图 Tab + 右侧搜索/排序/新建 */}
-          <div className={cn(workflowListToolbarClass, 'mb-[26px]')}>
-            <ViewTabs activeView={activeView} onViewChange={setActiveView} />
-
-            {isTasksView ? (
-              <TaskToolbar
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                sortValue={sortValue}
-                onSortChange={setSortValue}
-              >
-								<NewTaskDropdownButton
-                  onSelfCreate={() => {
-                    setEditingJob(null);
-                    setCreateOpen(true);
-                  }}
-                  onTemplateCreate={() => setTemplateOpen(true)}
-                />
-							</TaskToolbar>
-            ) : (
-              <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
-            )}
-          </div>
-
-          {/* 执行记录状态筛选导航 */}
-          {!isTasksView && (
-            <RecordStatusNav
-              activeStatus={recordStatus}
-              counts={recordCounts}
-              onStatusChange={(status) => {
-                setRecordStatus(status);
-                fetchRecords(status).catch(() => {});
-              }}
-            />
+    <div className="flex h-full min-h-0 flex-col">
+      <div
+        className={cn(
+          'relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0',
+          isWorkflowSection && workflowPageRootClass,
+        )}
+      >
+        {isWorkflowSection ? <WorkflowPageShading /> : null}
+        <div
+          className={cn(
+            stoMainInnerShell,
+            'relative z-[1] flex min-h-0 flex-1 flex-col overflow-hidden',
           )}
-
-          {/* ── 定时任务视图 ── */}
-          {isTasksView && (
-            <section aria-label={t('myTask.taskView.aria')} className="flex-1 flex flex-col">
-              {jobsLoading && safeJobs.length === 0 ? (
-                <div className="flex items-center justify-center py-20">
-                  <LoadingSpinner size="lg" />
-                </div>
-              ) : filteredTasks.length === 0 ? (
-                <TaskEmptyState
-                  searchQuery={searchQuery}
-                  onSelfCreate={() => {
-                    setEditingJob(null);
-                    setCreateOpen(true);
-                  }}
-                  onTemplateCreate={() => setTemplateOpen(true)}
-                />
-              ) : (
-                <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
-                  {filteredTasks.map((task) => (
-                    <TaskCard
-                      key={`${task.engineType}:${task.id}`}
-                      task={task}
-                      onToggle={(enabled) => handleToggle(task, enabled)}
-                      onEdit={() => {
-                        const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                        setEditingJob(job);
+        >
+          {/* 一级 Tab 固定顶栏：左分段；右为运行保障 + 搜索/新建 */}
+          <div className="mb-[38px] flex flex-shrink-0 flex-wrap items-center gap-3">
+            <SectionTabs
+              activeSection={activeSection}
+              onSectionChange={handleSectionChange}
+            />
+            {!isWorkflowSection ? (
+              <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+                <TaskRunGuardBar />
+                {isTasksView ? (
+                  <>
+                    <label className={workflowListSearchLabelClass}>
+                      <span className="sr-only">{t('myTask.toolbar.searchSrOnly')}</span>
+                      <span className={workflowListSearchIconWrapClass} aria-hidden="true">
+                        <Search className="h-3.5 w-3.5" />
+                      </span>
+                      <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className={myTaskSearchInputClass}
+                        placeholder={t('myTask.toolbar.searchPlaceholder')}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <NewTaskDropdownButton
+                      onSelfCreate={() => {
+                        setEditingJob(null);
                         setCreateOpen(true);
                       }}
-                      onDelete={() => {
-                        const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                        if (job) setDeleteTarget(job);
-                      }}
-                      onRun={() => handleTrigger(task)}
+                      onTemplateCreate={() => setTemplateOpen(true)}
                     />
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
-          {/* ── 执行记录视图 ── */}
-          {!isTasksView && (
-            <section aria-label={t('myTask.recordView.aria')}>
-              {currentTabLoading ? (
-                <div className="flex items-center justify-center py-20">
-                  <LoadingSpinner size="lg" />
+          {/* 仅内容区滚动 */}
+          {isWorkflowSection ? (
+            <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="pb-10">
+                <WorkflowDashboard
+                  embedded
+                  viewState={workflowViewState}
+                  onManualCreate={() => navigate('/workflow/new')}
+                  onGenerate={(prompt) => {
+                    navigate('/workflow/generate', { state: { prompt } });
+                  }}
+                  onEditCard={(workflowId) =>
+                    navigate(`/workflow/${encodeURIComponent(workflowId)}`)
+                  }
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* 标题 + 工具栏固定；仅下方卡片/记录列表滚动 */}
+              <header className="mb-[30px] shrink-0">
+                <div className="min-w-0">
+                  <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
+                  <p className={myTaskPageSubtitleClass}>{t('myTask.subtitle')}</p>
                 </div>
-              ) : currentRecords.length === 0 ? (
-                <div className="py-10 text-center text-[13px] text-muted-foreground">
-                  {t('myTask.taskView.emptyNoRecords')}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  {currentRecords.map((record) => (
-                    <RecordItem key={record.id} record={record} onViewDetail={setDetailRecord} />
-                  ))}
-                </div>
-              )}
+              </header>
 
-              {showRecordsCappedHint && (
-                <p className="mt-3 text-center text-[12px] text-muted-foreground">
-                  {t('myTask.taskView.recordsCappedHint')}
-                </p>
-              )}
-            </section>
+              <div className={cn(workflowListToolbarClass, 'mb-[18px] shrink-0')}>
+                <ViewTabs activeView={activeView} onViewChange={setActiveView} />
+
+                {isTasksView ? (
+                  <div className="ml-auto flex shrink-0 items-center gap-3">
+                    {hasCloudUpdates ? (
+                      <button
+                        type="button"
+                        disabled={pulling}
+                        onClick={() => void handlePullFromCloud()}
+                        className="inline-flex h-8 items-center rounded-[8px] border border-border bg-background px-3 text-[13px] text-foreground hover:bg-muted disabled:opacity-60"
+                      >
+                        {pulling ? t('myTask.toolbar.pulling') : t('myTask.toolbar.pullFromCloud')}
+                      </button>
+                    ) : null}
+                    <TaskToolbar
+                      sortValue={sortValue}
+                      onSortChange={setSortValue}
+                    />
+                  </div>
+                ) : (
+                  <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
+                )}
+              </div>
+
+              {!isTasksView ? (
+                <div className="shrink-0">
+                  <RecordStatusNav
+                    activeStatus={recordStatus}
+                    counts={recordCounts}
+                    onStatusChange={(status) => {
+                      setRecordStatus(status);
+                      fetchRecords(status).catch(() => {});
+                    }}
+                  />
+                </div>
+              ) : null}
+
+              <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {isTasksView ? (
+                  <section aria-label={t('myTask.taskView.aria')} className="flex flex-col pb-6">
+                    {jobsLoading && safeJobs.length === 0 ? (
+                      <div className="flex items-center justify-center py-20">
+                        <LoadingSpinner size="lg" />
+                      </div>
+                    ) : filteredTasks.length === 0 ? (
+                      <TaskEmptyState
+                        searchQuery={searchQuery}
+                        onSelfCreate={() => {
+                          setEditingJob(null);
+                          setCreateOpen(true);
+                        }}
+                        onTemplateCreate={() => setTemplateOpen(true)}
+                      />
+                    ) : (
+                      <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
+                        {filteredTasks.map((task) => {
+                          const openTaskEdit = () => {
+                            const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                            setEditingJob(job);
+                            setCreateOpen(true);
+                          };
+
+                          return (
+                            <TaskCard
+                              key={`${task.engineType}:${task.id}`}
+                              task={task}
+                              onToggle={(enabled) => handleToggle(task, enabled)}
+                              onClick={openTaskEdit}
+                              onEdit={openTaskEdit}
+                              onDelete={() => {
+                                const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                                if (job) setDeleteTarget(job);
+                              }}
+                              onRun={() => handleTrigger(task)}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                ) : (
+                  <section aria-label={t('myTask.recordView.aria')} className="pb-6">
+                    {currentTabLoading ? (
+                      <div className="flex items-center justify-center py-20">
+                        <LoadingSpinner size="lg" />
+                      </div>
+                    ) : currentRecords.length === 0 ? (
+                      <div className="py-10 text-center text-[13px] text-muted-foreground">
+                        {t('myTask.taskView.emptyNoRecords')}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2.5">
+                        {currentRecords.map((record) => (
+                          <RecordItem key={record.id} record={record} onViewDetail={setDetailRecord} />
+                        ))}
+                      </div>
+                    )}
+
+                    {showRecordsCappedHint && (
+                      <p className="mt-3 text-center text-[12px] text-muted-foreground">
+                        {t('myTask.taskView.recordsCappedHint')}
+                      </p>
+                    )}
+                  </section>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* ── 弹窗 ── */}
+      {/* ── 弹窗（仅定时任务区） ── */}
 
       {/* 新建/编辑任务弹窗 */}
       <TaskCreateModal

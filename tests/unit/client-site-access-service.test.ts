@@ -10,6 +10,19 @@ vi.mock('../../electron/utils/sto-domain', () => ({
   resolveStoBaseUrl: vi.fn().mockResolvedValue('https://baseinfo-aimemory-test.sto.cn'),
 }));
 
+describe('requiresClientSiteAccessCheck', () => {
+  it('returns true only for site organization categories', async () => {
+    const { requiresClientSiteAccessCheck } = await import('../../shared/client-site-access');
+    expect(requiresClientSiteAccessCheck('独立网点')).toBe(true);
+    expect(requiresClientSiteAccessCheck('承包区')).toBe(true);
+    expect(requiresClientSiteAccessCheck(' 网点部门 ')).toBe(true);
+    expect(requiresClientSiteAccessCheck('总公司')).toBe(false);
+    expect(requiresClientSiteAccessCheck('')).toBe(false);
+    expect(requiresClientSiteAccessCheck(null)).toBe(false);
+    expect(requiresClientSiteAccessCheck(undefined)).toBe(false);
+  });
+});
+
 describe('ClientSiteAccessService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,6 +112,46 @@ describe('ClientSiteAccessService', () => {
         headers: expect.objectContaining({ stotoken: 'test-token' }),
       }),
     );
+  });
+
+  it('checkAccess skips fetch for non-site categoryCode', async () => {
+    const { getClientSiteAccessService } = await import(
+      '../../electron/services/client-site-access-service'
+    );
+    const result = await getClientSiteAccessService().checkAccess('test-token', {
+      categoryCode: '总公司',
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.errCode).toBe('200');
+    expect(result.categoryCode).toBe('总公司');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('checkAccess still fetches for site categoryCode', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        errCode: '200',
+        data: {
+          client_code: 'StoClaw',
+          allowed: true,
+          categoryCode: '独立网点',
+          companyCode: '000030',
+        },
+      }),
+    });
+
+    const { getClientSiteAccessService } = await import(
+      '../../electron/services/client-site-access-service'
+    );
+    const result = await getClientSiteAccessService().checkAccess('test-token', {
+      categoryCode: '独立网点',
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it('checkAccess fail-closed on network error', async () => {

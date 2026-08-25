@@ -71,26 +71,34 @@ function pickBridgeSession(
 	return sessions[0] ?? null;
 }
 
+const RESULT_POLL_MS = 50;
+
 export async function runBridgeCommand(
 	cfg: BrowserBridgePluginConfig,
 	action: "snapshot" | "click" | "fill" | "navigate" | "screenshot" | "evaluate" | "scroll",
 	payload: Record<string, unknown> = {},
 	options?: BridgeCommandOptions,
 ): Promise<unknown> {
-	const sessions = await listBridgeSessions(cfg);
-	const embedOnly = options?.embedOnly || Boolean(options?.sessionId?.startsWith('embed-'));
-	const target = pickBridgeSession(sessions, { ...options, embedOnly });
-	if (!target) {
-		if (embedOnly || options?.sessionId?.startsWith('embed-')) {
+	const sessionIdFromOptions = options?.sessionId?.trim();
+	const embedOnly = options?.embedOnly || Boolean(sessionIdFromOptions?.startsWith('embed-'));
+	let sessionId = sessionIdFromOptions;
+
+	if (!sessionId) {
+		const sessions = await listBridgeSessions(cfg);
+		const target = pickBridgeSession(sessions, { ...options, embedOnly });
+		if (!target) {
+			if (embedOnly) {
+				throw new Error(
+					`应用广场内置浏览器未就绪（sessionId=${options?.sessionId ?? 'embed'}）。请确认左侧页面已加载完成后再试。`,
+				);
+			}
 			throw new Error(
-				`应用广场内置浏览器未就绪（sessionId=${options?.sessionId ?? 'embed'}）。请确认左侧页面已加载完成后再试。`,
+				"浏览器未连接。应用广场内嵌预览未就绪，或请安装 StoClaw Browser Bridge 扩展并完成配对。",
 			);
 		}
-		throw new Error(
-			"浏览器未连接。应用广场内嵌预览未就绪，或请安装 StoClaw Browser Bridge 扩展并完成配对。",
-		);
+		sessionId = target.sessionId;
 	}
-	const sessionId = target.sessionId;
+
 	const timeoutMs = cfg.commandTimeoutMs ?? 30_000;
 	const commandResponse = await fetchJson<{ commandId: string }>(
 		`${baseUrl(cfg)}/api/browser-bridge/command`,
@@ -111,7 +119,7 @@ export async function runBridgeCommand(
 		if (resultResponse.ready && resultResponse.result) {
 			return resultResponse.result.result;
 		}
-		await new Promise((resolve) => setTimeout(resolve, 200));
+		await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
 	}
 	throw new Error(`浏览器命令超时: ${action}`);
 }

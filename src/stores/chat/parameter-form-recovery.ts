@@ -350,6 +350,8 @@ function registerWorkflowSubmitHandler(
         collectedInputs: values,
       });
       chatState.clearPendingWorkflow(chatState.currentSessionKey);
+      const { refreshStartedWorkflowChatCards } = await import('@/lib/workflow-run-started');
+      await refreshStartedWorkflowChatCards(chatState.currentSessionKey, run.runId);
     } catch (err) {
       const messageErr = err instanceof Error ? err.message : String(err);
       console.error('[parameter-form-recovery] handler error', err);
@@ -708,6 +710,18 @@ export function ensureWorkflowParameterFormHandler(
   get: ChatGet,
 ): void {
   if (hasParameterFormHandler(formId)) return;
+  const state = get();
+  const pending = state.workflowChatUiBySessionKey[state.currentSessionKey]?.pendingWorkflow ?? null;
+  if (pending?.templateId === templateId && pending.schema) {
+    registerWorkflowSubmitHandler(formId, {
+      templateId,
+      templateName: pending.templateName,
+      schemaHash: pending.schemaHash || schemaHash,
+      schema: pending.schema,
+      get,
+    });
+    return;
+  }
   void (async () => {
     try {
       const { getStartupSchema } = await import('@/lib/workflow-api');

@@ -155,6 +155,65 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(after?.runtimeResult).toBeNull();
   });
 
+  it('cancels dispatch without send when the task was disabled after claim', async () => {
+    const { task, run } = await seedRun();
+    await taskRepo.setEnabled(task.id, false);
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).not.toHaveBeenCalled();
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.error).toMatch(/disabled/);
+  });
+
+  it('cancels dispatch without send when the task was deleted after claim', async () => {
+    const { task, run } = await seedRun();
+    await taskRepo.softDelete(task.id);
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).not.toHaveBeenCalled();
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.error).toMatch(/deleted/);
+  });
+
+  it('still dispatches a manual trigger even if the task is disabled', async () => {
+    const task = await taskRepo.create({ id: 't1', name: 'T1', enabled: false, ...baseTaskInput });
+    const run = await runRepo.createRun({
+      taskId: task.id,
+      triggerSource: 'manual',
+      idempotencyKey: 'manual-1',
+      scheduledFor: '2024-01-01T09:00:00.000Z',
+    });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
+    expect((await runRepo.getRun(run.runId))?.status).toBe('running');
+  });
+
+  it('does not retry after the task is disabled during send', async () => {
+    const { task, run } = await seedRun({ retryPolicy: { maxAttempts: 2, backoffSec: 0 } });
+    runMainChatSendMock.mockImplementation(async () => {
+      await taskRepo.setEnabled(task.id, false);
+      return { success: false, error: 'fail' };
+    });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+    await nextTick();
+    await nextTick();
+
+    expect((await runRepo.getRun(run.runId))?.status).toBe('failed');
+    expect((await runRepo.listRuns(task.id)).filter((item) => item.triggerSource === 'recovery')).toHaveLength(0);
+  });
+
   it('send success leaves run running; canonical terminal → succeeded + runtimeResult', async () => {
     const { task, run } = await seedRun();
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
@@ -162,7 +221,7 @@ describe('EngineScheduledTaskDispatcher', () => {
 
     await dispatcher.dispatch({ task, run });
 
-    // send 被调一次；Claude + append → message prepend 收件人规则，systemPromptAppend 仍保留。
+    // send 被调一次；Claude 原生使用 systemPromptAppend，用户历史保持原始 prompt。
     expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput).toMatchObject({
@@ -171,9 +230,9 @@ describe('EngineScheduledTaskDispatcher', () => {
       idempotencyKey: 'idem-1',
       permissionProfile: 'workspace-write',
       systemPromptAppend: '[dingtalk recipients]',
-      displayText: 'run report',
+      sourceText: 'run report',
     });
-    expect(passedInput.message).toBe('[dingtalk recipients]\n\nrun report');
+    expect(passedInput.message).toBe('run report');
 
     // send resolve 只表 run 启动——run 仍 running，不在此置 succeeded。
     const mid = await runRepo.getRun(run.runId);
@@ -215,7 +274,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
   });
 
-  it('openclaw keeps prompt as message; append stays for adapter merge (no double prepend)', async () => {
+  it('passes engine-neutral scheduled prompt context to openclaw adapter', async () => {
     const { task, run } = await seedRun({ engineType: 'openclaw' });
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-oc' } });
     const { dispatcher } = makeDispatcher({ systemPromptAppend: '[dingtalk recipients]' });
@@ -225,6 +284,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput.message).toBe('run report');
     expect(passedInput.systemPromptAppend).toBe('[dingtalk recipients]');
+    expect(passedInput.runtimePolicy).toMatchObject({ origin: 'scheduled_task', ownerId: run.runId });
 
     await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: 'sched:t1:20240101' }, 'run.completed'));
     expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');

@@ -68,11 +68,12 @@ function buildSendCommandHints(mentions: DingTalkMention[]): string[] {
   });
 }
 
-/** 文本是否含 StoClaw 钉钉收件人块（marker / legacy 注释 / 标题）。 */
+/** 文本是否含钉钉收件人块（marker / legacy 注释 / 新旧标题）。 */
 export function messageHasDingTalkRecipientContext(message: string): boolean {
   return message.includes(DINGTALK_RECIPIENTS_MARKER)
     || message.includes('<!-- StoClaw-DingTalk-Recipients: do-not-search -->')
-    || message.includes('## StoClaw DingTalk Recipients');
+    || message.includes('## StoClaw DingTalk Recipients')
+    || message.includes('## SClaw DingTalk Recipients');
 }
 
 /**
@@ -188,8 +189,8 @@ function buildRecipientHeader(
 
   const title =
     mode === 'scheduled-task'
-      ? '## StoClaw DingTalk Recipients（定时任务已配置）'
-      : '## StoClaw DingTalk Recipients（对话 @ 已选定对象）';
+      ? '## SClaw DingTalk Recipients（定时任务已配置）'
+      : '## SClaw DingTalk Recipients（对话 @ 已选定对象）';
 
   const rule3 =
     mode === 'chat-read'
@@ -204,7 +205,7 @@ function buildRecipientHeader(
     '',
     title,
     '',
-    '以上 JSON 中的 userId / openConversationId 由用户在 StoClaw 中**手动选定**，与显示名一一对应。',
+    '以上 JSON 中的 userId / openConversationId 由用户在 SClaw 中**手动选定**，与显示名一一对应。',
     '',
     '**必须遵守：**',
     '1. **禁止**对 JSON 内收件人执行 `dws contact user search`、`dws aisearch person` 或任何搜人/搜群命令',
@@ -258,7 +259,7 @@ function buildDingTalkMentionSystemContextForChatRead(
 ): string {
   return [
     ...buildRecipientHeader(mentions, 'chat-read'),
-    '4. **【P0 本轮禁止发送】** 用户消息没有明确发送意图（如发给/发送给/推送给/把…发给…）。@ 只表示选定对象。若用户只要求总结、分析、查看、检索、回答，**禁止**调用 `dws chat message send`，也**禁止**追问"是否需要发送"；读完后**只在 StoClaw 对话中回复**。',
+    '4. **【P0 本轮禁止发送】** 用户消息没有明确发送意图（如发给/发送给/推送给/把…发给…）。@ 只表示选定对象。若用户只要求总结、分析、查看、检索、回答，**禁止**调用 `dws chat message send`，也**禁止**追问"是否需要发送"；读完后**只在 SClaw 对话中回复**。',
     '5. ' + buildDingTalkReadHistoryGuidance(),
   ].join('\n');
 }
@@ -302,7 +303,7 @@ export function buildDingTalkMentionSystemContextForScheduledTask(
     ...buildRecipientHeader(mentions, 'scheduled-task'),
     '4. **定时任务：以上 JSON 内收件人必须发送，发送不是可选项（指定即必发）**——无需意图词；用块内 `userId` / `openConversationId` 逐个 `dws chat message send`；须等业务**完成或失败后再发**，禁止提前发送。**不要假设系统会自动发。**',
     '5. **【P0 收件人并集 + 同一正文】** JSON 为列配置结构化 id；若任务描述还自然语言点名了其他人（如「发给我自己 / 用户工号」），须一并发送。所有收件人的 `--text` 必须是**同一份业务结果**；每位只发 1 次。',
-    '6. **【P0 禁止回执上钉钉】** `--text` 禁止写「任务完成」「消息已发送至」「执行成功」等会话确认或回执清单；确认只留在 StoClaw 对话。正文由任务结果直接组织；`--dry-run` 仅自检；**禁止原样执行**下方命令示例。',
+    '6. **【P0 禁止回执上钉钉】** `--text` 禁止写「任务完成」「消息已发送至」「执行成功」等会话确认或回执清单；确认只留在 SClaw 对话。正文由任务结果直接组织；`--dry-run` 仅自检；**禁止原样执行**下方命令示例。',
     ...buildScheduledTaskSendFormatRules(),
     ...buildCommandExampleHint(mentions, { scheduledTask: true }),
     ...buildFileSendContextIfAny(mentions, options),

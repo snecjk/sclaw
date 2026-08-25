@@ -47,6 +47,7 @@ import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { useStoTaskSubitemEntry } from '@/hooks/use-sto-task-subitem-entry';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
+import { myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -328,7 +329,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     navigate(`/workflow/${encodeURIComponent(workflowId)}`);
   }, [navigate]);
   const openWorkflowList = useCallback((workflowId: string) => {
-    navigate(`/workflow?highlightWorkflowId=${encodeURIComponent(workflowId)}`);
+    navigate(myTasksWorkflowListHref(workflowId));
   }, [navigate]);
 
   const {

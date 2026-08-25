@@ -4,7 +4,7 @@
  * - recoverOnLaunch：在途 run（RUNNING/WAITING_APPROVAL/WAITING_INPUT）→ 标 INTERRUPTED
  *   + 在途 node_run 标 INTERRUPTED + outbox(terminal)；弹窗让用户选续跑/重发（onRecover 回调收集）。
  * - resumeRun：加载 wf_run.definition_json + wf_node_run，跳过 SUCCEEDED，从首个非 SUCCEEDED 节点
- *   恢复执行（上游输出从 wf_node_run.output_json 取）。agent 节点重跑靠 retry-context prompt（agent-retry），
+ *   恢复执行（上游输出从 wf_node_run.output_json 取）。被中断的 agent 节点从节点边界以干净会话重启，
  *   action 节点 echo 安全。
  *
  * 不自动续跑——由用户选（避免副作用幂等未覆盖的节点自动重跑）。
@@ -70,6 +70,25 @@ export async function resumeRun(
   const statusByNode = new Map(nodeRuns.map((nodeRun) => [nodeRun.node_id, nodeRun.status]));
   const ordered = topoSort(definition.nodes ?? [], definition.edges ?? []);
   const firstUnfinished = ordered.find((node) => statusByNode.get(node.id) !== 'SUCCEEDED');
+  const interruptedNodeRun = firstUnfinished
+    ? nodeRuns.find((nodeRun) => nodeRun.node_id === firstUnfinished.id && nodeRun.status === 'INTERRUPTED')
+    : undefined;
+  if (interruptedNodeRun) {
+    // Resume from the durable node boundary. Completed upstream checkpoints
+    // stay intact, while partial output and the aborted Agent session do not.
+    await repo.upsertNodeRun({
+      ...interruptedNodeRun,
+      run_id: runId,
+      status: 'PENDING',
+      agent_session_id: null,
+      input_json: null,
+      output_json: null,
+      prompt_text: null,
+      last_completion_issue: null,
+      started_at: null,
+      completed_at: null,
+    });
+  }
   workflowExecLog('info', 'recover-resume-ready', 'workflow run prepared for resume', {
     runId,
     workflowId: run.workflow_id,

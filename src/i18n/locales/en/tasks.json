@@ -41,6 +41,11 @@
     "pageTitle": "My Tasks",
     "subtitle": "Automate AI workflows with scheduled tasks",
     "newTask": "+ New Scheduled Task",
+    "sectionTabs": {
+      "tasks": "Scheduled Tasks",
+      "workflow": "Workflows",
+      "aria": "My Tasks sections"
+    },
     "viewTabs": {
       "tasks": "Scheduled Tasks",
       "records": "Execution Records",
@@ -85,7 +90,11 @@
     "toolbar": {
       "searchSrOnly": "Search scheduled task names",
       "searchPlaceholder": "Search task name",
-      "sortAria": "Sort by"
+      "sortAria": "Sort by",
+      "pullFromCloud": "Sync from cloud",
+      "pulling": "Syncing…",
+      "pullSuccess": "Synced from cloud",
+      "pullFailed": "Cloud sync failed"
     },
     "recordToolbar": {
       "searchSrOnly": "Search execution record task names",
@@ -130,19 +139,14 @@
       "workflowLabel": "Linked Workflow",
       "workflowPlaceholder": "Select",
       "workflowEmpty": "No workflows available",
-      "instructionsLabel": "What should SClaw do for you…",
-      "instructionsPlaceholder": "What should SClaw do for you…",
+      "instructionsLabel": "Task Content",
+      "instructionsPlaceholder": "Describe what you want SClaw to do...\n- You can set a start or reminder time, e.g. “Start every weekday at 9:00, notify me when done”\n- You can share results, e.g. “Send @DingTalk contact or group”; results are sent to the @target when the task finishes",
       "instructionsRequired": "Please describe what SClaw should do",
       "workflowAutoHint": "Linked workflow — description auto-generated",
-      "beautifyAria": "AI beautify task description",
-      "beautifyButton": "AI Beautify",
-      "beautifying": "Beautifying…",
-      "beautifyNoChange": "Description is already clear; no changes needed",
-      "beautifyFallback": "Model unavailable; applied basic rule-based polish",
-      "beautifySuccess": "Task description beautified",
-      "beautifySuccessWithModel": "Beautified with {{model}}",
-      "beautifyFailed": "AI beautify failed; please try again",
       "scheduleLabel": "Schedule",
+      "resultSaveToLabel": "Save task results to",
+      "myArtifactLabel": "My artifacts",
+      "sharedArtifactLabel": "Site shared artifacts",
       "recipientsLabel": "Recipients",
       "recipientsPlaceholder": "Type @ to search contacts and groups (multi-select)",
       "recipientsHint": "Results will be automatically sent to selected recipients when the task finishes",
@@ -159,7 +163,7 @@
       "running": "Running…",
       "edit": "Edit task",
       "delete": "Delete task",
-      "workflowBadge": "Workflow",
+      "workflowBadge": "Workflow task",
       "nextRunNow": "Running soon",
       "nextRunMinutes": "Next run in {{count}} min",
       "nextRunHours": "Next run in {{count}} hr",
@@ -181,7 +185,14 @@
       "everyDay": "Every day",
       "workday": "Workdays",
       "pleaseSelect": "Select",
-      "monthDay": "Day {{day}}"
+      "monthDay": "Day {{day}}",
+      "monthLastDay": "Last calendar day of the month",
+      "monthDaysRequired": "Select at least one day or the last calendar day",
+      "shortMonthSkipHint": "Dates that don't exist in some months will be skipped",
+      "addTime": "Add time",
+      "removeTime": "Remove this time",
+      "timesRequired": "Select at least one run time",
+      "tooComplexToEdit": "This schedule is too complex to edit in the UI. Please recreate the task."
     },
     "sort": {
       "createdDesc": "Created (latest)",

@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { listCardHoverBorderShadowClass } from '@/lib/surfaces';
 import { actionTooltipClass } from '../constants';
 import type { DataCenterUiEntry, EntryRenderProps } from '../types';
 import { formatBytes, formatDate, getEntryIcon } from '../utils';
@@ -153,7 +154,8 @@ export function EntryList(props: EntryRenderProps) {
               }}
               onContextMenu={(event) => openContextMenu(event, entry)}
               className={cn(
-                'grid h-[56px] grid-cols-[minmax(0,1fr)_128px] items-center rounded-[8px] bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-colors hover:bg-[#FAFBFC] min-[720px]:grid-cols-[minmax(0,1fr)_140px_64px_128px] min-[900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:border dark:border-border/60 dark:bg-card dark:shadow-none dark:hover:bg-muted/40',
+                'grid h-[56px] grid-cols-[minmax(0,1fr)_128px] items-center rounded-[8px] border border-transparent bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-[border-color,box-shadow] duration-base min-[720px]:grid-cols-[minmax(0,1fr)_140px_64px_128px] min-[900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:border-border/60 dark:bg-card dark:shadow-none',
+                listCardHoverBorderShadowClass,
                 draggingEntryId === entry.entryId && 'opacity-60',
                 dropActive && 'bg-[#EAF3FF] ring-1 ring-[#4E7FFF] dark:bg-primary/10',
               )}

@@ -367,6 +367,34 @@ describe('user-message-merge', () => {
     expect(merged[0]?.content).toBe('总部结算对账 创建工作流');
   });
 
+  it('does not reconstruct a truncated session label when the complete opening user turn exists', () => {
+    const completeMessage = '帮我执行 id 为：wf_73bb1840 的工作流 【客户成本分析 09:50】 帮我执行这个工作流';
+    const truncatedLabel = '帮我执行 id 为：wf_73bb1840 的工作流 【客户成本分析 09:50】 帮我执行这个工作…';
+    const enriched = [
+      {
+        id: 'history-user-1',
+        role: 'user',
+        content: completeMessage,
+        timestamp: 1710000001,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '工作流已成功启动',
+        timestamp: 1710000002,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': truncatedLabel },
+    );
+
+    expect(merged).toEqual(enriched);
+    expect(merged.filter((message) => message.role === 'user')).toHaveLength(1);
+  });
+
   it.each([
     '执行技能冷笑话工作流工作流（Claude）',
     '执行3日看天计划工作流（OpenClaw）',
@@ -450,6 +478,57 @@ describe('user-message-merge', () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0]?.role).toBe('assistant');
+  });
+
+  it('does not recover opening user from label when optimistic overlay already covers it', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '思考中…',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+    const optimistic = {
+      id: 'optimistic-1',
+      role: 'user',
+      content: '帮我做报价测算：覆盖新客测算与老客调价',
+      timestamp: 1710000001,
+      _skillMeta: { slug: 'customer-monitor', title: '客户异常监控' },
+    } as RawMessage;
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '帮我做报价测算：覆盖新客测算与老客调价' },
+      undefined,
+      { optimisticUser: optimistic },
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.role).toBe('assistant');
+  });
+
+  it('drops session-label users when overlay already has a skill-tagged turn', () => {
+    const messages = [
+      {
+        id: 'session-label-user-agent:main:session-1',
+        role: 'user',
+        content: '帮我做报价测算：覆盖新客测算与老客调价',
+        timestamp: 1710000000,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const cleaned = dropSyntheticSkillSessionLabelUsers(messages, { hasSkillUser: true });
+
+    expect(cleaned.filter((message) => message.role === 'user')).toHaveLength(0);
+    expect(cleaned[0]?.role).toBe('assistant');
   });
 
   it('does not reorder opening user while sending', () => {
@@ -550,7 +629,8 @@ describe('user-message-merge', () => {
       {
         id: 'history-user',
         role: 'user',
-        content: '请帮我完成网点出库运费流程',
+        // 首轮回显常带 defaultPrompt 前缀；软后缀证据仍须能配对。
+        content: '请帮我完成网点出库运费流程\n\n查网点432100的',
         timestamp: 1710000001,
       },
       {

@@ -6,7 +6,10 @@
 /** 执行记录状态 */
 export type RecordStatus = 'running' | 'success' | 'failed';
 
-/** 任务视图：定时任务 / 执行记录 */
+/** 一级 Tab：定时任务 / 工作流 */
+export type MyTaskSection = 'tasks' | 'workflow';
+
+/** 任务视图：定时任务 / 执行记录（一级「定时任务」内） */
 export type TaskView = 'tasks' | 'records';
 
 /** 执行记录（全部为工作流执行记录） */
@@ -41,8 +44,10 @@ export interface TaskViewModel {
   enabled: boolean;
   /** 下次执行时间（ISO 8601，来自接口 nextRunAt，仅展示） */
   nextRunAt: string | null;
-  /** 关联工作流 code */
-  workflowCode?: string;
+  /** 关联工作流：由 extra.composerSegments 派生，不再读 workflow_code 列 */
+  hasWorkflow?: boolean;
+  /** 关联技能：由 extra.composerSegments 派生 */
+  hasSkill?: boolean;
   /** 创建时间 */
   createdAt: string;
   /** 更新时间 */

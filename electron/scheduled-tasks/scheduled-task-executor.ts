@@ -15,7 +15,8 @@ import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../shared/chat-
 import { isTerminalChatRunPhase } from '../../shared/chat-runtime-protocol';
 import type { ChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import { resolveScheduledTaskDingTalkRecipients } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
-import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
+import { buildMediaFromComposerAttachments } from './scheduled-task-attachments';
+import { access } from 'node:fs/promises';
 import { collectArtifactsFromAssistantMessages } from '../services/data-center-artifact-sync/artifact-collector';
 import {
   resolveDataCenterTargetsFromUris,
@@ -79,7 +80,24 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
   constructor(private readonly deps: EngineScheduledTaskDispatcherDeps) {}
 
   async dispatch(params: { task: ScheduleTask; run: ScheduleTaskRun }): Promise<void> {
-    const { task, run } = params;
+    const { task: claimedTask, run: claimedRun } = params;
+
+    const currentRun = await this.deps.runRepo.getRun(claimedRun.runId);
+    if (!currentRun || currentRun.status !== 'queued') {
+      return;
+    }
+
+    const latest = await this.deps.taskRepo.getById(claimedTask.id);
+    const allowDisabled = currentRun.triggerSource === 'manual';
+    if (!latest || (!latest.enabled && !allowDisabled)) {
+      await this.cancelDispatch(
+        currentRun,
+        latest ? 'task disabled before dispatch' : 'task deleted before dispatch',
+      );
+      return;
+    }
+    const task = latest;
+    const run = currentRun;
 
     const gatewayManager = this.deps.getGatewayManager();
     if (!gatewayManager) {
@@ -98,23 +116,37 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       sessionKey = session.sessionKey;
     }
 
-    await this.deps.runRepo.updateRun(run.runId, {
-      status: 'running',
+    const marked = await this.deps.runRepo.markRunningIfQueued(run.runId, {
       startedAt: now.toISOString(),
       sessionKey,
     });
+    if (!marked) {
+      logger.info('[scheduled-task] dispatch aborted, run no longer queued', {
+        taskId: task.id,
+        runId: run.runId,
+      });
+      return;
+    }
 
     const adapter = getAdapter(task.engineType);
     const ctx: EngineAdapterContext = { gatewayManager };
     const systemPromptAppend = this.deps.buildSystemPromptAppend(task) ?? undefined;
-    // message 默认即库内 prompt。Claude：有 append 时再 prepend 进 user message（对齐
-    // OpenClaw 可见性；system append 仍保留）。OpenClaw 由 adapter 自行 merge，此处不重复。
+    // executor 只传递定时任务语义；system prompt 的实际承载方式由各引擎 adapter 决定。
     const recipients = resolveScheduledTaskDingTalkRecipients(task);
-    const appendText = systemPromptAppend?.trim() || '';
-    const message =
-      adapter.type === 'claude' && appendText.length > 0
-        ? prependSystemPromptAppend(task.prompt, systemPromptAppend)
-        : task.prompt;
+    const message = task.prompt;
+    const mediaCandidates = buildMediaFromComposerAttachments(task.extra);
+    const media: Array<{ filePath: string; mimeType: string; fileName: string }> = [];
+    for (const item of mediaCandidates) {
+      try {
+        await access(item.filePath);
+        media.push(item);
+      } catch {
+        logger.warn('[scheduled-task] skip missing attachment', {
+          taskId: task.id,
+          filePath: item.filePath,
+        });
+      }
+    }
 
     logger.info('[scheduled-task] dingtalk message assembled', {
       taskId: task.id,
@@ -122,6 +154,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       engineType: task.engineType,
       promptChars: task.prompt.length,
       messageChars: message.length,
+      mediaCount: media.length,
       recipientCount: recipients?.length ?? 0,
       recipients: (recipients ?? []).map((r) => ({
         type: r.type,
@@ -137,12 +170,13 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     const input: MainChatSendInput = {
       sessionKey,
       message,
-      displayText: task.prompt,
+      sourceText: task.prompt,
       deliver: true,
       idempotencyKey: run.idempotencyKey,
       systemPromptAppend,
       permissionProfile: task.permissionProfile ?? undefined,
       engineType: adapter.type,
+      media: media.length ? media : undefined,
       runtimePolicy: {
         origin: 'scheduled_task',
         ownerId: run.runId,
@@ -155,7 +189,15 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
         gatewayManager,
         input,
         (params, memory) => adapter.prepareMemoryInjection(params, memory),
-        (prepared) => adapter.sendMessage(ctx, prepared),
+        (prepared) => {
+          if (input.media && input.media.length > 0) {
+            return adapter.sendMessageWithMedia(ctx, {
+              ...prepared,
+              media: input.media,
+            });
+          }
+          return adapter.sendMessage(ctx, prepared);
+        },
       );
 
       if (!result.success) {
@@ -359,6 +401,21 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     logger.warn('[scheduled-task] run failed', { runId: run.runId, error });
   }
 
+  private async cancelDispatch(run: ScheduleTaskRun, reason: string): Promise<void> {
+    const updated = await this.deps.runRepo.cancelIfActive(run.runId, {
+      error: reason,
+      completedAt: new Date().toISOString(),
+      runtimeResult: { stopReason: 'cancelled', isError: false, durationMs: 0 },
+    });
+    if (updated) {
+      logger.info('[scheduled-task] dispatch skipped', {
+        taskId: run.taskId,
+        runId: run.runId,
+        reason,
+      });
+    }
+  }
+
   /**
    * run 终态失败后的善后：有 retry 余量则排程重试，否则落 failurePolicy。
    * 仅在真实 send 失败路径调用——gateway 未注册的 setup 错误不走此路（避免误暂停好任务）。
@@ -466,6 +523,14 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
    */
   private async scheduleRetry(task: ScheduleTask, run: ScheduleTaskRun): Promise<void> {
     const retryPolicy = task.retryPolicy!;
+    const latest = await this.deps.taskRepo.getById(task.id);
+    if (!latest || !latest.enabled) {
+      logger.info('[scheduled-task] skip retry, task no longer schedulable', {
+        taskId: task.id,
+        runId: run.runId,
+      });
+      return;
+    }
     const nextAttempt = run.attempt + 1;
     const backoffMs = Math.max(0, retryPolicy.backoffSec) * 1000;
     const idempotencyKey = `${task.id}:retry:${nextAttempt}:${run.runId}`;
@@ -532,6 +597,10 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     const consecutive = await this.deps.runRepo.countConsecutiveFailedFirings(task.id);
     if (consecutive >= failurePolicy.pauseAfterConsecutiveFailures) {
       await this.deps.taskRepo.setEnabled(task.id, false);
+      await this.deps.taskRepo.updateScheduleState(task.id, { nextRunAt: null });
+      await this.deps.runRepo.cancelActiveRunsForTask(task.id, {
+        error: `task paused after ${consecutive} consecutive failures`,
+      });
       this.deps.getEventSink().emit('scheduled-task:task:paused', {
         taskId: task.id,
         consecutiveFailures: consecutive,

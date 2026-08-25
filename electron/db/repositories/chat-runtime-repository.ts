@@ -144,7 +144,29 @@ export class ChatRuntimeRepository {
       )) return 'stale';
 
       if (existingEpoch === snapshot.epoch && existingSequence === snapshot.sequence) {
-        if (String(row.phase) !== snapshot.phase) return 'stale';
+        const existingPhase = String(row.phase) as ChatRunPhase;
+        if (existingPhase !== snapshot.phase) {
+          // Terminal state is monotonic. If an older runtime emitted a terminal
+          // event with the same sequence as its last progress event, preserve
+          // the terminal truth instead of leaving the row permanently active.
+          if (!isTerminalChatRunPhase(snapshot.phase) || isTerminalChatRunPhase(existingPhase)) {
+            return 'stale';
+          }
+          await trx.updateTable('chat_runtime_runs').set({
+            run_id: values.run_id,
+            origin: values.origin,
+            owner_id: values.owner_id,
+            deadline_at: values.deadline_at,
+            phase: values.phase,
+            last_event_at: values.last_event_at,
+            terminal_at: values.terminal_at,
+            error: values.error,
+            acceptance_result_json: values.acceptance_result_json,
+            updated_at: timestamp,
+            version: sql<number>`version + 1`,
+          }).where('id', '=', row.id).execute();
+          return 'updated';
+        }
         const metadataChanged = row.run_id !== values.run_id
           || row.acceptance_result_json !== values.acceptance_result_json
           || row.error !== values.error;

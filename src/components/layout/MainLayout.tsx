@@ -1,7 +1,7 @@
 /**
  * Main Layout Component
  *
- * 省区：无整行顶栏；Sidebar | L0 Gap | Workspace 三列 Grid。
+ * 省区：无整行顶栏；Sidebar | Workspace 两列 Grid。
  * Stage 2：ResizeHandle 作为 Workspace 起始侧 overlay（collapsed 时不渲染）。
  * Stage 3：split 用统一三列 Grid；preview-expanded 用 Workspace 内单列（Conversation 由页面保持挂载）。
  * 完整 layout：52px TitleBar + 侧栏 + main 滚动区。
@@ -11,7 +11,6 @@ import { matchPath, Outlet, useLocation } from 'react-router-dom';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   stoAppShellGridProvincialClass,
-  stoAppShellSidebarGapClass,
   stoMainCardBodyClass,
   stoMainCardBodyHomeClass,
   stoMainCardBodySplitClass,
@@ -31,6 +30,7 @@ import { useSidebarResize } from '@/hooks/use-sidebar-resize';
 import { getSidebarLayoutVariant } from '@/lib/sidebar-layout';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
+import { shouldHideWorkflowContentHeader, useWorkflowUiStore } from '@/stores/workflow-ui';
 import { SidebarDeleteConfirmPortal } from '@/components/layout/sidebar-delete-confirm-portal';
 import { SclawBrowserHost } from '@/components/sclaw-browser/SclawBrowserHost';
 import { AppPlazaShell } from '@/components/more-apps/AppPlazaShell';
@@ -48,6 +48,7 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
   const isHome = isHomeRoute(pathname);
   const isSplitLayout = layoutMode === 'split';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
+  const isLearningCenter = pathname === '/learning-center';
 
   // 三栏与双栏 body 类互斥：cn 合并时 px-[var(--sto-content-pad-x)] 可能压过 px-0，split row 会比 header 窄 ~32–40px
   if (isSplitLayout) {
@@ -78,8 +79,10 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
     <div
       className={cn(
         hideContentHeader
-          ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
-          : stoMainCardBodyClass,
+          ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-[var(--sto-content-pad-x)]'
+          : isLearningCenter
+            ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain pb-5 pt-0'
+            : stoMainCardBodyClass,
       )}
     >
       <Outlet />
@@ -90,8 +93,16 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
 /** 省区主卡片：Header 与 Body 各自拥有 inset，不把 macOS safe slot 下放给 main。 */
 function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean }) {
   const layoutMode = useContentHeaderLayoutMode();
+  const editorActive = useWorkflowUiStore((state) => state.editorActive);
+  const embeddedHeaderOwned = useWorkflowUiStore((state) => state.embeddedHeaderOwned);
+  const embeddedHeaderNegotiating = useWorkflowUiStore((state) => state.embeddedHeaderNegotiating);
   const isSplitLayout = layoutMode === 'split';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
+  const effectiveHideContentHeader = hideContentHeader || shouldHideWorkflowContentHeader({
+    editorActive,
+    embeddedHeaderOwned,
+    embeddedHeaderNegotiating,
+  });
 
   return (
     <main
@@ -105,8 +116,8 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
             : 'flex min-h-0 min-w-0 flex-1 flex-col',
       )}
     >
-      {!hideContentHeader ? <ContentHeader /> : null}
-      <MainCardBody hideContentHeader={hideContentHeader} />
+      {!effectiveHideContentHeader ? <ContentHeader /> : null}
+      <MainCardBody hideContentHeader={effectiveHideContentHeader} />
       <AppPlazaShell />
       <SclawBrowserHost />
     </main>
@@ -214,7 +225,6 @@ export function MainLayout() {
         <AppShellChromeOverlay />
         <div className={stoAppShellGridProvincialClass}>
           <Sidebar />
-          <div className={stoAppShellSidebarGapClass} aria-hidden />
           <div className={stoWorkspaceWrapClass}>
             {showSidebarResize ? (
               <SidebarResizeHandle

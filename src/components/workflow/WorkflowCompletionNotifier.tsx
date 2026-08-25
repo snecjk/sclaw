@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { openWorkflowResult } from '@/lib/workflow-result-navigation';
+import { requestWorkflowResultDrawerHandoff } from '@/lib/workflow-result-drawer-handoff';
 import { getRunViaIpc, runToExecutionState } from '@/lib/workflow-api';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { getExecutionByRunId, markCompletionNotificationDelivered } from '@/stores/workflow-memory';
@@ -16,6 +17,23 @@ interface WorkflowStatusPayload {
   status: WorkflowRunStatus;
   workflowId?: string;
   error?: string;
+}
+
+const MAX_DELIVERED_COMPLETION_NOTIFICATIONS = 500;
+const deliveredCompletionNotifications = new Set<string>();
+
+function completionNotificationId(sessionKey: string, runId: string): string {
+  return `workflow-completion:${sessionKey}:${runId}`;
+}
+
+function claimCompletionNotification(id: string): boolean {
+  if (deliveredCompletionNotifications.has(id)) return false;
+  deliveredCompletionNotifications.add(id);
+  if (deliveredCompletionNotifications.size > MAX_DELIVERED_COMPLETION_NOTIFICATIONS) {
+    const oldest = deliveredCompletionNotifications.values().next().value;
+    if (typeof oldest === 'string') deliveredCompletionNotifications.delete(oldest);
+  }
+  return true;
 }
 
 export function WorkflowCompletionNotifier() {
@@ -69,15 +87,28 @@ export function WorkflowCompletionNotifier() {
         } : current);
       }
     };
+    const openDetailsAfterHandoff = (
+      sessionKey: string,
+      runId: string,
+      workflowName?: string,
+    ) => {
+      requestWorkflowResultDrawerHandoff(runId, () => {
+        void openDetails(sessionKey, runId, workflowName);
+      });
+    };
     const onCompletionOpen = (payload: unknown) => {
       const data = payload as { sessionKey?: string; runId?: string };
-      if (data.sessionKey && data.runId) void openDetails(data.sessionKey, data.runId);
+      if (data.sessionKey && data.runId) {
+        openDetailsAfterHandoff(data.sessionKey, data.runId);
+      }
     };
     const onStatus = (payload: unknown) => {
       const data = payload as WorkflowStatusPayload;
       if (!data?.runId || !data.sessionKey || !isTerminalWorkflowRunStatus(data.status)) return;
       if (data.status !== 'completed' && data.status !== 'failed') return;
 
+      const notificationId = completionNotificationId(data.sessionKey, data.runId);
+      if (!claimCompletionNotification(notificationId)) return;
       const execution = getExecutionByRunId(data.runId, data.sessionKey);
       if (execution?.completionNotificationDeliveredAt) return;
       markCompletionNotificationDelivered(data.sessionKey, data.runId);
@@ -89,8 +120,12 @@ export function WorkflowCompletionNotifier() {
         : t('workflow.notificationViewDetails');
       const show = completed ? toast.success : toast.error;
       show(completed ? t('workflow.notificationCompleted', { workflowName }) : t('workflow.notificationFailed', { workflowName }), {
+        id: notificationId,
         description: completed ? t('workflow.notificationCompletedDescription') : (data.error || t('workflow.notificationFailedDescription')),
-        action: { label: actionLabel, onClick: () => void openDetails(data.sessionKey, data.runId, workflowName) },
+        action: {
+          label: actionLabel,
+          onClick: () => openDetailsAfterHandoff(data.sessionKey, data.runId, workflowName),
+        },
       });
     };
 
@@ -107,7 +142,7 @@ export function WorkflowCompletionNotifier() {
 
   return (
     <TestRunDrawer
-      variant="detail"
+      variant="trial"
       open={detail.open}
       workflowName={detail.workflowName}
       runId={detail.runId}

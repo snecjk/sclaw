@@ -7,9 +7,11 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { readMainChatDraftState } from '@/lib/main-chat-navigation';
+import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
+import { CHAT_EDIT_DRAFT_EVENT, type ChatEditDraftEventDetail } from '@/pages/Chat/ChatInput';
 
 /**
  * 首页：所有用户统一走 HomeAgentHubSurface，由后端推荐位 API 动态返回不同内容。
@@ -50,20 +52,33 @@ export function Home() {
   const navigate = useNavigate();
   const locationState = location.state;
   const draftState = readMainChatDraftState(locationState);
+  const bridgeMainSeed = useJsBridgeHostStore((s) => s.mainComposerSeed?.text);
   const consumedDraftTokensRef = useRef<Set<string>>(new Set());
+  const seedText = draftState?.composerHandoff
+    ? undefined
+    : draftState?.mainChatDraft ?? bridgeMainSeed;
 
   useEffect(() => {
-    if (!draftState) return;
-    const token = draftState.mainChatDraftToken;
+    const currentDraft = readMainChatDraftState(locationState);
+    if (!currentDraft) return;
+    const token = currentDraft.mainChatDraftToken;
     if (token) {
       if (consumedDraftTokensRef.current.has(token)) return;
       consumedDraftTokensRef.current.add(token);
+    }
+    const handoff = currentDraft.composerHandoff;
+    if (handoff) {
+      // Child effects register the ChatInput listener first, then this parent
+      // effect replays the same event homepage recommend cards use.
+      window.dispatchEvent(new CustomEvent<ChatEditDraftEventDetail>(CHAT_EDIT_DRAFT_EVENT, {
+        detail: handoff,
+      }));
     }
     // 子组件 effect 先于父组件执行：DingTalkMentionEditor 此时已把草稿
     // 写入输入框并聚焦，清掉 state 只会让 seedText prop 变回 undefined，
     // 不会清空已填充的草稿。
     navigate(location.pathname, { replace: true, state: null });
-  }, [draftState, locationState, location.pathname, navigate]);
+  }, [locationState, location.pathname, navigate]);
 
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -130,9 +145,9 @@ export function Home() {
             ?? 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden',
         )}
       >
-        <HomeAgentHubSurface
-          seedText={draftState?.mainChatDraft}
-          seedSkillSlug={seedSkillSlug}
+            <HomeAgentHubSurface
+              seedText={seedText}
+              seedSkillSlug={seedSkillSlug}
         />
       </div>
 

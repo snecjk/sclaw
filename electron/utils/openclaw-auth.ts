@@ -1406,6 +1406,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
 
 const DINGTALK_SEND_GUARD_PLUGIN_ID = 'sto-dingtalk-send-guard';
 const STO_BROWSER_BRIDGE_PLUGIN_ID = 'sto-browser-bridge';
+const STO_BROWSER_AUTOMATION_PLUGIN_ID = 'sto-browser-automation';
 
 /** Strip retired plugin ids from openclaw.json (skills/plugins removed from the app). */
 export async function removeRetiredPluginsFromOpenClawConfig(): Promise<boolean> {
@@ -1512,6 +1513,53 @@ export async function ensureStoBrowserBridgePluginInOpenClaw(): Promise<boolean>
     const plugins = (config.plugins || {}) as Record<string, unknown>;
     plugins.enabled = true;
     const modified = ensureStoBrowserBridgePluginConfig(plugins);
+    if (modified) {
+      config.plugins = plugins;
+      await writeOpenClawJson(config);
+    }
+    return modified;
+  });
+}
+
+/** Enable Browser Automation Platform plugin (ba_* tools). */
+function ensureStoBrowserAutomationPluginConfig(plugins: Record<string, unknown>): boolean {
+  const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
+  const entries = (
+    plugins.entries && typeof plugins.entries === 'object' && !Array.isArray(plugins.entries)
+      ? plugins.entries
+      : {}
+  ) as Record<string, Record<string, unknown>>;
+
+  let modified = false;
+  if (!allow.includes(STO_BROWSER_AUTOMATION_PLUGIN_ID)) {
+    allow.push(STO_BROWSER_AUTOMATION_PLUGIN_ID);
+    modified = true;
+  }
+  const current = entries[STO_BROWSER_AUTOMATION_PLUGIN_ID];
+  if (!current || current.enabled !== true) {
+    entries[STO_BROWSER_AUTOMATION_PLUGIN_ID] = {
+      enabled: true,
+      config: {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: PORTS.CLAWX_HOST_API,
+        commandTimeoutMs: 120_000,
+      },
+    };
+    modified = true;
+  }
+  if (modified) {
+    plugins.allow = allow;
+    plugins.entries = entries;
+  }
+  return modified;
+}
+
+export async function ensureStoBrowserAutomationPluginInOpenClaw(): Promise<boolean> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    const plugins = (config.plugins || {}) as Record<string, unknown>;
+    plugins.enabled = true;
+    const modified = ensureStoBrowserAutomationPluginConfig(plugins);
     if (modified) {
       config.plugins = plugins;
       await writeOpenClawJson(config);

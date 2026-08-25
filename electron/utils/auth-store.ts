@@ -57,6 +57,9 @@ export interface AuthState {
 type JsonObject = Record<string, unknown>;
 
 const SYSTEM_CODE = 'sto_claw';
+// Invalidates in-flight work created by a previous login, logout, or switch.
+// This stays process-local because every launch establishes a fresh runtime session.
+let authSessionGeneration = 0;
 
 function createDefaultAuthState(): AuthState {
   return {
@@ -167,7 +170,25 @@ export async function getAuthState(): Promise<AuthState> {
   };
 }
 
+export interface AuthSessionSnapshot {
+  key: string;
+}
+
+/** Returns a non-loggable comparison key for async work tied to the current login. */
+export async function getAuthSessionSnapshot(): Promise<AuthSessionSnapshot> {
+  const [state, origin] = await Promise.all([getAuthState(), getImpersonationOrigin()]);
+  const user = state.user;
+  return {
+    key: `${authSessionGeneration}:${state.ssoEnvironment}:${user?.id || user?.code || 'anonymous'}:${user?.stoToken ?? ''}:${origin?.id || origin?.code || ''}:${origin?.stoToken ?? ''}`,
+  };
+}
+
+export async function isAuthSessionCurrent(snapshot: AuthSessionSnapshot): Promise<boolean> {
+  return (await getAuthSessionSnapshot()).key === snapshot.key;
+}
+
 export async function setAuthUser(user: SsoUserInfo): Promise<void> {
+  authSessionGeneration++;
   // Primary storage: ~/.sai/sso-auth.json
   await syncSsoAuthToSaiCli(user);
   
@@ -189,12 +210,16 @@ export async function setAuthUser(user: SsoUserInfo): Promise<void> {
 }
 
 export async function clearAuthUser(): Promise<void> {
+  authSessionGeneration++;
   const store = await getAuthStore();
   const previousUser = store.get('user', null) as SsoUserInfo | null;
   logger.info('Clear auth user...');
   store.set('isAuthenticated', false);
   store.set('user', null);
   store.set('impersonationOrigin', null);
+  void import('../main/services/jsbridge/session-registry').then(({ destroyAllBridgeSessions }) => {
+    destroyAllBridgeSessions('auth_logout');
+  }).catch(() => {});
   await removeSsoAuthFromSaiCli(previousUser);
   await removeSsoAuthFromOpenClaw();
 }

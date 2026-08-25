@@ -26,6 +26,12 @@ import {
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
+import { logUserSend } from '../../shared/user-send-log';
+import {
+  applyClaudeStreamEvent,
+  ClaudeStreamContentAccumulator,
+  extractClaudeToolResultMessages,
+} from './claude-stream-content';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -44,6 +50,9 @@ type ActiveClaudeQuery = {
   sessionId: string;
   sessionKey: string;
 };
+
+const CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS = 400;
+const CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS = 4_096;
 
 const activeClaudeQueries = new Map<string, ActiveClaudeQuery>();
 const liveClaudeMessages = new Map<string, Array<{
@@ -648,7 +657,15 @@ export async function consumeClaudeQuery(
   let title: string | undefined;
   let seq = recoveryOptions?.initialSeq ?? 0;
   let seenResult = false;
+  let completionEmitted = false;
+  let completionDeferred = false;
   let errorThrown = false;
+  // Claude can finish the current main-agent turn while background subagents
+  // are still running. Their task notifications can then trigger another main
+  // turn on the same query. A `result` therefore is terminal for the app run
+  // only when no SDK task remains outstanding.
+  const pendingTaskIds = new Set<string>();
+  const ignoredAmbientTaskIds = new Set<string>();
   // Accumulated streaming text for the current assistant message. The SDK yields
   // content_block_delta/text_delta *fragments* (not a growing snapshot), and each
   // stream_event carries a per-event uuid (not a stable message id), so we must
@@ -657,29 +674,33 @@ export async function consumeClaudeQuery(
   // (matching the OpenClaw Gateway's delta shape), producing token-by-token
   // appending output. Reset on message_start and when the complete assistant
   // message is emitted as 'final'.
-  let streamText = '';
   let streamThinking = '';
-  let streamToolName = '';
+  const streamContent = new ClaudeStreamContentAccumulator();
+  const toolNamesById = new Map<string, string>();
+  let pendingToolInputDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingToolInputDelta = false;
+  let lastToolInputDeltaAt = 0;
 
   const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
     eventSink.emit('chat:message', toLegacyChatMessagePayload({ ...event, runId, sessionKey, seq: seq++ }));
   };
   const emitAgentCompleted = () => {
+    if (completionEmitted) return;
+    completionEmitted = true;
     if (!eventSink) return;
     eventSink.emit('notification', { method: 'agent', params: { phase: 'completed', runId, sessionKey } });
   };
-  const emitStreamingDelta = () => {
+  const emitStreamingDelta = (options?: { partialToolInput?: boolean }) => {
     const content: Array<Record<string, unknown>> = [];
     if (streamThinking) {
       content.push({ type: 'thinking', thinking: streamThinking });
     }
-    if (streamToolName) {
-      content.push({ type: 'tool_use', name: streamToolName, id: `stream-tool-${runId}` });
-    }
-    if (streamText) {
-      content.push({ type: 'text', text: streamText });
-    }
+    content.push(...streamContent.buildContentArray(
+      options?.partialToolInput
+        ? { maxPartialInputChars: CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS }
+        : undefined,
+    ));
     if (content.length === 0) return;
     emitEngineEvent({
       type: 'message.delta',
@@ -689,6 +710,32 @@ export async function consumeClaudeQuery(
         content,
       },
     });
+  };
+  const clearPendingToolInputDelta = () => {
+    if (pendingToolInputDeltaTimer) {
+      clearTimeout(pendingToolInputDeltaTimer);
+      pendingToolInputDeltaTimer = null;
+    }
+    pendingToolInputDelta = false;
+  };
+  const flushPendingToolInputDelta = () => {
+    if (!pendingToolInputDelta) return;
+    clearPendingToolInputDelta();
+    lastToolInputDeltaAt = Date.now();
+    emitStreamingDelta({ partialToolInput: true });
+  };
+  const queueToolInputDelta = () => {
+    pendingToolInputDelta = true;
+    const elapsed = Date.now() - lastToolInputDeltaAt;
+    if (elapsed >= CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS) {
+      flushPendingToolInputDelta();
+      return;
+    }
+    if (pendingToolInputDeltaTimer) return;
+    pendingToolInputDeltaTimer = setTimeout(() => {
+      pendingToolInputDeltaTimer = null;
+      flushPendingToolInputDelta();
+    }, CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS - elapsed);
   };
 
   try {
@@ -701,6 +748,35 @@ export async function consumeClaudeQuery(
     for await (const message of query) {
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
 
+      if (message.type === 'system') {
+        const taskMessage = message as {
+          subtype?: string;
+          task_id?: string;
+          skip_transcript?: boolean;
+          patch?: { status?: string };
+        };
+        const taskId = typeof taskMessage.task_id === 'string' ? taskMessage.task_id : '';
+        if (taskId && taskMessage.subtype === 'task_started') {
+          if (taskMessage.skip_transcript) {
+            ignoredAmbientTaskIds.add(taskId);
+          } else {
+            pendingTaskIds.add(taskId);
+          }
+        } else if (taskId && taskMessage.subtype === 'task_updated') {
+          if (!ignoredAmbientTaskIds.has(taskId)) {
+            const status = taskMessage.patch?.status;
+            if (status === 'completed' || status === 'failed' || status === 'killed') {
+              pendingTaskIds.delete(taskId);
+            } else if (status === 'pending' || status === 'running' || status === 'paused') {
+              pendingTaskIds.add(taskId);
+            }
+          }
+        } else if (taskId && taskMessage.subtype === 'task_notification') {
+          pendingTaskIds.delete(taskId);
+          ignoredAmbientTaskIds.delete(taskId);
+        }
+      }
+
       // Partial streaming events (only yielded when includePartialMessages is on).
       // Forward text + thinking deltas as live 'delta' chat events (钉钉 progress/content).
       if (message.type === 'stream_event') {
@@ -708,13 +784,17 @@ export async function consumeClaudeQuery(
         if (event) {
           if (event.type === 'message_start') {
             // A new assistant message begins — reset the accumulator.
-            streamText = '';
+            clearPendingToolInputDelta();
             streamThinking = '';
-            streamToolName = '';
+            applyClaudeStreamEvent(streamContent, event);
           } else if (event.type === 'content_block_start') {
-            const block = event.content_block as { type?: string; name?: string } | undefined;
+            flushPendingToolInputDelta();
+            const block = event.content_block as { type?: string; id?: string; name?: string } | undefined;
+            applyClaudeStreamEvent(streamContent, event);
             if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name) {
-              streamToolName = block.name;
+              if (typeof block.id === 'string' && block.id) {
+                toolNamesById.set(block.id, block.name);
+              }
               emitStreamingDelta();
               eventSink?.emit('notification', {
                 method: 'agent',
@@ -732,22 +812,22 @@ export async function consumeClaudeQuery(
               type?: string;
               text?: string;
               thinking?: string;
+              partial_json?: string;
             } | undefined;
             if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
-              streamText += delta.text;
-              emitEngineEvent({
-                type: 'message.delta',
-                message: {
-                  role: 'assistant',
-                  id: runId,
-                  content: [{ type: 'text', text: streamText }],
-                },
-              });
+              flushPendingToolInputDelta();
+              applyClaudeStreamEvent(streamContent, event);
               emitStreamingDelta();
             } else if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+              flushPendingToolInputDelta();
               streamThinking += delta.thinking;
               emitStreamingDelta();
+            } else if (delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+              applyClaudeStreamEvent(streamContent, event);
+              queueToolInputDelta();
             }
+          } else if (event.type === 'content_block_stop' || event.type === 'message_stop') {
+            flushPendingToolInputDelta();
           }
         }
         continue;
@@ -761,13 +841,30 @@ export async function consumeClaudeQuery(
             ? (message as { model: string }).model
             : undefined,
         });
+        flushPendingToolInputDelta();
+        clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
         seenResult = true;
-        // Terminal signal: the renderer's isClaudeRunFragment guard keeps the run
-        // active until this 'completed' notification fires
-        // scheduleCompletedRunFinalization, which sets sending=false and
-        // reconciles history.
-        emitAgentCompleted();
+        // A main-agent result may merely mean "waiting for background tasks".
+        // Keep the same app run alive so task_notification/auto-continuation
+        // messages remain visible. A later result after all tasks settle is the
+        // actual terminal signal.
+        if (pendingTaskIds.size === 0) {
+          if (completionDeferred) {
+            logger.debug('[claude-adapter] completing resumed run after background tasks settled', {
+              sessionKey,
+              runId,
+            });
+          }
+          emitAgentCompleted();
+        } else {
+          completionDeferred = true;
+          logger.debug('[claude-adapter] deferring run completion for background tasks', {
+            sessionKey,
+            runId,
+            pendingTaskIds: [...pendingTaskIds],
+          });
+        }
       }
       if (!title && message.type === 'user' && 'message' in message && !shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
         title = stringifyClaudeContent((message as { message?: unknown }).message);
@@ -778,6 +875,12 @@ export async function consumeClaudeQuery(
           // skips the tail onMessage path, so surface the message to observers
           // first (UI / history / workflow tool_result indexing).
           await onMessage?.(message);
+          for (const toolResult of extractClaudeToolResultMessages(
+            (message as { message?: unknown }).message,
+            toolNamesById,
+          )) {
+            emitEngineEvent({ type: 'tool.result', message: toolResult });
+          }
           const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
           if (workflowToolResult) {
             const nextEntry = {
@@ -826,7 +929,9 @@ export async function consumeClaudeQuery(
         // isClaudeRunFragment guard keeps these non-terminal (sending stays true)
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
-          streamText = '';
+          clearPendingToolInputDelta();
+          streamContent.reset();
+          streamThinking = '';
           emitEngineEvent({
             type: 'message.final',
             message: {
@@ -870,7 +975,15 @@ export async function consumeClaudeQuery(
     }
     throw error;
   } finally {
+    flushPendingToolInputDelta();
+    clearPendingToolInputDelta();
     activeClaudeQueries.delete(sessionKey);
+    // Some SDK task modes settle the outstanding task and then close the
+    // iterator without producing another result. At iterator EOF all observed
+    // tasks are terminal, so finalize the already-seen result here.
+    if (seenResult && !completionEmitted && pendingTaskIds.size === 0) {
+      emitAgentCompleted();
+    }
     // If the loop ended without a result and without an error, the query was
     // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
     if (!seenResult && !errorThrown) {
@@ -966,6 +1079,17 @@ async function startClaudeQuery(
       sessionKey,
       userPromptChars: typeof prompt === 'string' ? prompt.length : null,
       userPrompt: userPromptPreview,
+    });
+    const userMessageForLog = typeof prompt === 'string'
+      ? prompt
+      : (options?.userPrompt ?? '(stream/non-string prompt)');
+    logUserSend({
+      engine: 'claude',
+      sessionKey,
+      message: userMessageForLog,
+      messageLength: userMessageForLog.length,
+      systemPromptAppend: systemPromptAppend || null,
+      systemPromptAppendLength: systemPromptAppend.length,
     });
     // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
     // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。

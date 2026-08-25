@@ -21,11 +21,14 @@ import {
 } from '@/lib/surfaces';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
 import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
 interface SclawBrowserEmbedChatProps {
   sessionKey: string;
   appTitle: string;
+  /** Embed runtime id — used for JSBridge composer seed targeting. */
+  embedRuntimeId?: string | null;
   onClose?: () => void;
   sessionsProps?: SclawBrowserEmbedChatSessionsProps;
 }
@@ -33,6 +36,7 @@ interface SclawBrowserEmbedChatProps {
 export function SclawBrowserEmbedChat({
   sessionKey,
   appTitle,
+  embedRuntimeId,
   onClose,
   sessionsProps,
 }: SclawBrowserEmbedChatProps) {
@@ -92,6 +96,11 @@ export function SclawBrowserEmbedChat({
     if (onClose) onClose();
     else closeChatPanel();
   }, [onClose, closeChatPanel]);
+
+  const embedSeedEntry = useJsBridgeHostStore((s) => (
+    embedRuntimeId ? s.embedComposerSeedByRuntimeId[embedRuntimeId] : undefined
+  ));
+  const composerSeed = embedSeedEntry?.text;
 
   if (currentSessionKey !== sessionKey) {
     return (
@@ -188,7 +197,11 @@ export function SclawBrowserEmbedChat({
       ) : null}
 
       <div className="sclaw-browser-embed-chat__composer">
-        <HomeComposer showDisclaimer={false} footerAlign="center" />
+        <HomeComposer
+          showDisclaimer={false}
+          footerAlign="center"
+          seedText={composerSeed}
+        />
       </div>
     </div>
   );

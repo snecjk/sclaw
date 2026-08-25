@@ -75,7 +75,7 @@ export function TemplateSelectModal({
           transition={{ duration: 0.2, ease: 'easeInOut' }}
         >
           <motion.div
-            className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
+            className="w-full max-w-[min(728px,100%)] bg-background rounded-[22px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

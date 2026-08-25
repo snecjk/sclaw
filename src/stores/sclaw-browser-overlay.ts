@@ -68,6 +68,8 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
       runtimeId: embedRuntimeId,
       appTitle: session.title,
       initialUrl: session.url,
+      appId: session.appId,
+      bound: Boolean(session.appId),
     });
     set({
       session,
