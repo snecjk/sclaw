@@ -54,7 +54,10 @@ import {
   STO_WORKSPACE_RELATIVE,
   codeApplicationToWorkspaceFields,
 } from '../../shared/sto-workspace';
-import { appTemplatePackageManager } from './app-template-package-manager';
+import {
+  appTemplatePackageManager,
+  resolveLocalBuiltinTemplateDir,
+} from './app-template-package-manager';
 import { appTemplateApiClient, type AppTemplatePageType } from './app-template-api-client';
 import { buildAppTemplateArchive } from './app-template-archive';
 import { createUlid } from '../utils/ulid';
@@ -537,6 +540,7 @@ export interface CreateUserAppInput {
   /** Selected ACTIVE template and its immutable version. */
   templateId: string;
   templateVersion: string;
+  templateSource?: 'local-resource' | 'memory-center';
 }
 
 export interface CreateUserAppResult {
@@ -562,22 +566,6 @@ function appTemplateWorkspaceMarkerPath(templateRoot: string): string {
   return join(templateRoot, '.sclaw', 'app-template.json');
 }
 
-function resolveBuiltinTemplateDir(templateId: 'site-minimal' | 'assets-minimal'): string {
-  const candidates = [
-    join(process.cwd(), 'resources', 'app-templates', templateId),
-    join(app.getAppPath(), 'resources', 'app-templates', templateId),
-    join(process.resourcesPath, 'resources', 'app-templates', templateId),
-    join(process.resourcesPath, 'app-templates', templateId),
-  ];
-  const resolved = candidates.find((candidate) => validTemplateRootWithManifest(candidate));
-  if (!resolved) throw new Error(`内置模板资源缺失: ${templateId}`);
-  return resolved;
-}
-
-function validTemplateRootWithManifest(dir: string): boolean {
-  return isValidReactTemplate(dir) && existsSync(join(dir, 'manifest.json'));
-}
-
 export async function openAppTemplateWorkspace(input: {
   templateId?: string;
   pageType: AppTemplatePageType;
@@ -601,7 +589,7 @@ export async function openAppTemplateWorkspace(input: {
         input.pageType,
       );
     } else {
-      sourceDir = resolveBuiltinTemplateDir(`${input.pageType}-minimal`);
+      sourceDir = resolveLocalBuiltinTemplateDir(`${input.pageType}-minimal`);
     }
     await mkdir(DEFAULT_TEMPLATES_PARENT_DIR, { recursive: true });
     await cp(sourceDir, appPath, { recursive: true });
@@ -703,6 +691,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const templateId = input.templateId?.trim();
   const templateVersion = input.templateVersion?.trim();
   if (!templateId || !templateVersion) throw new Error('请选择应用模板');
+  const templateSource = input.templateSource ?? 'memory-center';
 
   const parentDir = (input.parentDir?.trim() || DEFAULT_APPS_PARENT_DIR);
   const appPath = join(parentDir, name);
@@ -713,15 +702,20 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     }
   }
 
-  const template = await appTemplatePackageManager.ensureTemplate(
-    templateId,
-    templateVersion,
-    pageType,
-  );
+  if (templateSource === 'local-resource' && app.isPackaged) {
+    throw new Error('本地资源模板仅用于开发调试');
+  }
+  const expectedBuiltinId = `${pageType}-minimal` as 'site-minimal' | 'assets-minimal';
+  if (templateSource === 'local-resource' && templateId !== expectedBuiltinId) {
+    throw new Error(`本地资源模板与应用类型不一致: ${templateId}`);
+  }
+  const template = templateSource === 'local-resource'
+    ? resolveLocalBuiltinTemplateDir(expectedBuiltinId)
+    : await appTemplatePackageManager.ensureTemplate(templateId, templateVersion, pageType);
   if (!isValidReactTemplate(template)) {
     throw new Error(`应用模板缺失: ${template}`);
   }
-  const templateMeta = JSON.parse(
+  const templateMeta = templateSource === 'local-resource' ? {} : JSON.parse(
     await readFile(templateMetaPath(template), 'utf8'),
   ) as {
     packageOssKey?: string;
@@ -1931,25 +1925,8 @@ async function ensureAppOpenspecScaffold(appPath: string): Promise<void> {
     await cp(catalogSrc, catalogDest, { recursive: true });
   }
 
-  // Keep package AI catalog in sync with engineering template (overwrite guidance assets).
-  if (existsSync(catalogSrc)) {
-    await mkdir(catalogDest, { recursive: true });
-    const packagesManifest = 'packages.manifest.json';
-    const srcManifest = join(catalogSrc, packagesManifest);
-    const destManifest = join(catalogDest, packagesManifest);
-    if (existsSync(srcManifest)) {
-      await cp(srcManifest, destManifest);
-    }
-    try {
-      const entries = await readdir(catalogSrc, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory() || !entry.name.startsWith('pkg-')) continue;
-        await cp(join(catalogSrc, entry.name), join(catalogDest, entry.name), { recursive: true });
-      }
-    } catch {
-      // ignore catalog sync errors
-    }
-  }
+  // Existing catalogs belong to their selected template. Plugin upgrades are explicit and must not
+  // be overwritten by the client's fallback engineering template.
 }
 
 async function syncOpenspecSkillsIntoAgents(appPath: string): Promise<void> {

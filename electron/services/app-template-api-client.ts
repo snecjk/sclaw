@@ -3,6 +3,7 @@ import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 
 export type AppTemplatePageType = 'site' | 'assets';
+export type AppTemplateSource = 'local-resource' | 'memory-center';
 
 export interface AppTemplateSummary {
   templateId: string;
@@ -14,6 +15,7 @@ export interface AppTemplateSummary {
   latestVersion: string;
   createdAt: string;
   updatedAt: string;
+  source?: AppTemplateSource;
 }
 
 export interface AppTemplatePageResult {

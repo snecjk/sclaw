@@ -23,6 +23,10 @@ import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 
+function templateSelectionKey(item: AppTemplateSummary): string {
+  return `${item.source ?? 'memory-center'}:${item.templateId}:${item.latestVersion}`;
+}
+
 export interface CreateAppDialogProps {
   open: boolean;
   onClose: () => void;
@@ -73,8 +77,10 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
         if (cancelled) return;
         const items = result.items.filter((item) => item.pageType === pageType && item.latestVersion);
         setTemplates(items);
-        const preferred = items.find((item) => item.templateId === `${pageType}-minimal`);
-        setTemplateId(preferred?.templateId ?? '');
+        const preferred = items.find(
+          (item) => item.templateId === `${pageType}-minimal` && item.source === 'local-resource',
+        ) ?? items.find((item) => item.templateId === `${pageType}-minimal`);
+        setTemplateId(preferred ? templateSelectionKey(preferred) : '');
         if (!preferred) {
           setTemplateError(
             items.length > 0
@@ -129,6 +135,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
         pageType,
         templateId: selectedTemplate.templateId,
         templateVersion: selectedTemplate.latestVersion,
+        templateSource: selectedTemplate.source ?? 'memory-center',
       });
       useAppDevCatalogStore.getState().registerWorkspaceId(result.workspaceId);
       await useSessionCatalogStore.getState().refreshWorkspaces().catch(() => undefined);
@@ -150,7 +157,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     { value: 'site', label: '独立站点', hint: '固定域名，发版不需要修改版本号' },
     { value: 'assets', label: '托管应用', hint: '可以申请自定义域名，发版需要修改版本号' },
   ];
-  const selectedTemplate = templates.find((item) => item.templateId === templateId);
+  const selectedTemplate = templates.find((item) => templateSelectionKey(item) === templateId);
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
@@ -222,8 +229,10 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
           {!loadingTemplates && templates.length === 0 && <option value="">暂无可用模板</option>}
           {!loadingTemplates && templates.length > 0 && !templateId && <option value="">请选择模板</option>}
           {templates.map((item) => (
-            <option key={item.templateId} value={item.templateId}>
-              {item.name} · v{item.latestVersion}
+            <option key={templateSelectionKey(item)} value={templateSelectionKey(item)}>
+              {item.source === 'local-resource'
+                ? `${item.name} · 本地资源`
+                : `${item.name} · Memory Center · v${item.latestVersion}`}
             </option>
           ))}
         </select>

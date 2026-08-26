@@ -49,6 +49,7 @@ export interface AppTemplateSummary {
   latestVersion: string;
   createdAt: string;
   updatedAt: string;
+  source?: 'local-resource' | 'memory-center';
 }
 
 export interface AppTemplatePageResult {
@@ -190,6 +191,7 @@ export async function createUserApp(input: {
   pageType?: CodeApplicationPageType;
   templateId: string;
   templateVersion: string;
+  templateSource?: 'local-resource' | 'memory-center';
 }): Promise<{ workspaceId: string; appPath: string; workspaceName: string }> {
   return hostApiFetch('/api/app-dev/apps', {
     method: 'POST',

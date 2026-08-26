@@ -88,6 +88,7 @@ describe('CreateAppDialog application type', () => {
         pageType: 'assets',
         templateId: 'assets-minimal',
         templateVersion: '1.0.0',
+        templateSource: 'memory-center',
       });
     });
   });
@@ -114,5 +115,51 @@ describe('CreateAppDialog application type', () => {
     expect(await screen.findByText('内置最简模板尚未初始化，请主动选择其他模板')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '应用模板' })).toHaveValue('');
     expect(screen.getByRole('option', { name: '请选择模板' })).toBeInTheDocument();
+  });
+
+  it('distinguishes a local resource template from the Memory Center version', async () => {
+    listAppTemplatesMock.mockImplementation(async (pageType: 'site' | 'assets') => ({
+      items: [
+        {
+          templateId: `${pageType}-minimal`,
+          pageType,
+          name: pageType === 'site' ? '最简独立站点' : '最简托管应用',
+          description: '本地调试模板',
+          status: 'ACTIVE',
+          isBuiltin: true,
+          latestVersion: 'local',
+          source: 'local-resource',
+          createdAt: '',
+          updatedAt: '',
+        },
+        {
+          templateId: `${pageType}-minimal`,
+          pageType,
+          name: pageType === 'site' ? '最简独立站点' : '最简托管应用',
+          description: '平台内置最简模板',
+          status: 'ACTIVE',
+          isBuiltin: true,
+          latestVersion: '1.0.0',
+          source: 'memory-center',
+          createdAt: '2026-08-26T00:00:00Z',
+          updatedAt: '2026-08-26T00:00:00Z',
+        },
+      ],
+      total: 2,
+      pageNum: 1,
+      pageSize: 100,
+    }));
+    render(<CreateAppDialog open onClose={vi.fn()} />);
+
+    expect(await screen.findByRole('option', { name: '最简独立站点 · 本地资源' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '最简独立站点 · Memory Center · v1.0.0' })).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('比如：快递查询助手'), { target: { value: '本地模板应用' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建应用' }));
+
+    await waitFor(() => expect(createUserAppMock).toHaveBeenCalledWith(expect.objectContaining({
+      templateId: 'site-minimal',
+      templateVersion: 'local',
+      templateSource: 'local-resource',
+    })));
   });
 });

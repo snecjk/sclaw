@@ -28,4 +28,22 @@ describe('built-in app template resources', () => {
     expect(assetsMain).toContain('captureStoTokenFromUrl');
     expect(assetsMain).not.toContain('checkAndRedirectToLogin');
   });
+
+  it('assets 提供 Policy Ontology SDK 开发能力插件', () => {
+    const catalogRoot = join(resources, 'assets-minimal', 'openspec', 'skill-catalog');
+    const packagesManifest = JSON.parse(
+      readFileSync(join(catalogRoot, 'packages.manifest.json'), 'utf8'),
+    );
+    const plugin = packagesManifest.packages.find(
+      (item: { id?: string }) => item.id === 'fe-policy-ontology-sdk',
+    );
+
+    expect(plugin).toMatchObject({
+      kind: 'frontend',
+      packageName: '@sto/policy-ontology-sdk',
+      npmPackages: ['@sto/policy-ontology-sdk@0.1.0'],
+      ai: { skillId: 'pkg-policy-ontology-sdk' },
+    });
+    expect(existsSync(join(catalogRoot, 'pkg-policy-ontology-sdk', 'SKILL.md'))).toBe(true);
+  });
 });

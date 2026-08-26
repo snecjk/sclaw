@@ -9,6 +9,7 @@ import {
   appTemplateApiClient,
   type AppTemplateDownloadInfo,
   type AppTemplatePageType,
+  type AppTemplateSummary,
 } from './app-template-api-client';
 
 interface AppTemplatePackageManagerDeps {
@@ -35,6 +36,58 @@ function validTemplateRoot(dir: string): boolean {
   const rootPackage = existsSync(join(dir, 'package.json')) && existsSync(join(dir, 'src'));
   const legacyPackage = existsSync(join(dir, 'frontend', 'package.json'));
   return existsSync(join(dir, 'manifest.json')) && (rootPackage || legacyPackage);
+}
+
+function builtinTemplateResourcesRoot(): string {
+  const candidates = [
+    join(process.cwd(), 'resources', 'app-templates'),
+    join(app.getAppPath(), 'resources', 'app-templates'),
+    join(process.resourcesPath, 'resources', 'app-templates'),
+    join(process.resourcesPath, 'app-templates'),
+  ];
+  const resolved = candidates.find((candidate) =>
+    existsSync(join(candidate, 'site-minimal')) || existsSync(join(candidate, 'assets-minimal')),
+  );
+  if (!resolved) throw new Error('内置应用模板资源缺失');
+  return resolved;
+}
+
+export function resolveLocalBuiltinTemplateDir(
+  templateId: 'site-minimal' | 'assets-minimal',
+  resourcesRoot = builtinTemplateResourcesRoot(),
+): string {
+  const resolved = join(resourcesRoot, templateId);
+  if (!validTemplateRoot(resolved)) throw new Error(`内置模板资源缺失: ${templateId}`);
+  return resolved;
+}
+
+export async function listLocalBuiltinAppTemplates(
+  resourcesRoot: string | undefined,
+  pageType: AppTemplatePageType,
+): Promise<AppTemplateSummary[]> {
+  const templateId = `${pageType}-minimal` as const;
+  const root = resolveLocalBuiltinTemplateDir(templateId, resourcesRoot ?? builtinTemplateResourcesRoot());
+  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as {
+    templateId?: string;
+    pageType?: string;
+    name?: string;
+    description?: string;
+  };
+  if (manifest.templateId !== templateId || manifest.pageType !== pageType) {
+    throw new Error(`内置模板 manifest.json 与资源目录不一致: ${templateId}`);
+  }
+  return [{
+    templateId,
+    pageType,
+    name: manifest.name?.trim() || templateId,
+    description: manifest.description?.trim() || '',
+    status: 'ACTIVE',
+    isBuiltin: true,
+    latestVersion: 'local',
+    createdAt: '',
+    updatedAt: '',
+    source: 'local-resource',
+  }];
 }
 
 function normalizedEtag(value: string | null): string | null {

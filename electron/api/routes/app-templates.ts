@@ -1,8 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { app } from 'electron';
 
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { appTemplateApiClient } from '../../services/app-template-api-client';
+import { listLocalBuiltinAppTemplates } from '../../services/app-template-package-manager';
 import {
   openAppTemplateWorkspace,
   publishAppTemplateWorkspace,
@@ -30,14 +32,29 @@ export async function handleAppTemplateRoutes(
       if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
         throw Object.assign(new Error('pageSize 必须是 1 到 100 的整数'), { statusCode: 400 });
       }
-      const page = await appTemplateApiClient.page({
-        pageType: rawPageType ?? undefined,
-        status: 'ACTIVE',
-        keyword: url.searchParams.get('keyword') ?? undefined,
-        pageNum,
-        pageSize,
+      const localItems = !app.isPackaged && rawPageType
+        ? await listLocalBuiltinAppTemplates(undefined, rawPageType)
+        : [];
+      let page;
+      try {
+        page = await appTemplateApiClient.page({
+          pageType: rawPageType ?? undefined,
+          status: 'ACTIVE',
+          keyword: url.searchParams.get('keyword') ?? undefined,
+          pageNum,
+          pageSize,
+        });
+      } catch (error) {
+        if (localItems.length === 0) throw error;
+        page = { items: [], total: 0, pageNum, pageSize };
+      }
+      const remoteItems = page.items.map((item) => ({ ...item, source: 'memory-center' as const }));
+      sendJson(res, 200, {
+        success: true,
+        ...page,
+        items: [...localItems, ...remoteItems],
+        total: localItems.length + page.total,
       });
-      sendJson(res, 200, { success: true, ...page });
       return true;
     }
 

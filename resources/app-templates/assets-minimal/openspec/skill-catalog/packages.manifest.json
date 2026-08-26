@@ -3,6 +3,18 @@
   "rule": "社区选装包必须声明 ai 字段；安装流水线 = 依赖安装 + 写入 openspec/skills + 刷新 AGENTS。禁止只装 npm 不装 AI 用法。自定义包名无清单时仅装依赖并提示缺少 AI 资产。",
   "packages": [
     {
+      "id": "fe-policy-ontology-sdk",
+      "kind": "frontend",
+      "name": "STO Policy Ontology SDK",
+      "packageName": "@sto/policy-ontology-sdk",
+      "npmPackages": ["@sto/policy-ontology-sdk@0.1.0"],
+      "description": "STO Policy Ontology 九接口的类型安全客户端和 Operation Engine。",
+      "ai": {
+        "skillId": "pkg-policy-ontology-sdk",
+        "summary": "通过受控 Operation 使用 Ontology；地址和身份由应用基础设施注入。"
+      }
+    },
+    {
       "id": "fe-axios",
       "kind": "frontend",
       "name": "Axios",
