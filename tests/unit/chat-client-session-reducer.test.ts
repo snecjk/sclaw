@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import i18n from '@/i18n';
 import {
   applyRuntimeSnapshot,
   createClientSessionState,
@@ -182,6 +183,8 @@ describe('canonical chat client session reducer', () => {
 
     expect(interrupted.error?.code).toBe('TIMEOUT');
     expect(interrupted.error?.details).toMatchObject({ reason: 'recovery-timeout' });
+    expect(interrupted.error?.message).toBe(i18n.t('chat:runtime.errors.recoveryTimeout'));
+    expect(interrupted.error?.message).not.toMatch(/browser|浏览器|ブラウザ/i);
 
     const replacement = reduceSessionEvent(interrupted, event({
       eventId: 'event-3',

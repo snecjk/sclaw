@@ -15,6 +15,9 @@ import { Button } from '@/components/ui/button';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
 import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
+import { useAiResourceAdmin } from '@/hooks/use-ai-resource-admin';
+import { useTurnTokenUsage } from '@/hooks/use-turn-token-usage';
+import { TurnTokenMeta } from '@/components/chat/TurnTokenMeta';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
@@ -23,10 +26,12 @@ import {
   isLastUserMessage,
   isMessageInCurrentUserTurn,
   isTurnDisplayAssistantMessage,
+  getTurnIndexForAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
 import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/pages/Chat/turn-lifecycle';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
+import type { TurnTokenUsage } from '../../../shared/turn-token';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import {
@@ -254,6 +259,7 @@ export const ChatMessage = memo(function ChatMessage({
     (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
   );
   const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
   const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
   const workflowCard = null;
   const isWorkflowCompletionMessage = false;
@@ -450,6 +456,20 @@ export const ChatMessage = memo(function ChatMessage({
   const { sending, pendingFinal, activeRunId, lastUserMessageAt } = useChatSessionRuntimeView(sessionKey);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
+  );
+  const isAiResourceAdmin = useAiResourceAdmin();
+  const isClaudeSession = useMemo(
+    () => sessions.find((session) => session.key === sessionKey)?.engineType === 'claude',
+    [sessions, sessionKey],
+  );
+  const assistantTurnIndex = useMemo(() => {
+    if (isUser || !isLastAssistantInTurn) return -1;
+    return getTurnIndexForAssistantMessage(message, sessionMessages);
+  }, [isUser, isLastAssistantInTurn, message, sessionMessages]);
+  const turnTokenUsage = useTurnTokenUsage(
+    sessionKey,
+    assistantTurnIndex,
+    isAiResourceAdmin && isClaudeSession && assistantTurnIndex >= 0,
   );
   const isInCurrentUserTurn = isMessageInCurrentUserTurn(message, sessionMessages);
   const isLastUserInTurn = isUser && isLastUserMessage(message, sessionMessages);
@@ -884,6 +904,7 @@ export const ChatMessage = memo(function ChatMessage({
           <AssistantMessageMetaRow
             copyShareContent={assistantCopyShareContent}
             timestamp={message.timestamp}
+            turnTokenUsage={turnTokenUsage}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
             onShare={openConversationShare}
           />
@@ -1107,11 +1128,13 @@ function UserMessageMetaRow({
 function AssistantMessageMetaRow({
   copyShareContent,
   timestamp,
+  turnTokenUsage,
   onCopyDebugSnapshot,
   onShare,
 }: {
   copyShareContent: { text: string; files: AttachedFileMeta[] };
   timestamp?: number;
+  turnTokenUsage?: TurnTokenUsage | null;
   onCopyDebugSnapshot?: () => Promise<void> | void;
   onShare?: () => void;
 }) {
@@ -1174,6 +1197,7 @@ function AssistantMessageMetaRow({
           <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
         </Button>
       ) : null}
+      {turnTokenUsage ? <TurnTokenMeta usage={turnTokenUsage} /> : null}
       {timestamp ? (
         <span className="text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}

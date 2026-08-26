@@ -33,6 +33,7 @@ export interface SplitPanelResizeHandleProps {
    * ArrowLeft → +1；ArrowRight → -1（与「向左拖 = 预览变宽」一致）。
    */
   onKeyboardAdjust: (deltaPercent: number) => void;
+  ariaLabel?: string;
   className?: string;
 }
 
@@ -43,6 +44,7 @@ export function SplitPanelResizeHandle({
   isResizing = false,
   onResizeStart,
   onKeyboardAdjust,
+  ariaLabel,
   className,
 }: SplitPanelResizeHandleProps) {
   const { t } = useTranslation('chat');
@@ -66,7 +68,7 @@ export function SplitPanelResizeHandle({
       aria-valuenow={Math.round(valuePercent)}
       aria-valuemin={minPercent}
       aria-valuemax={maxPercent}
-      aria-label={t('preview.resizeSeparator')}
+      aria-label={ariaLabel ?? t('preview.resizeSeparator')}
       tabIndex={0}
       data-resizing={isResizing ? 'true' : undefined}
       onPointerDown={onResizeStart}

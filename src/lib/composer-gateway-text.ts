@@ -29,10 +29,10 @@ function gatewayBodyPartForSegment(seg: ComposerSegment): string {
       // 文件/技能占位符在遍历中生成（需要注册表 / 标题）。
       return '';
     case 'workflow':
-      if (seg.source === 'mine') {
-        return `帮我执行 id 为：${seg.id} 的工作流 【${seg.name}】`;
-      }
-      return seg.name;
+      // Bake 句与 source 解耦：mine / 模版 / 学习中心 handoff 都写同一句，
+      // 以便 stripComposerModelBakeForDisplay 能还原 displayText，完成乐观↔echo 配对。
+      // source 仍由 dispatchChatSend 决定执行路径，不参与正文编码。
+      return `帮我执行 id 为：${seg.id} 的工作流 【${seg.name}】`;
     default:
       return '';
   }
