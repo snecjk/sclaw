@@ -60,17 +60,80 @@ export function parseFlowCardFence(text: string): FlowCardPayload | null {
   return parseFlowCardPayload(tryParseJsonObject(match[1]));
 }
 
+/** Generic fenced JSON (models sometimes emit ```json instead of ```flow_card). */
+const GENERIC_JSON_FENCE_REGEX = /```(?:json)?\s*\r?\n?([\s\S]*?)```/gi;
+
+function parseFlowCardFromJsonText(raw: string): FlowCardPayload | null {
+  return parseFlowCardPayload(tryParseJsonObject(raw));
+}
+
+function findFlowCardJsonStart(text: string): number {
+  let searchFrom = 0;
+  while (searchFrom < text.length) {
+    const jsonStart = text.indexOf('{', searchFrom);
+    if (jsonStart < 0) return -1;
+    if (parseFlowCardFromJsonText(text.slice(jsonStart))) return jsonStart;
+    searchFrom = jsonStart + 1;
+  }
+  return -1;
+}
+
+/** Bare JSON object after intro text, or the whole message. */
+export function findBareFlowCardJsonInText(text: string): FlowCardPayload | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const whole = parseFlowCardFromJsonText(trimmed);
+  if (whole) return whole;
+
+  const jsonStart = findFlowCardJsonStart(trimmed);
+  if (jsonStart < 0) return null;
+  return parseFlowCardFromJsonText(trimmed.slice(jsonStart));
+}
+
+/** Parse flow_card from fenced or bare model output. */
+export function findFlowCardInText(text: string): FlowCardPayload | null {
+  const fenced = parseFlowCardFence(text);
+  if (fenced) return fenced;
+
+  for (const match of text.matchAll(GENERIC_JSON_FENCE_REGEX)) {
+    const parsed = parseFlowCardFromJsonText(match[1] ?? '');
+    if (parsed) return parsed;
+  }
+
+  return findBareFlowCardJsonInText(text);
+}
+
+function stripGenericJsonFenceIfFlowCard(text: string): string {
+  return text.replace(GENERIC_JSON_FENCE_REGEX, (full, inner: string) => (
+    parseFlowCardFromJsonText(inner) ? '' : full
+  ));
+}
+
+function stripBareFlowCardJson(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return text;
+
+  if (parseFlowCardFromJsonText(trimmed)) return '';
+
+  const jsonStart = findFlowCardJsonStart(text);
+  if (jsonStart > 0) return text.slice(0, jsonStart).trim();
+
+  return text;
+}
+
 export function stripFlowCardFences(text: string): string {
-  return text
+  const withoutFences = text
     .replace(/```flow_card\s*\r?\n?([\s\S]*?)```/gi, '')
     // Incomplete streaming fence: drop from opener to end
-    .replace(/```flow_card\b[\s\S]*$/i, '')
-    .trim();
+    .replace(/```flow_card\b[\s\S]*$/i, '');
+
+  return stripBareFlowCardJson(stripGenericJsonFenceIfFlowCard(withoutFences)).trim();
 }
 
 export function findFlowCardFenceInMessage(content: unknown): FlowCardPayload | null {
   if (typeof content === 'string') {
-    return parseFlowCardFence(content);
+    return findFlowCardInText(content);
   }
   if (!Array.isArray(content)) return null;
   for (const block of content) {
@@ -80,7 +143,7 @@ export function findFlowCardFenceInMessage(content: unknown): FlowCardPayload | 
       && (block as { type?: string }).type === 'text'
       && typeof (block as { text?: string }).text === 'string'
     ) {
-      const parsed = parseFlowCardFence((block as { text: string }).text);
+      const parsed = findFlowCardInText((block as { text: string }).text);
       if (parsed) return parsed;
     }
   }

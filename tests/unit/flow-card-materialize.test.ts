@@ -39,4 +39,23 @@ describe('extractFlowCard display-time fence parse', () => {
     expect(card?.phase).toBe('awaiting_upload');
     expect(card?.actions?.[0]?.kind).toBe('composer.openFilePicker');
   });
+
+  it('parses bare JSON flow card payloads', () => {
+    const message: RawMessage = {
+      role: 'assistant',
+      id: 'a3',
+      content: [
+        '请点击下方按钮上传报价表。',
+        JSON.stringify({
+          cardId: 'quote-active',
+          phase: 'awaiting_upload',
+          title: '开始',
+          actions: [{ id: 'upload', label: '上传', kind: 'composer.openFilePicker' }],
+        }, null, 2),
+      ].join('\n\n'),
+    };
+    const card = extractFlowCard(message);
+    expect(card?.cardId).toBe('quote-active');
+    expect(card?.phase).toBe('awaiting_upload');
+  });
 });

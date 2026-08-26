@@ -192,6 +192,12 @@ export interface AppGetInfoResult {
   runtimeId: string | null;
 }
 
+export interface BridgeSubscribeResult {
+  subscribed: string[];
+  added?: string[];
+  denied?: string[];
+}
+
 export interface StoClawBridgeNative {
   getVersion?: () => string;
   call: (method: string, params?: unknown, options?: CallOptions) => Promise<unknown>;

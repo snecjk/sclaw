@@ -44,7 +44,6 @@ import {
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
-import { ChatBrowserPreviewPanel } from '@/components/chat-browser/ChatBrowserPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { useStoTaskSubitemEntry } from '@/hooks/use-sto-task-subitem-entry';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
@@ -312,19 +311,18 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,
-    activePreviewFilePath,
-    setActivePreviewFilePath,
-    previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
     openPreviewPanel,
     closePreviewPanel,
     expandPreview,
     restorePreview,
-    dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
-    hasBrowserPreview,
+    previewTabs,
+    activePreviewTabId,
+    selectPreviewTab,
+    dismissPreviewTab,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
@@ -427,21 +425,21 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && previewableFiles.length > 0 ? (
+      showPreviewPanel && previewTabs.length > 0 ? (
         <ChatPreviewHeaderTabs
-          files={previewableFiles}
-          activeFilePath={activePreviewFilePath}
-          onSelectFile={setActivePreviewFilePath}
-          onDismissFile={dismissPreviewFile}
+          tabs={previewTabs}
+          activeTabId={activePreviewTabId}
+          onSelectTab={selectPreviewTab}
+          onDismissTab={dismissPreviewTab}
         />
       ) : null
     ),
     [
       showPreviewPanel,
-      previewableFiles,
-      activePreviewFilePath,
-      setActivePreviewFilePath,
-      dismissPreviewFile,
+      previewTabs,
+      activePreviewTabId,
+      selectPreviewTab,
+      dismissPreviewTab,
     ],
   );
 
@@ -662,29 +660,15 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
             onKeyboardAdjust={adjustPreviewPercent}
           />
         ) : null}
-        {hasBrowserPreview && previewableFiles.length === 0 ? (
-          <ChatBrowserPreviewPanel
-            sessionKey={currentSessionKey}
-            className="h-full w-full"
-          />
-        ) : (
-          <>
-            <ChatPreviewPanel
-              files={previewableFiles}
-              activeFilePath={activePreviewFilePath}
-              showEditWorkflow={showEditWorkflow}
-              workflowId={sessionWorkflowId}
-              onEditWorkflow={openWorkflowPreview}
-              className={cn('h-full w-full', hasBrowserPreview ? 'max-h-[45%] shrink-0 border-b border-border/70' : '')}
-            />
-            {hasBrowserPreview ? (
-              <ChatBrowserPreviewPanel
-                sessionKey={currentSessionKey}
-                className="min-h-0 flex-1"
-              />
-            ) : null}
-          </>
-        )}
+        <ChatPreviewPanel
+          tabs={previewTabs}
+          activeTabId={activePreviewTabId}
+          sessionKey={currentSessionKey}
+          showEditWorkflow={showEditWorkflow}
+          workflowId={sessionWorkflowId}
+          onEditWorkflow={openWorkflowPreview}
+          className="h-full w-full"
+        />
       </div>
     ) : null}
   </div>

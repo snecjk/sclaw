@@ -5,6 +5,8 @@ export type CapabilityRisk = 'public' | 'low' | 'medium' | 'high' | 'critical';
 export type Capability =
   | 'bridge.ping'
   | 'bridge.getCapabilities'
+  | 'bridge.subscribe'
+  | 'bridge.unsubscribe'
   | 'app.getInfo'
   | 'user.getInfo'
   | 'auth.getUser'
@@ -40,6 +42,8 @@ export type Capability =
 export const ALL_CAPABILITIES: readonly Capability[] = [
   'bridge.ping',
   'bridge.getCapabilities',
+  'bridge.subscribe',
+  'bridge.unsubscribe',
   'app.getInfo',
   'user.getInfo',
   'auth.getUser',
@@ -76,6 +80,8 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
 export const CAPABILITY_RISK: Record<Capability, CapabilityRisk> = {
   'bridge.ping': 'public',
   'bridge.getCapabilities': 'public',
+  'bridge.subscribe': 'low',
+  'bridge.unsubscribe': 'low',
   'app.getInfo': 'public',
   'user.getInfo': 'low',
   'auth.getUser': 'low',
@@ -139,6 +145,8 @@ const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
   catalog: [
     'bridge.ping',
     'bridge.getCapabilities',
+    'bridge.subscribe',
+    'bridge.unsubscribe',
     'app.getInfo',
     'user.getInfo',
     'auth.getUser',
@@ -165,6 +173,8 @@ const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
   external: [
     'bridge.ping',
     'bridge.getCapabilities',
+    'bridge.subscribe',
+    'bridge.unsubscribe',
     'app.getInfo',
     'auth.getUser',
     'ui.toast',
@@ -172,6 +182,8 @@ const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
   untrusted: [
     'bridge.ping',
     'bridge.getCapabilities',
+    'bridge.subscribe',
+    'bridge.unsubscribe',
     'app.getInfo',
   ],
 };

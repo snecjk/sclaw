@@ -7,6 +7,17 @@ export {
 
 export { StoClawBridgeError, wrapNativeError } from './errors';
 
+export {
+  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+  BRIDGE_EVENT_SESSION_DESTROYED,
+} from './events';
+
+export type {
+  QuotePreviewRefreshPayload,
+  QuoteValidationCompletePayload,
+} from './events';
+
 export type {
   AppGetInfoResult,
   AuthGetAuthModeResult,
@@ -14,6 +25,7 @@ export type {
   BridgeAiFileAttachmentRef,
   BridgeError,
   BridgeErrorCode,
+  BridgeSubscribeResult,
   CallOptions,
   ChatCancelParams,
   ChatCancelResult,

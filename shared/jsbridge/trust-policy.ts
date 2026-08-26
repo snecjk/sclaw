@@ -19,12 +19,14 @@ export interface BridgeTrustPolicy {
   ai?: BridgeAiProfile;
   /** Optional quick-action pills above the embed AI composer. */
   embedComposerActions?: EmbedComposerAction[];
+  /** Guest event patterns allowed for bridge.subscribe (e.g. quote:*). */
+  allowedEventPatterns?: string[];
 }
 
 export interface ResolveTrustPolicyInput {
   appId?: string | null;
   bound?: boolean;
-  bridgePolicy?: Partial<Pick<BridgeTrustPolicy, 'allowedOrigins' | 'capabilities' | 'consentCapabilities' | 'hostFetchAllowlist' | 'ai' | 'embedComposerActions'>> | null;
+  bridgePolicy?: Partial<Pick<BridgeTrustPolicy, 'allowedOrigins' | 'capabilities' | 'consentCapabilities' | 'hostFetchAllowlist' | 'ai' | 'embedComposerActions' | 'allowedEventPatterns'>> | null;
 }
 
 export function resolveTrustTier(input: ResolveTrustPolicyInput): BridgeTrustTier {
@@ -60,6 +62,7 @@ export function resolveTrustPolicy(input: ResolveTrustPolicyInput): BridgeTrustP
     hostFetchAllowlist: input.bridgePolicy?.hostFetchAllowlist,
     ai: input.bridgePolicy?.ai,
     embedComposerActions: input.bridgePolicy?.embedComposerActions,
+    allowedEventPatterns: input.bridgePolicy?.allowedEventPatterns,
   };
 }
 

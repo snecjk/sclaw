@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  findBareFlowCardJsonInText,
+  findFlowCardInText,
   parseFlowCardFence,
   parseFlowCardPayload,
   stripFlowCardFences,
@@ -37,5 +39,35 @@ describe('flow-card-marker', () => {
   it('parses fence without newline before closing ticks', () => {
     const text = '```flow_card\n{"cardId":"c","phase":"awaiting_upload","title":"开始"}```';
     expect(parseFlowCardFence(text)?.cardId).toBe('c');
+  });
+
+  it('parses bare JSON after intro text (model omitted flow_card fence)', () => {
+    const payload = {
+      cardId: 'quote-active',
+      domain: 'quote',
+      phase: 'awaiting_upload',
+      title: '好的，开始**新建报价**。',
+      actions: [{
+        id: 'upload',
+        label: '上传报价表(支持多选文件)',
+        kind: 'composer.openFilePicker',
+      }],
+    };
+    const text = [
+      '好的，请点击下方按钮上传报价表文件（支持 .xlsx / .xls / .csv，可多选）。',
+      JSON.stringify(payload, null, 2),
+    ].join('\n\n');
+
+    expect(findBareFlowCardJsonInText(text)?.cardId).toBe('quote-active');
+    expect(findFlowCardInText(text)?.phase).toBe('awaiting_upload');
+    expect(stripFlowCardFences(text)).toBe(
+      '好的，请点击下方按钮上传报价表文件（支持 .xlsx / .xls / .csv，可多选）。',
+    );
+  });
+
+  it('parses ```json fence when model uses generic code block', () => {
+    const text = '说明\n```json\n{"cardId":"c","phase":"awaiting_upload"}\n```';
+    expect(findFlowCardInText(text)?.cardId).toBe('c');
+    expect(stripFlowCardFences(text)).toBe('说明');
   });
 });

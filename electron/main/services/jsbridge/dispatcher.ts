@@ -13,6 +13,7 @@ import {
 import { handleAppGetInfo } from './handlers/app';
 import { handleAuthGetAuthMode, handleAuthGetToken, handleAuthGetUser, handleAuthRequestLogin } from './handlers/auth';
 import { handleBridgeGetCapabilities, handleBridgePing } from './handlers/bridge-meta';
+import { handleBridgeSubscribe, handleBridgeUnsubscribe } from './handlers/bridge-events';
 import { handleChatFillComposer, handleChatOpenSession, handleChatSendMessage } from './handlers/chat';
 import { handleChatCancel, handleChatComplete } from './handlers/chat-ai';
 import { handleComposerOpenFilePicker, handleNavOpenPreviewTab } from './handlers/composer';
@@ -48,6 +49,8 @@ const replayGuard = new ReplayGuard();
 const HANDLERS: Record<string, BridgeHandlerFn> = {
   'bridge.ping': handleBridgePing,
   'bridge.getCapabilities': handleBridgeGetCapabilities,
+  'bridge.subscribe': handleBridgeSubscribe,
+  'bridge.unsubscribe': handleBridgeUnsubscribe,
   'app.getInfo': handleAppGetInfo,
   'user.getInfo': handleUserGetInfo,
   'auth.getUser': handleAuthGetUser,

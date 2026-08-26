@@ -26,7 +26,6 @@ import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
-import { ChatBrowserPreviewPanel } from '@/components/chat-browser/ChatBrowserPreviewPanel';
 import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher, suspendAutoSend } from '@/stores/message-queue';
 import { markTurnInterrupted } from '@/lib/turn-interrupt-marker';
@@ -468,19 +467,18 @@ export function Chat() {
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,
-    activePreviewFilePath,
-    setActivePreviewFilePath,
-    previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
     openPreviewPanel,
     closePreviewPanel,
     expandPreview,
     restorePreview,
-    dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
-    hasBrowserPreview,
+    previewTabs,
+    activePreviewTabId,
+    selectPreviewTab,
+    dismissPreviewTab,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
@@ -578,21 +576,21 @@ export function Chat() {
 
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && previewableFiles.length > 0 ? (
+      showPreviewPanel && previewTabs.length > 0 ? (
         <ChatPreviewHeaderTabs
-          files={previewableFiles}
-          activeFilePath={activePreviewFilePath}
-          onSelectFile={setActivePreviewFilePath}
-          onDismissFile={dismissPreviewFile}
+          tabs={previewTabs}
+          activeTabId={activePreviewTabId}
+          onSelectTab={selectPreviewTab}
+          onDismissTab={dismissPreviewTab}
         />
       ) : null
     ),
     [
       showPreviewPanel,
-      previewableFiles,
-      activePreviewFilePath,
-      setActivePreviewFilePath,
-      dismissPreviewFile,
+      previewTabs,
+      activePreviewTabId,
+      selectPreviewTab,
+      dismissPreviewTab,
     ],
   );
 
@@ -846,29 +844,15 @@ export function Chat() {
               onKeyboardAdjust={adjustPreviewPercent}
             />
           ) : null}
-          {hasBrowserPreview && previewableFiles.length === 0 ? (
-            <ChatBrowserPreviewPanel
-              sessionKey={currentSessionKey}
-              className="h-full w-full"
-            />
-          ) : (
-            <>
-              <ChatPreviewPanel
-                files={previewableFiles}
-                activeFilePath={activePreviewFilePath}
-                showEditWorkflow={showEditWorkflow}
-                workflowId={sessionWorkflowId}
-                onEditWorkflow={openWorkflowPreview}
-                className={cn('h-full w-full', hasBrowserPreview ? 'max-h-[45%] shrink-0 border-b border-border/70' : '')}
-              />
-              {hasBrowserPreview ? (
-                <ChatBrowserPreviewPanel
-                  sessionKey={currentSessionKey}
-                  className="min-h-0 flex-1"
-                />
-              ) : null}
-            </>
-          )}
+          <ChatPreviewPanel
+            tabs={previewTabs}
+            activeTabId={activePreviewTabId}
+            sessionKey={currentSessionKey}
+            showEditWorkflow={showEditWorkflow}
+            workflowId={sessionWorkflowId}
+            onEditWorkflow={openWorkflowPreview}
+            className="h-full w-full"
+          />
         </div>
       ) : null}
     </div>

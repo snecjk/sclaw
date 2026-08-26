@@ -2,6 +2,7 @@ import { StoClawBridgeError, wrapNativeError } from './errors';
 import type {
   AppGetInfoResult,
   AuthGetAuthModeResult,
+  BridgeSubscribeResult,
   CallOptions,
   ChatCancelParams,
   ChatCancelResult,
@@ -51,6 +52,36 @@ async function callNative<T>(
   }
 }
 
+/** Ref-count host subscriptions per event name (multiple addListener on same event). */
+const subscriptionRefCounts = new Map<string, number>();
+
+function normalizeEventList(events: string | string[]): string[] {
+  const list = Array.isArray(events) ? events : [events];
+  const out: string[] = [];
+  for (const item of list) {
+    const trimmed = item.trim();
+    if (!trimmed || out.includes(trimmed)) continue;
+    out.push(trimmed);
+  }
+  return out;
+}
+
+async function bumpSubscription(event: string, delta: number): Promise<void> {
+  const prev = subscriptionRefCounts.get(event) ?? 0;
+  const next = prev + delta;
+  if (next <= 0) {
+    subscriptionRefCounts.delete(event);
+    if (prev > 0) {
+      await callNative<BridgeSubscribeResult>('bridge.unsubscribe', { events: [event] });
+    }
+    return;
+  }
+  subscriptionRefCounts.set(event, next);
+  if (prev === 0) {
+    await callNative<BridgeSubscribeResult>('bridge.subscribe', { events: [event] });
+  }
+}
+
 export class StoClawBridgeClient {
   /** Raw bridge invoke — method names follow stoclaw-bridge/v1 registry. */
   call<T = unknown>(method: string, params?: unknown, options?: CallOptions): Promise<T> {
@@ -73,6 +104,46 @@ export class StoClawBridgeClient {
 
   off(event: string, handler: (payload: unknown) => void): void {
     resolveNativeBridge().off?.(event, handler);
+  }
+
+  /** Register interest with the host (required before events are delivered). */
+  subscribe(events: string | string[]): Promise<BridgeSubscribeResult> {
+    const list = normalizeEventList(events);
+    if (list.length === 0) {
+      return Promise.resolve({ subscribed: [] });
+    }
+    return callNative<BridgeSubscribeResult>('bridge.subscribe', { events: list });
+  }
+
+  /** Remove host subscriptions. Omit events to clear all. */
+  unsubscribe(events?: string | string[]): Promise<BridgeSubscribeResult> {
+    const list = events ? normalizeEventList(events) : undefined;
+    if (!list?.length) {
+      for (const event of [...subscriptionRefCounts.keys()]) {
+        subscriptionRefCounts.delete(event);
+      }
+      return callNative<BridgeSubscribeResult>('bridge.unsubscribe', {});
+    }
+    for (const event of list) {
+      subscriptionRefCounts.delete(event);
+    }
+    return callNative<BridgeSubscribeResult>('bridge.unsubscribe', { events: list });
+  }
+
+  /**
+   * Subscribe + local listener in one call. Cleanup unsubscribes from host
+   * when the last ref-counted listener for that event is removed.
+   */
+  async addListener<T = unknown>(
+    event: string,
+    handler: (payload: T) => void,
+  ): Promise<() => void> {
+    await bumpSubscription(event, 1);
+    const offLocal = this.on(event, handler as (payload: unknown) => void);
+    return () => {
+      offLocal();
+      void bumpSubscription(event, -1);
+    };
   }
 
   // ── 1. 用户信息 ──
