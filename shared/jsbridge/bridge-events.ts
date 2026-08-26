@@ -9,12 +9,20 @@ export const BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH = 'quote:preview-refresh' as con
 /** Quote workbench: validation finished (pass/fail). */
 export const BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE = 'quote:validation-complete' as const;
 
+/** Quote workbench: vip quotation save succeeded (`phase: editing`). */
+export const BRIDGE_EVENT_QUOTE_SAVE_COMPLETE = 'quote:save-complete' as const;
+
+/** Quote workbench: quote submitted (`phase: submitted`). */
+export const BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE = 'quote:submit-complete' as const;
+
 /** Lifecycle — delivered without prior subscribe. */
 export const BRIDGE_EVENT_SESSION_DESTROYED = 'bridge:session-destroyed' as const;
 
 export const QUOTE_BRIDGE_EVENTS = [
   BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
   BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
 ] as const;
 
 const EVENT_NAME_RE = /^[a-z][a-z0-9]*(?::[a-z][a-z0-9-]*)+$/;

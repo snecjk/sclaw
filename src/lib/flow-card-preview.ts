@@ -9,6 +9,8 @@ import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-sess
 import {
   BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
   BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
   emitBridgeGuestEvent,
 } from '@/lib/jsbridge/emit-guest-event';
 import { parseFlowCardValidationOutcome } from '@/lib/flow-card-progress';
@@ -108,6 +110,33 @@ function emitQuoteBridgeEvents(
         pass: outcome === 'pass',
         errorCount,
         phase: card.phase,
+      },
+    });
+  }
+
+  if (mode === 'refresh' && card.phase === 'editing') {
+    void emitBridgeGuestEvent({
+      runtimeId,
+      name: BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
+      eventPayload: {
+        ossKey,
+        quoteId: readString(card.data, 'quoteId') ?? undefined,
+        phase: card.phase,
+        url,
+      },
+    });
+  }
+
+  if (mode === 'refresh' && card.phase === 'submitted') {
+    void emitBridgeGuestEvent({
+      runtimeId,
+      name: BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
+      eventPayload: {
+        ossKey,
+        quoteId: readString(card.data, 'quoteId') ?? undefined,
+        detailUrl: readString(card.data, 'detailUrl') ?? undefined,
+        phase: card.phase,
+        url,
       },
     });
   }

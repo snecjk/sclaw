@@ -3,7 +3,7 @@ name: quote-assistant
 description: >-
   报价工作台 AI 助手：新建报价、上传报价表、校验纠错、自然语言改参与提交报价。
   当用户提到新建报价、上传 Excel/CSV、调价、续重、首重、报价测算或提交报价时使用。
-version: 1.2.5
+version: 1.2.7
 ---
 
 # 报价助手（quote-assistant）
@@ -45,6 +45,85 @@ version: 1.2.5
 3. **保存 / 提交成功**：`editing` / `submitted` 卡继续带同一 `ossKey`，并设 `"previewMode": "refresh"`。平台会**再次导航到** `clawQuotation?ossKey=…`（**禁止**指望 webview `reload`——业务改过地址后直接刷新会回首页）。
 
 推荐：只写 `ossKey`，让平台按当前客户端环境拼 host；若你自拼 `previewUrl`，必须与上表环境一致。
+
+## 业务 H5 事件通知（JSBridge · 应用广场必接）
+
+**应用广场**左侧 webview 加载 `clawQuotation` 等业务页时，页面需用 `@sto/claw-bridge-sdk` 的 `stoClaw.addListener` **主动注册**后，宿主才会推送事件（无注册 = 无推送）。
+
+你（Skill）**不调用** `addListener`；你只需在 `flow_card.data` 写对字段，平台在以下时机自动 `emit`：
+
+| 业务时机 | 你应在卡里写什么 | 平台推送事件 | payload 要点 |
+|---------|----------------|-------------|-------------|
+| 首次上传 / 校验中打开确认页 | `data.ossKey` + `phase: validating` | `quote:preview-refresh` | `{ ossKey, phase, mode: 'open', url }` — **仅导航同步** |
+| 重新上传（新文件） | **新** `data.ossKey` | `quote:preview-refresh` | `mode: 'open'`，`ossKey` 为新值 |
+| **校验结束**（通过 / 失败） | `data.validationOutcome: "pass"` 或 `"fail"` | **`quote:validation-complete`** | `{ ossKey, pass, errorCount?, phase }` |
+| **保存成功** | `phase: editing` + `ossKey` + `"previewMode": "refresh"` | **`quote:save-complete`** + `quote:preview-refresh` | save: `{ ossKey, quoteId?, url }` |
+| **提交成功** | `phase: submitted` + `ossKey` + `"previewMode": "refresh"` | **`quote:submit-complete`** + `quote:preview-refresh` | submit: `{ ossKey, quoteId?, detailUrl?, url }` |
+
+**三类业务事件务必区分（不要混用）：**
+
+| 事件 | 语义 | 页面侧处理 |
+|------|------|-----------|
+| `quote:validation-complete` | Excel **校验**完成 | `pass === true` → 可编辑；`pass === false` → 展示错误数 / 引导重传 |
+| `quote:save-complete` | **保存报价**成功（`vip quotation save` 后） | 刷新列表 / 跳转详情草稿态 |
+| `quote:submit-complete` | **提交审批**成功 | 跳转审批详情 `detailUrl` |
+
+`quote:preview-refresh` 只表示宿主做了**页面导航**（打开 / 刷新 `clawQuotation?ossKey=`），不单独承载「校验 / 保存 / 提交」语义；业务逻辑请监听上表三个专用事件。
+
+**铁律（与事件相关）：**
+
+1. 凡需通知业务页的卡，`data.ossKey` **不得缺失**（含 `editing` / `submitted`）。
+2. 重新上传必须写**新** `ossKey`。
+3. 校验结果卡必须写 `validationOutcome`（`pass` / `fail`），才会发 `quote:validation-complete`。
+4. 保存成功用 `phase: editing` + `previewMode: refresh` → 发 `quote:save-complete`。
+5. 提交成功用 `phase: submitted` + `previewMode: refresh` → 发 `quote:submit-complete`。
+6. 事件仅在**应用广场 embed** 投递。
+
+业务页接入示例（给前端同学，完整 API 见 `packages/claw-bridge-sdk/jsbridge-api.md` §宿主→页面事件）：
+
+```typescript
+import {
+  stoClaw,
+  isStoClawBridgeAvailable,
+  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
+} from '@sto/claw-bridge-sdk';
+
+if (isStoClawBridgeAvailable()) {
+  const offValidation = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE, (payload) => {
+    const { ossKey, pass, errorCount } = payload as {
+      ossKey: string;
+      pass: boolean;
+      errorCount?: number;
+    };
+    if (pass) {
+      // 校验通过，可进入编辑
+    } else {
+      // 展示 errorCount，引导重新上传
+    }
+  });
+
+  const offSave = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_SAVE_COMPLETE, (payload) => {
+    const { ossKey, quoteId, url } = payload as { ossKey: string; quoteId?: string; url?: string };
+    // 保存成功：刷新当前页数据（勿 location.reload）
+  });
+
+  const offSubmit = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE, (payload) => {
+    const { detailUrl, quoteId } = payload as { detailUrl?: string; quoteId?: string };
+    // 提交成功：跳转审批详情 detailUrl
+  });
+
+  // 可选：仅关心宿主导航时监听
+  const offPreview = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH, (payload) => {
+    const { ossKey, mode, url } = payload as { ossKey: string; mode?: string; url?: string };
+    // mode === 'open' | 'refresh' — 宿主已导航，业务页做 SPA 内同步即可
+  });
+
+  // 页面卸载：offValidation(); offSave(); offSubmit(); offPreview();
+}
+```
 
 ## 输出格式
 
@@ -306,6 +385,8 @@ version: 1.2.5
   "body": "报价已进入审批流程。如需新建另一条，请再说「帮我新建一个报价」。",
   "data": {
     "quoteId": "Q-DEMO",
+    "ossKey": "vip/osstmp/…",
+    "previewMode": "refresh",
     "detailUrl": "https://wd-vip.sto.cn/vipLogin#/quote-ops-console/confirm/Q-DEMO"
   },
   "actions": []
@@ -339,8 +420,9 @@ version: 1.2.5
 3. `sai-cli vip quotation-check validate --ossKey <上一步的key> --source CLI`
 4. 校验失败 → `errors` 卡：`progressSteps` + `validationOutcome: "fail"` + `ossKey` + `data.ossUrl` + 下载按钮；`body` 写错误摘要。重新上传后重复 1–3（新 `ossKey` 必须再打开预览）。
 5. 校验成功 → 出「校验通过 · 待保存」卡（`validationOutcome: "pass"` + `ossKey` + `chat.sendMessage` 保存按钮）。**禁止** `kind: "quote.save"`。
-6. 用户确认「保存报价」→ `vip quotation-draft parse`（可选）→ `vip quotation save` → `editing` 卡（`ossKey` + `"previewMode": "refresh"` + `quoteId` / `detailUrl`）。
-7. 若返回无 `detailUrl`：`https://wd-vip.sto.cn/vipLogin#/quote-ops-console/confirm/{quoteId}`。
+6. 用户确认「保存报价」→ `vip quotation save` → `editing` 卡（`ossKey` + `previewMode: refresh` + `quoteId` / `detailUrl`）；平台推送 **`quote:save-complete`**（及导航用 `quote:preview-refresh`）。
+7. 用户「提交报价」完成 → `submitted` 卡（`ossKey` + `previewMode: refresh` + `detailUrl`）；平台推送 **`quote:submit-complete`**。
+8. 若返回无 `detailUrl`：`https://wd-vip.sto.cn/vipLogin#/quote-ops-console/confirm/{quoteId}`。
 
 仅当某步返回 `ARGUMENT_INVALID` 且缺参不明确时，才允许对该命令执行一次 `sai-cli help <三段命令>`（仍不要加引号）。
 
