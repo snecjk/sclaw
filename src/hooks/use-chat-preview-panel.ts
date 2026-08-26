@@ -15,6 +15,19 @@ const EMPTY_BROWSER_TABS: ChatBrowserPreviewTab[] = [];
 /** Workbench 预览布局：closed 双栏 / split 三栏 / expanded 预览占满 Workspace（非 DOM Fullscreen） */
 export type PreviewMode = 'closed' | 'split' | 'expanded';
 
+/** 统一预览 tab：文件产物与业务网页混排在同一条标签栏（对齐 Kimi Work 预览面板模型） */
+export type ChatPreviewTab =
+  | { kind: 'file'; id: string; file: AttachedFileMeta }
+  | { kind: 'browser'; id: string; tab: ChatBrowserPreviewTab };
+
+export function filePreviewTabId(filePath: string): string {
+  return `file:${filePath}`;
+}
+
+export function browserPreviewTabId(tabId: string): string {
+  return `browser:${tabId}`;
+}
+
 export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: string) {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('closed');
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);

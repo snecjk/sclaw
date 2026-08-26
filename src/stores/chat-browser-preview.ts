@@ -3,6 +3,8 @@ import { create } from 'zustand';
 export interface ChatBrowserPreviewTab {
   id: string;
   url: string;
+  /** Same-origin navigations update this; falls back to `url` for display. */
+  currentUrl?: string;
   title: string;
   /** Bumped to remount iframe when re-navigating the same logical URL. */
   remountKey: number;
@@ -18,6 +20,8 @@ interface ChatBrowserPreviewState {
   ) => string;
   closeTab: (sessionKey: string, tabId: string) => void;
   setActiveTab: (sessionKey: string, tabId: string | null) => void;
+  /** Record the iframe's current location after same-origin in-page navigation. */
+  updateTabUrl: (sessionKey: string, tabId: string, url: string) => void;
   getTabs: (sessionKey: string) => ChatBrowserPreviewTab[];
   getActiveTab: (sessionKey: string) => ChatBrowserPreviewTab | null;
 }
@@ -107,6 +111,17 @@ export const useChatBrowserPreviewStore = create<ChatBrowserPreviewState>((set, 
   setActiveTab: (sessionKey, tabId) => {
     set((state) => ({
       activeTabIdBySession: { ...state.activeTabIdBySession, [sessionKey]: tabId },
+    }));
+  },
+
+  updateTabUrl: (sessionKey, tabId, url) => {
+    set((state) => ({
+      tabsBySession: {
+        ...state.tabsBySession,
+        [sessionKey]: (state.tabsBySession[sessionKey] ?? []).map((tab) => (
+          tab.id === tabId && tab.currentUrl !== url ? { ...tab, currentUrl: url } : tab
+        )),
+      },
     }));
   },
 
