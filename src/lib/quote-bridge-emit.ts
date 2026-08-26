@@ -13,6 +13,7 @@ import {
   parseBatchAdjustParams,
   parseBatchAdjustValidation,
   serializeBatchAdjustObjectListJson,
+  type BatchAdjustParams,
 } from '../../shared/quote-batch-adjust';
 import { BRIDGE_EVENT_QUOTE, emitBridgeGuestEvent } from '@/lib/jsbridge/emit-guest-event';
 import type { FlowCardPreviewMode } from '@/lib/flow-card-preview';
@@ -115,6 +116,27 @@ function emitNotifyKind(
     default:
       break;
   }
+}
+
+/** Push `batch-adjust.params-ready` from parsed CLI params (not tied to flow_card diff). */
+export function emitBatchAdjustParamsReady(input: {
+  runtimeId: string;
+  params: BatchAdjustParams;
+  cardId?: string;
+  phase?: string;
+  url?: string | null;
+}): void {
+  const cardId = input.cardId?.trim() || 'batch-adjust';
+  const phase = input.phase?.trim() || 'batch_adjust';
+  emitQuoteChannel(input.runtimeId, QUOTE_BRIDGE_CHANNEL_BATCH_ADJUST_PARAMS_READY, {
+    cardId,
+    phase,
+    url: input.url ?? undefined,
+    freightFeeType: input.params.freightFeeType,
+    objectList: input.params.objectList,
+    objectListJson: serializeBatchAdjustObjectListJson(input.params.objectList),
+    summary: input.params.summary,
+  });
 }
 
 /** Push quote notifications to embed business page (`quote:event` + channel). */

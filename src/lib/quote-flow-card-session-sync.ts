@@ -1,10 +1,6 @@
 import type { FlowCardContentBlock } from '../../shared/flow-card-protocol';
 import type { QuoteBridgeNotifyKind } from '../../shared/quote-bridge-channels';
-import {
-  parseBatchAdjustDraft,
-  parseBatchAdjustParams,
-  parseBatchAdjustValidation,
-} from '../../shared/quote-batch-adjust';
+import { parseBatchAdjustParams } from '../../shared/quote-batch-adjust';
 import {
   extractFlowCard,
   findMessageIndexByFlowCardId,
@@ -18,22 +14,11 @@ export interface FlowCardPreviewSyncSnapshot {
   previewUrl: string;
   previewMode: string;
   phase: string;
-  batchParamsSig: string;
-  batchValidationSig: string;
-  batchDraftSig: string;
 }
 
 const lastSnapshotByKey = new Map<string, FlowCardPreviewSyncSnapshot>();
 const openedOssKeysBySession = new Map<string, Set<string>>();
 const openedPreviewUrlsBySession = new Map<string, Set<string>>();
-
-function fieldSignature(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '';
-  }
-}
 
 function snapshotKey(sessionKey: string, cardId: string): string {
   return `${sessionKey}:${cardId}`;
@@ -57,6 +42,13 @@ function openedPreviewUrls(sessionKey: string): Set<string> {
   return set;
 }
 
+function isBatchAdjustFlowCard(card: FlowCardContentBlock): boolean {
+  if (card.phase === 'batch_adjust') return true;
+  const scene = typeof card.data?.scene === 'string' ? card.data.scene.trim() : '';
+  if (scene === 'batch_adjust') return true;
+  return parseBatchAdjustParams(card.data) != null;
+}
+
 export function readFlowCardPreviewSyncSnapshot(
   sessionKey: string,
   cardId: string,
@@ -78,16 +70,11 @@ export function buildFlowCardPreviewSyncSnapshot(
   const ossKey = typeof card.data?.ossKey === 'string' ? card.data.ossKey.trim() : '';
   const previewUrl = typeof card.data?.previewUrl === 'string' ? card.data.previewUrl.trim() : '';
   const previewMode = typeof card.data?.previewMode === 'string' ? card.data.previewMode.trim() : '';
-  const data = card.data ?? {};
-  const batchValidation = parseBatchAdjustValidation(data);
   return {
     ossKey,
     previewUrl,
     previewMode,
     phase: card.phase,
-    batchParamsSig: fieldSignature(parseBatchAdjustParams(data)),
-    batchValidationSig: batchValidation ? fieldSignature(batchValidation) : '',
-    batchDraftSig: fieldSignature(parseBatchAdjustDraft(data)),
   };
 }
 
@@ -133,35 +120,23 @@ export function computeFlowCardPreviewNotifies(input: {
   current: FlowCardPreviewSyncSnapshot;
 }): QuoteBridgeNotifyKind[] {
   const { card, prev, current } = input;
-  const data = card.data ?? {};
-  const batchValidation = parseBatchAdjustValidation(data);
 
   if (card.phase === 'awaiting_upload') return [];
-
-  if (!prev) {
-    return [];
-  }
+  if (isBatchAdjustFlowCard(card)) return [];
 
   const notifies: QuoteBridgeNotifyKind[] = [];
+
+  if (!prev) {
+    if (current.ossKey) notifies.push('preview');
+    if (current.previewUrl) notifies.push('preview');
+    return notifies;
+  }
 
   if (prev.ossKey !== current.ossKey && current.ossKey) {
     notifies.push('preview');
   }
   if (prev.previewUrl !== current.previewUrl && current.previewUrl) {
     notifies.push('preview');
-  }
-  if (prev.batchParamsSig !== current.batchParamsSig && current.batchParamsSig) {
-    notifies.push('batch-adjust-params');
-  }
-  if (
-    prev.batchValidationSig !== current.batchValidationSig
-    && batchValidation
-    && !batchValidation.pass
-  ) {
-    notifies.push('batch-adjust-validate-fail');
-  }
-  if (prev.batchDraftSig !== current.batchDraftSig && current.batchDraftSig) {
-    notifies.push('batch-adjust-draft');
   }
 
   const submitSuccess =
@@ -187,6 +162,7 @@ export function shouldNavigateQuoteFlowCardPreview(
   sessionKey: string,
   card: FlowCardContentBlock,
 ): boolean {
+  if (isBatchAdjustFlowCard(card)) return false;
   const ossKey = typeof card.data?.ossKey === 'string' ? card.data.ossKey.trim() : '';
   if (ossKey && !openedOssKeys(sessionKey).has(ossKey)) return true;
   const previewUrl = typeof card.data?.previewUrl === 'string' ? card.data.previewUrl.trim() : '';

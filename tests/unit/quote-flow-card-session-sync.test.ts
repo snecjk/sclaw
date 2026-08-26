@@ -44,7 +44,11 @@ describe('quote-flow-card-session-sync', () => {
     const prev = buildFlowCardPreviewSyncSnapshot(prevCard);
     const current = buildFlowCardPreviewSyncSnapshot(nextCard);
 
-    expect(computeFlowCardPreviewNotifies({ card: nextCard, prev, current })).toEqual(['preview']);
+    expect(computeFlowCardPreviewNotifies({
+      card: nextCard,
+      prev,
+      current,
+    })).toEqual(['preview']);
     expect(shouldNavigateQuoteFlowCardPreview('sess-2', nextCard)).toBe(true);
   });
 
@@ -99,5 +103,29 @@ describe('quote-flow-card-session-sync', () => {
     expect(notifies).toEqual(['preview']);
     expect(shouldNavigateQuoteFlowCardPreview('sess-4', nextCard)).toBe(true);
     expect(opened.has('vip/osstmp/b')).toBe(false);
+  });
+
+  it('does not open preview for batch_adjust card with previewUrl only', () => {
+    const card = createFlowCardBlock({
+      cardId: 'quote-active',
+      phase: 'batch_adjust',
+      data: {
+        scene: 'batch_adjust',
+        previewUrl: 'https://wd-vip.sto.cn/vipLogin#/quote-ops-console',
+        batchAdjustParams: {
+          objectList: [{
+            objectName: '刘飞',
+            sceneType: 'CUSTOMER',
+            startDate: '2026-09-01',
+            endDate: '2026-12-31',
+            items: [],
+          }],
+        },
+      },
+    });
+    const current = buildFlowCardPreviewSyncSnapshot(card);
+
+    expect(computeFlowCardPreviewNotifies({ card, prev: null, current })).toEqual([]);
+    expect(shouldNavigateQuoteFlowCardPreview('sess-batch', card)).toBe(false);
   });
 });

@@ -42,7 +42,7 @@ version: 1.3.5
 1. **校验过程中**（`validating` / `errors` / `ready_to_save`）：有 `ossKey` 即自动打开业务页。
    - **主会话**：预览区展示业务页。
    - **应用广场**：业务 webview 展示（AI 在另一侧）。
-2. **批量调价**：参数齐备后写 `data.previewUrl`（或 CLI 返回的业务页 URL），平台同样会**在页面中打开**，引导用户在**页面里查看并确认**调价方案（**不要说「左侧/右侧」**，统一说「在页面中」）。
+2. **批量调价**：参数齐备后写 `data.batchAdjustParams`；**应用广场不重定向**左侧 webview，平台只推 `batch-adjust.params-ready`，由**当前已打开的业务页**展示/回填（**不要说「左侧/右侧」**，统一说「在页面中」）。
 3. **失败后重新上传**：新文件拿到**新** `ossKey` 后再次写入卡；平台会**重新打开**对应链接，保证会话与预览一致。
 4. **提交成功**：`submitted` 卡（或批量调价完成后的 `editing` 卡）继续带同一 `ossKey`，并设 `"previewMode": "refresh"`。平台会**再次导航到** `clawQuotation?ossKey=…`（**禁止**指望 webview `reload`——业务改过地址后直接刷新会回首页）。
 
@@ -426,7 +426,8 @@ if (isStoClawBridgeAvailable()) {
 
 **页面引导**：
 - 参数齐备并出卡后，正文一句：**「请在页面中查看并确认调价方案」**（**禁止**写「左侧」「右侧」）。
-- 卡里写 `data.previewUrl`（业务批量调价/报价工作台地址）；平台会在**页面中**打开该 URL，并推送 `batch-adjust.params-ready`。
+- **不要**为批量调价写 `data.previewUrl` 指望宿主跳转；应用广场**只**推 `batch-adjust.params-ready`，用户应已在业务页。
+- 平台从会话消息里解析 `batchAdjustParams`（常为 `flow_card.data`，仅作结构化载体），按 CLI 草案入参格式校验通过后**直接**推 `batch-adjust.params-ready`；**不依赖 card 快照 diff**。
 - `data.scene` 固定写 `"batch_adjust"`。
 
 **缺参处理（铁律 3）**：
@@ -484,7 +485,7 @@ if (isStoClawBridgeAvailable()) {
 
 **调用顺序**（意图整理完毕、参数齐备后，**仅 1 步**）：
 
-1. 出 `batch_adjust` 卡：写入 `data.batchAdjustParams` + `data.previewUrl` + `data.scene: "batch_adjust"` → 平台推送 `batch-adjust.params-ready` 并打开业务页。**会话结束**，不再执行任何 CLI。
+1. 出 `batch_adjust` 卡：写入 `data.batchAdjustParams` + `data.scene: "batch_adjust"` → 平台推送 `batch-adjust.params-ready`（**不重定向**业务页）。**会话结束**，不再执行任何 CLI。
 
 用户补充或修改说法时：只重新整理意图、更新 `batchAdjustParams`，同一 `cardId` 再发卡（业务页收新的 `params-ready`）。
 
@@ -499,7 +500,6 @@ if (isStoClawBridgeAvailable()) {
   "body": "已根据您的描述整理好调价意图，请在页面中查看并确认。",
   "data": {
     "scene": "batch_adjust",
-    "previewUrl": "https://wd-vip.sto.cn/vipLogin#/quote-ops-console",
     "batchAdjustParams": { }
   },
   "actions": []

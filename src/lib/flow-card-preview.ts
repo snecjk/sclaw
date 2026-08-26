@@ -10,6 +10,7 @@ import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-sess
 import { emitQuoteFlowCardBridgeEvents } from '@/lib/quote-bridge-emit';
 import { openChatBrowserPreview } from '@/stores/chat-browser-preview';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
+import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useChatStore } from '@/stores/chat';
 
 export type FlowCardPreviewMode = 'open' | 'refresh';
@@ -63,10 +64,20 @@ export function openFlowCardPreview(input: {
 function resolveEmbedRuntimeId(sessionKey: string): string | null {
   if (!isSclawBrowserEmbedChatSessionKey(sessionKey)) return null;
   const shell = useAppPlazaShellStore.getState();
-  const tab = shell.browserTabs.find(
+  const plazaTab = shell.browserTabs.find(
     (entry) => entry.chatSessionKey === sessionKey && entry.status === 'live',
   ) ?? shell.browserTabs.find((entry) => entry.id === shell.activeTabId && entry.status === 'live');
-  return tab?.embedRuntimeId ?? null;
+  if (plazaTab?.embedRuntimeId) return plazaTab.embedRuntimeId;
+
+  const overlay = useSclawBrowserOverlayStore.getState();
+  if (overlay.chatSessionKey === sessionKey && overlay.embedRuntimeId) {
+    return overlay.embedRuntimeId;
+  }
+  return null;
+}
+
+export function resolveEmbedRuntimeIdForChatSession(sessionKey: string): string | null {
+  return resolveEmbedRuntimeId(sessionKey);
 }
 
 /** Sync preview — optionally navigate business page; always emit `quote:event` when requested. */
