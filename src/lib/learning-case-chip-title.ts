@@ -14,7 +14,8 @@ export async function resolveLearningCaseChipTitle(
   if (!code) return undefined;
 
   if (action.targetType === 'SKILL') {
-    return (await resolveSkillPrompt(code)).title;
+    const title = (await resolveSkillPrompt(code)).title.trim();
+    return title && title !== code ? title : undefined;
   }
 
   if (action.targetType === 'WORKFLOW') {
@@ -23,9 +24,16 @@ export async function resolveLearningCaseChipTitle(
     try {
       const result = await listWorkflowTemplates({ query: code, page: 1, pageSize: 20 });
       const matched = result.items.find((item) => item.id === code);
-      return matched?.label?.trim() || code;
+      if (matched?.label?.trim()) return matched.label.trim();
     } catch {
-      return code;
+      // Some deployments search template names only, so an id query can fail.
+    }
+    try {
+      const catalog = await listWorkflowTemplates({ page: 1, pageSize: 100 });
+      const matched = catalog.items.find((item) => item.id === code);
+      return matched?.label?.trim() || undefined;
+    } catch {
+      return undefined;
     }
   }
 

@@ -76,7 +76,7 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
       { navigate, displayTitle: '几善诗词' },
     );
     expect(handoffMock).toHaveBeenCalledWith(navigate, {
-      workflow: { id: 'tpl_demo', name: '几善诗词' },
+      workflow: { id: 'tpl_demo', name: '几善诗词', source: 'template' },
       suffixText: '按本周数据跑一遍',
     });
   });
@@ -109,7 +109,7 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
 
     expect(result).toMatchObject({ ok: true, navigatedTo: '/', draftApplied: true });
     expect(handoffMock).toHaveBeenCalledWith(navigate, {
-      workflow: { id: 'wf/1 2', name: '每日任务' },
+      workflow: { id: 'wf/1 2', name: '每日任务', source: 'template' },
     });
     expect(navigate).not.toHaveBeenCalled();
   });

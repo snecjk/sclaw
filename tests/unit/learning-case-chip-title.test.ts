@@ -69,6 +69,31 @@ describe('resolveLearningCaseChipTitle', () => {
     }))).resolves.toBe('报价测算');
   });
 
+  it('falls back to the workflow catalog when id search does not match', async () => {
+    workflowMock
+      .mockResolvedValueOnce({ items: [], total: 0, page: 1, pageSize: 20 })
+      .mockResolvedValueOnce({
+        items: [{ id: 'tpl_demo', label: '总部结算对账', description: '' }],
+        total: 1,
+        page: 1,
+        pageSize: 100,
+      });
+
+    await expect(resolveLearningCaseChipTitle(action({
+      targetType: 'WORKFLOW',
+      targetCode: 'tpl_demo',
+    }))).resolves.toBe('总部结算对账');
+  });
+
+  it('never exposes a workflow code as the display title', async () => {
+    workflowMock.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 });
+
+    await expect(resolveLearningCaseChipTitle(action({
+      targetType: 'WORKFLOW',
+      targetCode: 'tpl_demo',
+    }))).resolves.toBeUndefined();
+  });
+
   it('does not use a title for CHAT drafts', async () => {
     await expect(resolveLearningCaseChipTitle(action({
       targetType: 'CHAT',

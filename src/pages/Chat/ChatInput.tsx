@@ -38,6 +38,7 @@ import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
 import { EMPTY_MENTION_COMPOSER_SNAPSHOT } from '@/lib/dingtalk-mention-composer';
 import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
+import { isSingleTemplateWorkflowSend } from '@/lib/workflow-template-send';
 import { FlyToTargetLayer } from '@/components/fly-to-target';
 import { QuickInputIcon } from '@/components/icons/composer-toolbar-icons';
 import {
@@ -446,10 +447,10 @@ export function ChatInput({
         }
       }
 
-      const nonMineWorkflows = payload.workflows.filter((wf) => wf.source !== 'mine');
-      const templateOnlyWorkflow = nonMineWorkflows.length === 1
-        && !payload.workflows.some((wf) => wf.source === 'mine')
-        && payload.skillMetas.length === 0;
+      const templateOnlyWorkflow = isSingleTemplateWorkflowSend({
+        workflows: payload.workflows,
+        skillCount: payload.skillMetas.length,
+      });
 
       if (sending && onQueue && !templateOnlyWorkflow) {
         onQueue(

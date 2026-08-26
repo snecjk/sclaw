@@ -55,6 +55,7 @@ import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
 import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
+import { getTurnTokenService } from '../services/turn-token-service';
 import { getProviderService } from '../services/providers/provider-service';
 import {
   getOpenClawProviderKey,
@@ -2187,6 +2188,13 @@ function registerUsageHandlers(): void {
       ? Math.max(Math.floor(limit), 1)
       : undefined;
     return await getRecentTokenUsageHistory(safeLimit);
+  });
+
+  ipcMain.handle('turn-token:get', async (_, sessionKey: unknown, turnIndex: unknown) => {
+    if (typeof sessionKey !== 'string' || typeof turnIndex !== 'number' || !Number.isFinite(turnIndex)) {
+      return null;
+    }
+    return getTurnTokenService().get(sessionKey, Math.max(0, Math.floor(turnIndex)));
   });
 }
 /**
