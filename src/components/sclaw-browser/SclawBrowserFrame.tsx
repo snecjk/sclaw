@@ -135,6 +135,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const [guestPreloadUrl, setGuestPreloadUrl] = useState<string | null>(null);
     const [preloadReady, setPreloadReady] = useState(!isElectron);
     const launchedSrcRef = useRef<string | null>(null);
+    /** True only after the guest webview has emitted dom-ready (required before loadURL). */
+    const webviewDomReadyRef = useRef(false);
     const onPageFaviconRef = useRef(onPageFavicon);
     const onPageTitleRef = useRef(onPageTitle);
     const onPageUrlRef = useRef(onPageUrl);
@@ -163,6 +165,27 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       };
     }, []);
 
+    // Track dom-ready separately — getWebContentsId() can succeed before dom-ready,
+    // but loadURL still throws until the event has fired.
+    useEffect(() => {
+      if (!isElectron || !preloadReady) {
+        webviewDomReadyRef.current = false;
+        return;
+      }
+
+      const el = webviewRef.current;
+      if (!el) return;
+
+      const onDomReady = () => {
+        webviewDomReadyRef.current = true;
+      };
+      el.addEventListener('dom-ready', onDomReady);
+      return () => {
+        webviewDomReadyRef.current = false;
+        el.removeEventListener('dom-ready', onDomReady);
+      };
+    }, [preloadReady]);
+
     // Navigate only after guest preload is attached AND webview has emitted dom-ready.
     // Calling loadURL before attach/dom-ready throws and crashes the App Plaza tree.
     useEffect(() => {
@@ -173,7 +196,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       let cancelled = false;
 
       const navigate = () => {
-        if (cancelled || launchedSrcRef.current === url) return;
+        if (cancelled || !webviewDomReadyRef.current || launchedSrcRef.current === url) return;
         try {
           const result = el.loadURL?.(url);
           launchedSrcRef.current = url;
@@ -186,17 +209,16 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         }
       };
 
-      if (safeGetWebContentsId(el)) {
-        navigate();
-        return () => {
-          cancelled = true;
-        };
-      }
-
       const onDomReady = () => {
         navigate();
       };
-      el.addEventListener('dom-ready', onDomReady);
+
+      if (webviewDomReadyRef.current) {
+        navigate();
+      } else {
+        el.addEventListener('dom-ready', onDomReady);
+      }
+
       return () => {
         cancelled = true;
         el.removeEventListener('dom-ready', onDomReady);
