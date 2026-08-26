@@ -2,7 +2,8 @@
  * Designer local trial-run state machine (canvas migration Task 4).
  *
  * Drives a client-local "试运行" flow independently from its canvas host:
- *   begin → (StartupRunDialog if schema has inputs) → startWorkflowLocal
+ *   begin → use configured startup inputs directly (or collect runtime files)
+ *   → startWorkflowLocal
  *   → workflow:status-update broadcast (sessionKey='designer-try-run')
  *   → hydrate full run via getRunViaIpc → WorkflowExecutionState → TestRunDrawer
  *
@@ -45,6 +46,56 @@ export interface RuntimeUploadNode {
 
 export const DESIGNER_TRY_RUN_SESSION_KEY = 'designer-try-run';
 const EMPTY_STARTUP_DEFAULT_VALUES: Record<string, unknown> = {};
+const DEFAULT_TRIAL_RUN_ENGINE = 'claude' as const;
+
+function resolveConfiguredStartupInputs(
+  schema: WorkflowSchema | null,
+  defaultValues: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!schema?.enabled) return {};
+  const inputs: Record<string, unknown> = {};
+  for (const field of schema.fields ?? []) {
+    const value = Object.prototype.hasOwnProperty.call(defaultValues, field.key)
+      ? defaultValues[field.key]
+      : field.defaultValue;
+    if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) continue;
+    inputs[field.key] = value;
+  }
+  return inputs;
+}
+
+function collectRuntimeUploadNodes(definition: Record<string, unknown> | undefined): RuntimeUploadNode[] {
+  const nodes = Array.isArray(definition?.nodes) ? definition.nodes : [];
+  return nodes.flatMap((value): RuntimeUploadNode[] => {
+    if (!value || typeof value !== 'object') return [];
+    const node = value as Record<string, unknown>;
+    if (node.type !== 'agent_data_fetch' || typeof node.id !== 'string') return [];
+    const config = node.config && typeof node.config === 'object'
+      ? node.config as Record<string, unknown>
+      : {};
+    const business = config.businessConfig && typeof config.businessConfig === 'object'
+      ? config.businessConfig as Record<string, unknown>
+      : {};
+    if (!['runtime_upload', 'mixed'].includes(String(business.inputProvisionMode ?? ''))) return [];
+    const localImport = business.localImport && typeof business.localImport === 'object'
+      ? business.localImport as Record<string, unknown>
+      : {};
+    const acceptedExtensions = Array.isArray(localImport.acceptedExtensions)
+      ? localImport.acceptedExtensions.filter((extension): extension is string => typeof extension === 'string')
+      : undefined;
+    const maxFiles = typeof localImport.maxFiles === 'number'
+      && Number.isInteger(localImport.maxFiles)
+      && localImport.maxFiles > 0
+      ? localImport.maxFiles
+      : undefined;
+    return [{
+      nodeId: node.id,
+      name: typeof node.name === 'string' && node.name.trim() ? node.name : node.id,
+      acceptedExtensions,
+      maxFiles,
+    }];
+  });
+}
 
 interface StatusUpdatePayload {
   runId: string;
@@ -119,6 +170,7 @@ export function useDesignerTryRun({
   const snapshotRef = useRef<WorkflowDraftSnapshot | null>(null);
   const workflowNameRef = useRef<string>('');
   const launchConfirmationRef = useRef<TrialRunLaunchConfirmation | null>(null);
+  const configuredStartupInputsRef = useRef<Record<string, unknown>>({});
 
   const runIdRef = useRef<string | null>(null);
   const eventHydrateTimerRef = useRef<number | null>(null);
@@ -278,31 +330,27 @@ export function useDesignerTryRun({
         ...snapshot?.startup.defaultValues,
         ...workflowDetail?.startup?.defaultPreset?.values,
       };
+      const configuredStartupInputs = resolveConfiguredStartupInputs(nextSchema, nextDefaultValues);
+      configuredStartupInputsRef.current = configuredStartupInputs;
       setActiveStartupSchema(nextSchema);
       setActiveStartupDefaultValues(nextDefaultValues);
-      const uploads = ((definition as any)?.nodes ?? []).flatMap((node: any) => {
-        const business = node?.config?.businessConfig ?? {};
-        return node?.type === 'agent_data_fetch' && ['runtime_upload', 'mixed'].includes(business.inputProvisionMode)
-          ? [{
-              nodeId: node.id,
-              name: node.name ?? node.id,
-              acceptedExtensions: business.localImport?.acceptedExtensions,
-              maxFiles: Number.isInteger(business.localImport?.maxFiles) && business.localImport.maxFiles > 0
-                ? business.localImport.maxFiles
-                : undefined,
-            }]
-          : [];
-      });
+      const uploads = collectRuntimeUploadNodes(definition);
       setRuntimeUploadNodes(uploads);
-      // Engine selection is mandatory even when the workflow has no startup fields.
+      const hasConfiguredStartupFields = Boolean(nextSchema?.enabled && nextSchema.fields?.length);
+      if (hasConfiguredStartupFields && uploads.length === 0) {
+        await launch(configuredStartupInputs, snapshot ?? null, DEFAULT_TRIAL_RUN_ENGINE);
+        return;
+      }
+      // Runtime file selection remains interactive. Workflows without startup
+      // fields keep the existing engine confirmation behavior.
       setIsStartupDialogOpen(true);
     })().catch((error) => setLaunchError(error instanceof Error ? error.message : '无法读取试运行配置'));
-  }, [workflowId, canStart, startupDefaultValues, startupSchema]);
+  }, [workflowId, canStart, startupDefaultValues, startupSchema, launch]);
 
   const confirmStartup = useCallback(
     async (inputs: Record<string, unknown>, engineType: 'claude' | 'openclaw') => {
       setIsStartupDialogOpen(false);
-      await launch(inputs, snapshotRef.current, engineType);
+      await launch({ ...configuredStartupInputsRef.current, ...inputs }, snapshotRef.current, engineType);
     },
     [launch],
   );

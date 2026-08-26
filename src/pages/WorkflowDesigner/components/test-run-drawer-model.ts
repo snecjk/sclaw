@@ -276,13 +276,20 @@ export function collectTrialRunArtifacts(
   for (const artifact of executionState?.result?.artifacts ?? []) {
     items.push({ ...artifact, source: 'final' });
   }
-  const seen = new Set<string>();
-  return items.filter((artifact) => {
-    const key = artifact.id || artifact.filePath || artifact.previewUrl || artifact.url;
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const byFile = new Map<string, TrialRunDisplayArtifact>();
+  for (const artifact of items) {
+    const key = artifact.name.trim().toLowerCase()
+      || artifact.filePath?.trim().toLowerCase()
+      || artifact.previewUrl?.trim().toLowerCase()
+      || artifact.url.trim().toLowerCase()
+      || artifact.id;
+    if (!key) continue;
+    const existing = byFile.get(key);
+    if (!existing || (existing.source === 'process' && artifact.source === 'final')) {
+      byFile.set(key, artifact);
+    }
+  }
+  return [...byFile.values()];
 }
 
 export function getTrialRunArtifactTarget(artifact: TrialRunDisplayArtifact) {

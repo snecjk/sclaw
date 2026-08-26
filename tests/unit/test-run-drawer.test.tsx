@@ -160,8 +160,49 @@ describe('TestRunDrawer trial mode', () => {
 
     expect(screen.queryByText('agent.answer_delta')).not.toBeInTheDocument();
     expect(screen.getByText('实时输出')).toBeInTheDocument();
+    expect(screen.queryByText('工资数据')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '展开实时输出内容' }));
     expect(screen.getByText('工资数据')).toBeInTheDocument();
     expect(screen.getAllByTestId('trial-run-timeline-dot')).toHaveLength(1);
+  });
+
+  it('keeps node details collapsed by default and expands each one independently', () => {
+    const runtime = runtimeFixture('running');
+    runtime.run.events = [
+      {
+        id: 'event-1',
+        type: 'agent.answer_delta',
+        nodeId: 'node-1',
+        payload: { message: '短内容', rawText: '第一行\n第二行' },
+        timestamp: '2026-08-12T10:11:35.100+08:00',
+      },
+      {
+        id: 'event-2',
+        type: 'agent.answer_delta',
+        nodeId: 'node-2',
+        payload: { message: '长内容', rawText: '第一行\n第二行\n第三行\n第四行\n第五行' },
+        timestamp: '2026-08-12T10:11:36.100+08:00',
+      },
+    ];
+
+    renderDrawer('running', runtime);
+
+    const toggles = screen.getAllByTestId('trial-run-timeline-toggle');
+    expect(toggles).toHaveLength(2);
+    toggles.forEach((toggle) => expect(toggle).toHaveAttribute('aria-expanded', 'false'));
+    expect(screen.queryByTestId('trial-run-timeline-detail')).not.toBeInTheDocument();
+
+    fireEvent.click(toggles[0]);
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'true');
+    expect(toggles[1]).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('trial-run-timeline-detail')).toHaveTextContent('第一行 第二行');
+
+    fireEvent.click(toggles[1]);
+    expect(screen.getAllByTestId('trial-run-timeline-detail')).toHaveLength(2);
+
+    fireEvent.click(toggles[0]);
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getAllByTestId('trial-run-timeline-detail')).toHaveLength(1);
   });
 
   it.each([

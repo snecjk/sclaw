@@ -254,4 +254,33 @@ describe('test run drawer model', () => {
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0]).toMatchObject({ id: 'artifact-1', name: '对账表.xlsx' });
   });
+
+  it('deduplicates one output file reported with different ids in artifacts and process files', () => {
+    const artifacts = collectTrialRunArtifacts(runFixture({
+      result: {
+        artifacts: [{
+          id: 'final-artifact',
+          name: '唐代诗词选（HTML）',
+          type: 'file',
+          contentType: 'text/html',
+          tempUrl: 'https://preview.example.com/final-artifact',
+        }],
+        processFiles: [{
+          id: 'process-artifact',
+          name: '唐代诗词选（HTML）',
+          kind: 'OUTPUT',
+          type: 'OUTPUT',
+          filePath: 'D:/runtime/outputs/poems.html',
+        }],
+      },
+    }), null);
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      id: 'final-artifact',
+      name: '唐代诗词选（HTML）',
+      contentType: 'text/html',
+      source: 'final',
+    });
+  });
 });

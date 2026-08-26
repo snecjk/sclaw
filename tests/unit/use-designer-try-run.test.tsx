@@ -1,7 +1,13 @@
-import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { cancelRun, getRunViaIpc, runToExecutionState } from '@/lib/workflow-api';
+import {
+  cancelRun,
+  getRunViaIpc,
+  getWorkflowDetail,
+  runToExecutionState,
+  startWorkflowLocal,
+} from '@/lib/workflow-api';
 import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 import {
   WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
@@ -48,6 +54,125 @@ vi.mock('@/stores/workflow-memory', () => ({
 }));
 
 describe('useDesignerTryRun snapshot status', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('starts with configured workflow inputs without opening startup confirmation', async () => {
+    vi.mocked(getWorkflowDetail).mockResolvedValueOnce({
+      workflowId: 'wf-1',
+      workflowName: '参数工作流',
+      version: 7,
+      nodes: [],
+      edges: [],
+      startup: {
+        schemaHash: 'schema-1',
+        schema: {
+          nodeId: 'startup-1',
+          enabled: true,
+          steps: [],
+          fields: [
+            { key: 'city', label: '城市', group: 'default', order: 1, component: 'text', defaultValue: '西安' },
+            { key: 'days', label: '天数', group: 'default', order: 2, component: 'integer', defaultValue: 3 },
+          ],
+        },
+        defaultPreset: {
+          id: 'preset-1',
+          name: '默认配置',
+          workflowId: 'wf-1',
+          workflowVersionId: 7,
+          values: { city: '兰州', days: 7 },
+          schemaHash: 'schema-1',
+          isDefault: true,
+          status: 'active',
+        },
+      },
+    });
+    vi.mocked(startWorkflowLocal).mockResolvedValueOnce({
+      runId: 'run-parameterized',
+      workflowId: 'wf-1',
+      versionId: 7,
+      workflowVersion: 7,
+      startedAt: '2026-08-26T13:00:00+08:00',
+    });
+    const { result } = renderHook(() => useDesignerTryRun({
+      workflowId: 'wf-1',
+      startupSchema: null,
+      canStart: () => true,
+    }));
+
+    act(() => result.current.begin());
+
+    await waitFor(() => expect(startWorkflowLocal).toHaveBeenCalledWith(expect.objectContaining({
+      workflowId: 'wf-1',
+      inputs: { city: '兰州', days: 7 },
+      engineType: 'claude',
+      runMode: 'trial',
+    })));
+    expect(result.current.isStartupDialogOpen).toBe(false);
+    expect(result.current.isDrawerOpen).toBe(true);
+  });
+
+  it('keeps runtime file selection but merges configured startup inputs automatically', async () => {
+    const snapshot: WorkflowDraftSnapshot = {
+      workflowId: 'wf-1',
+      workflowVersionId: 'draft-8',
+      versionStatus: 'draft',
+      definition: {
+        nodes: [{
+          id: 'fetch-1',
+          type: 'agent_data_fetch',
+          name: '上传数据',
+          config: { businessConfig: { inputProvisionMode: 'runtime_upload' } },
+        }],
+        edges: [],
+      },
+      startup: {
+        schema: {
+          nodeId: 'startup-1',
+          enabled: true,
+          steps: [],
+          fields: [{ key: 'city', label: '城市', group: 'default', order: 1, component: 'text' }],
+        },
+        defaultValues: { city: '兰州' },
+      },
+    };
+    vi.mocked(startWorkflowLocal).mockResolvedValueOnce({
+      runId: 'run-upload',
+      workflowId: 'wf-1',
+      versionId: 'draft-8',
+      workflowVersion: 8,
+      startedAt: '2026-08-26T13:00:00+08:00',
+    });
+    const { result } = renderHook(() => useDesignerTryRun({
+      workflowId: 'wf-1',
+      startupSchema: null,
+      canStart: () => true,
+    }));
+
+    act(() => result.current.begin(snapshot));
+    await waitFor(() => expect(result.current.isStartupDialogOpen).toBe(true));
+    expect(startWorkflowLocal).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.confirmStartup({
+        __workflowRuntimeUploads: {
+          'fetch-1': [{ filePath: 'D:/data/input.xlsx', name: 'input.xlsx' }],
+        },
+      }, 'openclaw');
+    });
+
+    expect(startWorkflowLocal).toHaveBeenCalledWith(expect.objectContaining({
+      inputs: {
+        city: '兰州',
+        __workflowRuntimeUploads: {
+          'fetch-1': [{ filePath: 'D:/data/input.xlsx', name: 'input.xlsx' }],
+        },
+      },
+      engineType: 'openclaw',
+    }));
+  });
+
   it('does not label an explicit published-version trial run as a draft snapshot', async () => {
     const publishedSnapshot: WorkflowDraftSnapshot = {
       workflowId: 'wf-1',

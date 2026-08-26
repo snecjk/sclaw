@@ -55,31 +55,73 @@ function openArtifact(artifact: TrialRunDisplayArtifact) {
 
 function TrialRunTimeline({ items }: { items: TrialRunTimelineItem[] }) {
   const { t } = useTranslation('workflow');
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => new Set());
+
+  const toggleItem = (itemId: string) => {
+    setExpandedItemIds((current) => {
+      const next = new Set(current);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 [scrollbar-width:thin]">
       {items.length === 0 ? (
         <p className="py-6 text-center text-xs text-muted-foreground">{t('run.noEvents')}</p>
       ) : (
         <ol>
-          {items.map((item, index) => (
-            <li className="relative grid grid-cols-[12px_minmax(0,1fr)_auto] gap-x-2 pb-3 last:pb-0" key={item.id}>
-              <span className="relative flex justify-center pt-1.5" aria-hidden>
-                <span data-testid="trial-run-timeline-dot" className="z-10 h-1.5 w-1.5 rounded-full bg-[#C9CDD4]" />
-                {index < items.length - 1 ? (
-                  <span data-testid="trial-run-timeline-line" className="absolute bottom-[-6px] top-3 w-px bg-[#E5E6EB]" />
+          {items.map((item, index) => {
+            const isExpanded = expandedItemIds.has(item.id);
+            const detailId = `trial-run-timeline-detail-${index}`;
+            return (
+              <li className="relative grid grid-cols-[12px_minmax(0,1fr)_auto] gap-x-2 pb-3 last:pb-0" key={item.id}>
+                <span className="relative flex justify-center pt-1.5" aria-hidden>
+                  <span data-testid="trial-run-timeline-dot" className="z-10 h-1.5 w-1.5 rounded-full bg-[#C9CDD4]" />
+                  {index < items.length - 1 ? (
+                    <span data-testid="trial-run-timeline-line" className="absolute bottom-[-6px] top-3 w-px bg-[#E5E6EB]" />
+                  ) : null}
+                </span>
+                <div className="min-w-0">
+                  {item.detail ? (
+                    <button
+                      type="button"
+                      data-testid="trial-run-timeline-toggle"
+                      className="flex min-w-0 items-start gap-1 rounded-sm text-left text-xs leading-5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-expanded={isExpanded}
+                      aria-controls={detailId}
+                      aria-label={isExpanded
+                        ? t('run.collapseNodeDetail', { name: item.label })
+                        : t('run.expandNodeDetail', { name: item.label })}
+                      onClick={() => toggleItem(item.id)}
+                    >
+                      <span className="min-w-0 break-words">{item.label}</span>
+                      {isExpanded
+                        ? <ChevronUp className="mt-1 h-3 w-3 shrink-0" aria-hidden />
+                        : <ChevronDown className="mt-1 h-3 w-3 shrink-0" aria-hidden />}
+                    </button>
+                  ) : (
+                    <p className="text-xs leading-5 text-muted-foreground">{item.label}</p>
+                  )}
+                  {item.detail && isExpanded ? (
+                    <p
+                      id={detailId}
+                      data-testid="trial-run-timeline-detail"
+                      className="whitespace-pre-wrap break-words pl-3 text-xs leading-5 text-muted-foreground"
+                    >
+                      {item.detail}
+                    </p>
+                  ) : null}
+                </div>
+                {item.timestamp ? (
+                  <time className="pt-0.5 text-[11px] leading-5 text-muted-foreground">
+                    {formatTrialRunTime(item.timestamp)}
+                  </time>
                 ) : null}
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs leading-5 text-muted-foreground">{item.label}</p>
-                {item.detail ? <p className="whitespace-pre-wrap break-words pl-3 text-xs leading-5 text-muted-foreground">{item.detail}</p> : null}
-              </div>
-              {item.timestamp ? (
-                <time className="pt-0.5 text-[11px] leading-5 text-muted-foreground">
-                  {formatTrialRunTime(item.timestamp)}
-                </time>
-              ) : null}
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>
