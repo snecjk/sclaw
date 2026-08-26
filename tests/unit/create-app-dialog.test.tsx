@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreateAppDialog } from '@/components/more-apps/CreateAppDialog';
 
 const createUserAppMock = vi.fn();
+const listAppTemplatesMock = vi.fn();
 
 vi.mock('@/lib/app-dev-api', () => ({
   createUserApp: (...args: unknown[]) => createUserAppMock(...args),
+  listAppTemplates: (...args: unknown[]) => listAppTemplatesMock(...args),
   getAppDevEnvironment: vi.fn(async () => ({
     nodeRuntime: { state: 'ready', version: '22', receivedBytes: 0, totalBytes: 0 },
     gitAvailable: true,
@@ -40,7 +42,24 @@ vi.mock('@/stores/app-plaza-shell', () => ({
 describe('CreateAppDialog application type', () => {
   beforeEach(() => {
     createUserAppMock.mockReset();
+    listAppTemplatesMock.mockReset();
     createUserAppMock.mockResolvedValue({ workspaceId: 'ws-1', appPath: '/tmp/app', workspaceName: '测试应用' });
+    listAppTemplatesMock.mockImplementation(async (pageType: 'site' | 'assets') => ({
+      items: [{
+        templateId: `${pageType}-minimal`,
+        pageType,
+        name: pageType === 'site' ? '最简独立站点' : '最简托管应用',
+        description: '平台内置最简模板',
+        status: 'ACTIVE',
+        isBuiltin: true,
+        latestVersion: '1.0.0',
+        createdAt: '2026-08-26T00:00:00Z',
+        updatedAt: '2026-08-26T00:00:00Z',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 100,
+    }));
   });
 
   it('defaults to site and explains both publishing modes', async () => {
@@ -49,6 +68,7 @@ describe('CreateAppDialog application type', () => {
     expect(screen.getByRole('button', { name: /独立站点/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('固定域名，发版不需要修改版本号')).toBeInTheDocument();
     expect(screen.getByText('可以申请自定义域名，发版需要修改版本号')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /最简独立站点/ })).toBeInTheDocument();
   });
 
   it('submits the selected assets pageType', async () => {
@@ -66,7 +86,33 @@ describe('CreateAppDialog application type', () => {
         parentDir: '/tmp/SClawApps',
         projectType: 'frontend',
         pageType: 'assets',
+        templateId: 'assets-minimal',
+        templateVersion: '1.0.0',
       });
     });
+  });
+
+  it('does not silently select another template when minimal is not initialized', async () => {
+    listAppTemplatesMock.mockResolvedValueOnce({
+      items: [{
+        templateId: '01J00000000000000000000000',
+        pageType: 'site',
+        name: '业务模板',
+        description: '',
+        status: 'ACTIVE',
+        isBuiltin: false,
+        latestVersion: '1.0.0',
+        createdAt: '2026-08-26T00:00:00Z',
+        updatedAt: '2026-08-26T00:00:00Z',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 100,
+    });
+    render(<CreateAppDialog open onClose={vi.fn()} />);
+
+    expect(await screen.findByText('内置最简模板尚未初始化，请主动选择其他模板')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '应用模板' })).toHaveValue('');
+    expect(screen.getByRole('option', { name: '请选择模板' })).toBeInTheDocument();
   });
 });

@@ -14,7 +14,9 @@ import { pickProjectFolder } from '@/lib/session-catalog-api';
 import {
   createUserApp,
   getAppDevEnvironment,
+  listAppTemplates,
   prepareAppDevEnvironment,
+  type AppTemplateSummary,
   type CodeApplicationPageType,
 } from '@/lib/app-dev-api';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
@@ -33,6 +35,10 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   const [defaultParentDir, setDefaultParentDir] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [templates, setTemplates] = useState<AppTemplateSummary[]>([]);
+  const [templateId, setTemplateId] = useState('');
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [templateError, setTemplateError] = useState('');
 
   // 后台预热 Node 运行环境：用户填表单的时间通常足够完成下载。
   useEffect(() => {
@@ -40,6 +46,9 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
       setName('');
       setParentDir('');
       setPageType('site');
+      setTemplates([]);
+      setTemplateId('');
+      setTemplateError('');
       return;
     }
     void prepareAppDevEnvironment().catch(() => undefined);
@@ -51,6 +60,39 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
       })
       .catch(() => undefined);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoadingTemplates(true);
+    setTemplateError('');
+    setTemplates([]);
+    setTemplateId('');
+    void listAppTemplates(pageType)
+      .then((result) => {
+        if (cancelled) return;
+        const items = result.items.filter((item) => item.pageType === pageType && item.latestVersion);
+        setTemplates(items);
+        const preferred = items.find((item) => item.templateId === `${pageType}-minimal`);
+        setTemplateId(preferred?.templateId ?? '');
+        if (!preferred) {
+          setTemplateError(
+            items.length > 0
+              ? '内置最简模板尚未初始化，请主动选择其他模板'
+              : '当前应用类型暂无可用模板',
+          );
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setTemplateError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTemplates(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, pageType]);
 
   if (!open) return null;
 
@@ -69,6 +111,10 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   const handleSubmit = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    if (!selectedTemplate) {
+      toast.error('请选择可用的应用模板');
+      return;
+    }
     setSubmitting(true);
     try {
       const resolvedParentDir = parentDir.trim() || defaultParentDir;
@@ -81,6 +127,8 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
         parentDir: resolvedParentDir,
         projectType: 'frontend',
         pageType,
+        templateId: selectedTemplate.templateId,
+        templateVersion: selectedTemplate.latestVersion,
       });
       useAppDevCatalogStore.getState().registerWorkspaceId(result.workspaceId);
       await useSessionCatalogStore.getState().refreshWorkspaces().catch(() => undefined);
@@ -102,6 +150,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     { value: 'site', label: '独立站点', hint: '固定域名，发版不需要修改版本号' },
     { value: 'assets', label: '托管应用', hint: '可以申请自定义域名，发版需要修改版本号' },
   ];
+  const selectedTemplate = templates.find((item) => item.templateId === templateId);
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
@@ -158,6 +207,33 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
           })}
         </div>
 
+        <label className="mb-2 block text-sm font-medium text-foreground">应用模板</label>
+        <select
+          aria-label="应用模板"
+          value={templateId}
+          disabled={loadingTemplates || templates.length === 0}
+          onChange={(event) => setTemplateId(event.target.value)}
+          className={cn(
+            'mb-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground',
+            formFieldFocusClass,
+          )}
+        >
+          {loadingTemplates && <option value="">正在加载模板…</option>}
+          {!loadingTemplates && templates.length === 0 && <option value="">暂无可用模板</option>}
+          {!loadingTemplates && templates.length > 0 && !templateId && <option value="">请选择模板</option>}
+          {templates.map((item) => (
+            <option key={item.templateId} value={item.templateId}>
+              {item.name} · v{item.latestVersion}
+            </option>
+          ))}
+        </select>
+        <p className={cn(
+          'mb-5 text-xs leading-relaxed',
+          templateError ? 'text-[var(--sto-functional-error)]' : 'text-muted-foreground',
+        )}>
+          {templateError || selectedTemplate?.description || '模板决定新应用的初始工程内容。'}
+        </p>
+
         <label className="mb-2 block text-sm font-medium text-foreground">存放位置</label>
         <button
           type="button"
@@ -194,7 +270,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
           <Button
             type="button"
             className={cn(modalPrimarySubmitButtonClass, 'min-w-[88px]')}
-            disabled={submitting || !name.trim() || !parentDir.trim()}
+            disabled={submitting || loadingTemplates || !selectedTemplate || !name.trim() || !parentDir.trim()}
             onClick={() => void handleSubmit()}
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '创建应用'}

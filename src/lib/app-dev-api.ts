@@ -39,6 +39,25 @@ export interface AppDevEnvironment {
   defaultParentDir: string;
 }
 
+export interface AppTemplateSummary {
+  templateId: string;
+  pageType: CodeApplicationPageType;
+  name: string;
+  description: string;
+  status: 'ACTIVE' | 'DISABLED';
+  isBuiltin: boolean;
+  latestVersion: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppTemplatePageResult {
+  items: AppTemplateSummary[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+}
+
 export interface AppCheckpoint {
   hash: string;
   subject: string;
@@ -71,6 +90,48 @@ export async function getAppDevEnvironment(): Promise<AppDevEnvironment> {
 /** Background warmup — call when the creation entry becomes visible. */
 export async function prepareAppDevEnvironment(): Promise<void> {
   await hostApiFetch('/api/app-dev/environment/prepare', { method: 'POST' });
+}
+
+export async function listAppTemplates(
+  pageType?: CodeApplicationPageType,
+): Promise<AppTemplatePageResult> {
+  const query = pageType ? `?pageType=${encodeURIComponent(pageType)}` : '';
+  return hostApiFetch(`/api/app-templates${query}`);
+}
+
+export async function openAppTemplateWorkspace(input: {
+  templateId?: string;
+  pageType: CodeApplicationPageType;
+  name: string;
+  description?: string;
+  latestVersion?: string;
+}): Promise<{ workspaceId: string; appPath: string; workspaceName: string; templateId: string }> {
+  return hostApiFetch('/api/app-templates/workspaces', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function publishAppTemplateWorkspace(
+  workspaceId: string,
+): Promise<{
+  templateId: string;
+  pageType: CodeApplicationPageType;
+  version: string;
+  status: 'ACTIVE';
+  packageOssKey: string;
+  packageEtag: string | null;
+  packageSize: number;
+  created: boolean;
+}> {
+  return hostApiFetch('/api/app-templates/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, confirmed: true }),
+    ...APP_DEV_LONG_RUNNING,
+  });
 }
 
 export async function listDevApps(): Promise<DevAppSummary[]> {
@@ -127,6 +188,8 @@ export async function createUserApp(input: {
   parentDir?: string;
   projectType?: string;
   pageType?: CodeApplicationPageType;
+  templateId: string;
+  templateVersion: string;
 }): Promise<{ workspaceId: string; appPath: string; workspaceName: string }> {
   return hostApiFetch('/api/app-dev/apps', {
     method: 'POST',

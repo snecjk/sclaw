@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   History,
   MessageCircle,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
@@ -45,6 +46,7 @@ import {
   getAppDevEnvironment,
   getStoAppStatus,
   pullStoApp,
+  publishAppTemplateWorkspace,
   pushStoApp,
   type StoAppStatus,
   restoreAppCheckpoint,
@@ -204,6 +206,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
+  const [templatePublishConfirm, setTemplatePublishConfirm] = useState(false);
+  const [templatePublishing, setTemplatePublishing] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
@@ -217,6 +221,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     s.apps.find((app) => app.workspaceId === workspaceId)?.pageType
   ));
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? tab.title;
+  const isTemplateWorkspace = tab.kind === 'template';
   const listedApp = useAppDevCatalogStore((s) =>
     s.apps.find((app) => app.workspaceId === workspaceId),
   );
@@ -421,7 +426,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     }
   };
 
-  const commitMode = showGitCommit ? 'git' : 'sto';
+  const commitMode = isTemplateWorkspace || showGitCommit ? 'git' : 'sto';
 
   const phase = status?.phase ?? 'created';
   const stoStatusTone = stoStatus?.available && stoStatus.bound
@@ -459,7 +464,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         </button>
         <div className="h-4 w-px bg-border" aria-hidden />
         <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">{appName}</h1>
-        <AppDevPageTypeBadge pageType={pageType} />
+        {isTemplateWorkspace ? (
+          <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[11px] text-violet-600 dark:text-violet-300">
+            应用模板
+          </span>
+        ) : <AppDevPageTypeBadge pageType={pageType} />}
         <div className="flex-1" />
         <AppDevRunStatusMenu
           phase={phase}
@@ -495,6 +504,31 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               onClick={() => setCommitOpen(true)}
             >
               提交
+            </Button>
+          ) : null}
+
+          {isTemplateWorkspace && gitAvailable ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => setCommitOpen(true)}
+            >
+              提交
+            </Button>
+          ) : null}
+
+          {isTemplateWorkspace ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={templatePublishing}
+              onClick={() => setTemplatePublishConfirm(true)}
+            >
+              <Upload className="h-3.5 w-3.5" aria-hidden />
+              {templatePublishing ? '发布中…' : '发布模板'}
             </Button>
           ) : null}
 
@@ -648,6 +682,26 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           setConfirmRestore(false);
         }}
         onCancel={() => setConfirmRestore(false)}
+      />
+      <ConfirmDialog
+        open={templatePublishConfirm}
+        title="发布模板新版本"
+        message="发布后会自动生成下一个 patch 版本，并用于之后新建的应用；已有应用不会变化。确认继续吗？"
+        confirmLabel="确认发布"
+        confirmingLabel="发布中…"
+        onConfirm={async () => {
+          setTemplatePublishing(true);
+          try {
+            const result = await publishAppTemplateWorkspace(workspaceId);
+            toast.success(`模板 v${result.version} 已发布`);
+            setTemplatePublishConfirm(false);
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : '模板发布失败');
+          } finally {
+            setTemplatePublishing(false);
+          }
+        }}
+        onCancel={() => setTemplatePublishConfirm(false)}
       />
       <StoAppCommitDialog
         open={commitOpen}

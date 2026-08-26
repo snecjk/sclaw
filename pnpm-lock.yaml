@@ -94,6 +94,9 @@ importers:
       json-schema-traverse:
         specifier: ^0.4.1
         version: 0.4.1
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       kysely:
         specifier: ^0.29.3
         version: 0.29.3

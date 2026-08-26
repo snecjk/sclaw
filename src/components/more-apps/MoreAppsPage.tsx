@@ -7,7 +7,7 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Heart, FolderInput, ChevronDown } from 'lucide-react';
+import { Search, Plus, Heart, FolderInput, ChevronDown, FileCode2 } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -27,6 +27,7 @@ import { AppCard } from './AppCard';
 import { DevAppCard } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { CreateAppDialog } from './CreateAppDialog';
+import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
@@ -47,6 +48,7 @@ import { importUserApp } from '@/lib/app-dev-api';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useAppDevPermission } from '@/hooks/use-app-dev-permission';
+import { useAuthStore } from '@/stores/auth';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 /** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
@@ -96,6 +98,7 @@ export function MoreAppsPage() {
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
   const [createAppOpen, setCreateAppOpen] = useState(false);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [importingApp, setImportingApp] = useState(false);
   const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
@@ -108,6 +111,7 @@ export function MoreAppsPage() {
   const devApps = useAppDevCatalogStore((s) => s.apps);
   const refreshDevApps = useAppDevCatalogStore((s) => s.refresh);
   const { canUseAppDev } = useAppDevPermission();
+  const canManageAppTemplates = useAuthStore((state) => Boolean(state.user?.isAdministrator));
 
   useEffect(() => {
     if (!canUseAppDev && activeTab === 'dev-apps') {
@@ -822,6 +826,12 @@ export function MoreAppsPage() {
                   <Plus className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
                   {t('moreApps.createApp', { defaultValue: '创建应用' })}
                 </DropdownMenuItem>
+                {canManageAppTemplates ? (
+                  <DropdownMenuItem onSelect={() => setTemplateManagerOpen(true)}>
+                    <FileCode2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                    管理应用模板
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem
                   id="more-apps-import-app-btn"
                   disabled={importingApp}
@@ -898,6 +908,12 @@ export function MoreAppsPage() {
       <AddExternalAppModal />
       {canUseAppDev ? (
         <CreateAppDialog open={createAppOpen} onClose={() => setCreateAppOpen(false)} />
+      ) : null}
+      {canUseAppDev && canManageAppTemplates ? (
+        <AppTemplateManagerDialog
+          open={templateManagerOpen}
+          onClose={() => setTemplateManagerOpen(false)}
+        />
       ) : null}
       <ConfirmDialog
         open={!!pendingStoPolicyApp}

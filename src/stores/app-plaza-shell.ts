@@ -40,6 +40,7 @@ export interface AppPlazaDevAppTab {
   id: string;
   workspaceId: string;
   title: string;
+  kind?: 'app' | 'template';
 }
 
 export interface AppPlazaBrowserTab {
@@ -113,7 +114,11 @@ interface AppPlazaShellState {
   addBlankTab: () => void;
   closeBrowserTab: (tabId: string) => void;
   /** Open (or focus) a dev-app workbench tab. Returns the tab id. */
-  openOrFocusDevAppTab: (workspaceId: string, title: string) => string;
+  openOrFocusDevAppTab: (
+    workspaceId: string,
+    title: string,
+    kind?: 'app' | 'template',
+  ) => string;
   closeDevAppTab: (tabId: string) => void;
   closeDevAppTabsByWorkspaceId: (workspaceId: string) => void;
   submitBlankTabUrl: (tabId: string, rawUrl: string) => void;
@@ -482,14 +487,14 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     set({ browserTabs: remaining, activeTabId: nextActive });
   },
 
-  openOrFocusDevAppTab: (workspaceId, title) => {
+  openOrFocusDevAppTab: (workspaceId, title, kind: 'app' | 'template' = 'app') => {
     const existing = get().devAppTabs.find((t) => t.workspaceId === workspaceId);
     if (existing) {
       set({ activeTabId: existing.id });
       return existing.id;
     }
     const id = `devapp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const tab: AppPlazaDevAppTab = { id, workspaceId, title };
+    const tab: AppPlazaDevAppTab = { id, workspaceId, title, kind };
     set((prev) => ({
       devAppTabs: [...prev.devAppTabs, tab],
       activeTabId: id,

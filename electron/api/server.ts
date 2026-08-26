@@ -58,6 +58,7 @@ import { handleDataCenterRoutes } from './routes/data-center';
 import { handleArtifactSaveRecordRoutes } from './routes/artifact-save-records';
 import { handleLocalAuthorizedFileRoutes } from './routes/local-authorized-files';
 import { handleAppDevRoutes } from './routes/app-dev';
+import { handleAppTemplateRoutes } from './routes/app-templates';
 
 import { sendJson } from './route-utils';
 
@@ -100,6 +101,7 @@ const routeHandlers: RouteHandler[] = [
   handleLocalAuthorizedFileRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
+  handleAppTemplateRoutes,
   handleAppDevRoutes,
   handleBrowserAutomationRoutes,
   handleScheduledTaskRoutes,
