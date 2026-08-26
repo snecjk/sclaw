@@ -3,7 +3,7 @@ name: quote-assistant
 description: >-
   报价工作台 AI 助手：新建报价、上传报价表、校验纠错、自然语言改参与提交报价。
   当用户提到新建报价、上传 Excel/CSV、调价、续重、首重、报价测算或提交报价时使用。
-version: 1.2.7
+version: 1.2.8
 ---
 
 # 报价助手（quote-assistant）
@@ -124,6 +124,34 @@ if (isStoClawBridgeAvailable()) {
   // 页面卸载：offValidation(); offSave(); offSubmit(); offPreview();
 }
 ```
+
+### Payload 字段说明（业务页对接用）
+
+| 事件 | payload | 字段说明 |
+|------|---------|----------|
+| `quote:validation-complete` | `{ ossKey, pass, errorCount?, phase? }` | **校验结束**（与保存/提交无关） |
+| | `ossKey` | 当前报价表 OSS 路径，用于定位是哪次上传/校验 |
+| | `pass` | `true` = 校验通过，可进入编辑；`false` = 校验失败 |
+| | `errorCount?` | 校验失败时的错误条数（`pass === false` 时可能有） |
+| | `phase?` | 发卡时的阶段，如 `errors` / `ready_to_save` |
+| `quote:save-complete` | `{ ossKey, quoteId?, phase?, url? }` | **`vip quotation save` 成功后**（`phase: editing`） |
+| | `ossKey` | 已保存报价关联的 OSS key |
+| | `quoteId?` | 保存后业务返回的报价单号（卡里 `data.quoteId`） |
+| | `phase?` | 一般为 `editing` |
+| | `url?` | 宿主导航目标 URL（多为 `…/clawQuotation?ossKey=`） |
+| `quote:submit-complete` | `{ ossKey, quoteId?, detailUrl?, phase?, url? }` | **提交审批成功后**（`phase: submitted`） |
+| | `ossKey` | 提交关联的 OSS key |
+| | `quoteId?` | 报价单号 |
+| | `detailUrl?` | 审批详情页完整 URL（卡里 `data.detailUrl`，页面应跳转此地址） |
+| | `phase?` | 一般为 `submitted` |
+| | `url?` | 宿主同步导航 URL（可与 `detailUrl` 不同，业务跳转优先用 `detailUrl`） |
+| `quote:preview-refresh` | `{ ossKey, phase?, mode?, url? }` | **仅宿主导航同步**，不表示校验/保存/提交结果 |
+| | `ossKey` | 本次导航关联的 OSS key |
+| | `phase?` | 触发导航时的卡阶段 |
+| | `mode?` | `open` = 首次打开或重新上传后打开；`refresh` = 保存/提交后重新打开 |
+| | `url?` | 宿主已导航到的完整 URL |
+
+**注册方式**：`await stoClaw.addListener('<事件名>', handler)`（内部会 `bridge.subscribe`）。catalog 应用默认可订阅 `quote:*`。
 
 ## 输出格式
 
