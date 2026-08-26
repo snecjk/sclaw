@@ -3,7 +3,7 @@ name: quote-assistant
 description: >-
   报价工作台 AI 助手：新建报价、上传报价表、校验纠错、自然语言改参与提交报价。
   当用户提到新建报价、上传 Excel/CSV、调价、续重、首重、报价测算或提交报价时使用。
-version: 1.3.3
+version: 1.3.5
 ---
 
 # 报价助手（quote-assistant）
@@ -25,6 +25,7 @@ version: 1.3.3
 3. 缺参用普通文本追问，不新发卡。
 4. 测算 / 预警：仅文本「待上线」，不发卡。
 5. 拿到 `ossKey` 后卡片 `data` **必须**带上 `ossKey`（可选再带 `previewUrl`）；平台会自动打开报价确认页并与会话对齐。
+6. **批量调价**：会话**只整理用户意图**（自然语言 → `batchAdjustParams`），推送给业务页后即结束；**禁止**调用草案校验（`quotation-batch-check validate`）、草案生成（`quotation-draft create`）、提交（`quotation save`）及任何其它 sai-cli。
 
 ## 报价确认页预览（重要）
 
@@ -57,9 +58,7 @@ version: 1.3.3
 |---------|----------------|-----------|-------------|
 | 打开 / 重新打开业务页 | `data.ossKey` 或 `data.previewUrl` 变化 | `preview.open` | `{ ossKey?, mode, url, phase? }` |
 | **提交成功** | `phase: submitted` + `previewMode: refresh`（或批量调价 `editing`） | `save.complete` | `{ ossKey?, quoteId?, scene?, detailUrl? }` |
-| 批量调价 · 参数已提炼 | `data.batchAdjustParams` | `batch-adjust.params-ready` | `{ objectList, objectListJson, summary? }` |
-| 批量调价 · **校验失败** | `data.batchAdjustValidation` 且 `pass: false` | `batch-adjust.validate-fail` | `{ pass: false, warnings?, …Errors? }` |
-| 批量调价 · 草案生成 | `data.batchAdjustDraft` | `batch-adjust.draft-complete` | `{ quotationList?, quoteId? }` |
+| 批量调价 · 参数已提炼 | `data.batchAdjustParams` | `batch-adjust.params-ready` | `{ objectList, objectListJson, freightFeeType?, summary? }` |
 
 **channel 约定（可扩展，无需改 JSBridge）：**
 
@@ -67,15 +66,14 @@ version: 1.3.3
 |---------|------|-----------|
 | `preview.open` | 宿主已在**页面中**打开/重新打开 URL | SPA 内同步即可 |
 | `save.complete` | 提交报价成功（上传 / 批量调价） | 刷新列表 / 进入审批态 |
-| `batch-adjust.params-ready` | NL → CLI 参数 | 在页面中展示/回填调价方案 |
-| `batch-adjust.validate-fail` | 批量调价参数校验失败 | 展示错误并引导补参（**pass 不通知**） |
-| `batch-adjust.draft-complete` | 批量调价草案 | 在页面中确认后保存 |
+| `batch-adjust.params-ready` | 用户调价意图已整理为 CLI 参数结构 | 在页面中展示/回填；**草案校验、草案生成、提交均在业务页** |
 
 **铁律（与事件相关）：**
 
 1. Excel 上传流程：**校验通过不通知**业务页；仅 `ossKey`/`previewUrl` 变化发 `preview.open`，**提交报价**（`vip quotation save`）成功发 `save.complete`。
-2. 批量调价可无 `ossKey`；提交成功须带 `previewMode: refresh`。
-3. 事件仅在**应用广场 embed** 投递。
+2. **批量调价**：会话**只整理用户意图**为 `batchAdjustParams` 并推送 `batch-adjust.params-ready`；**禁止**草案校验、草案生成、提交及一切 sai-cli 调用。
+3. 批量调价可无 `ossKey`；上传报价提交成功须带 `previewMode: refresh`。
+4. 事件仅在**应用广场 embed** 投递。
 
 业务页接入（**只注册一个 event**）：
 
@@ -99,10 +97,6 @@ if (isStoClawBridgeAvailable()) {
         const { objectListJson, summary } = data as { objectListJson: string; summary?: string };
         break;
       }
-      case 'batch-adjust.validate-fail':
-        break;
-      case 'batch-adjust.draft-complete':
-        break;
       default:
         break;
     }
@@ -120,8 +114,6 @@ if (isStoClawBridgeAvailable()) {
 | `preview.open` | `ossKey?`, `mode` (`open` \| `refresh`), `url?` |
 | `save.complete` | `ossKey?`, `quoteId?`, `scene?`, `detailUrl?` |
 | `batch-adjust.params-ready` | `objectList`, `objectListJson`, `freightFeeType?`, `summary?` |
-| `batch-adjust.validate-fail` | `pass: false`, `warnings?`, `preCheckErrors?`, … |
-| `batch-adjust.draft-complete` | `quotationList?`, `quoteId?` |
 
 **注册方式**：`await stoClaw.addListener(BRIDGE_EVENT_QUOTE, handler)`（即 `quote:event`）。catalog 应用默认可订阅 `quote:*`。
 
@@ -401,8 +393,7 @@ if (isStoClawBridgeAvailable()) {
 | 上传文件校验 | `vip quotation-check validate --ossKey <ossKey> --source CLI` |
 | 草案预览 | `vip quotation-draft parse` |
 | 确认提交报价 | `vip quotation save`（工具 `description` 写 **「提交报价」**，勿写「保存报价」） |
-| 批量调价草案 | `vip quotation-draft create` |
-| 批量调价参数校验 | `vip quotation-batch-check validate` |
+| 批量调价校验 / 草案 / 提交 | **业务页自行调用**（`quotation-batch-check validate`、`quotation-draft create`、`quotation save` 等）；**会话侧禁止调用** |
 
 ### 新建报价 · 有附件时的最短调用顺序
 
@@ -420,13 +411,22 @@ if (isStoClawBridgeAvailable()) {
 
 仅当某步返回 `ARGUMENT_INVALID` 且缺参不明确时，才允许对该命令执行一次 `sai-cli help <三段命令>`（仍不要加引号）。
 
-### 批量调价（自然语言 → CLI → 页面同步）
+### 批量调价（自然语言 → 意图整理 → 业务页）
+
+**会话职责（唯一）**：听懂用户说什么，整理成 `batchAdjustParams`（与 sai-cli `objectListJson` 同结构），出卡并交给业务页。**你不是调价执行者。**
 
 **适用**：用户说「给某某涨价/降价/加0.2元」「全部客户」「某流向某重量段调价」等，**无需上传 Excel**。
 
-**页面引导（重要）**：
-- 参数齐备、校验或草案生成后，提示用户：**「请在页面中查看并确认调价方案」**（主会话 / 应用广场布局不同，**禁止**写「左侧」「右侧」）。
-- 卡里写 `data.previewUrl`（业务批量调价/报价工作台地址）；平台会在宿主**页面区域**打开该 URL。
+**禁止（批量调价会话内一律不做）**：
+- 草案参数校验：`vip quotation-batch-check validate`（及任何 validate）
+- 草案生成：`vip quotation-draft create`（及 `quotation-draft parse`）
+- 提交报价：`vip quotation save`
+- 写入 `batchAdjustValidation`、`batchAdjustDraft`
+- 卡上「开始校验」「生成草案」「提交」等按钮
+
+**页面引导**：
+- 参数齐备并出卡后，正文一句：**「请在页面中查看并确认调价方案」**（**禁止**写「左侧」「右侧」）。
+- 卡里写 `data.previewUrl`（业务批量调价/报价工作台地址）；平台会在**页面中**打开该 URL，并推送 `batch-adjust.params-ready`。
 - `data.scene` 固定写 `"batch_adjust"`。
 
 **缺参处理（铁律 3）**：
@@ -480,18 +480,13 @@ if (isStoClawBridgeAvailable()) {
 - `objectName: "ALL"`, `sceneType: "CUSTOMER"`  
 - 日期修正为 `2027-02-28`  
 - 黑吉辽 → 三条 `items`（黑龙江/吉林/辽宁）或追问是否三省统一规则  
-- **加收费**：先确认 `freightFeeType`；若 `quotation-draft create` 不支持该科目，告知用户并勿强行调用  
+- **加收费**：先确认 `freightFeeType`；若业务页不支持该科目，告知用户并建议改走上传 Excel 或其它流程  
 
-**调用顺序**（参数齐备后）：
+**调用顺序**（意图整理完毕、参数齐备后，**仅 1 步**）：
 
-1. 出 `batch_adjust` 卡：写入 `data.batchAdjustParams` + `data.previewUrl`（业务工作台 URL）+ `data.scene: "batch_adjust"` → 平台推送 `batch-adjust.params-ready`（`quote:event`），并在**页面中**打开预览。
-2. `sai-cli vip quotation-batch-check validate --freightFeeType BASE_FREIGHT_FEE --objectListJson <上表 JSON 字符串> --source CLI`  
-   - 将返回的 `pass`、`warnings`、各类 `*Errors` 写入 `data.batchAdjustValidation`  
-   - `pass: false`：平台推送 `batch-adjust.validate-fail`；文本 + 卡 `body` 摘要错误，引导用户在页面中改参或补充自然语言。**`pass: true` 不通知业务页。**
-3. `pass: true` → `sai-cli vip quotation-draft create --freightFeeType BASE_FREIGHT_FEE --objectListJson <同上> --source CLI`  
-   - 将 `quotationList` 等写入 `data.batchAdjustDraft` → `batch-adjust.draft-complete`  
-   - 提示：**「草案已生成，请在页面中确认后提交。」**
-4. 用户确认提交 → `vip quotation save`（`scene: BATCH_ADJUST`，按 CLI 返回字段传参）→ `submitted` 或 `editing` 卡 + `previewMode: refresh`。
+1. 出 `batch_adjust` 卡：写入 `data.batchAdjustParams` + `data.previewUrl` + `data.scene: "batch_adjust"` → 平台推送 `batch-adjust.params-ready` 并打开业务页。**会话结束**，不再执行任何 CLI。
+
+用户补充或修改说法时：只重新整理意图、更新 `batchAdjustParams`，同一 `cardId` 再发卡（业务页收新的 `params-ready`）。
 
 **`batch_adjust` 卡模板**（`phase: "batch_adjust"`）：
 
@@ -501,26 +496,19 @@ if (isStoClawBridgeAvailable()) {
   "domain": "quote",
   "phase": "batch_adjust",
   "title": "批量调价",
-  "body": "已根据您的描述生成调价方案，请在页面中查看并确认。",
+  "body": "已根据您的描述整理好调价意图，请在页面中查看并确认。",
   "data": {
     "scene": "batch_adjust",
     "previewUrl": "https://wd-vip.sto.cn/vipLogin#/quote-ops-console",
     "batchAdjustParams": { }
   },
-  "actions": [
-    {
-      "id": "confirm_validate",
-      "label": "开始校验",
-      "kind": "chat.sendMessage",
-      "params": { "text": "请按当前方案校验批量调价参数" }
-    }
-  ]
+  "actions": []
 }
 ```
 
-校验 / 草案结果卡：在同一 `cardId` 上更新 `batchAdjustValidation` 或 `batchAdjustDraft`，并刷新 `body`；**不要**在卡外重复贴大段 JSON。
+**不要**在卡上放任何操作按钮。
 
-### 降级（命令失败或未登录）
+### 降级（**仅上传报价流程**；批量调价不适用）
 
 仅当 sai-cli 明确失败时才用 mock：
 
@@ -531,5 +519,6 @@ if (isStoClawBridgeAvailable()) {
 
 ## 改参 / 提交
 
-- 改参：尽量映射到校验 / 调价相关命令；否则文本确认并更新 `editing` 卡 `body`（**不放提交按钮**）
-- 「提交报价」：用消息中的 `ossKey`（及 `scene`）调用 `vip quotation save`；成功后出 **`submitted` 卡**并带 `previewMode: "refresh"`（重新打开确认页，禁止依赖 reload）。**不要**再出第二张带「提交报价」按钮的卡。
+- **批量调价**：用户在会话里补充说明 → **只重新整理意图**、更新 `batchAdjustParams` 与 `batch_adjust` 卡；业务页收新的 `params-ready`。**禁止**校验、草案、提交。
+- **上传报价改参**：尽量映射到校验相关命令；否则文本确认并更新 `editing` 卡 `body`（**不放提交按钮**）。
+- **上传报价「提交报价」**：用消息中的 `ossKey`（及 `scene`）调用 `vip quotation save`；成功后出 **`submitted` 卡**并带 `previewMode: "refresh"`。**不要**再出第二张带「提交报价」按钮的卡。
