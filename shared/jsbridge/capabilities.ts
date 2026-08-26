@@ -33,7 +33,9 @@ export type Capability =
   | 'chat.sendMessage'
   | 'chat.complete'
   | 'chat.cancel'
-  | 'chat.invokeAgent';
+  | 'chat.invokeAgent'
+  | 'composer.openFilePicker'
+  | 'nav.openPreviewTab';
 
 export const ALL_CAPABILITIES: readonly Capability[] = [
   'bridge.ping',
@@ -67,6 +69,8 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   'chat.complete',
   'chat.cancel',
   'chat.invokeAgent',
+  'composer.openFilePicker',
+  'nav.openPreviewTab',
 ];
 
 export const CAPABILITY_RISK: Record<Capability, CapabilityRisk> = {
@@ -102,6 +106,8 @@ export const CAPABILITY_RISK: Record<Capability, CapabilityRisk> = {
   // Aborting a run the caller itself started is de-escalating, not privileged.
   'chat.cancel': 'low',
   'chat.invokeAgent': 'critical',
+  'composer.openFilePicker': 'low',
+  'nav.openPreviewTab': 'medium',
 };
 
 /** AI invocation capabilities. Granting these is not sufficient: the app's AI
@@ -153,6 +159,8 @@ const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
     'chat.fillComposer',
     'chat.openSession',
     'chat.sendMessage',
+    'composer.openFilePicker',
+    'nav.openPreviewTab',
   ],
   external: [
     'bridge.ping',

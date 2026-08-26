@@ -1,3 +1,4 @@
+import type { EmbedComposerAction } from '../embed-composer-actions';
 import type { BridgeAiProfile } from './bridge-ai-protocol';
 import type { Capability } from './capabilities';
 import { JSBRIDGE_ORIGIN_POLICY } from './config';
@@ -16,12 +17,14 @@ export interface BridgeTrustPolicy {
   hostFetchAllowlist?: string[];
   /** AI invocation profile. Absent means AI is unavailable for this app. */
   ai?: BridgeAiProfile;
+  /** Optional quick-action pills above the embed AI composer. */
+  embedComposerActions?: EmbedComposerAction[];
 }
 
 export interface ResolveTrustPolicyInput {
   appId?: string | null;
   bound?: boolean;
-  bridgePolicy?: Partial<Pick<BridgeTrustPolicy, 'allowedOrigins' | 'capabilities' | 'consentCapabilities' | 'hostFetchAllowlist' | 'ai'>> | null;
+  bridgePolicy?: Partial<Pick<BridgeTrustPolicy, 'allowedOrigins' | 'capabilities' | 'consentCapabilities' | 'hostFetchAllowlist' | 'ai' | 'embedComposerActions'>> | null;
 }
 
 export function resolveTrustTier(input: ResolveTrustPolicyInput): BridgeTrustTier {
@@ -56,6 +59,7 @@ export function resolveTrustPolicy(input: ResolveTrustPolicyInput): BridgeTrustP
     consentCapabilities: input.bridgePolicy?.consentCapabilities ?? [],
     hostFetchAllowlist: input.bridgePolicy?.hostFetchAllowlist,
     ai: input.bridgePolicy?.ai,
+    embedComposerActions: input.bridgePolicy?.embedComposerActions,
   };
 }
 

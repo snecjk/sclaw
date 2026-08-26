@@ -41,6 +41,16 @@ export type JsBridgeHostAction =
       route?: string;
       title?: string;
       bound?: boolean;
+    }
+  | {
+      type: 'composer.openFilePicker';
+      accept?: string;
+      multiple?: boolean;
+    }
+  | {
+      type: 'nav.openPreviewTab';
+      url: string;
+      title?: string;
     };
 
 export interface JsBridgeHostActionEnvelope {

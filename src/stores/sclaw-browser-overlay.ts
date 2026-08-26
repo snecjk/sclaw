@@ -18,6 +18,8 @@ import {
   registerSclawBrowserRuntime,
   unregisterSclawBrowserRuntime,
 } from '@/lib/sclaw-browser-host-api';
+import { useComposerFlowStore } from '@/stores/composer-flow';
+import type { EmbedComposerAction } from '../../shared/embed-composer-actions';
 
 export interface SclawBrowserOverlaySession {
   appId: string;
@@ -27,6 +29,7 @@ export interface SclawBrowserOverlaySession {
   sourceUrl?: string;
   /** Target subsystem code for re-exchanging skip-login links. */
   systemCode?: string;
+  embedComposerActions?: EmbedComposerAction[];
 }
 
 interface SclawBrowserOverlayState {
@@ -112,6 +115,7 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
     const { embedRuntimeId, session } = get();
     if (!embedRuntimeId || !session?.appId) return;
     void ensureSclawBrowserBridge(embedRuntimeId);
+    useComposerFlowStore.getState().setEmbedComposerActions(session.embedComposerActions ?? null);
     const { chatSessionKey, savedMainSessionKey } = activateSclawBrowserEmbedChat(
       session.appId,
       embedRuntimeId,

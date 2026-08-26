@@ -50,6 +50,7 @@ export const handleUiOpenDrawer: BridgeHandlerFn = async ({ session, request }) 
   return createHostActionEnvelope({
     type: 'ui.openDrawer',
     kind: 'chat',
+    // Bind to this guest's App Plaza tab so Host opens the right-side embed chat session.
     runtimeId: session.runtimeId,
   });
 };

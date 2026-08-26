@@ -3,6 +3,10 @@ import type {
   AppGetInfoResult,
   AuthGetAuthModeResult,
   CallOptions,
+  ChatCancelParams,
+  ChatCancelResult,
+  ChatCompleteParams,
+  ChatCompleteResult,
   ChatFillComposerParams,
   ChatOpenSessionParams,
   ChatSendMessageParams,
@@ -17,6 +21,7 @@ import type {
   UiToastParams,
   UserGetInfoResult,
 } from './types';
+import { BRIDGE_AI_DEFAULT_TIMEOUT_MS } from './types';
 
 function resolveNativeBridge(): StoClawBridgeNative {
   if (typeof window === 'undefined') {
@@ -132,6 +137,29 @@ export class StoClawBridgeClient {
 
   toggleChatPanel(): Promise<{ ok: boolean }> {
     return callNative('chat.togglePanel');
+  }
+
+  // ── 6. Headless AI（Text prompt + JSON context → Text / JSON） ──
+
+  /**
+   * One-shot Agent invocation without opening the chat panel.
+   * Sets default `timeoutMs` and ensures the bridge IPC timeout exceeds the agent budget.
+   */
+  complete(params: ChatCompleteParams, options?: CallOptions): Promise<ChatCompleteResult> {
+    const timeoutMs = params.timeoutMs ?? BRIDGE_AI_DEFAULT_TIMEOUT_MS;
+    return callNative<ChatCompleteResult>(
+      'chat.complete',
+      { ...params, timeoutMs },
+      {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? timeoutMs + 5_000,
+      },
+    );
+  }
+
+  /** Cancel an in-flight {@link complete} call by `requestId`. */
+  cancel(params: ChatCancelParams, options?: CallOptions): Promise<ChatCancelResult> {
+    return callNative<ChatCancelResult>('chat.cancel', params, options);
   }
 
   ping(): Promise<{ pong: boolean; timestamp: number }> {

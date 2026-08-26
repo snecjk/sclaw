@@ -56,12 +56,20 @@ async function maybeGrantConsent(input: {
     appId,
     capability,
   });
+  // Fresh id/timestamp so consent retry cannot trip replay guard even if the
+  // first USER_CONSENT_REQUIRED response already consumed the original id.
+  const retryRequest: BridgeRequest = {
+    ...input.request,
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+  };
   let response = await invokeJsBridge({
-    request: input.request,
+    request: retryRequest,
     webContentsId: input.webContentsId,
   });
-  response = await resolveJsBridgeResponse(input.request, response);
-  return response;
+  response = await resolveJsBridgeResponse(retryRequest, response);
+  // Guest is still waiting on the original request id.
+  return { ...response, id: input.request.id };
 }
 
 export async function handleJsBridgeWebviewRequest(input: {

@@ -13,6 +13,8 @@ import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
+import { resolveEmbedComposerActions } from '../../../shared/embed-composer-actions';
+import { useComposerFlowStore } from '@/stores/composer-flow';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -101,6 +103,9 @@ export function SclawBrowserEmbedChat({
     embedRuntimeId ? s.embedComposerSeedByRuntimeId[embedRuntimeId] : undefined
   ));
   const composerSeed = embedSeedEntry?.text;
+  const composerScenarioActions = resolveEmbedComposerActions(
+    useComposerFlowStore((s) => s.embedComposerActions),
+  );
 
   if (currentSessionKey !== sessionKey) {
     return (
@@ -201,6 +206,7 @@ export function SclawBrowserEmbedChat({
           showDisclaimer={false}
           footerAlign="center"
           seedText={composerSeed}
+          composerScenarioActions={composerScenarioActions}
         />
       </div>
     </div>

@@ -44,6 +44,7 @@ import {
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
+import { ChatBrowserPreviewPanel } from '@/components/chat-browser/ChatBrowserPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { useStoTaskSubitemEntry } from '@/hooks/use-sto-task-subitem-entry';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
@@ -323,6 +324,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
+    hasBrowserPreview,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
@@ -660,14 +662,29 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
             onKeyboardAdjust={adjustPreviewPercent}
           />
         ) : null}
-        <ChatPreviewPanel
-          files={previewableFiles}
-          activeFilePath={activePreviewFilePath}
-          showEditWorkflow={showEditWorkflow}
-          workflowId={sessionWorkflowId}
-          onEditWorkflow={openWorkflowPreview}
-          className="h-full w-full"
-        />
+        {hasBrowserPreview && previewableFiles.length === 0 ? (
+          <ChatBrowserPreviewPanel
+            sessionKey={currentSessionKey}
+            className="h-full w-full"
+          />
+        ) : (
+          <>
+            <ChatPreviewPanel
+              files={previewableFiles}
+              activeFilePath={activePreviewFilePath}
+              showEditWorkflow={showEditWorkflow}
+              workflowId={sessionWorkflowId}
+              onEditWorkflow={openWorkflowPreview}
+              className={cn('h-full w-full', hasBrowserPreview ? 'max-h-[45%] shrink-0 border-b border-border/70' : '')}
+            />
+            {hasBrowserPreview ? (
+              <ChatBrowserPreviewPanel
+                sessionKey={currentSessionKey}
+                className="min-h-0 flex-1"
+              />
+            ) : null}
+          </>
+        )}
       </div>
     ) : null}
   </div>

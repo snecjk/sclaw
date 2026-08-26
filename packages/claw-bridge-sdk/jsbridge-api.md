@@ -1,14 +1,28 @@
 # SClaw JSBridge 调用文档
 
-`@sto/claw-bridge-sdk` 官方调用文档 · 协议 `stoclaw-bridge/v1` · 版本 `1.0.0`
+`@sto/claw-bridge-sdk` 官方调用文档 · 协议 `stoclaw-bridge/v1` · SDK 包版本 `1.1.0`
 
 ---
 
 ## 1. 概述
 
-JSBridge 供 **嵌入 SClaw 客户端 webview 的 H5 页面** 调用宿主能力，例如：读取 SSO 用户信息、弹出统一 UI、跳转应用/路由、回填 AI 会话等。
+JSBridge 供 **嵌入 SClaw 客户端 webview 的 H5 页面** 调用宿主能力，例如：读取 SSO 用户信息、弹出统一 UI、跳转应用/路由、与 SClaw AI 联动等。
 
 **典型场景**：应用广场（App Plaza）内打开的 `*.sto.cn` 业务页面。
+
+### 能力域一览
+
+| 域 | method | 状态 |
+|----|--------|------|
+| Bridge 元信息 | `bridge.ping` · `bridge.getCapabilities` · `app.getInfo` | ✅ |
+| 用户与鉴权 | `user.getInfo` · `auth.getUser` · `auth.getAuthMode` · `auth.getToken` · `auth.requestLogin` | ✅（`requestLogin` 固定拒绝） |
+| 导航 | `nav.jump` · `nav.openTab` · `nav.openApp` · `nav.openExternal` · `nav.goBack` · `nav.reload` · `nav.closeSelf` | ✅ |
+| UI | `ui.toast` · `ui.alert` · `ui.confirm` · `ui.openDrawer` | ✅ |
+| 会话联动 | `chat.togglePanel` · `chat.fillComposer` · `chat.openSession` · `chat.sendMessage` | ✅ |
+| AI 引擎直连 | `chat.complete` · `chat.cancel` | ✅ |
+| Storage | `storage.get` · `storage.set` · `storage.remove` · `storage.clear` | ✅ |
+| 网络代理 | `host.fetch` | ⏳ 预留，未实现 |
+| AI 流式 | `chat.invokeAgent` + `chat:stream` 事件 | ⏳ 预留，未实现 |
 
 ```
 H5 页面 (Guest)
@@ -21,6 +35,83 @@ Main Process（鉴权 / 分发）
     ↓ 部分能力需 Host 二次执行（弹窗、会话回填等）
 返回 Promise 结果
 ```
+
+### 通信载荷：不只 Text，还有 JSON 与文件
+
+Guest ↔ Host ↔ Main 之间走 **JSON 结构化信封**（`BridgeRequest` / `BridgeResponse` / `BridgeEvent`）。`params` 与 `data` 必须是 **可 JSON 序列化** 的值；原生 `File` / `Blob` / `ArrayBuffer` **不能**直接作为参数传递。
+
+| 载荷类型 | 典型字段 | 适用 API | 说明 |
+|----------|----------|----------|------|
+| **Text** | `text`、`prompt`、`message` | `chat.fillComposer` · `chat.sendMessage` · `chat.complete` | 纯字符串；UI 联动路径仅支持 text |
+| **JSON 对象** | `params` / `context` / `value` | `storage.set/get` · `chat.complete` | 结构化业务数据、配置、列表、表单快照 |
+| **JSON 响应** | `parsed` | `chat.complete`（`responseFormat: 'json'`） | 宿主尝试解析模型输出为 JSON |
+| **文件（间接）** | `attachments` · `encoding: 'base64'` · `url` | `chat.complete` 的 `context` · `storage.set` | 见下文「文件传递模式」 |
+
+**文件传递模式（当前版本）**
+
+JSBridge **尚无**独立的 `bridge.file.upload` / `bridge.file.download` API。文件类数据请用以下方式：
+
+1. **结构化引用（推荐）**：在 `context` 或 `storage` 中传 `{ name, url, mimeType, size }`，指向业务系统已有的 `*.sto.cn` 下载地址或附件 ID，由 Agent 或后续 `host.fetch`（预留）处理。
+2. **小文件 Base64**：将文件读为 Base64 字符串放入 `context`（须控制总大小，见下表）。
+3. **持久化元数据**：用 `storage.set` 保存附件列表、草稿、解析中间结果等 JSON，跨页面刷新仍可读取。
+
+| 场景 | 建议上限 | 超限行为 |
+|------|----------|----------|
+| `chat.complete` 的 `context` 序列化大小 | **128 KiB** | `AI_CONTEXT_TOO_LARGE`，不静默截断 |
+| `storage` 单值 | 受 electron-store / 磁盘约束，建议 **< 1 MiB** | 写入失败或性能下降 |
+| UI 联动 `sendMessage` / `fillComposer` | 仅 **text 字符串** | 大段数据请改走 `chat.complete` 的 `context` |
+
+```typescript
+// ① JSON 业务数据 → AI
+await stoClaw.complete({
+  prompt: '根据以下订单 JSON 给出改价建议',
+  context: {
+    orderId: 'SO-2026-001',
+    lines: [{ sku: 'A1', qty: 10, price: 99.5 }],
+    currency: 'CNY',
+  },
+  responseFormat: 'json',
+});
+
+// ② 文件：URL 引用（推荐）
+await stoClaw.complete({
+  prompt: '解析附件中的异常明细',
+  context: {
+    attachments: [{
+      name: 'exceptions.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      url: 'https://ops.sto.cn/files/exceptions.xlsx',
+      size: 48291,
+    }],
+  },
+});
+
+// ③ 文件：小体积 Base64（注意 128 KiB 总 context 上限）
+const base64 = await fileToBase64(smallFile);
+await stoClaw.complete({
+  prompt: '提取图片中的表格字段',
+  context: {
+    file: { name: smallFile.name, mimeType: smallFile.type, encoding: 'base64', data: base64 },
+  },
+});
+
+// ④ JSON 持久化（Storage）
+await stoClaw.call('storage.set', {
+  key: 'quote-draft',
+  value: { rows: selectedRows, updatedAt: Date.now() },
+});
+const { value } = await stoClaw.call('storage.get', { key: 'quote-draft' });
+
+// ⑤ 结构化 AI 输出
+const { parsed, text, parseError } = await stoClaw.complete({
+  prompt: '返回 JSON：{ "suggestions": string[], "riskLevel": "low"|"medium"|"high" }',
+  responseFormat: 'json',
+});
+if (parseError) console.warn('JSON 解析失败，fallback text:', text);
+else console.log(parsed);
+```
+
+> **预留**：`host.fetch` 实现后可用于宿主代发 HTTP / 拉取 `*.sto.cn` 资源；`chat.invokeAgent` 流式事件的 `delta` 仍为 text，结构化结果在 `done` 或 `responseFormat: 'json'` 终态中交付。
 
 ---
 
@@ -143,6 +234,28 @@ await stoClaw.jump({
 });
 ```
 
+### Headless AI（不打开右栏，直接拿结果）
+
+适用于页面内嵌逻辑、选中行分析、表单建议等「像调 API 一样要 AI 输出」的场景。
+
+**前置**：应用已配置 AI Profile（`bridgePolicy.ai.enabled = true`）；首次调用需用户 Consent。调用前用 `bridge.getCapabilities` 确认列表含 `chat.complete`。
+
+```typescript
+const result = await stoClaw.complete({
+  prompt: '分析以下报价数据并给出改价建议',
+  context: { rows: selectedRows },
+  conversationId: 'quote-1',
+  responseFormat: 'json',
+});
+
+console.log(result.text);
+if (result.parsed) console.log(result.parsed);
+
+await stoClaw.cancel({ requestId: result.requestId });
+```
+
+> 会话在宿主侧使用独立 `bridge-ai` sessionKey，**不会出现在左侧主会话列表**。`complete()` 默认 `timeoutMs = 120_000`，并自动把 Bridge IPC 超时设为 `timeoutMs + 5s`。
+
 ---
 
 ## 5. 能力分级与权限
@@ -156,15 +269,31 @@ Bridge 按应用信任等级（`trustTier`）授予不同能力，可通过 `app
 | `internal` | 内部应用（`__xxx__` 形式 appId） | 全部能力 |
 | `untrusted` | 无 appId | 仅 ping、getCapabilities、app.getInfo |
 
+### AI Profile 门禁（`chat.complete` / `chat.cancel`）
+
+AI 直连能力与 trustTier **独立**：即使 `internal` 等级默认可授予 capability，仍须在应用配置中设置 `bridgePolicy.ai.enabled = true`。未开启时调用返回 `AI_NOT_ENABLED`（与 `CAPABILITY_DENIED` 区分）。
+
+`bridge.getCapabilities` 在 Profile 未开启时 **不会** 列出 `chat.complete` / `chat.cancel` / `chat.invokeAgent`。
+
 ### 需用户授权的能力
 
 以下能力首次调用时可能弹出授权确认（`USER_CONSENT_REQUIRED`）：
 
 - `auth.getToken`
 - `nav.openExternal`
+- `host.fetch`（预留）
 - `chat.sendMessage`
+- `chat.complete`
+- `chat.invokeAgent`（预留）
 
-> `host.fetch` 已在能力清单中预留，**当前版本尚未实现**。
+`chat.cancel` **不需要** Consent（仅取消调用方自己发起的运行）。
+
+### 预留能力
+
+| method | 状态 |
+|--------|------|
+| `host.fetch` | 清单已登记，Handler **未实现**；规划用于宿主代发 HTTP / 拉取受控资源 |
+| `chat.invokeAgent` | 清单已登记，Handler **未实现**；规划为流式 AI + `chat:stream` 事件 |
 
 ---
 
@@ -451,7 +580,9 @@ await stoClaw.openApp({ appId: 'my-app-id', title: '我的应用' });
 
 ---
 
-### 6.5 会话 / Chat
+### 6.5 会话联动（UI · 以 Text 为主）
+
+以下能力通过 Host Renderer 打开/操作 **可见的 Chat 面板**。参数中的 **`text` 为纯字符串**；结构化数据或文件请改用 §6.6 `chat.complete` 的 `context`，或在 text 中嵌入简短摘要 + 引导用户查看右栏。
 
 #### `chat.fillComposer`
 
@@ -532,9 +663,63 @@ await stoClaw.toggleChatPanel();
 
 ---
 
-### 6.6 Storage（Bridge 隔离存储）
+### 6.6 AI 引擎直连（Headless · Text + JSON Context）
 
-按 `appId + sessionId` 隔离的键值存储，不会污染页面 `localStorage`。
+不打开右栏 UI，在 Main 进程 headless 调用 Agent。支持 **Text prompt** + **JSON context** 入参，以及 **Text / JSON** 两种响应形态。
+
+**前置**：`bridgePolicy.ai.enabled = true`；`bridge.getCapabilities` 含 `chat.complete`；首次调用需 Consent。
+
+#### `chat.complete`
+
+**参数**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `prompt` | `string` | 是 | 用户意图 / 指令（Text） |
+| `context` | `unknown`（JSON 可序列化） | 否 | 结构化业务数据、附件元数据、小文件 Base64 等；**整包 ≤ 128 KiB** |
+| `agentId` | `string` | 否 | 覆盖 Profile 默认 Agent |
+| `skillSlugs` | `string[]` | 否 | 在 Profile 白名单内追加技能 |
+| `responseFormat` | `'text' \| 'json'` | 否 | 默认 `text`；`json` 时宿主解析输出到 `parsed` |
+| `conversationId` | `string` | 否 | 多轮复用；省略则单次会话 |
+| `timeoutMs` | `number` | 建议 | 默认 120_000，最大 180_000；**务必同时增大 `call` 的 options.timeoutMs** |
+
+**返回**
+
+```typescript
+{
+  requestId: string;
+  runId: string | null;
+  text: string;              // 模型原始文本输出
+  parsed?: unknown;          // responseFormat='json' 且解析成功
+  parseError?: string;       // JSON 解析失败原因
+  finishReason: 'completed' | 'timeout' | 'aborted' | 'failed';
+}
+```
+
+```typescript
+const result = await stoClaw.complete(
+  {
+    prompt: '汇总以下 JSON 并给出风险等级',
+    context: { metrics: { revenue: 1.2e6, churn: 0.03 } },
+    responseFormat: 'json',
+  },
+  { timeoutMs: 130_000 }, // 可选：覆盖默认 IPC 超时（默认 = params.timeoutMs + 5s）
+);
+```
+
+#### `chat.cancel`
+
+取消进行中的 `chat.complete`（或未来 `chat.invokeAgent`）调用。
+
+**参数** `{ requestId: string }`（来自 `chat.complete` 返回）  
+**返回** `{ ok: boolean }`  
+**Consent**：不需要。
+
+---
+
+### 6.7 Storage（Bridge 隔离存储 · JSON KV）
+
+按 `appId`（+ 非 catalog 时 `sessionId`）隔离的键值存储，不会污染页面 `localStorage`。`value` 为 **任意 JSON 可序列化对象**（含嵌套对象、数组、字符串、数字、布尔、null）；**不支持**直接存 `File` / `Blob`，文件请存元数据或 Base64 字符串。
 
 #### `storage.get`
 
@@ -583,8 +768,11 @@ const { value } = await window.stoClaw.call('storage.get', { key: 'draft' });
 | `openSession()` | `chat.openSession` | 新建会话 |
 | `sendMessage()` | `chat.sendMessage` | 回填并发送 |
 | `toggleChatPanel()` | `chat.togglePanel` | 切换 AI 面板 |
+| `complete()` | `chat.complete` | Headless AI（Text + JSON context → Text/JSON） |
+| `cancel()` | `chat.cancel` | 取消 AI 调用 |
+| `call('storage.*', …)` | `storage.*` | JSON KV 读写 |
 | `call(method, params)` | 任意 | 底层调用 |
-| `on(event, handler)` | — | 订阅 Bridge 事件 |
+| `on(event, handler)` | — | 订阅 Bridge 事件（payload 为 JSON） |
 | `isStoClawBridgeAvailable()` | — | 环境检测（静态） |
 
 ---
@@ -606,6 +794,15 @@ const { value } = await window.stoClaw.call('storage.get', { key: 'draft' });
 | `RATE_LIMITED` | 调用频率超限 | 降低调用频率 |
 | `REQUEST_TIMEOUT` | 超时 | 增大 `timeoutMs` 或重试 |
 | `INTERNAL_ERROR` | 宿主内部错误 | 联系 SClaw 维护方 |
+| `AI_NOT_ENABLED` | 应用未开启 AI Profile | 联系 SClaw 配置 `bridgePolicy.ai.enabled` |
+| `AI_INVALID_PARAMS` | AI 参数不合法 | 检查 `prompt` / `requestId` 等 |
+| `AI_CONTEXT_TOO_LARGE` | `context` 超过 128 KiB | 裁剪 JSON、改用 URL 引用大文件 |
+| `AI_SKILL_NOT_ALLOWED` | 请求的技能不在白名单 | 检查 Profile `allowedSkillSlugs` |
+| `AI_QUOTA_EXCEEDED` | AI 配额超限 | 降低调用频率 |
+| `AI_CONCURRENCY_EXCEEDED` | 并发 AI 调用过多 | 排队或取消进行中的调用 |
+| `AI_TIMEOUT` | Agent 运行超时 | 增大 `timeoutMs` 或简化任务 |
+| `AI_ABORTED` | 调用被取消 | 正常终态 |
+| `AI_RUN_FAILED` | Agent 运行失败 | 查看 `finishReason` / 重试 |
 
 ```typescript
 import { stoClaw, StoClawBridgeError } from '@sto/claw-bridge-sdk';
@@ -629,6 +826,10 @@ try {
 4. **会话 target 选对**：embed 页面操作右侧 AI 用 `target: 'embed'`；影响主界面用 `target: 'main'`。
 5. **避免高频调用**：untrusted 等级限流 20 次/分钟，catalog 为 120 次/分钟。
 6. **用户手势**：敏感操作（确认框、发送消息）建议在点击事件回调中调用，可传 `{ userGesture: true }`。
+7. **结构化数据走 JSON**：表格行、表单、配置用 `chat.complete` 的 `context` 或 `storage.set`，不要拼进超长 `text`。
+8. **大文件不要用 Base64 硬塞 context**：优先 URL / 附件 ID；小文件注意 **128 KiB** 上限；独立文件 API 尚未提供。
+9. **要结构化 AI 输出**：设 `responseFormat: 'json'`，成功读 `parsed`，失败 fallback `text` + `parseError`。
+10. **Headless AI 超时**：优先用 `stoClaw.complete()`——默认 `timeoutMs = 120_000`，Bridge IPC 超时自动设为 `timeoutMs + 5s`；原生 `call` 时需手动设两层超时。
 
 ---
 
@@ -678,7 +879,11 @@ chat.togglePanel
 chat.fillComposer
 chat.openSession
 chat.sendMessage
-storage.get
+chat.complete          ← Headless；Text prompt + JSON context
+chat.cancel
+chat.invokeAgent       ← 预留，未实现
+host.fetch             ← 预留，未实现
+storage.get            ← JSON value
 storage.set
 storage.remove
 storage.clear

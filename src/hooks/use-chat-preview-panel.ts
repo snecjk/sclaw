@@ -4,6 +4,13 @@ import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview'
 import { filterSessionWorkflowCardStates } from '@/lib/session-workflow-context';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { logFilePreview } from '@/lib/file-preview-debug';
+import {
+  useChatBrowserPreviewStore,
+  type ChatBrowserPreviewTab,
+} from '@/stores/chat-browser-preview';
+
+/** Stable empty snapshot — never allocate `[]` inside a zustand selector. */
+const EMPTY_BROWSER_TABS: ChatBrowserPreviewTab[] = [];
 
 /** Workbench 预览布局：closed 双栏 / split 三栏 / expanded 预览占满 Workspace（非 DOM Fullscreen） */
 export type PreviewMode = 'closed' | 'split' | 'expanded';
@@ -22,6 +29,11 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   );
 
   const previewableFiles = usePreviewableFiles(allMessages, sessionWorkflowCardStates, sessionKey);
+
+  const browserTabs = useChatBrowserPreviewStore(
+    (s) => s.tabsBySession[sessionKey] ?? EMPTY_BROWSER_TABS,
+  );
+  const hasBrowserPreview = browserTabs.length > 0;
 
   const previewFiles = useMemo(() => {
     const byPath = new Map<string, AttachedFileMeta>();
@@ -51,7 +63,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
     showEditWorkflow,
   } = useSessionWorkflowPreview(allMessages, sessionKey);
 
-  const canShowPreviewPanel = visiblePreviewFiles.length > 0;
+  const canShowPreviewPanel = visiblePreviewFiles.length > 0 || hasBrowserPreview;
   const showPreviewPanel = previewMode !== 'closed';
   const isPreviewSplit = previewMode === 'split';
   const isPreviewExpanded = previewMode === 'expanded';
@@ -68,7 +80,14 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   }, [sessionKey]);
 
   useEffect(() => {
+    if (browserTabs.length > 0 && previewMode === 'closed') {
+      setPreviewMode('split');
+    }
+  }, [browserTabs.length, previewMode]);
+
+  useEffect(() => {
     if (previewMode === 'closed') return;
+    if (hasBrowserPreview) return;
 
     if (
       activePreviewFilePath !== null
@@ -84,14 +103,18 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
       setPreviewMode('closed');
       setActivePreviewFilePath(null);
     }
-  }, [previewMode, activePreviewFilePath, visiblePreviewFiles]);
+  }, [previewMode, activePreviewFilePath, visiblePreviewFiles, hasBrowserPreview]);
 
   const openPreviewPanel = useCallback(() => {
+    if (hasBrowserPreview) {
+      setPreviewMode('split');
+      return;
+    }
     const latestFile = visiblePreviewFiles[visiblePreviewFiles.length - 1];
     if (!latestFile?.filePath) return;
     setActivePreviewFilePath(latestFile.filePath);
     setPreviewMode('split');
-  }, [visiblePreviewFiles]);
+  }, [visiblePreviewFiles, hasBrowserPreview]);
 
   const openArtifactPreview = useCallback((file: AttachedFileMeta) => {
     if (!file.filePath) return;
@@ -168,5 +191,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
     dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
+    hasBrowserPreview,
+    browserTabs,
   };
 }

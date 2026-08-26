@@ -1,5 +1,8 @@
 /**
  * Drawer content frame — Electron webview (first-party cookies) or dev iframe.
+ *
+ * Guest JSBridge preload must be attached before the first real navigation;
+ * otherwise `window.stoClaw` is never injected.
  */
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
@@ -160,15 +163,44 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       };
     }, []);
 
+    // Navigate only after guest preload is attached AND webview has emitted dom-ready.
+    // Calling loadURL before attach/dom-ready throws and crashes the App Plaza tree.
     useEffect(() => {
       if (!isElectron || !preloadReady) return;
       const el = webviewRef.current;
-      if (!el || launchedSrcRef.current === url) return;
-      launchedSrcRef.current = url;
-      const result = el.loadURL?.(url);
-      void Promise.resolve(result).catch(() => {
-        // SSO skip-login 302 aborts the original loadURL; the follow-up navigation still proceeds.
-      });
+      if (!el || !url || launchedSrcRef.current === url) return;
+
+      let cancelled = false;
+
+      const navigate = () => {
+        if (cancelled || launchedSrcRef.current === url) return;
+        try {
+          const result = el.loadURL?.(url);
+          launchedSrcRef.current = url;
+          void Promise.resolve(result).catch(() => {
+            // SSO skip-login 302 aborts the original loadURL; the follow-up navigation still proceeds.
+          });
+        } catch {
+          // Not attached / not dom-ready yet — wait for next dom-ready.
+          launchedSrcRef.current = null;
+        }
+      };
+
+      if (safeGetWebContentsId(el)) {
+        navigate();
+        return () => {
+          cancelled = true;
+        };
+      }
+
+      const onDomReady = () => {
+        navigate();
+      };
+      el.addEventListener('dom-ready', onDomReady);
+      return () => {
+        cancelled = true;
+        el.removeEventListener('dom-ready', onDomReady);
+      };
     }, [preloadReady, url]);
 
     const publishNavState = () => {
@@ -336,6 +368,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           src="about:blank"
           partition={SCLAW_EMBED_BROWSER_PARTITION}
           allowpopups={true}
+          // @ts-expect-error Electron <webview> attributes
           webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=no,enableRemoteModule=no"
           preload={guestPreloadUrl ?? undefined}
           className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"

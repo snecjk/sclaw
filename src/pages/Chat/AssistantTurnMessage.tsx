@@ -36,6 +36,7 @@ import {
   extractParameterForm,
   isWorkflowPreambleAssistantMessage,
 } from './message-utils';
+import { extractFlowCard } from '@/lib/flow-card-patch';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
@@ -346,6 +347,19 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     if (!base) return null;
 
     if (thinkingLayout.finalReplyText) {
+      // finalReplyText comes from extractText(), which strips ```flow_card fences.
+      // Re-attach the card from the raw history message so FlowCard still renders.
+      const preservedCard = extractFlowCard(base);
+      if (preservedCard) {
+        return {
+          ...base,
+          role: 'assistant' as const,
+          content: [
+            { type: 'text', text: thinkingLayout.finalReplyText },
+            preservedCard,
+          ],
+        } as RawMessage;
+      }
       return {
         ...base,
         role: 'assistant' as const,
@@ -451,6 +465,9 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const chatDisplayMessage = replyDisplayMessage;
   const chatDisplayHasWorkflowCard = false;
+  const chatDisplayHasFlowCard = Boolean(
+    replyMessage && extractFlowCard(replyMessage),
+  );
 
   const replyTimestamp = useMemo(() => {
     if (chatDisplayMessage?.timestamp != null) return chatDisplayMessage.timestamp;
@@ -472,6 +489,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const hasThinkingFinalReply =
     replyDisplayHasText
     || hasPreambleMessages
+    || chatDisplayHasFlowCard
     || (!isStreaming && chatDisplayHasWorkflowCard);
 
   const thinkingSegmentsForDisplay = useMemo(() => {
@@ -526,7 +544,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ],
   );
 
-  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard) {
+  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard && !chatDisplayHasFlowCard) {
     return null;
   }
 
@@ -549,7 +567,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     />
   ) : null;
 
-  if (((replyDisplayHasText || chatDisplayHasWorkflowCard) && chatDisplayMessageWithTimestamp) || hasPreambleMessages) {
+  if (((replyDisplayHasText || chatDisplayHasWorkflowCard || chatDisplayHasFlowCard) && chatDisplayMessageWithTimestamp) || hasPreambleMessages) {
     return (
       <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
         {thinkingPanelEl}
@@ -578,7 +596,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
           />
           );
         })}
-        {replyDisplayHasText || chatDisplayHasWorkflowCard ? (
+        {replyDisplayHasText || chatDisplayHasWorkflowCard || chatDisplayHasFlowCard ? (
           chatDisplayMessageWithTimestamp ? (() => {
             const replySearchKey = resolveChatMessageSearchKey(
               chatDisplayMessageWithTimestamp.id,

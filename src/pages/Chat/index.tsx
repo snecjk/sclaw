@@ -26,6 +26,7 @@ import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
+import { ChatBrowserPreviewPanel } from '@/components/chat-browser/ChatBrowserPreviewPanel';
 import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher, suspendAutoSend } from '@/stores/message-queue';
 import { markTurnInterrupted } from '@/lib/turn-interrupt-marker';
@@ -479,6 +480,7 @@ export function Chat() {
     dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
+    hasBrowserPreview,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
@@ -844,14 +846,29 @@ export function Chat() {
               onKeyboardAdjust={adjustPreviewPercent}
             />
           ) : null}
-          <ChatPreviewPanel
-            files={previewableFiles}
-            activeFilePath={activePreviewFilePath}
-            showEditWorkflow={showEditWorkflow}
-            workflowId={sessionWorkflowId}
-            onEditWorkflow={openWorkflowPreview}
-            className="h-full w-full"
-          />
+          {hasBrowserPreview && previewableFiles.length === 0 ? (
+            <ChatBrowserPreviewPanel
+              sessionKey={currentSessionKey}
+              className="h-full w-full"
+            />
+          ) : (
+            <>
+              <ChatPreviewPanel
+                files={previewableFiles}
+                activeFilePath={activePreviewFilePath}
+                showEditWorkflow={showEditWorkflow}
+                workflowId={sessionWorkflowId}
+                onEditWorkflow={openWorkflowPreview}
+                className={cn('h-full w-full', hasBrowserPreview ? 'max-h-[45%] shrink-0 border-b border-border/70' : '')}
+              />
+              {hasBrowserPreview ? (
+                <ChatBrowserPreviewPanel
+                  sessionKey={currentSessionKey}
+                  className="min-h-0 flex-1"
+                />
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
     </div>

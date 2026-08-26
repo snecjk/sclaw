@@ -20,6 +20,7 @@ import {
   unregisterSclawBrowserRuntime,
 } from '@/lib/sclaw-browser-host-api';
 import { purgeEphemeralEmbedChatForApp } from '@/lib/app-plaza-ephemeral-chat-purge';
+import { useComposerFlowStore } from '@/stores/composer-flow';
 import {
   appPlazaTabUrlsMatch,
   coerceAppPlazaNavigableUrl,
@@ -29,6 +30,7 @@ import { resolveSclawBrowserUrl } from '@/lib/resolve-sclaw-browser-url';
 import { invokeIpc } from '@/lib/api-client';
 import { isStoEmbedBrowserUrl } from '../../shared/sclaw-embed-browser';
 import type { AppTone } from '@/types/more-apps';
+import type { EmbedComposerAction } from '../../shared/embed-composer-actions';
 
 export const APP_PLAZA_HOME_TAB_ID = 'home';
 export const APP_PLAZA_MAX_LIVE_BROWSER_TABS = 5;
@@ -75,6 +77,8 @@ export interface AppPlazaBrowserTab {
   systemCode?: string;
   /** Only App Plaza catalog apps may exchange skip-login URLs. */
   skipLoginEligible?: boolean;
+  /** Config-driven composer pills for embed AI panel. */
+  embedComposerActions?: EmbedComposerAction[];
 }
 
 interface OpenOrFocusBrowserTabInput {
@@ -92,6 +96,7 @@ interface OpenOrFocusBrowserTabInput {
   systemCode?: string;
   /** Only App Plaza catalog apps may exchange skip-login URLs. */
   skipLoginEligible?: boolean;
+  embedComposerActions?: EmbedComposerAction[];
 }
 
 interface AppPlazaShellState {
@@ -105,8 +110,12 @@ interface AppPlazaShellState {
   addBlankTab: () => void;
   closeBrowserTab: (tabId: string) => void;
   submitBlankTabUrl: (tabId: string, rawUrl: string) => void;
-  /** Navigate an existing live/suspended/blank tab to a manually entered URL. */
-  navigateBrowserTabUrl: (tabId: string, rawUrl: string) => void;
+  /**
+   * Navigate an existing live/suspended/blank tab to a manually entered URL.
+   * `force: true` remounts even when the target matches `tab.url` (SPA may have
+   * drifted to homepage; clawQuotation must be re-opened, not `reload`).
+   */
+  navigateBrowserTabUrl: (tabId: string, rawUrl: string, options?: { force?: boolean }) => void;
   openOrFocusBrowserTab: (input: OpenOrFocusBrowserTabInput) => void;
   promoteTabBound: (tabId: string, nextAppId: string, title?: string) => void;
   updateTabTitle: (tabId: string, title: string) => void;
@@ -306,6 +315,7 @@ function makeLiveTab(
     sourceUrl?: string;
     systemCode?: string;
     skipLoginEligible?: boolean;
+    embedComposerActions?: EmbedComposerAction[];
   },
 ): AppPlazaBrowserTab {
   const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
@@ -337,6 +347,7 @@ function makeLiveTab(
     sourceUrl: icons?.sourceUrl?.trim() || tab.sourceUrl,
     systemCode: icons?.systemCode?.trim() || tab.systemCode,
     skipLoginEligible: icons?.skipLoginEligible ?? tab.skipLoginEligible,
+    embedComposerActions: icons?.embedComposerActions ?? tab.embedComposerActions,
     iconKey: icons?.iconKey ?? tab.iconKey,
     tone: icons?.tone ?? tab.tone,
     // Reset until the page reports its own favicon (same as Chrome).
@@ -516,7 +527,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     })();
   },
 
-  navigateBrowserTabUrl: (tabId, rawUrl) => {
+  navigateBrowserTabUrl: (tabId, rawUrl, options) => {
     const tab = get().browserTabs.find((t) => t.id === tabId);
     if (!tab) return;
     if (tab.status === 'blank') {
@@ -527,7 +538,10 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     const navigable = coerceAppPlazaNavigableUrl(rawUrl);
     if (!navigable) return;
     const resolvedUrl = resolveSclawBrowserUrl(navigable);
-    if (tab.url && appPlazaTabUrlsMatch(tab.url, resolvedUrl)) {
+    const liveUrl = tab.currentPageUrl || tab.url;
+    const sameTarget = tab.url && appPlazaTabUrlsMatch(tab.url, resolvedUrl);
+    const stillOnTarget = liveUrl && appPlazaTabUrlsMatch(liveUrl, resolvedUrl);
+    if (sameTarget && stillOnTarget && options?.force !== true) {
       set({ activeTabId: tabId });
       return;
     }
@@ -619,6 +633,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       sourceUrl: input.sourceUrl?.trim() || undefined,
       systemCode: input.systemCode?.trim() || undefined,
       skipLoginEligible: input.skipLoginEligible ?? false,
+      embedComposerActions: input.embedComposerActions,
     };
 
     void (async () => {
@@ -657,6 +672,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
               sourceUrl: icons.sourceUrl || current.sourceUrl,
               systemCode: icons.systemCode || current.systemCode,
               skipLoginEligible: icons.skipLoginEligible ?? current.skipLoginEligible,
+              embedComposerActions: icons.embedComposerActions ?? current.embedComposerActions,
             });
             return { browserTabs: tabs, activeTabId: existing.id };
           });
@@ -680,6 +696,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
                   sourceUrl: icons.sourceUrl || t.sourceUrl,
                   systemCode: icons.systemCode || t.systemCode,
                   skipLoginEligible: icons.skipLoginEligible ?? t.skipLoginEligible,
+                  embedComposerActions: icons.embedComposerActions ?? t.embedComposerActions,
                 }
               : t,
           ),
@@ -760,6 +777,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     if (!tab?.embedRuntimeId || !tab.appId || tab.status !== 'live') return;
     if (tab.chatPanelOpen) return;
     void ensureSclawBrowserBridge(tab.embedRuntimeId);
+    useComposerFlowStore.getState().setEmbedComposerActions(tab.embedComposerActions ?? null);
     const activation = activateSclawBrowserEmbedChat(tab.appId, tab.embedRuntimeId);
     set((prev) => ({
       browserTabs: prev.browserTabs.map((t) =>

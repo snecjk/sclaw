@@ -87,7 +87,7 @@ export interface RawMessage {
 
 /** Content block inside a message */
 export interface ContentBlock {
-  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card' | 'parameter_form' | 'workflow_context';
+  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card' | 'flow_card' | 'parameter_form' | 'workflow_context';
   text?: string;
   thinking?: string;
   source?: { type: string; media_type?: string; data?: string; url?: string };
@@ -103,6 +103,14 @@ export interface ContentBlock {
   runId?: string;
   /** Shared by workflow_card and workflow_context blocks */
   templateName?: string;
+  /** flow_card block fields */
+  cardId?: string;
+  domain?: string;
+  phase?: string;
+  title?: string;
+  body?: string;
+  hint?: string;
+  actions?: import('../../../shared/flow-card-protocol').FlowCardAction[];
   /** Parameter form block fields */
   formId?: string;
   formConfig?: import('@/types/user-form').UserFormConfig;

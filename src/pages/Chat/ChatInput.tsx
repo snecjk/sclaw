@@ -67,6 +67,9 @@ import {
   clearMainChatComposerDraft,
   publishMainChatComposerDraft,
 } from '@/lib/main-chat-composer-draft';
+import { ComposerScenarioPills } from '@/components/flow-card/ComposerScenarioPills';
+import { useComposerFlowStore } from '@/stores/composer-flow';
+import type { EmbedComposerAction } from '../../../shared/embed-composer-actions';
 
 export { CHAT_EDIT_DRAFT_EVENT };
 export type { FileAttachment } from '@/components/attachments';
@@ -137,6 +140,8 @@ interface ChatInputProps {
   composerLayout?: 'default' | 'home';
   toolbarInlineSelectors?: ReactNode;
   showProjectPicker?: boolean;
+  /** Scenario pills above composer (e.g. quote workbench quick actions). */
+  composerScenarioActions?: EmbedComposerAction[];
 }
 
 export function ChatInput({
@@ -156,6 +161,7 @@ export function ChatInput({
   composerLayout = 'default',
   toolbarInlineSelectors,
   showProjectPicker = false,
+  composerScenarioActions,
 }: ChatInputProps) {
   void _isEmpty;
   const { t } = useTranslation('chat');
@@ -230,6 +236,7 @@ export function ChatInput({
     clearAttachments,
     setAttachmentsSilent,
     pickFiles,
+    removeAttachment,
     stageDataCenterFiles,
     handleAttachmentRemoveFromEditor,
     dragOver,
@@ -261,6 +268,32 @@ export function ChatInput({
     pickFiles,
     stageDataCenterFiles,
   });
+
+  const filePickerRequest = useComposerFlowStore((s) => s.filePickerRequest);
+  const composerPhaseHint = useComposerFlowStore((s) => s.phaseHint);
+  const activeScenarioId = useComposerFlowStore((s) => s.activeScenarioId);
+
+  useEffect(() => {
+    if (!filePickerRequest) return;
+    const request = filePickerRequest;
+    useComposerFlowStore.getState().consumeFilePickerRequest(request.requestId);
+    void (async () => {
+      const picked = await pickFiles();
+      if (!request.autoSend || picked.length === 0 || disabled) return;
+
+      // Remove just-staged files from the composer strip — they go out with this send.
+      for (const file of picked) {
+        removeAttachment(file.id);
+      }
+
+      const sendText = request.sendText?.trim() || '';
+      if (sending && onQueue) {
+        onQueue(sendText, picked, targetAgentId, undefined, null, undefined);
+        return;
+      }
+      onSend(sendText, picked, targetAgentId, undefined, null, null, null, undefined);
+    })();
+  }, [filePickerRequest, pickFiles, removeAttachment, disabled, sending, onQueue, onSend, targetAgentId]);
 
   const voice = useInputComposerVoice({
     mentionEditorRef,
@@ -682,6 +715,13 @@ export function ChatInput({
       <FlyToTargetLayer targetRef={quickInputPicker.buttonRef}>
         <QuickInputIcon className="h-full w-full text-foreground" />
       </FlyToTargetLayer>
+      {composerScenarioActions?.length ? (
+        <ComposerScenarioPills
+          actions={composerScenarioActions}
+          activeId={activeScenarioId}
+          disabled={disabled || sending}
+        />
+      ) : null}
       {showProjectPicker ? (
         <div className={chatComposerHomeStackShellClass}>
           {shell}
@@ -690,6 +730,11 @@ export function ChatInput({
       ) : (
         shell
       )}
+      {composerPhaseHint ? (
+        <p className="mt-2 px-1 text-center text-[11px] leading-relaxed text-muted-foreground">
+          {composerPhaseHint}
+        </p>
+      ) : null}
       <ComposerAttachMenu
         open={attachSource.menuOpen}
         onOpenChange={attachSource.setMenuOpen}

@@ -12,6 +12,8 @@ import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useMoreAppsStore } from '@/stores/more-apps';
 import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
 import { useChatStore } from '@/stores/chat';
+import { useComposerFlowStore } from '@/stores/composer-flow';
+import { openFlowCardPreview } from '@/lib/flow-card-preview';
 
 function okResponse(request: BridgeRequest, data: unknown): BridgeResponse {
   return {
@@ -42,6 +44,9 @@ async function ensureEmbedChatReady(tabId: string, createNew = false): Promise<s
     shell.createChatSession(tabId);
   } else if (!tab.chatSessionKey || !tab.chatPanelOpen) {
     shell.openChatPanel(tabId);
+  } else {
+    // Panel already open: re-bind chat store to this tab's right-side session.
+    shell.ensureEmbedChatActive(tabId);
   }
 
   const next = useAppPlazaShellStore.getState().browserTabs.find((entry) => entry.id === tabId);
@@ -235,6 +240,23 @@ export async function executeJsBridgeHostAction(
         return okResponse(request, { type: 'route', route: action.route });
       }
       return okResponse(request, { ok: true, type: action.jumpType });
+    }
+    case 'composer.openFilePicker': {
+      const requestId = useComposerFlowStore.getState().requestFilePicker({
+        accept: action.accept,
+        multiple: action.multiple,
+      });
+      return okResponse(request, { ok: true, requestId });
+    }
+    case 'nav.openPreviewTab': {
+      const sessionKey = useChatStore.getState().currentSessionKey;
+      openFlowCardPreview({
+        url: action.url,
+        title: action.title,
+        mode: 'open',
+        sessionKey,
+      });
+      return okResponse(request, { ok: true, url: action.url });
     }
     default:
       return {

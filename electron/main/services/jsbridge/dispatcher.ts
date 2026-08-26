@@ -15,6 +15,7 @@ import { handleAuthGetAuthMode, handleAuthGetToken, handleAuthGetUser, handleAut
 import { handleBridgeGetCapabilities, handleBridgePing } from './handlers/bridge-meta';
 import { handleChatFillComposer, handleChatOpenSession, handleChatSendMessage } from './handlers/chat';
 import { handleChatCancel, handleChatComplete } from './handlers/chat-ai';
+import { handleComposerOpenFilePicker, handleNavOpenPreviewTab } from './handlers/composer';
 import {
   handleNavCloseSelf,
   handleNavGoBack,
@@ -74,6 +75,8 @@ const HANDLERS: Record<string, BridgeHandlerFn> = {
   'chat.sendMessage': handleChatSendMessage,
   'chat.complete': handleChatComplete,
   'chat.cancel': handleChatCancel,
+  'composer.openFilePicker': handleComposerOpenFilePicker,
+  'nav.openPreviewTab': handleNavOpenPreviewTab,
 };
 
 const RATE_LIMIT_BY_TIER: Record<BridgeSession['trustPolicy']['trustTier'], number> = {
@@ -122,9 +125,6 @@ function assertSessionAuthorized(
   if (!validateRequestTimestamp(request.timestamp)) {
     return bridgeFailure(request, 'REPLAY_DETECTED', 'Request timestamp out of range');
   }
-  if (!replayGuard.consume(`${session.sessionId}:${request.id}`)) {
-    return bridgeFailure(request, 'REPLAY_DETECTED', 'Duplicate request id');
-  }
 
   const pageUrl = resolveCurrentPageUrl(session);
   if (!pageUrl) {
@@ -147,12 +147,18 @@ function assertSessionAuthorized(
   }
   if (!session.grantedCapabilities.has(method)) {
     if ((CONSENT_CAPABILITIES as readonly string[]).includes(method)) {
+      // Do not consume the request id here — Host may retry the same envelope
+      // after the user grants consent (see maybeGrantConsent).
       return bridgeFailure(request, 'USER_CONSENT_REQUIRED', 'User consent required', {
         capability: method,
         appId: session.trustPolicy.appId,
       });
     }
     return bridgeFailure(request, 'CAPABILITY_DENIED', `Capability denied: ${method}`);
+  }
+
+  if (!replayGuard.consume(`${session.sessionId}:${request.id}`)) {
+    return bridgeFailure(request, 'REPLAY_DETECTED', 'Duplicate request id');
   }
 
   const limit = RATE_LIMIT_BY_TIER[session.trustPolicy.trustTier];

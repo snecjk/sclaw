@@ -1,0 +1,10 @@
+{
+  "name": "jsbridge-excel-ai-demo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SClaw JSBridge Excel → Agent demo (requires SClaw webview)",
+  "type": "module",
+  "dependencies": {
+    "@sto/claw-bridge-sdk": "1.1.0"
+  }
+}
