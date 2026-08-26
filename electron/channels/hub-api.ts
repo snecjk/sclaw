@@ -54,6 +54,39 @@ function resolveHubErrorMessage(json: HubApiEnvelope<unknown>, fallback: string)
     || fallback;
 }
 
+const HUB_LOG_SENSITIVE_KEY = /(token|ticket|authorization|password|secret|qrcontent|^content$)/i;
+
+function redactHubLogValue(key: string, value: unknown): unknown {
+  if (!HUB_LOG_SENSITIVE_KEY.test(key)) return value;
+  if (typeof value === 'string') return `<redacted:length=${value.length}>`;
+  return '<redacted>';
+}
+
+function formatHubLogValue(value: unknown, maxLength = 800): string {
+  if (value === undefined) return '-';
+  try {
+    const text = JSON.stringify(value, redactHubLogValue);
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  } catch {
+    return '<unserializable>';
+  }
+}
+
+function formatHubLogUrl(urlStr: string): string {
+  try {
+    const url = new URL(urlStr);
+    for (const key of url.searchParams.keys()) {
+      if (HUB_LOG_SENSITIVE_KEY.test(key)) {
+        const value = url.searchParams.get(key) || '';
+        url.searchParams.set(key, `REDACTED_len_${value.length}`);
+      }
+    }
+    return url.toString();
+  } catch {
+    return urlStr;
+  }
+}
+
 function nodeHttpRequest(
   method: string,
   urlStr: string,
@@ -106,10 +139,11 @@ async function hubFetch<T>(
     throw new Error('未登录或 stoToken 已过期，请重新登录');
   }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  const logUrl = formatHubLogUrl(url);
   const headers = buildHubAuthHeaders(token);
   const bodyText = body === undefined ? undefined : JSON.stringify(body);
   logger.info(
-    `[SclawHub] >>> ${method} ${url} hasStotoken=${Boolean(headers.stotoken)} tokenLen=${token.length} via=node-http headerKeys=${Object.keys(headers).join(',')}`,
+    `[SclawHub] >>> ${method} ${logUrl} params=${formatHubLogValue(body)} hasStotoken=${Boolean(headers.stotoken)} tokenLen=${token.length} via=node-http headerKeys=${Object.keys(headers).join(',')}`,
   );
 
   const res = await nodeHttpRequest(method, url, headers, bodyText);
@@ -118,11 +152,11 @@ async function hubFetch<T>(
   try {
     json = JSON.parse(text) as HubApiEnvelope<T>;
   } catch {
-    logger.warn(`[SclawHub] <<< ${method} ${url} status=${res.status} non-json=${text.slice(0, 300)}`);
+    logger.warn(`[SclawHub] <<< ${method} ${logUrl} status=${res.status} non-json=${text.slice(0, 300)}`);
     throw new Error(`Hub API HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
   logger.info(
-    `[SclawHub] <<< ${method} ${url} status=${res.status} success=${json.success} err=${resolveHubErrorMessage(json, '')} body=${text.slice(0, 240)}`,
+    `[SclawHub] <<< ${method} ${logUrl} status=${res.status} success=${json.success} err=${resolveHubErrorMessage(json, '')} body=${formatHubLogValue(json, 500)}`,
   );
 
   if (res.status < 200 || res.status >= 300) {
