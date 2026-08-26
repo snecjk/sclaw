@@ -7,9 +7,9 @@ import {
 import { ensureSclawBrowserBridge } from '@/lib/sclaw-browser-host-api';
 
 vi.mock('@/lib/sclaw-browser-host-api', () => ({
-  registerSclawBrowserRuntime: vi.fn(async () => undefined),
-  unregisterSclawBrowserRuntime: vi.fn(async () => undefined),
-  ensureSclawBrowserBridge: vi.fn(async () => undefined),
+  registerSclawBrowserRuntime: vi.fn(async () => ({ ok: true })),
+  unregisterSclawBrowserRuntime: vi.fn(async () => ({ ok: true })),
+  ensureSclawBrowserBridge: vi.fn(async () => true),
 }));
 
 vi.mock('@/lib/app-plaza-ephemeral-chat-purge', () => ({

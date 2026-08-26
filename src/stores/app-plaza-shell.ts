@@ -301,31 +301,45 @@ function suspendTab(tab: AppPlazaBrowserTab): AppPlazaBrowserTab {
   };
 }
 
-function makeLiveTab(
+type LiveTabIcons = {
+  iconUrl?: string;
+  iconKey?: string;
+  tone?: AppTone;
+  registryAppId?: string;
+  sourceUrl?: string;
+  systemCode?: string;
+  skipLoginEligible?: boolean;
+  embedComposerActions?: EmbedComposerAction[];
+};
+
+/** Register in Main before exposing embedRuntimeId — bindWebContents requires the entry. */
+async function registerEmbedRuntime(input: {
+  appTitle: string;
+  initialUrl: string;
+  appId: string;
+  bound: boolean;
+}): Promise<string | null> {
+  const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
+  const result = await registerSclawBrowserRuntime({
+    runtimeId: embedRuntimeId,
+    appTitle: input.appTitle,
+    initialUrl: input.initialUrl,
+    appId: input.appId,
+    bound: input.bound,
+  });
+  if (result?.ok === false) return null;
+  return embedRuntimeId;
+}
+
+function buildLiveTab(
   tab: AppPlazaBrowserTab,
+  embedRuntimeId: string,
   url: string,
   title: string,
   appId: string,
   bound: boolean,
-  icons?: {
-    iconUrl?: string;
-    iconKey?: string;
-    tone?: AppTone;
-    registryAppId?: string;
-    sourceUrl?: string;
-    systemCode?: string;
-    skipLoginEligible?: boolean;
-    embedComposerActions?: EmbedComposerAction[];
-  },
+  icons?: LiveTabIcons,
 ): AppPlazaBrowserTab {
-  const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
-  void registerSclawBrowserRuntime({
-    runtimeId: embedRuntimeId,
-    appTitle: title,
-    initialUrl: url,
-    appId,
-    bound,
-  });
   // Catalog hints optional; pageFaviconUrl comes from webview after load (Chrome-like).
   const iconUrl = icons?.iconUrl?.trim() || tab.iconUrl;
   return {
@@ -394,6 +408,16 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     if (tab.status === 'suspended' && tab.url) {
       void (async () => {
         await prepareStoSessionIfNeeded(tab.url);
+        const reviveTitle = tab.title || tab.url;
+        const reviveAppId = tab.appId || deriveSclawBrowserAppId({ url: tab.url });
+        const embedRuntimeId = await registerEmbedRuntime({
+          appTitle: reviveTitle,
+          initialUrl: tab.url,
+          appId: reviveAppId,
+          bound: tab.bound,
+        });
+        if (!embedRuntimeId) return;
+
         set((prev) => {
           let tabs = [...prev.browserTabs];
           const idx = tabs.findIndex((t) => t.id === tabId);
@@ -407,11 +431,12 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           }
 
           const current = tabs[idx]!;
-          const revived = makeLiveTab(
+          tabs[idx] = buildLiveTab(
             current,
+            embedRuntimeId,
             current.url,
-            current.title || current.url,
-            current.appId || deriveSclawBrowserAppId({ url: current.url }),
+            reviveTitle,
+            reviveAppId,
             current.bound,
             {
               iconUrl: current.iconUrl,
@@ -423,7 +448,6 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
               skipLoginEligible: current.skipLoginEligible,
             },
           );
-          tabs[idx] = revived;
           return { browserTabs: tabs, activeTabId: tabId };
         });
       })();
@@ -488,6 +512,14 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
 
     void (async () => {
       await prepareStoSessionIfNeeded(resolvedUrl);
+      const embedRuntimeId = await registerEmbedRuntime({
+        appTitle: title,
+        initialUrl: resolvedUrl,
+        appId,
+        bound: false,
+      });
+      if (!embedRuntimeId) return;
+
       set((prev) => {
         let tabs = [...prev.browserTabs];
         const idx = tabs.findIndex((t) => t.id === tabId);
@@ -499,6 +531,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           excludeTabId: tabId,
         });
         if (existing) {
+          void unregisterSclawBrowserRuntime(embedRuntimeId);
           // Close the blank tab without purge (no appId chat yet)
           tabs = tabs.filter((t) => t.id !== tabId);
           return { browserTabs: tabs, activeTabId: existing.id };
@@ -511,7 +544,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         }
 
         const current = tabs[idx]!;
-        tabs[idx] = makeLiveTab(current, resolvedUrl, title, appId, false, {
+        tabs[idx] = buildLiveTab(current, embedRuntimeId, resolvedUrl, title, appId, false, {
           registryAppId: undefined,
         });
         return { browserTabs: tabs, activeTabId: tabId };
@@ -561,10 +594,21 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
 
     void (async () => {
       await prepareStoSessionIfNeeded(resolvedUrl);
+      const embedRuntimeId = await registerEmbedRuntime({
+        appTitle: title,
+        initialUrl: resolvedUrl,
+        appId,
+        bound,
+      });
+      if (!embedRuntimeId) return;
+
       set((prev) => {
         let tabs = [...prev.browserTabs];
         const idx = tabs.findIndex((t) => t.id === tabId);
-        if (idx < 0) return prev;
+        if (idx < 0) {
+          void unregisterSclawBrowserRuntime(embedRuntimeId);
+          return prev;
+        }
 
         const existing = findReusableBrowserTab(tabs, {
           url: resolvedUrl,
@@ -573,6 +617,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           excludeTabId: tabId,
         });
         if (existing) {
+          void unregisterSclawBrowserRuntime(embedRuntimeId);
           const closing = tabs[idx]!;
           const cleared = tearDownTabRuntime(closing);
           if (!closing.bound && closing.appId) {
@@ -590,7 +635,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         }
 
         const current = tearDownTabRuntime(tabs[idx]!);
-        tabs[idx] = makeLiveTab(current, resolvedUrl, title, appId, bound, {
+        tabs[idx] = buildLiveTab(current, embedRuntimeId, resolvedUrl, title, appId, bound, {
           iconUrl: current.iconUrl,
           iconKey: current.iconKey,
           tone: current.tone,
@@ -649,10 +694,24 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         const shouldRemount = existing.status === 'suspended' || urlChanged;
 
         if (shouldRemount) {
+          const remountTitle = title || existing.title;
+          const nextBound = existing.bound || bound;
+          const nextAppId = nextBound ? appId : (existing.appId || appId);
+          const embedRuntimeId = await registerEmbedRuntime({
+            appTitle: remountTitle,
+            initialUrl: resolvedUrl,
+            appId: nextAppId,
+            bound: nextBound,
+          });
+          if (!embedRuntimeId) return;
+
           set((prev) => {
             let tabs = [...prev.browserTabs];
             const idx = tabs.findIndex((t) => t.id === existing.id);
-            if (idx < 0) return prev;
+            if (idx < 0) {
+              void unregisterSclawBrowserRuntime(embedRuntimeId);
+              return prev;
+            }
 
             while (countLive(tabs) >= APP_PLAZA_MAX_LIVE_BROWSER_TABS) {
               const victim = pickLruSuspendCandidate(tabs, existing.id);
@@ -661,9 +720,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
             }
 
             const current = tearDownTabRuntime(tabs[idx]!);
-            const nextBound = current.bound || bound;
-            const nextAppId = nextBound ? appId : (current.appId || appId);
-            tabs[idx] = makeLiveTab(current, resolvedUrl, title || current.title, nextAppId, nextBound, {
+            tabs[idx] = buildLiveTab(current, embedRuntimeId, resolvedUrl, remountTitle, nextAppId, nextBound, {
               iconUrl: icons.iconUrl || current.iconUrl,
               iconKey: icons.iconKey || current.iconKey,
               tone: icons.tone || current.tone,
@@ -704,6 +761,14 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         return;
       }
 
+      const embedRuntimeId = await registerEmbedRuntime({
+        appTitle: title,
+        initialUrl: resolvedUrl,
+        appId,
+        bound,
+      });
+      if (!embedRuntimeId) return;
+
       set((prev) => {
         let tabs = [...prev.browserTabs];
         while (countLive(tabs) >= APP_PLAZA_MAX_LIVE_BROWSER_TABS) {
@@ -712,7 +777,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           tabs = tabs.map((t) => (t.id === victim.id ? suspendTab(t) : t));
         }
         const blank = createBlankTab();
-        const live = makeLiveTab(blank, resolvedUrl, title, appId, bound, icons);
+        const live = buildLiveTab(blank, embedRuntimeId, resolvedUrl, title, appId, bound, icons);
         return {
           browserTabs: [...tabs, live],
           activeTabId: live.id,

@@ -108,6 +108,23 @@ function isEmbedWebviewPageUrl(pageUrl: string): boolean {
   }
 }
 
+async function bindEmbedWebContentsWithRetry(input: {
+  runtimeId: string;
+  webContentsId: number;
+  pageUrl: string;
+}): Promise<Awaited<ReturnType<typeof bindSclawBrowserWebContents>>> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await bindSclawBrowserWebContents(input);
+    if (result.ok) return result;
+    if (attempt < 7) {
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 40 * (attempt + 1));
+      });
+    }
+  }
+  return { ok: false };
+}
+
 export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowserFrameProps>(
   function SclawBrowserFrame(
     {
@@ -291,7 +308,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         registerSclawBrowserWebview(el);
 
         markPolicyAuthedFromUrl(pageUrl);
-        void bindSclawBrowserWebContents({
+        void bindEmbedWebContentsWithRetry({
           runtimeId: embedRuntimeId,
           webContentsId,
           pageUrl,

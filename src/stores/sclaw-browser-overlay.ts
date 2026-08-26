@@ -66,22 +66,25 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
   chatSessions: [],
 
   open: (session) => {
-    const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
-    void registerSclawBrowserRuntime({
-      runtimeId: embedRuntimeId,
-      appTitle: session.title,
-      initialUrl: session.url,
-      appId: session.appId,
-      bound: Boolean(session.appId),
-    });
-    set({
-      session,
-      embedRuntimeId,
-      chatPanelOpen: false,
-      chatSessionKey: null,
-      savedMainSessionKey: null,
-      chatSessions: listSclawBrowserEmbedChatSessions(session.appId),
-    });
+    void (async () => {
+      const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
+      const registered = await registerSclawBrowserRuntime({
+        runtimeId: embedRuntimeId,
+        appTitle: session.title,
+        initialUrl: session.url,
+        appId: session.appId,
+        bound: Boolean(session.appId),
+      });
+      if (registered?.ok === false) return;
+      set({
+        session,
+        embedRuntimeId,
+        chatPanelOpen: false,
+        chatSessionKey: null,
+        savedMainSessionKey: null,
+        chatSessions: listSclawBrowserEmbedChatSessions(session.appId),
+      });
+    })();
   },
 
   close: () => {

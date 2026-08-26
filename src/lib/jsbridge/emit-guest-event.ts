@@ -2,6 +2,8 @@ import { invokeIpc } from '@/lib/api-client';
 import {
   BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
   BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
 } from '../../../shared/jsbridge/bridge-events';
 
 export async function emitBridgeGuestEvent(input: {
@@ -23,4 +25,9 @@ export async function emitBridgeGuestEvent(input: {
   return Boolean(result.ok && result.delivered);
 }
 
-export { BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH, BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE };
+export {
+  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
+  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
+};
