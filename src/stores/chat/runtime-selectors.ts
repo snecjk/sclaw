@@ -81,6 +81,7 @@ export function buildChatSessionRuntimeView(
   if (!session) return EMPTY_RUNTIME_VIEW;
   const runtime = session?.runtime ?? null;
   const sending = Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
+  const pendingFinal = Boolean(session?.overlay.awaitingTranscript);
   const lastUser = [...(session?.transcript ?? [])].reverse().find((message) => message.role === 'user');
   const optimisticTimestamp = session?.overlay.optimisticUserMessage?.timestamp;
   const transcriptTimestamp = lastUser?.timestamp;
@@ -96,11 +97,16 @@ export function buildChatSessionRuntimeView(
   const currentTranscriptAt = runtime && transcriptAt !== null && transcriptAt >= runtime.startedAt - 2_000
     ? transcriptAt
     : null;
-  const lastUserMessageAt = sending ? optimisticAt ?? currentTranscriptAt : null;
+  // A terminal run can still be waiting for its authoritative transcript.
+  // Keep the user-turn anchor until history takes over the retained overlay,
+  // without exposing the completed run itself as active/sending.
+  const lastUserMessageAt = sending || pendingFinal
+    ? optimisticAt ?? currentTranscriptAt
+    : null;
   const view: ChatSessionRuntimeView = {
     sending,
     activeRunId: sending ? runtime?.runId ?? null : null,
-    pendingFinal: Boolean(session?.overlay.awaitingTranscript),
+    pendingFinal,
     error: session?.error ? formatChatRuntimeErrorForDisplay(session.error) : null,
     phase: runtime?.phase ?? null,
     lastEventAt: runtime?.lastEventAt ?? 0,

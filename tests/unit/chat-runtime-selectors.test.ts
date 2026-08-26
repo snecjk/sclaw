@@ -61,6 +61,26 @@ describe('canonical chat runtime selectors', () => {
     expect(buildChatSessionRuntimeView(state).lastUserMessageAt).toBeNull();
   });
 
+  it('keeps the current user anchor while a completed turn awaits transcript takeover', () => {
+    const state = createClientSessionState();
+    state.overlay.optimisticUserMessage = {
+      id: 'message-1', role: 'user', content: 'question', timestamp: 2,
+    };
+    state.overlay.streamingMessage = { role: 'assistant', content: 'final answer' };
+    state.overlay.awaitingTranscript = true;
+    state.runtime = {
+      phase: 'completed', runId: 'run-1', idempotencyKey: 'message-1', engineType: 'claude',
+      epoch: 1, sequence: 4, startedAt: 2_000, lastEventAt: 3_000,
+    };
+
+    expect(buildChatSessionRuntimeView(state)).toMatchObject({
+      sending: false,
+      activeRunId: null,
+      pendingFinal: true,
+      lastUserMessageAt: 2_000,
+    });
+  });
+
   it('does not anchor a new background run to the previous transcript user turn', () => {
     const state = createClientSessionState();
     state.transcript = [{ role: 'user', content: 'previous question', timestamp: 1 }];

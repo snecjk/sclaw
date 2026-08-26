@@ -101,4 +101,30 @@ describe('useChatDisplay', () => {
 
     expect(result.current.activeTurn?.activeStream.isProcessing).toBe(true);
   });
+
+  it('keeps a completed final overlay visible until transcript takeover', () => {
+    const userMessage: RawMessage = {
+      id: 'u-final', role: 'user', content: 'who are you', timestamp: 1_000,
+    };
+    const { result } = renderHook(() => useChatDisplay({
+      messages: [userMessage],
+      sending: false,
+      pendingFinal: true,
+      showThinking: true,
+      lastChatEventAt: Date.now(),
+      streamMsg: {
+        id: 'a-final', role: 'assistant', content: 'final answer', timestamp: 2_000,
+      },
+      streamText: 'final answer',
+      streamingMessages: [],
+      streamingToolResults: [],
+      streamingTools: [],
+      lastUserMessageAt: 1_000,
+    }));
+
+    expect(result.current.shouldRenderStreaming).toBe(true);
+    expect(result.current.activeTurn?.turnStableKey).toBe('turn-user-u-final');
+    expect(result.current.activeTurn?.precedingUserMessage).toBe(userMessage);
+    expect(result.current.activeTurn?.activeStream.streamText).toBe('final answer');
+  });
 });

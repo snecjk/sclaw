@@ -116,7 +116,11 @@ export function useChatDisplay(params: {
     streamingTools,
     showThinking,
   );
-  const shouldRenderStreaming = sending && hasAnyStreamContent;
+  // Keep the completed payload mounted until authoritative transcript history
+  // takes over, preventing a blank frame between stream completion and refresh.
+  const retainFinalOverlay = pendingFinal && hasAnyStreamContent;
+  const displayActive = sending || retainFinalOverlay;
+  const shouldRenderStreaming = displayActive && hasAnyStreamContent;
 
   const isStillExecuting = useMemo(() => {
     if (!sending || pendingFinal) return false;
@@ -126,7 +130,7 @@ export function useChatDisplay(params: {
   }, [sending, pendingFinal, hasAnyStreamContent, lastChatEventAt, staleTick]);
 
   const { staticItems, activeTurn } = useMemo(() => {
-    if (!sending) {
+    if (!displayActive) {
       return { staticItems: displayItems, activeTurn: null as null | {
         turnStableKey: string;
         turnMessages: RawMessage[];
@@ -232,6 +236,7 @@ export function useChatDisplay(params: {
     };
   }, [
     displayItems,
+    displayActive,
     sending,
     pendingFinal,
     showThinking,
