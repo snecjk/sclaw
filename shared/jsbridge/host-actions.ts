@@ -1,5 +1,7 @@
 /** Marker returned by Main handlers; Host renderer executes the action and responds to Guest. */
 
+import type { BridgeComposerFillSegment } from './composer-fill-segments';
+
 export const JSBRIDGE_HOST_ACTION_MARKER = '__stoclaw_host_action__' as const;
 
 export type JsBridgeChatTarget = 'embed' | 'main' | 'auto';
@@ -20,6 +22,7 @@ export type JsBridgeHostAction =
   | {
       type: 'chat.fillComposer';
       text: string;
+      segments?: BridgeComposerFillSegment[];
       target: JsBridgeChatTarget;
       send?: boolean;
       openPanel?: boolean;

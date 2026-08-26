@@ -50,21 +50,18 @@ function colLetter(index: number): string {
 
 export function ExcelGridViewer({ buffer, className }: ExcelGridViewerProps) {
   const { t } = useTranslation('chat');
-  const [sheets, setSheets] = useState<SheetData[] | null>(null);
-  const [error, setError] = useState('');
+  /** 解析结果与其对应的 buffer 绑定；result.buffer !== buffer 时视为加载中（派生态，无需 effect 重置） */
+  const [result, setResult] = useState<
+    { buffer: Uint8Array; sheets: SheetData[] } | { buffer: Uint8Array; error: string } | null
+  >(null);
   const [activeSheet, setActiveSheet] = useState(0);
   const [visibleRows, setVisibleRows] = useState(INITIAL_ROWS);
 
   useEffect(() => {
     let cancelled = false;
-    setSheets(null);
-    setError('');
-    setActiveSheet(0);
-    setVisibleRows(INITIAL_ROWS);
 
     void (async () => {
       try {
-        // @ts-ignore — xlsx 无内置 d.ts（与 FilePreviewViewer 既有模式一致）
         const XLSX = await import(/* @vite-ignore */ 'xlsx');
         const workbook = XLSX.read(buffer, { type: 'array' });
         const parsed: SheetData[] = workbook.SheetNames.map((name: string) => {
@@ -101,9 +98,9 @@ export function ExcelGridViewer({ buffer, className }: ExcelGridViewerProps) {
           return { name, rows, colWidths, merge: { spans, covered }, totalRows: rows.length, totalCols };
         });
 
-        if (!cancelled) setSheets(parsed);
+        if (!cancelled) setResult({ buffer, sheets: parsed });
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Excel 解析失败');
+        if (!cancelled) setResult({ buffer, error: e instanceof Error ? e.message : 'Excel 解析失败' });
       }
     })();
 
@@ -112,18 +109,22 @@ export function ExcelGridViewer({ buffer, className }: ExcelGridViewerProps) {
     };
   }, [buffer]);
 
-  if (error) {
+  const current = result !== null && result.buffer === buffer ? result : null;
+
+  if (current && 'error' in current) {
     return (
       <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
         <FileSpreadsheet className="h-12 w-12 text-muted-foreground opacity-40" aria-hidden />
-        <p className="text-destructive">{error}</p>
+        <p className="text-destructive">{current.error}</p>
       </div>
     );
   }
 
-  if (!sheets) {
+  if (!current) {
     return <PreviewLoading label={t('preview.office.parsing', { label: 'Excel' })} variant="spreadsheet" className={className} />;
   }
+
+  const sheets = current.sheets;
 
   const sheet = sheets[Math.min(activeSheet, sheets.length - 1)];
   if (!sheet || sheet.rows.length === 0) {

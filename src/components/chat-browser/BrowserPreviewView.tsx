@@ -7,7 +7,7 @@
  * - 多 tab keep-alive：非活跃 iframe 仅隐藏不卸载，页面状态（登录态/滚动/表单）保留
  * - 同源页面跟踪地址栏 URL（跨域时保持最后一次已知地址）
  */
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -39,30 +39,14 @@ export function BrowserPreviewView({
   const { t } = useTranslation('chat');
   const updateTabUrl = useChatBrowserPreviewStore((s) => s.updateTabUrl);
   const iframeRefs = useRef(new Map<string, HTMLIFrameElement>());
-  /** 每个 tab 的加载态（progress bar 只跟随活跃 tab） */
-  const [loadingTabIds, setLoadingTabIds] = useState<ReadonlySet<string>>(() => new Set());
+  /** 已完成首次 load 的 iframe 挂载代（`${tabId}:${remountKey}`）——仅在 onLoad 事件中更新 */
+  const [loadedMountKeys, setLoadedMountKeys] = useState<ReadonlySet<string>>(() => new Set());
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[tabs.length - 1] ?? null;
 
-  // 新挂载的 tab / force 刷新（remountKey 变化）→ 标记加载中（按 id+remountKey 去重，
-  // 不能依赖 tabs 数组 identity——store 更新会产生新数组导致进度条卡住）
-  const seenMountKeysRef = useRef(new Set<string>());
-  useEffect(() => {
-    const pending: string[] = [];
-    for (const tab of tabs) {
-      const mountKey = `${tab.id}:${tab.remountKey}`;
-      if (!seenMountKeysRef.current.has(mountKey)) {
-        seenMountKeysRef.current.add(mountKey);
-        pending.push(tab.id);
-      }
-    }
-    if (pending.length === 0) return;
-    setLoadingTabIds((prev) => {
-      const next = new Set(prev);
-      for (const id of pending) next.add(id);
-      return next;
-    });
-  }, [tabs]);
+  // 加载态派生：当前挂载代尚未触发 load → 加载中（无需 effect 同步）
+  const mountKeyOf = (tab: ChatBrowserPreviewTab) => `${tab.id}:${tab.remountKey}`;
+  const isTabLoading = (tab: ChatBrowserPreviewTab) => !loadedMountKeys.has(mountKeyOf(tab));
 
   if (!activeTab) {
     return (
@@ -72,17 +56,18 @@ export function BrowserPreviewView({
     );
   }
 
-  const markLoaded = (tabId: string) => {
-    setLoadingTabIds((prev) => {
-      if (!prev.has(tabId)) return prev;
+  const markLoaded = (tab: ChatBrowserPreviewTab) => {
+    const mountKey = mountKeyOf(tab);
+    setLoadedMountKeys((prev) => {
+      if (prev.has(mountKey)) return prev;
       const next = new Set(prev);
-      next.delete(tabId);
+      next.add(mountKey);
       return next;
     });
-    const iframe = iframeRefs.current.get(tabId);
+    const iframe = iframeRefs.current.get(tab.id);
     try {
       const href = iframe?.contentWindow?.location?.href;
-      if (href && href !== 'about:blank') updateTabUrl(sessionKey, tabId, href);
+      if (href && href !== 'about:blank') updateTabUrl(sessionKey, tab.id, href);
     } catch {
       // 跨域页面：保持最后一次已知地址
     }
@@ -103,12 +88,19 @@ export function BrowserPreviewView({
   const handleForward = () => withActiveFrame((win) => win.history.forward());
 
   const handleReload = () => {
-    setLoadingTabIds((prev) => new Set(prev).add(activeTab.id));
+    // 移除当前挂载代的已加载标记 → 进度条重新出现，直到下一次 load
+    const mountKey = mountKeyOf(activeTab);
+    setLoadedMountKeys((prev) => {
+      if (!prev.has(mountKey)) return prev;
+      const next = new Set(prev);
+      next.delete(mountKey);
+      return next;
+    });
     // location.reload() 是跨域白名单 API（HTML spec），可直接调用
     withActiveFrame((win) => win.location.reload());
   };
 
-  const isLoading = loadingTabIds.has(activeTab.id);
+  const isLoading = isTabLoading(activeTab);
 
   return (
     <div className={cn('flex h-full min-h-0 flex-col overflow-hidden', className)}>
@@ -174,7 +166,7 @@ export function BrowserPreviewView({
             id={`chat-browser-frame-${tab.id}`}
             title={tab.title}
             src={tab.url}
-            onLoad={() => markLoaded(tab.id)}
+            onLoad={() => markLoaded(tab)}
             className={cn(
               'absolute inset-0 h-full w-full border-0 bg-white',
               tab.id === activeTab.id ? 'visible' : 'invisible pointer-events-none',

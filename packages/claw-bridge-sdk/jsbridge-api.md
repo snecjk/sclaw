@@ -1,6 +1,6 @@
 # SClaw JSBridge 调用文档
 
-`@sto/claw-bridge-sdk` 官方调用文档 · 协议 `stoclaw-bridge/v1` · SDK 包版本 `1.1.0`
+`@sto/claw-bridge-sdk` 官方调用文档 · 协议 `stoclaw-bridge/v1` · SDK 包版本 `1.1.1`
 
 ---
 
@@ -586,16 +586,25 @@ await stoClaw.openApp({ appId: 'my-app-id', title: '我的应用' });
 
 #### `chat.fillComposer`
 
-向 AI 会话输入框回填文本。
+向 AI 会话输入框回填内容。支持纯文本（`text`）或结构化片段（`segments`）。
 
 **参数**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `text` | `string` | 是 | 回填内容 |
+| `text` | `string` | 二选一 | 向后兼容：等价于单个 `{ type: 'text', text }` segment |
+| `segments` | `ComposerFillSegment[]` | 二选一 | 结构化片段列表；与 `text` 至少提供一个 |
 | `target` | `'embed' \| 'main' \| 'auto'` | 否 | 默认 `auto` |
 | `send` | `boolean` | 否 | `true` 时回填后立即发送 |
 | `openPanel` | `boolean` | 否 | embed 目标时是否先打开右侧面板，默认 `true` |
+
+**`ComposerFillSegment`**
+
+| type | 字段 | 说明 |
+|------|------|------|
+| `text` | `text: string` | 纯文本 |
+| `skill` | `slug: string`, `title?: string` | 技能标签；`title` 缺省时 Host 从广场缓存解析 |
+| `workflow` | `id: string`, `name?: string` | 工作流标签；`name` 缺省时 Host 用 `id` 占位 |
 
 **target 说明**
 
@@ -606,10 +615,21 @@ await stoClaw.openApp({ appId: 'my-app-id', title: '我的应用' });
 | `auto` | 来自 embed webview 时填右侧，否则填主会话 |
 
 ```typescript
+// 纯文本（向后兼容）
 await stoClaw.fillComposer({
   text: '分析当前页面的异常数据',
   target: 'embed',
   openPanel: true,
+});
+
+// 结构化片段：技能 + 文本
+await stoClaw.fillComposer({
+  target: 'embed',
+  openPanel: true,
+  segments: [
+    { type: 'skill', slug: 'quote-assistant' },
+    { type: 'text', text: '帮我新建一个报价' },
+  ],
 });
 ```
 

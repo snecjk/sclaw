@@ -1,4 +1,8 @@
 import { createHostActionEnvelope, type JsBridgeChatTarget } from '../../../../../shared/jsbridge/host-actions';
+import {
+  bridgeComposerFillPlainText,
+  normalizeBridgeComposerFillInput,
+} from '../../../../../shared/jsbridge/composer-fill-segments';
 import type { BridgeHandlerFn } from './types';
 
 function readText(value: unknown): string {
@@ -13,17 +17,22 @@ function parseTarget(value: unknown): JsBridgeChatTarget {
 export const handleChatFillComposer: BridgeHandlerFn = async ({ session, request }) => {
   const params = request.params as {
     text?: string;
+    segments?: unknown;
     target?: JsBridgeChatTarget;
     send?: boolean;
     openPanel?: boolean;
   } | undefined;
-  const text = readText(params?.text);
-  if (!text) {
-    throw Object.assign(new Error('text is required'), { code: 'INVALID_PARAMS' });
+  const segments = normalizeBridgeComposerFillInput({
+    text: params?.text,
+    segments: params?.segments,
+  });
+  if (!segments) {
+    throw Object.assign(new Error('text or segments is required'), { code: 'INVALID_PARAMS' });
   }
   return createHostActionEnvelope({
     type: 'chat.fillComposer',
-    text,
+    text: bridgeComposerFillPlainText(segments),
+    segments,
     target: parseTarget(params?.target),
     send: params?.send === true,
     openPanel: params?.openPanel !== false,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FlowCardAction, FlowCardContentBlock } from '../../../shared/flow-card-protocol';
@@ -11,7 +11,6 @@ import {
   type FlowCardProgressStep,
   type FlowCardProgressStepStatus,
 } from '@/lib/flow-card-progress';
-import { useChatStore } from '@/stores/chat';
 
 /** Render light markdown: **bold** only (matches design copy). */
 function renderInlineEmphasis(text: string) {
@@ -189,23 +188,41 @@ export function FlowCard({ card }: FlowCardProps) {
   const actions = resolveCardActions(card);
   const progressSteps = parseFlowCardProgressSteps(card.data);
   const showProgress = progressSteps.length > 0;
-  const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const previewSyncRef = useRef<{
+    ossKey: string;
+    previewUrl: string;
+    previewMode: string;
+    phase: string;
+  } | null>(null);
 
-  // Keep preview in sync with ossKey / previewUrl (main = right, plaza = left).
+  // Only navigate when preview-driving fields change (new ossKey / phase refresh).
+  // Skip initial mount so opening embed chat or scrolling history does not jump the left browser.
   useEffect(() => {
     const ossKey = typeof card.data?.ossKey === 'string' ? card.data.ossKey.trim() : '';
     const previewUrl = typeof card.data?.previewUrl === 'string' ? card.data.previewUrl.trim() : '';
+    const previewMode = typeof card.data?.previewMode === 'string' ? card.data.previewMode.trim() : '';
+    const current = { ossKey, previewUrl, previewMode, phase: card.phase };
+    const prev = previewSyncRef.current;
+    previewSyncRef.current = current;
+
     if (!ossKey && !previewUrl) return;
-    // Skip awaiting_upload — no file yet.
     if (card.phase === 'awaiting_upload') return;
-    syncFlowCardPreview(card, sessionKey);
+    if (!prev) return;
+
+    const previewChanged =
+      prev.ossKey !== ossKey
+      || prev.previewUrl !== previewUrl
+      || prev.previewMode !== previewMode
+      || prev.phase !== card.phase;
+    if (!previewChanged) return;
+
+    syncFlowCardPreview(card);
   }, [
     card.cardId,
     card.phase,
     card.data?.ossKey,
     card.data?.previewUrl,
     card.data?.previewMode,
-    sessionKey,
   ]);
 
   return (

@@ -48,9 +48,18 @@ export interface NavJumpParams {
   title?: string;
 }
 
+/** 结构化输入框片段（`chat.fillComposer` segments） */
+export type ComposerFillSegment =
+  | { type: 'text'; text: string }
+  | { type: 'skill'; slug: string; title?: string }
+  | { type: 'workflow'; id: string; name?: string };
+
 /** 4. 回填会话输入框 */
 export interface ChatFillComposerParams {
-  text: string;
+  /** 向后兼容：等价于单个 text segment */
+  text?: string;
+  /** 结构化片段；与 text 至少提供一个 */
+  segments?: ComposerFillSegment[];
   /**
    * embed = 应用广场 webview 右侧会话；
    * main = 首页/主会话左侧对话框；

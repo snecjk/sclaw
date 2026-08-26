@@ -14,6 +14,9 @@ import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
 import { useChatStore } from '@/stores/chat';
 import { useComposerFlowStore } from '@/stores/composer-flow';
 import { openFlowCardPreview } from '@/lib/flow-card-preview';
+import { resolveComposerFillSegments, type ResolvedComposerFill } from '@/lib/jsbridge/resolve-composer-fill-segments';
+import type { BridgeComposerFillSegment } from '../../../shared/jsbridge/composer-fill-segments';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 
 function okResponse(request: BridgeRequest, data: unknown): BridgeResponse {
   return {
@@ -53,17 +56,49 @@ async function ensureEmbedChatReady(tabId: string, createNew = false): Promise<s
   return next?.chatSessionKey ?? null;
 }
 
-async function sendToSession(sessionKey: string, text: string): Promise<void> {
+function resolveHostComposerFill(input: {
+  text: string;
+  segments?: BridgeComposerFillSegment[];
+}): ResolvedComposerFill {
+  if (input.segments?.length) {
+    return resolveComposerFillSegments(input.segments);
+  }
+  const text = input.text.trim();
+  if (!text) {
+    return { segments: [], plainText: '', skillMetas: [], workflows: [] };
+  }
+  return {
+    segments: [{ type: 'text', text }],
+    plainText: text,
+    skillMetas: [],
+    workflows: [],
+  };
+}
+
+async function sendToSession(
+  sessionKey: string,
+  input: {
+    text: string;
+    segments?: PersistedComposerSegment[];
+    skillMetas?: import('@/types/skill-meta').SkillMeta[];
+    workflows?: Array<{ id: string; name: string; source?: string }>;
+  },
+): Promise<void> {
   const chat = useChatStore.getState();
   if (chat.currentSessionKey !== sessionKey) {
     chat.switchSession(sessionKey);
   }
-  await dispatchChatSend({ text });
+  await dispatchChatSend({
+    text: input.text,
+    composerSegments: input.segments,
+    skillMetas: input.skillMetas,
+    workflows: input.workflows,
+  });
 }
 
 async function fillEmbedComposer(input: {
   runtimeId?: string | null;
-  text: string;
+  resolved: ResolvedComposerFill;
   send?: boolean;
   openPanel?: boolean;
   createSession?: boolean;
@@ -80,19 +115,26 @@ async function fillEmbedComposer(input: {
   const sessionKey = await ensureEmbedChatReady(tab.id, input.createSession === true);
   const seedToken = useJsBridgeHostStore.getState().setEmbedComposerSeed(
     tab.embedRuntimeId,
-    input.text,
-    false,
+    {
+      text: input.resolved.plainText,
+      segments: input.resolved.segments,
+    },
   );
 
   if (input.send && sessionKey) {
-    await sendToSession(sessionKey, input.text);
+    await sendToSession(sessionKey, {
+      text: input.resolved.plainText,
+      segments: input.resolved.segments,
+      skillMetas: input.resolved.skillMetas,
+      workflows: input.resolved.workflows,
+    });
   }
 
   return { sessionKey, seedToken };
 }
 
 async function fillMainComposer(input: {
-  text: string;
+  resolved: ResolvedComposerFill;
   send?: boolean;
   newSession?: boolean;
   title?: string;
@@ -111,11 +153,19 @@ async function fillMainComposer(input: {
   }
 
   if (input.send) {
-    await sendToSession(sessionKey, input.text);
+    await sendToSession(sessionKey, {
+      text: input.resolved.plainText,
+      segments: input.resolved.segments,
+      skillMetas: input.resolved.skillMetas,
+      workflows: input.resolved.workflows,
+    });
     return { sessionKey };
   }
 
-  useJsBridgeHostStore.getState().setMainComposerSeed(input.text, false);
+  useJsBridgeHostStore.getState().setMainComposerSeed({
+    text: input.resolved.plainText,
+    segments: input.resolved.segments,
+  });
   return { sessionKey };
 }
 
@@ -173,18 +223,22 @@ export async function executeJsBridgeHostAction(
       return okResponse(request, { ok: true });
     }
     case 'chat.fillComposer': {
+      const resolved = resolveHostComposerFill({
+        text: action.text,
+        segments: action.segments,
+      });
       const target = resolveChatTarget(action.target, action.runtimeId);
       if (target === 'embed') {
         const result = await fillEmbedComposer({
           runtimeId: action.runtimeId,
-          text: action.text,
+          resolved,
           send: action.send,
           openPanel: action.openPanel,
         });
         return okResponse(request, { target: 'embed', ...result });
       }
       const result = await fillMainComposer({
-        text: action.text,
+        resolved,
         send: action.send,
         newSession: false,
       });
@@ -192,17 +246,23 @@ export async function executeJsBridgeHostAction(
     }
     case 'chat.openSession': {
       if (action.target === 'main') {
-        const result = await fillMainComposer({
+        const resolved = resolveHostComposerFill({
           text: action.text ?? '',
+        });
+        const result = await fillMainComposer({
+          resolved,
           send: action.send,
           newSession: true,
           title: action.title,
         });
         return okResponse(request, { target: 'main', ...result });
       }
+      const resolved = resolveHostComposerFill({
+        text: action.text ?? '',
+      });
       const result = await fillEmbedComposer({
         runtimeId: action.runtimeId,
-        text: action.text ?? '',
+        resolved,
         send: action.send,
         openPanel: true,
         createSession: true,

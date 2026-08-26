@@ -34,6 +34,7 @@ export type {
   ChatCompleteResponseFormat,
   ChatCompleteResult,
   ChatFillComposerParams,
+  ComposerFillSegment,
   ChatOpenSessionParams,
   ChatSendMessageParams,
   ChatTarget,

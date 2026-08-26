@@ -21,6 +21,12 @@ interface WordDocViewerProps {
   className?: string;
 }
 
+/** 渲染结果与 buffer 绑定；result.buffer !== buffer 时视为加载中（派生态，无需 effect 重置） */
+type WordRenderResult =
+  | { buffer: Uint8Array; kind: 'docx' }
+  | { buffer: Uint8Array; kind: 'mammoth'; html: string }
+  | { buffer: Uint8Array; kind: 'error'; error: string };
+
 /** mammoth 兜底时的文档 HTML 外壳样式（沿用原 FilePreviewViewer 的排版） */
 const MAMMOTH_SHELL_STYLE = `
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
@@ -34,24 +40,27 @@ th{background:#f8f8f8}
 img{max-width:100%}
 `;
 
+/** 可选 npm 包：绕过 Vite 静态分析，未安装时返回 null */
+async function importOptionalModule<T = Record<string, unknown>>(specifier: string): Promise<T | null> {
+  try {
+    const load = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<T>;
+    return await load(specifier);
+  } catch {
+    return null;
+  }
+}
+
 export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProps) {
   const { t } = useTranslation('chat');
   const containerRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
-  const [docxRendered, setDocxRendered] = useState(false);
-  const [mammothHtml, setMammothHtml] = useState<string | null>(null);
-  const [error, setError] = useState('');
+  const [result, setResult] = useState<WordRenderResult | null>(null);
   const [fitScale, setFitScale] = useState(1);
   const [scaledHeight, setScaledHeight] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let observer: ResizeObserver | null = null;
-    setDocxRendered(false);
-    setMammothHtml(null);
-    setError('');
-    setFitScale(1);
-    setScaledHeight(null);
 
     const computeFit = () => {
       const outer = outerRef.current;
@@ -67,10 +76,17 @@ export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProp
     };
 
     void (async () => {
-      // 1) docx-preview 高保真分支
-      try {
-        // @ts-ignore — 可选依赖，未安装时走 mammoth 兜底
-        const docxPreview = await import(/* @vite-ignore */ 'docx-preview');
+      // 1) docx-preview 高保真分支（可选依赖，未安装时走 mammoth）
+      const docxPreview = await importOptionalModule<{
+        renderAsync: (
+          data: ArrayBuffer,
+          bodyContainer: HTMLElement,
+          styleContainer?: HTMLElement,
+          options?: Record<string, unknown>,
+        ) => Promise<void>;
+      }>('docx-preview');
+      if (docxPreview) {
+        try {
         const container = containerRef.current;
         if (cancelled || !container) return;
         container.innerHTML = '';
@@ -84,7 +100,7 @@ export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProp
           renderEndnotes: true,
         });
         if (cancelled) return;
-        setDocxRendered(true);
+        setResult({ buffer, kind: 'docx' });
         computeFit();
         // 面板宽度变化时重算缩放
         if (outerRef.current) {
@@ -92,20 +108,22 @@ export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProp
           observer.observe(outerRef.current);
         }
         return; // docx-preview 渲染成功
-      } catch {
-        // 未安装或渲染失败 → mammoth 兜底
+        } catch {
+          // 渲染失败 → mammoth 兜底
+        }
       }
 
       // 2) mammoth 兜底分支
       try {
-        // @ts-ignore — mammoth 无内置 d.ts
         const mammoth = await import(/* @vite-ignore */ 'mammoth');
-        const result = await mammoth.convertToHtml({
+        const converted = await mammoth.convertToHtml({
           arrayBuffer: uint8ArrayToArrayBuffer(buffer),
         });
-        if (!cancelled) setMammothHtml(result.value);
+        if (!cancelled) setResult({ buffer, kind: 'mammoth', html: converted.value });
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Word 预览失败');
+        if (!cancelled) {
+          setResult({ buffer, kind: 'error', error: e instanceof Error ? e.message : 'Word 预览失败' });
+        }
       }
     })();
 
@@ -115,25 +133,27 @@ export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProp
     };
   }, [buffer]);
 
-  if (error) {
+  const current = result !== null && result.buffer === buffer ? result : null;
+
+  if (current?.kind === 'error') {
     return (
       <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
         <FileText className="h-12 w-12 text-muted-foreground opacity-40" aria-hidden />
         <p className="font-medium text-foreground">{fileName}</p>
-        <p className="text-destructive">{error}</p>
+        <p className="text-destructive">{current.error}</p>
       </div>
     );
   }
 
   // mammoth 兜底：iframe srcDoc
-  if (mammothHtml !== null) {
+  if (current?.kind === 'mammoth') {
     const srcDoc = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>${MAMMOTH_SHELL_STYLE}</style>
 </head>
-<body>${mammothHtml}</body>
+<body>${current.html}</body>
 </html>`;
     return (
       <iframe
@@ -158,7 +178,7 @@ export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProp
           style={fitScale < 1 ? { transform: `scale(${fitScale})`, transformOrigin: 'top center' } : undefined}
         />
       </div>
-      {!docxRendered ? (
+      {current?.kind !== 'docx' ? (
         <div className="absolute inset-0 bg-[var(--sto-panel-bg)]">
           <PreviewLoading label={t('preview.office.parsing', { label: 'Word' })} variant="document" />
         </div>

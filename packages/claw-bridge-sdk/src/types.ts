@@ -113,8 +113,17 @@ export interface NavOpenAppParams {
 
 export type ChatTarget = 'embed' | 'main' | 'auto';
 
+/** 结构化输入框片段（`chat.fillComposer` segments） */
+export type ComposerFillSegment =
+  | { type: 'text'; text: string }
+  | { type: 'skill'; slug: string; title?: string }
+  | { type: 'workflow'; id: string; name?: string };
+
 export interface ChatFillComposerParams {
-  text: string;
+  /** 向后兼容：等价于单个 text segment */
+  text?: string;
+  /** 结构化片段；与 text 至少提供一个 */
+  segments?: ComposerFillSegment[];
   target?: ChatTarget;
   send?: boolean;
   openPanel?: boolean;

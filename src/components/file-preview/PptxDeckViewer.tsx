@@ -31,27 +31,25 @@ interface PptxPreviewerInstance {
   destroy: () => void;
 }
 
+/** 加载结果与 buffer 绑定；result.buffer !== buffer 时视为加载中（派生态，无需 effect 重置） */
+type PptxLoadResult =
+  | { buffer: Uint8Array; slideCount: number }
+  | { buffer: Uint8Array; error: string };
+
 export function PptxDeckViewer({ buffer, fileName, className }: PptxDeckViewerProps) {
   const { t } = useTranslation('chat');
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const previewerRef = useRef<PptxPreviewerInstance | null>(null);
-  const [error, setError] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [result, setResult] = useState<PptxLoadResult | null>(null);
   const [slideIndex, setSlideIndex] = useState(0);
-  const [slideCount, setSlideCount] = useState(0);
   const [fitScale, setFitScale] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
-    setError('');
-    setLoaded(false);
-    setSlideIndex(0);
-    setSlideCount(0);
 
     void (async () => {
       try {
-        // @ts-ignore — pptx-preview 无内置 d.ts
         const { init } = await import(/* @vite-ignore */ 'pptx-preview');
         const container = containerRef.current;
         if (cancelled || !container) return;
@@ -66,11 +64,12 @@ export function PptxDeckViewer({ buffer, fileName, className }: PptxDeckViewerPr
 
         await previewer.preview(uint8ArrayToArrayBuffer(buffer));
         if (cancelled) return;
-        setSlideCount(previewer.slideCount);
+        setResult({ buffer, slideCount: previewer.slideCount });
         setSlideIndex(previewer.currentIndex);
-        setLoaded(true);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'PPT 预览失败');
+        if (!cancelled) {
+          setResult({ buffer, error: e instanceof Error ? e.message : 'PPT 预览失败' });
+        }
       }
     })();
 
@@ -80,6 +79,10 @@ export function PptxDeckViewer({ buffer, fileName, className }: PptxDeckViewerPr
       previewerRef.current = null;
     };
   }, [buffer]);
+
+  const current = result !== null && result.buffer === buffer ? result : null;
+  const loaded = current !== null && !('error' in current);
+  const slideCount = current !== null && !('error' in current) ? current.slideCount : 0;
 
   // 适应宽度缩放
   useEffect(() => {
@@ -105,23 +108,29 @@ export function PptxDeckViewer({ buffer, fileName, className }: PptxDeckViewerPr
     setSlideIndex(previewer.currentIndex);
   };
 
-  // 键盘翻页
+  // 键盘翻页（逻辑内联，避免依赖不稳定的函数引用）
   useEffect(() => {
     if (!loaded) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') goTo(slideIndex - 1);
-      if (event.key === 'ArrowRight') goTo(slideIndex + 1);
+      const delta = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+      if (delta === 0) return;
+      const previewer = previewerRef.current;
+      if (!previewer || slideCount === 0) return;
+      const next = Math.max(0, Math.min(slideCount - 1, slideIndex + delta));
+      if (next === slideIndex) return;
+      previewer.renderSingleSlide(next);
+      setSlideIndex(previewer.currentIndex);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [loaded, slideIndex, slideCount]);
 
-  if (error) {
+  if (current && 'error' in current) {
     return (
       <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
         <Presentation className="h-12 w-12 text-muted-foreground opacity-40" aria-hidden />
         <p className="font-medium text-foreground">{fileName}</p>
-        <p className="text-destructive">{error}</p>
+        <p className="text-destructive">{current.error}</p>
       </div>
     );
   }

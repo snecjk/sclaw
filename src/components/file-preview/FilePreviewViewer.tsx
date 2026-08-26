@@ -4,7 +4,7 @@
  * (HTML, PDF, Markdown, web links, Office docs, CSV, code) in an iframe or fallback UI.
  */
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { ExternalLink, FileText, RefreshCw, Maximize, Minimize, Table, FileSpreadsheet, Presentation } from 'lucide-react';
+import { ExternalLink, FileText, Maximize, Minimize, Table, FileSpreadsheet, Presentation } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,7 @@ import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { previewBridgeHttpFetch } from '@/lib/preview-bridge-fetch';
 import { isExtensionlessWebUrl, isHttpUrl, isRemoteFileHtmlUrl, normalizeLocalFilePath, resolvePreviewMimeType } from '@/lib/preview-url';
-import { loadPreviewBinary, uint8ArrayToArrayBuffer } from '@/lib/preview-binary-load';
+import { loadPreviewBinary } from '@/lib/preview-binary-load';
 import { resolvePreviewPathOnHost } from '@/lib/preview-href';
 import {
   HTML_PREVIEW_IFRAME_SANDBOX,
@@ -20,7 +20,11 @@ import {
   preparePreviewSrcDoc,
 } from '@/lib/preview-srcdoc';
 import { UserWatermark } from '@/components/layout/UserWatermark';
-// @ts-ignore — highlight.js v10 ships without bundled .d.ts
+import { ExcelGridViewer } from './ExcelGridViewer';
+import { WordDocViewer } from './WordDocViewer';
+import { PptxDeckViewer } from './PptxDeckViewer';
+import { PreviewLoading } from './PreviewLoading';
+// @ts-expect-error — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
 
@@ -111,11 +115,6 @@ function isOfficeFile(mimeType: string, filePath: string): { type: 'excel' | 'wo
   return { type: null };
 }
 
-type OfficeData =
-  | { type: 'excel'; data: unknown[][] }
-  | { type: 'word'; html: string }
-  | { type: 'ppt'; buffer: Uint8Array };
-
 export function FilePreviewViewer({
   filePath: rawFilePath,
   fileName,
@@ -177,7 +176,7 @@ export function FilePreviewViewer({
   const [textError, setTextError] = useState<string>('');
   const [htmlContent, setHtmlContent] = useState<string>('');
   const [htmlLoading, setHtmlLoading] = useState(false);
-  const [officeData, setOfficeData] = useState<OfficeData | null>(null);
+  const [officeBuffer, setOfficeBuffer] = useState<Uint8Array | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState<string>('');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -367,50 +366,26 @@ export function FilePreviewViewer({
     };
   }, [filePath, effectiveMime]);
 
-  // Load Office files (Excel / Word / PPT) — local paths and remote OSS URLs
+  // Load Office files (Excel / Word / PPT) — local paths and remote OSS URLs.
+  // 这里只负责取二进制，解析/渲染交给各类型专用查看器（ExcelGridViewer / WordDocViewer / PptxDeckViewer）。
   useEffect(() => {
     const office = isOfficeFile(effectiveMime, filePath);
     if (!office.type) {
-      setOfficeData(null);
+      setOfficeBuffer(null);
       setOfficeLoading(false);
       setOfficeError('');
       return;
     }
 
     let cancelled = false;
-    setOfficeData(null);
+    setOfficeBuffer(null);
     setOfficeError('');
     setOfficeLoading(true);
 
     void (async () => {
       try {
         const buffer = await loadPreviewBinary(filePath);
-
-        if (office.type === 'excel') {
-          try {
-            // @ts-ignore
-            const XLSX = await import(/* @vite-ignore */ 'xlsx');
-            const workbook = XLSX.read(buffer, { type: 'array' });
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as unknown[][];
-            if (!cancelled) setOfficeData({ type: 'excel', data });
-          } catch {
-            throw new Error('Excel 预览库未安装（pnpm add xlsx）');
-          }
-        } else if (office.type === 'word') {
-          try {
-            // @ts-ignore
-            const mammoth = await import(/* @vite-ignore */ 'mammoth');
-            const result = await mammoth.convertToHtml({
-              arrayBuffer: uint8ArrayToArrayBuffer(buffer),
-            });
-            if (!cancelled) setOfficeData({ type: 'word', html: result.value });
-          } catch {
-            throw new Error('Word 预览库未安装（pnpm add mammoth）');
-          }
-        } else if (office.type === 'ppt') {
-          if (!cancelled) setOfficeData({ type: 'ppt', buffer });
-        }
+        if (!cancelled) setOfficeBuffer(buffer);
       } catch (e) {
         if (!cancelled) {
           const msg = e instanceof Error ? e.message : '预览失败';
@@ -471,18 +446,13 @@ export function FilePreviewViewer({
 
     const Icon = office.type === 'excel' ? FileSpreadsheet : office.type === 'ppt' ? Presentation : FileText;
     const label = office.type === 'excel' ? 'Excel' : office.type === 'ppt' ? 'PowerPoint' : 'Word';
+    const loadingVariant = office.type === 'excel' ? 'spreadsheet' : office.type === 'ppt' ? 'slides' : 'document';
 
     if (officeLoading) {
-      return (
-        <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-          <RefreshCw className="h-5 w-5 animate-spin" />
-          正在解析 {label} 文件…
-        </div>
-      );
+      return <PreviewLoading label={`正在解析 ${label} 文件…`} variant={loadingVariant} className={className} />;
     }
 
     if (officeError) {
-      const isMissingLib = officeError.includes('未安装');
       let friendlyError = officeError;
       if (officeError.includes('EPERM') || officeError.includes('EACCES')) {
         friendlyError = '文件被系统锁定，暂时无法预览';
@@ -495,84 +465,21 @@ export function FilePreviewViewer({
           <div className="text-center">
             <p className="font-medium text-foreground">{fileName}</p>
             <p className="mt-1 text-xs text-destructive">{friendlyError}</p>
-            {isMissingLib && (
-              <p className="mt-1 text-xs">安装依赖后可预览：{office.type === 'excel' ? 'pnpm add xlsx' : 'pnpm add mammoth'}</p>
-            )}
           </div>
           <OpenExternalButton filePath={filePath} />
         </div>
       );
     }
 
-    if (officeData?.type === 'excel' && officeData.data.length > 0) {
-      const data = officeData.data;
-      return (
-        <div className={cn('h-full overflow-auto bg-white dark:bg-[#0d1117] p-4', className)}>
-          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <FileSpreadsheet className="h-4 w-4" />
-            <span>{data.length} 行 · {data[0]?.length ?? 0} 列</span>
-          </div>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-muted/60">
-                {Array.isArray(data[0]) && data[0].map((cell, i) => (
-                  <th key={i} className="border border-border px-3 py-2 text-left font-medium text-foreground">
-                    {String(cell ?? '')}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.slice(1).map((row, ri) => (
-                <tr key={ri} className={ri % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                  {Array.isArray(row) && row.map((cell, ci) => (
-                    <td key={ci} className="border border-border px-3 py-2 text-foreground">
-                      {String(cell ?? '')}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-    }
+    if (!officeBuffer) return null;
 
-    if (officeData?.type === 'word') {
-      const srcDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
-h1,h2,h3,h4,h5,h6{margin-top:1.5em;margin-bottom:0.5em}
-code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
-pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
-blockquote{border-left:4px solid #ddd;margin:0;padding-left:16px;color:#666}
-table{border-collapse:collapse;width:100%;margin:1em 0}
-th,td{border:1px solid #ddd;padding:8px;text-align:left}
-th{background:#f8f8f8}
-img{max-width:100%}
-</style>
-</head>
-<body>${officeData.html}</body>
-</html>`;
-      return (
-        <iframe
-          key={filePath}
-          srcDoc={srcDoc}
-          title={fileName}
-          className={cn('h-full min-w-0 w-full border-0', className)}
-          sandbox="allow-scripts"
-        />
-      );
+    if (office.type === 'excel') {
+      return <ExcelGridViewer buffer={officeBuffer} className={className} />;
     }
-
-    if (officeData?.type === 'ppt') {
-      return <PptxPreviewPanel buffer={officeData.buffer} className={className} />;
+    if (office.type === 'word') {
+      return <WordDocViewer buffer={officeBuffer} fileName={fileName} className={className} />;
     }
-
-    return null;
+    return <PptxDeckViewer buffer={officeBuffer} fileName={fileName} className={className} />;
   };
 
   const content = (() => {
@@ -586,10 +493,7 @@ img{max-width:100%}
         if (isRemoteFileHtmlUrl(filePath)) {
           if (htmlLoading) {
             return (
-              <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-                <RefreshCw className="h-5 w-5 animate-spin" />
-                正在加载 HTML 预览…
-              </div>
+              <PreviewLoading label="正在加载 HTML 预览…" variant="text" className={className} />
             );
           }
           if (htmlContent) {
@@ -632,10 +536,7 @@ img{max-width:100%}
       if (effectiveMime === 'text/markdown') {
         if (textLoading) {
           return (
-            <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-              <RefreshCw className="h-5 w-5 animate-spin" />
-              正在加载预览…
-            </div>
+            <PreviewLoading label="正在加载预览…" variant="text" className={className} />
           );
         }
         if (textError) {
@@ -654,10 +555,7 @@ img{max-width:100%}
       if (effectiveMime === 'text/plain' || effectiveMime === 'application/json' || effectiveMime === 'text/csv') {
         if (textLoading) {
           return (
-            <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-              <RefreshCw className="h-5 w-5 animate-spin" />
-              正在加载文件…
-            </div>
+            <PreviewLoading label="正在加载文件…" variant="text" className={className} />
           );
         }
         if (textError) {
@@ -715,10 +613,7 @@ img{max-width:100%}
     if (effectiveMime === 'text/markdown') {
       if (mdLoading) {
         return (
-          <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-            <RefreshCw className="h-5 w-5 animate-spin" />
-            正在加载预览…
-          </div>
+          <PreviewLoading label="正在加载预览…" variant="text" className={className} />
         );
       }
       if (mdError) {
@@ -735,10 +630,7 @@ img{max-width:100%}
     if (tableData && tableData.length > 0) {
       if (textLoading) {
         return (
-          <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-            <RefreshCw className="h-5 w-5 animate-spin" />
-            正在加载文件…
-          </div>
+          <PreviewLoading label="正在加载文件…" variant="text" className={className} />
         );
       }
       if (textError) {
@@ -789,10 +681,7 @@ img{max-width:100%}
     if (isText) {
       if (textLoading) {
         return (
-          <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-            <RefreshCw className="h-5 w-5 animate-spin" />
-            正在加载文件…
-          </div>
+          <PreviewLoading label="正在加载文件…" variant="text" className={className} />
         );
       }
       if (textError) {
@@ -864,54 +753,6 @@ function ImagePreview({ src, fileName, className }: { src: string; fileName: str
       />
     </div>
   );
-}
-
-function PptxPreviewPanel({ buffer, className }: { buffer: Uint8Array; className?: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const previewerRef = useRef<any>(null);
-  const [error, setError] = useState<string>('');
-
-  useEffect(() => {
-    let cancelled = false;
-    setError('');
-
-    void (async () => {
-      try {
-        // @ts-ignore
-        const { init } = await import(/* @vite-ignore */ 'pptx-preview');
-        if (cancelled) return;
-
-        if (containerRef.current && !previewerRef.current) {
-          previewerRef.current = init(containerRef.current, {
-            width: 960,
-            height: 540,
-          });
-        }
-
-        previewerRef.current?.preview(buffer.buffer);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'PPT 预览失败');
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [buffer]);
-
-  if (error) {
-    return (
-      <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-sm text-muted-foreground', className)}>
-        <Presentation className="h-12 w-12 opacity-40" />
-        <p className="text-destructive">{error}</p>
-        <p className="text-xs">pptx-preview 库未安装（pnpm add pptx-preview）</p>
-      </div>
-    );
-  }
-
-  return <div ref={containerRef} className={cn('h-full w-full', className)} />;
 }
 
 function MarkdownPreviewPane({ content, className }: { content: string; className?: string }) {

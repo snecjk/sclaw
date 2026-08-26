@@ -126,8 +126,10 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   useEffect(() => {
     const grew = browserTabs.length > prevBrowserTabCountRef.current;
     prevBrowserTabCountRef.current = browserTabs.length;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- activate newly opened browser tab
     if (grew) setActiveTabKind('browser');
     if (browserTabs.length > 0 && previewMode === 'closed') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-open panel when first browser tab arrives
       setPreviewMode('split');
     }
   }, [browserTabs.length, previewMode]);
@@ -144,7 +146,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
       const latest = visiblePreviewFiles[visiblePreviewFiles.length - 1];
       if (latest?.filePath) {
         setActiveTabKind('file');
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- reconcile active tab kind with remaining tabs
+         
         setActivePreviewFilePath(latest.filePath);
       } else {
         setPreviewMode('closed');
@@ -169,7 +171,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
       const latest = visiblePreviewFiles[visiblePreviewFiles.length - 1];
       if (latest?.filePath) {
         // 产物列表收缩时把活跃 tab 同步到仍存在的文件。
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync active tab when file list shrinks
+         
         setActivePreviewFilePath(latest.filePath);
       }
     }

@@ -2,7 +2,7 @@
 
 SClaw JSBridge SDK — 供嵌入 SClaw webview 的 `*.sto.cn` H5 页面调用宿主能力。
 
-协议版本：`stoclaw-bridge/v1` · 包版本：`1.1.0`
+协议版本：`stoclaw-bridge/v1` · 包版本：`1.1.1`
 
 ## 安装
 
