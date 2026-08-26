@@ -55,6 +55,7 @@ import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
 import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
+import { getTurnTokenService } from '../services/turn-token-service';
 import { getProviderService } from '../services/providers/provider-service';
 import {
   getOpenClawProviderKey,
@@ -97,6 +98,9 @@ export function registerIpcHandlers(
   // Catch embed webview window.open as early as guest WebContents are created.
   void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
     installSclawEmbedBrowserWindowOpenHook();
+  });
+  void import('./services/sclaw-embed-browser-guest-preferences').then(({ installSclawEmbedBrowserGuestPreferencesHook }) => {
+    installSclawEmbedBrowserGuestPreferencesHook();
   });
 
   // Unified request protocol (non-breaking: legacy channels remain available)
@@ -2185,6 +2189,13 @@ function registerUsageHandlers(): void {
       : undefined;
     return await getRecentTokenUsageHistory(safeLimit);
   });
+
+  ipcMain.handle('turn-token:get', async (_, sessionKey: unknown, turnIndex: unknown) => {
+    if (typeof sessionKey !== 'string' || typeof turnIndex !== 'number' || !Number.isFinite(turnIndex)) {
+      return null;
+    }
+    return getTurnTokenService().get(sessionKey, Math.max(0, Math.floor(turnIndex)));
+  });
 }
 /**
  * Window control handlers (for custom title bar on Windows)
@@ -2838,7 +2849,7 @@ function registerSessionHandlers(): void {
     const webContentsId = typeof payload?.webContentsId === 'number' ? payload.webContentsId : 0;
     if (!runtimeId || !webContentsId) return { ok: false };
     const { bindSclawEmbedBrowserWebContents } = await import('./services/sclaw-embed-browser-runtime');
-    const meta = bindSclawEmbedBrowserWebContents({
+    const meta = await bindSclawEmbedBrowserWebContents({
       runtimeId,
       webContentsId,
       pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
@@ -2914,5 +2925,21 @@ function registerSessionHandlers(): void {
     const { setSclawEmbedBrowserPointerPassthrough } = await import('./services/sclaw-embed-browser-runtime');
     const applied = setSclawEmbedBrowserPointerPassthrough(runtimeId, payload?.passthrough === true);
     return { ok: applied };
+  });
+
+  ipcMain.handle('sclaw-browser:openDevTools', async (_, payload: {
+    runtimeId?: string;
+    toggle?: boolean;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const {
+      openSclawEmbedBrowserDevTools,
+      toggleSclawEmbedBrowserDevTools,
+    } = await import('./services/sclaw-embed-browser-runtime');
+    const opened = payload?.toggle
+      ? toggleSclawEmbedBrowserDevTools(runtimeId)
+      : openSclawEmbedBrowserDevTools(runtimeId);
+    return { ok: opened };
   });
 }

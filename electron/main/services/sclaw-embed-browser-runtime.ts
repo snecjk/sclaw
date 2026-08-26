@@ -21,9 +21,14 @@ import {
   detachSclawEmbedBrowserShortcutHandler,
 } from './sclaw-embed-browser-shortcuts';
 import {
+  attachSclawEmbedBrowserDevToolsMenu,
+  detachSclawEmbedBrowserDevToolsMenu,
+} from './sclaw-embed-browser-devtools';
+import {
   attachSclawEmbedBrowserWindowOpenHandler,
   detachSclawEmbedBrowserWindowOpenHandler,
 } from './sclaw-embed-browser-window-open';
+import { ensureBridgeConsentStore } from './jsbridge/consent-store';
 import {
   createBridgeSession,
   destroyBridgeSessionsForRuntime,
@@ -139,12 +144,12 @@ export function linkSclawEmbedBrowserChatSession(runtimeId: string, chatSessionK
   chatSessionIndex.set(chatSessionKey, runtimeId);
 }
 
-export function bindSclawEmbedBrowserWebContents(input: {
+export async function bindSclawEmbedBrowserWebContents(input: {
   runtimeId: string;
   webContentsId: number;
   pageUrl?: string;
   pageTitle?: string;
-}): SclawEmbedBrowserRuntimeMeta {
+}): Promise<SclawEmbedBrowserRuntimeMeta> {
   const entry = ensureRuntime(input.runtimeId);
   entry.webContentsId = input.webContentsId;
   entry.boundAt = Date.now();
@@ -159,8 +164,10 @@ export function bindSclawEmbedBrowserWebContents(input: {
   });
   attachSclawEmbedBrowserShortcutHandler(input.webContentsId);
   attachSclawEmbedBrowserWindowOpenHandler(input.webContentsId, input.runtimeId);
+  attachSclawEmbedBrowserDevToolsMenu(input.webContentsId);
 
   const pageUrl = entry.pageUrl || input.pageUrl || entry.initialUrl;
+  await ensureBridgeConsentStore();
   const bridgeSession = createBridgeSession({
     runtimeId: input.runtimeId,
     webContentsId: input.webContentsId,
@@ -207,6 +214,7 @@ export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {
   setSclawEmbedBrowserPointerPassthrough(runtimeId, false);
   detachSclawEmbedBrowserShortcutHandler(entry.webContentsId);
   detachSclawEmbedBrowserWindowOpenHandler(entry.webContentsId);
+  detachSclawEmbedBrowserDevToolsMenu(entry.webContentsId ?? 0);
   disconnectSclawEmbedBridge(runtimeId);
   destroyBridgeSessionsForRuntime(runtimeId);
   if (entry.chatSessionKey) {
@@ -318,6 +326,34 @@ export function setSclawEmbedBrowserPointerPassthrough(runtimeId: string, passth
     wc.setIgnoreMouseEvents(true, { forward: true });
   } else {
     wc.setIgnoreMouseEvents(false);
+  }
+  return true;
+}
+
+/** Open (or focus) detached DevTools for the embed webview guest page. */
+export function openSclawEmbedBrowserDevTools(runtimeId: string): boolean {
+  const entry = runtimes.get(runtimeId);
+  if (!entry?.webContentsId) return false;
+  const wc = resolveWebContents(entry);
+  if (!wc || wc.isDestroyed()) return false;
+  if (wc.isDevToolsOpened()) {
+    wc.devToolsWebContents?.focus();
+    return true;
+  }
+  wc.openDevTools({ mode: 'detach' });
+  return true;
+}
+
+/** Toggle detached DevTools for the embed webview guest page. */
+export function toggleSclawEmbedBrowserDevTools(runtimeId: string): boolean {
+  const entry = runtimes.get(runtimeId);
+  if (!entry?.webContentsId) return false;
+  const wc = resolveWebContents(entry);
+  if (!wc || wc.isDestroyed()) return false;
+  if (wc.isDevToolsOpened()) {
+    wc.closeDevTools();
+  } else {
+    wc.openDevTools({ mode: 'detach' });
   }
   return true;
 }

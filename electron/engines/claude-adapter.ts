@@ -7,6 +7,7 @@ import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
+import { captureClaudeTurnTokenUsage } from '../services/turn-token-capture';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, patchEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -833,6 +834,13 @@ export async function consumeClaudeQuery(
       }
 
       if (message.type === 'result') {
+        captureClaudeTurnTokenUsage({
+          sessionKey,
+          resultMessage: message,
+          model: typeof (message as { model?: unknown }).model === 'string'
+            ? (message as { model: string }).model
+            : undefined,
+        });
         flushPendingToolInputDelta();
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));

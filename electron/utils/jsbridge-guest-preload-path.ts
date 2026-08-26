@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { app } from 'electron';
 import { JSBRIDGE_GUEST_PRELOAD_CJS } from '../../shared/jsbridge-guest-preload-source';
 
@@ -22,5 +23,6 @@ export function getJsBridgeGuestPreloadPath(): string {
 /** file:// URL for webview preload attribute. */
 export function getJsBridgeGuestPreloadUrl(): string {
   const path = getJsBridgeGuestPreloadPath();
-  return `file://${path}`;
+  // Windows paths must be file:///C:/... — string concat breaks on win32.
+  return pathToFileURL(path).href;
 }

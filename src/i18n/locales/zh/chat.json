@@ -335,7 +335,7 @@
     },
     "runtime": {
         "errors": {
-            "recoveryTimeout": "运行确认超时：浏览器自动化可能仍在进行，请查看左侧页面或稍后重试。",
+            "recoveryTimeout": "运行确认超时，请稍后重试。",
             "rateLimit": "模型请求过于频繁，请稍等片刻后重试。"
         }
     }

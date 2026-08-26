@@ -128,7 +128,7 @@ export function dispatchLearningCaseAction(
       if (!targetCode) return fail('MISSING_TARGET_CODE');
       const title = context.displayTitle?.trim() || targetCode;
       const applied = navigateToMainChatWithComposerHandoff(context.navigate, {
-        workflow: { id: targetCode, name: title },
+        workflow: { id: targetCode, name: title, source: 'template' },
         ...(prompt ? { suffixText: prompt } : {}),
       });
       return applied ? { ok: true, navigatedTo: '/', draftApplied: true } : fail('TARGET_UNAVAILABLE');

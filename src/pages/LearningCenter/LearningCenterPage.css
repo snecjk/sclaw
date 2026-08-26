@@ -79,55 +79,10 @@
   min-width: 0;
 }
 
-.learning-center-split__aside {
-  flex: 0 0 0;
-  width: 0;
-  min-width: 0;
-  overflow: hidden;
-  background: var(--lc-canvas-bg);
-}
-
-.learning-center-split--open .learning-center-tutorial-sheet {
-  position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: none !important;
-  height: auto !important;
-}
-
-/* Narrow screens keep the sheet as an overlay. Desktop splits: 564px pane beside adaptive content. */
-@media (max-width: 63.9375rem) {
-  .learning-center-split--open > .learning-center-split__aside {
-    position: absolute;
-    top: calc(var(--sto-content-header-h, 44px) + var(--sto-shell-card-gap, 0.5rem));
-    right: var(--sto-shell-card-gap, 0.5rem);
-    bottom: var(--sto-shell-card-gap, 0.5rem);
-    left: auto;
-    z-index: 40;
-    flex: none;
-    width: min(var(--lc-detail-panel-w), calc(100% - 1rem));
-    min-width: 0;
-    max-width: calc(100% - 1rem);
-  }
-}
-
-/* Tutorial open: left pane fills remaining space beside the 564px sheet. */
 @media (min-width: 64rem) {
   .learning-center-split--open > .learning-center-page {
-    grid-column: 1;
+    grid-column: 1 / 4;
     grid-row: 2;
-  }
-
-  .learning-center-split--open > .learning-center-split__aside {
-    position: relative;
-    grid-column: 3;
-    grid-row: 2;
-    z-index: auto;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    align-self: stretch;
   }
 
   .learning-center-page--detail-open {

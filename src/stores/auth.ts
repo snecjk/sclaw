@@ -9,6 +9,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { fetchAccountSwitchOptions as requestAccountSwitchOptions, isAccountSwitchHostApiMissing, isAuthSessionCommitHostApiMissing, postAccountSwitchDirect } from '@/lib/account-switch-fetch';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { setSiteDepartmentTypes } from '../../shared/site-user-utils';
+import { normalizeSsoRoleCodes } from '../../shared/sso-roles';
 import type { ClientSiteAccessCheckData } from '../../shared/client-site-access';
 
 interface StoSyncResponse {
@@ -46,6 +47,8 @@ export interface SsoUserInfo {
   departmentName: string;
   categoryCode: string;
   isAdministrator: boolean;
+  /** SSO 角色编码列表（getRoles=true 时由登录接口填充） */
+  roles?: string[];
   loginMode: string;
   openId: string;
   signature: string;
@@ -146,6 +149,7 @@ function coerceSsoUserInfo(raw: Record<string, unknown>): SsoUserInfo {
     departmentName: String(raw.departmentName ?? ''),
     categoryCode: String(raw.categoryCode ?? ''),
     isAdministrator: Boolean(raw.isAdministrator),
+    roles: normalizeSsoRoleCodes(raw.roles),
     loginMode: String(raw.loginMode ?? ''),
     openId: String(raw.openId ?? ''),
     signature: String(raw.signature ?? ''),

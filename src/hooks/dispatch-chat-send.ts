@@ -10,6 +10,7 @@ import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import { isSingleTemplateWorkflowSend } from '@/lib/workflow-template-send';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
 export interface DispatchChatSendOptions {
@@ -18,7 +19,11 @@ export interface DispatchChatSendOptions {
   targetAgentId?: string | null;
   dingTalkMentions?: DingTalkMention[];
   workflowId?: string | null;
-  /** 工作流来源：'mine' = 我的工作流-已发布（以工作流上下文发送，不取模版 schema）。 */
+  /**
+   * 工作流来源：
+   * - `'mine'` = 我的工作流实例（不取模版 schema）
+   * - `'template'` / 空 = 模版（学习中心 / 首页推荐 / 官方安装），走 sendWithWorkflow
+   */
   workflowSource?: string | null;
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
@@ -108,15 +113,15 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     useChatRuntimeV2Store.getState().sessionsByKey[useChatStore.getState().currentSessionKey]?.error,
   );
 
-  const nonMineWorkflows = resolvedWorkflows.filter((wf) => wf.source !== 'mine');
-  const hasMineWorkflow = resolvedWorkflows.some((wf) => wf.source === 'mine');
-  const useTemplateWorkflowPath = !gatewayText
-    && resolvedSkillMetas.length === 0
-    && nonMineWorkflows.length === 1
-    && !hasMineWorkflow;
+  // 单模版：学习中心 / 首页推荐 chip（可有 gateway bake）与官方安装 ?workflowId=（无 bake）
+  // 统一走 sendWithWorkflow，由客户端挂 pending + 参数表单；不再要求 !gatewayText。
+  const useTemplateWorkflowPath = isSingleTemplateWorkflowSend({
+    workflows: resolvedWorkflows,
+    skillCount: resolvedSkillMetas.length,
+  });
 
   if (useTemplateWorkflowPath) {
-    const templateWorkflow = nonMineWorkflows[0];
+    const templateWorkflow = resolvedWorkflows[0];
     const workflowSession = await materializeDefaultSessionForWorkflowShortcut();
     const workflowChatState = useChatStore.getState();
     if (
