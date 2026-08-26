@@ -1,7 +1,7 @@
 /**
  * SidebarBrandHeader — 侧栏顶品牌区（含字 logo + 版本 + 折叠钮）。
  *
- * 省区 Mac：chrome 行（DEV 在红绿灯后 + 折叠）+ 品牌行；
+ * 省区 Mac：chrome 行（红绿灯安全区 + DEV）+ 品牌行（logo 与折叠钮同一行垂直居中）；
  * 省区 Win / 完整 layout：单行（Win 在版本号后展示 DEV）。
  */
 import sidebarLogoSvg from '@/assets/sidebar-logo.svg';
@@ -90,19 +90,24 @@ export function SidebarBrandHeader({
       <>
         <div
           className={cn(
-            'drag-region flex min-h-[var(--sto-sidebar-chrome-h)] shrink-0 items-start justify-between gap-2 px-2 pt-[var(--sto-sidebar-chrome-toggle-inset-top)]',
+            'drag-region flex min-h-[var(--sto-sidebar-chrome-h)] shrink-0 items-start gap-2 px-2 pt-[var(--sto-sidebar-chrome-toggle-inset-top)]',
             'pl-20',
           )}
         >
           <div className="no-drag flex min-w-0 flex-1 items-center">
             <ChromeEnvBadge />
           </div>
-          {toggle}
         </div>
-        <div className={cn('mt-1.5 flex shrink-0 items-center pb-1.5', SIDEBAR_BRAND_OUTER_X)}>
-          <div className={cn('min-w-0', SIDEBAR_BRAND_INNER_X)}>
+        <div
+          className={cn(
+            'mt-1.5 flex shrink-0 items-center justify-between gap-2 pb-1.5',
+            SIDEBAR_BRAND_OUTER_X,
+          )}
+        >
+          <div className={cn('min-w-0 flex-1', SIDEBAR_BRAND_INNER_X)}>
             <SidebarBrandTitle displayVersion={displayVersion} showEnvBadgeAfterVersion={false} />
           </div>
+          {toggle}
         </div>
       </>
     );
