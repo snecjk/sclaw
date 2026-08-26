@@ -1,6 +1,6 @@
 {
   "name": "@sto/claw-bridge-sdk",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "SClaw JSBridge SDK for *.sto.cn H5 pages embedded in SClaw webview",
   "license": "UNLICENSED",
   "author": "caoyu@sto.cn",

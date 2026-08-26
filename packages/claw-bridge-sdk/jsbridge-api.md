@@ -985,6 +985,29 @@ stoClaw.on(BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE, ({ pass, ossKey }) => {
 | `quote:preview-refresh` | 宿主导航到确认页（打开 / 刷新 URL） | `{ ossKey, phase, mode, url }` |
 | `bridge:session-destroyed` | Bridge 会话销毁（无需 subscribe） | `{ reason? }` |
 
+#### Payload 字段说明（报价业务）
+
+| 事件 | 字段 | 类型 | 说明 |
+|------|------|------|------|
+| `quote:validation-complete` | `ossKey` | `string` | 当前报价表 OSS 路径 |
+| | `pass` | `boolean` | `true` 校验通过；`false` 校验失败 |
+| | `errorCount` | `number?` | 失败时的错误条数 |
+| | `phase` | `string?` | 发卡阶段，如 `errors` / `ready_to_save` |
+| `quote:save-complete` | `ossKey` | `string` | 已保存报价的 OSS key |
+| | `quoteId` | `string?` | 保存后的报价单号 |
+| | `phase` | `string?` | 一般为 `editing` |
+| | `url` | `string?` | 宿主导航 URL（`clawQuotation?ossKey=`） |
+| `quote:submit-complete` | `ossKey` | `string` | 提交关联的 OSS key |
+| | `quoteId` | `string?` | 报价单号 |
+| | `detailUrl` | `string?` | 审批详情页 URL，**页面应优先跳转此字段** |
+| | `phase` | `string?` | 一般为 `submitted` |
+| | `url` | `string?` | 宿主同步导航 URL |
+| `quote:preview-refresh` | `ossKey` | `string` | 导航关联的 OSS key |
+| | `phase` | `string?` | 触发时的卡阶段 |
+| | `mode` | `'open' \| 'refresh'?` | `open` 首次/重传打开；`refresh` 保存或提交后重开 |
+| | `url` | `string?` | 宿主已导航到的 URL |
+
+> `quote:preview-refresh` 只表示宿主导航，**校验 / 保存 / 提交** 的业务语义请分别监听上表前三个事件。
 
 catalog 应用默认允许订阅 `quote:*`；其它事件需在应用 `bridgePolicy.allowedEventPatterns` 中配置。
 
