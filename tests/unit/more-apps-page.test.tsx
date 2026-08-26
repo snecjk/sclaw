@@ -10,18 +10,12 @@ const fetchRegistryMock = vi.fn();
 const hasStoPolicyAuthInEmbedSessionMock = vi.fn();
 const hasTeambitionAuthInEmbedSessionMock = vi.fn();
 let mockCanUseAppDev = true;
-let mockIsAdministrator = true;
 
 vi.mock('@/hooks/use-app-dev-permission', () => ({
   useAppDevPermission: () => ({
     canUseAppDev: mockCanUseAppDev,
     loaded: true,
   }),
-}));
-
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: (selector: (state: { user: { isAdministrator: boolean } }) => unknown) =>
-    selector({ user: { isAdministrator: mockIsAdministrator } }),
 }));
 
 vi.mock('@/lib/app-plaza-api', () => ({
@@ -164,7 +158,6 @@ describe('MoreAppsPage server catalog', () => {
   beforeEach(() => {
     localStorage.clear();
     mockCanUseAppDev = true;
-    mockIsAdministrator = true;
     resetStore();
     mockDevApps = [];
     refreshDevAppsMock.mockReset().mockResolvedValue(undefined);
@@ -790,8 +783,7 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
   });
 
-  it('only shows template management to platform administrators', async () => {
-    mockIsAdministrator = false;
+  it('shows template management to app-dev whitelist users', async () => {
     render(<MoreAppsPage />);
 
     fireEvent.pointerDown(screen.getByRole('button', { name: '创建应用' }), {
@@ -800,7 +792,7 @@ describe('MoreAppsPage server catalog', () => {
     });
 
     expect(await screen.findByRole('menuitem', { name: '创建应用' })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: '管理应用模板' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '管理应用模板' })).toBeInTheDocument();
   });
 
   it('shows a fallback when a banner image fails', async () => {

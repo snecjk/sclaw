@@ -55,6 +55,17 @@ describe('app-dev split metrics', () => {
 });
 
 describe('app-dev workbench split wiring', () => {
+  it('uses a dedicated template publish confirmation component', () => {
+    const plazaSrc = readFileSync(
+      resolve(process.cwd(), 'src/components/more-apps/AppPlazaDevAppPane.tsx'),
+      'utf8',
+    );
+
+    expect(plazaSrc).toContain("import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';");
+    expect(plazaSrc).toContain('<TemplatePublishConfirmDialog');
+    expect(plazaSrc).not.toMatch(/<ConfirmDialog\s+open=\{templatePublishConfirm\}/);
+  });
+
   it('mounts AppDevSplitBody in both workbench shells', () => {
     const plazaSrc = readFileSync(
       resolve(process.cwd(), 'src/components/more-apps/AppPlazaDevAppPane.tsx'),

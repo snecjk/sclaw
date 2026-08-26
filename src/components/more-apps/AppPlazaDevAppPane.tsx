@@ -26,6 +26,7 @@ import { AppDevComposer } from '@/components/app-dev/AppDevComposer';
 import { AppDevSplitBody } from '@/components/app-dev/AppDevSplitBody';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -683,12 +684,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         }}
         onCancel={() => setConfirmRestore(false)}
       />
-      <ConfirmDialog
+      <TemplatePublishConfirmDialog
         open={templatePublishConfirm}
-        title="发布模板新版本"
-        message="发布后会自动生成下一个 patch 版本，并用于之后新建的应用；已有应用不会变化。确认继续吗？"
-        confirmLabel="确认发布"
-        confirmingLabel="发布中…"
         onConfirm={async () => {
           setTemplatePublishing(true);
           try {

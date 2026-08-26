@@ -48,7 +48,6 @@ import { importUserApp } from '@/lib/app-dev-api';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useAppDevPermission } from '@/hooks/use-app-dev-permission';
-import { useAuthStore } from '@/stores/auth';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 /** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
@@ -111,7 +110,6 @@ export function MoreAppsPage() {
   const devApps = useAppDevCatalogStore((s) => s.apps);
   const refreshDevApps = useAppDevCatalogStore((s) => s.refresh);
   const { canUseAppDev } = useAppDevPermission();
-  const canManageAppTemplates = useAuthStore((state) => Boolean(state.user?.isAdministrator));
 
   useEffect(() => {
     if (!canUseAppDev && activeTab === 'dev-apps') {
@@ -190,22 +188,22 @@ export function MoreAppsPage() {
       categoriesLoading || categoriesError
         ? []
         : categories
-            // 历史误建的「链接器/连接器」APP 分类不再展示；链接器入口已迁至技能广场页签
-            .filter((c) => {
-              const name = c.name.trim();
-              const id = c.id.trim().toLowerCase();
-              return !(
-                name === '链接器' ||
-                name === '连接器' ||
-                id === 'connectors' ||
-                id === 'connector'
-              );
-            })
-            .map((c) => ({
-              id: c.id as MarketCategory,
-              label: c.name,
-              count: categoryCounts[c.id] ?? 0,
-            }));
+          // 历史误建的「链接器/连接器」APP 分类不再展示；链接器入口已迁至技能广场页签
+          .filter((c) => {
+            const name = c.name.trim();
+            const id = c.id.trim().toLowerCase();
+            return !(
+              name === '链接器' ||
+              name === '连接器' ||
+              id === 'connectors' ||
+              id === 'connector'
+            );
+          })
+          .map((c) => ({
+            id: c.id as MarketCategory,
+            label: c.name,
+            count: categoryCounts[c.id] ?? 0,
+          }));
     return [featured, ...serverItems];
   }, [categories, categoryCounts, categoriesLoading, categoriesError, marketTotal, t]);
 
@@ -826,7 +824,7 @@ export function MoreAppsPage() {
                   <Plus className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
                   {t('moreApps.createApp', { defaultValue: '创建应用' })}
                 </DropdownMenuItem>
-                {canManageAppTemplates ? (
+                {canUseAppDev ? (
                   <DropdownMenuItem onSelect={() => setTemplateManagerOpen(true)}>
                     <FileCode2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
                     管理应用模板
@@ -909,7 +907,7 @@ export function MoreAppsPage() {
       {canUseAppDev ? (
         <CreateAppDialog open={createAppOpen} onClose={() => setCreateAppOpen(false)} />
       ) : null}
-      {canUseAppDev && canManageAppTemplates ? (
+      {canUseAppDev ? (
         <AppTemplateManagerDialog
           open={templateManagerOpen}
           onClose={() => setTemplateManagerOpen(false)}
