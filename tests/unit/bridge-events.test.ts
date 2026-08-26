@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+  BRIDGE_EVENT_QUOTE,
   isBridgeEventAllowed,
   isValidBridgeEventName,
   matchBridgeEventPattern,
@@ -39,9 +39,9 @@ function makeSession(appId = 'customer-quote'): BridgeSession {
 
 describe('bridge-events', () => {
   it('validates event names and patterns', () => {
-    expect(isValidBridgeEventName('quote:preview-refresh')).toBe(true);
+    expect(isValidBridgeEventName('quote:event')).toBe(true);
     expect(isValidBridgeEventName('Quote:Bad')).toBe(false);
-    expect(matchBridgeEventPattern('quote:*', BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH)).toBe(true);
+    expect(matchBridgeEventPattern('quote:*', BRIDGE_EVENT_QUOTE)).toBe(true);
     expect(matchBridgeEventPattern('quote:*', 'chat:done')).toBe(false);
   });
 
@@ -50,20 +50,20 @@ describe('bridge-events', () => {
       appId: 'customer-quote',
       bound: true,
     }));
-    expect(isBridgeEventAllowed(BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH, patterns)).toBe(true);
+    expect(isBridgeEventAllowed(BRIDGE_EVENT_QUOTE, patterns)).toBe(true);
   });
 
   it('subscribe and unsubscribe update session registry', () => {
     const session = makeSession();
     const { subscribed, denied } = subscribeBridgeEvents(session, [
-      BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+      BRIDGE_EVENT_QUOTE,
       'chat:unknown',
     ]);
-    expect(subscribed).toEqual([BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH]);
+    expect(subscribed).toEqual([BRIDGE_EVENT_QUOTE]);
     expect(denied).toEqual(['chat:unknown']);
-    expect(session.eventSubscriptions.has(BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH)).toBe(true);
+    expect(session.eventSubscriptions.has(BRIDGE_EVENT_QUOTE)).toBe(true);
 
-    unsubscribeBridgeEvents(session, [BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH]);
+    unsubscribeBridgeEvents(session, [BRIDGE_EVENT_QUOTE]);
     expect(session.eventSubscriptions.size).toBe(0);
   });
 });

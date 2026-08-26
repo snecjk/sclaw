@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 /** Progress-step helpers for flow_card validating UI (design-aligned, result-gated). */
 
 export type FlowCardProgressStepStatus = 'pending' | 'active' | 'done' | 'error';
@@ -71,4 +73,39 @@ export function resolveGatedProgressStatuses(
     if (outcome === 'fail' && i === stepCount - 1) return 'error';
     return 'done';
   });
+}
+
+/** Gated progress animation — body/actions should wait until this returns true. */
+export function useFlowCardProgressAnimation(card: {
+  cardId: string;
+  data?: Record<string, unknown>;
+}) {
+  const steps = parseFlowCardProgressSteps(card.data);
+  const outcome = parseFlowCardValidationOutcome(card.data);
+  const [finishingIndex, setFinishingIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!outcome || steps.length === 0) {
+      setFinishingIndex(null);
+      return;
+    }
+    setFinishingIndex(0);
+    const timers: number[] = [];
+    for (let i = 1; i <= steps.length; i += 1) {
+      timers.push(
+        window.setTimeout(() => {
+          setFinishingIndex(i >= steps.length ? null : i);
+        }, i * 280),
+      );
+    }
+    return () => {
+      for (const id of timers) window.clearTimeout(id);
+    };
+  }, [outcome, steps.length, card.cardId]);
+
+  const statuses = resolveGatedProgressStatuses(steps.length, outcome, finishingIndex);
+  const allDone = steps.length === 0 || (outcome != null && finishingIndex == null);
+  const progressSettled = steps.length === 0 || allDone;
+
+  return { steps, outcome, finishingIndex, statuses, allDone, progressSettled };
 }

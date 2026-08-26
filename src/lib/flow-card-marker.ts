@@ -122,13 +122,91 @@ function stripBareFlowCardJson(text: string): string {
   return text;
 }
 
+/** Short validation status lines that belong in flow_card, not as a separate bubble. */
+export function isFlowCardCompanionText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (/^(校验通过|校验未通过|校验失败|正在校验|已完成)[!.。…\s]*$/u.test(trimmed)) return true;
+  if (/^报价对象\s+.+\s+校验(通过|未通过)[。.]?$/u.test(trimmed)) return true;
+  return false;
+}
+
+export function stripFlowCardCompanionText(text: string): string {
+  if (!text.trim()) return text;
+  const kept = text
+    .split('\n')
+    .filter((line) => !isFlowCardCompanionText(line))
+    .join('\n')
+    .trim();
+  return kept;
+}
+
+/** True when a ```flow_card fence has started but not yet closed (streaming). */
+export function hasOpenFlowCardFence(text: string): boolean {
+  if (!/```flow_card\b/i.test(text)) return false;
+  FLOW_CARD_FENCE_REGEX.lastIndex = 0;
+  const closed = FLOW_CARD_FENCE_REGEX.test(text);
+  FLOW_CARD_FENCE_REGEX.lastIndex = 0;
+  return !closed;
+}
+
+function tryParsePartialFlowCardPayload(raw: string): FlowCardPayload | null {
+  const jsonStart = raw.indexOf('{');
+  if (jsonStart < 0) return null;
+
+  let slice = raw.slice(jsonStart).replace(/```\s*$/, '').trim();
+  for (let attempt = 0; attempt < 40 && slice.length > 1; attempt += 1) {
+    const payload = parseFlowCardPayload(tryParseJsonObject(slice));
+    if (payload) return payload;
+
+    slice = slice
+      .replace(/,\s*"[^"]*"\s*:\s*("[^"]*)?$/, '')
+      .replace(/,\s*"[^"]*"\s*:\s*\{[^}]*$/, '')
+      .replace(/,\s*"[^"]*"\s*:\s*\[[^\]]*$/, '')
+      .replace(/,\s*$/, '');
+    if (!slice.endsWith('}')) slice = `${slice}}`;
+  }
+  return null;
+}
+
+function extractMinimalStreamingFlowCardPayload(raw: string): FlowCardPayload | null {
+  const cardId = raw.match(/"cardId"\s*:\s*"([^"\\]+)"/)?.[1]?.trim();
+  const phase = raw.match(/"phase"\s*:\s*"([^"\\]+)"/)?.[1]?.trim();
+  if (!cardId || !phase) return null;
+
+  const payload: FlowCardPayload = { cardId, phase };
+  const domain = raw.match(/"domain"\s*:\s*"([^"\\]+)"/)?.[1]?.trim();
+  if (domain) payload.domain = domain;
+  const title = raw.match(/"title"\s*:\s*"([^"]*)"/)?.[1];
+  if (title) payload.title = title;
+  return payload;
+}
+
+/**
+ * Parse flow_card during streaming — complete fence first, then partial JSON inside an open fence.
+ */
+export function findStreamingFlowCardInText(text: string): FlowCardPayload | null {
+  const complete = findFlowCardInText(text);
+  if (complete) return complete;
+  if (!hasOpenFlowCardFence(text)) return null;
+
+  const openMatch = text.match(/```flow_card\s*\r?\n?([\s\S]*)$/i);
+  const inner = openMatch?.[1]?.trim();
+  if (!inner) return null;
+
+  return tryParsePartialFlowCardPayload(inner) ?? extractMinimalStreamingFlowCardPayload(inner);
+}
+
 export function stripFlowCardFences(text: string): string {
+  const hadFence = /```flow_card\b/i.test(text);
   const withoutFences = text
     .replace(/```flow_card\s*\r?\n?([\s\S]*?)```/gi, '')
     // Incomplete streaming fence: drop from opener to end
     .replace(/```flow_card\b[\s\S]*$/i, '');
 
-  return stripBareFlowCardJson(stripGenericJsonFenceIfFlowCard(withoutFences)).trim();
+  const stripped = stripBareFlowCardJson(stripGenericJsonFenceIfFlowCard(withoutFences)).trim();
+  if (!stripped) return '';
+  return hadFence ? stripFlowCardCompanionText(stripped) : stripped;
 }
 
 export function findFlowCardFenceInMessage(content: unknown): FlowCardPayload | null {
@@ -144,6 +222,29 @@ export function findFlowCardFenceInMessage(content: unknown): FlowCardPayload | 
       && typeof (block as { text?: string }).text === 'string'
     ) {
       const parsed = findFlowCardInText((block as { text: string }).text);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
+/** Like findFlowCardFenceInMessage but tolerates incomplete streaming fences. */
+export function findStreamingFlowCardInMessage(content: unknown): FlowCardPayload | null {
+  const complete = findFlowCardFenceInMessage(content);
+  if (complete) return complete;
+
+  if (typeof content === 'string') {
+    return findStreamingFlowCardInText(content);
+  }
+  if (!Array.isArray(content)) return null;
+  for (const block of content) {
+    if (
+      block
+      && typeof block === 'object'
+      && (block as { type?: string }).type === 'text'
+      && typeof (block as { text?: string }).text === 'string'
+    ) {
+      const parsed = findStreamingFlowCardInText((block as { text: string }).text);
       if (parsed) return parsed;
     }
   }

@@ -1,19 +1,13 @@
 /**
  * Open / re-open / refresh flow-card preview:
- * - Main chat session → right browser preview panel
- * - App Plaza embed chat → left webview (force navigate; never plain reload)
+ * - Main chat session → preview panel
+ * - App Plaza embed chat → business webview (force navigate; never plain reload)
  */
 import { buildVipClawQuotationUrl } from '../../shared/vip-claw-quotation-url';
 import type { FlowCardContentBlock } from '../../shared/flow-card-protocol';
+import type { QuoteBridgeNotifyKind } from '../../shared/quote-bridge-channels';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
-import {
-  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
-  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
-  emitBridgeGuestEvent,
-} from '@/lib/jsbridge/emit-guest-event';
-import { parseFlowCardValidationOutcome } from '@/lib/flow-card-progress';
+import { emitQuoteFlowCardBridgeEvents } from '@/lib/quote-bridge-emit';
 import { openChatBrowserPreview } from '@/stores/chat-browser-preview';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useChatStore } from '@/stores/chat';
@@ -37,7 +31,6 @@ export function resolveFlowCardPreviewUrl(card: FlowCardContentBlock): string | 
 export function resolveFlowCardPreviewMode(card: FlowCardContentBlock): FlowCardPreviewMode {
   const raw = readString(card.data, 'previewMode');
   if (raw === 'refresh') return 'refresh';
-  // After save/submit, default to re-open (business SPA may have left clawQuotation).
   if (card.phase === 'editing' || card.phase === 'submitted') return 'refresh';
   return 'open';
 }
@@ -76,83 +69,26 @@ function resolveEmbedRuntimeId(sessionKey: string): string | null {
   return tab?.embedRuntimeId ?? null;
 }
 
-function emitQuoteBridgeEvents(
+/** Sync preview — navigate business page and emit `quote:event` when requested. */
+export function syncFlowCardPreview(
   card: FlowCardContentBlock,
-  sessionKey: string,
-  url: string,
-  mode: FlowCardPreviewMode,
+  sessionKey?: string,
+  notify?: QuoteBridgeNotifyKind,
 ): void {
-  const runtimeId = resolveEmbedRuntimeId(sessionKey);
-  if (!runtimeId) return;
-
-  const ossKey = readString(card.data, 'ossKey');
-  if (!ossKey) return;
-
-  void emitBridgeGuestEvent({
-    runtimeId,
-    name: BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
-    eventPayload: {
-      ossKey,
-      phase: card.phase,
-      mode,
-      url,
-    },
-  });
-
-  const outcome = parseFlowCardValidationOutcome(card.data);
-  if (outcome) {
-    const errorCount = typeof card.data?.errorCount === 'number' ? card.data.errorCount : undefined;
-    void emitBridgeGuestEvent({
-      runtimeId,
-      name: BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
-      eventPayload: {
-        ossKey,
-        pass: outcome === 'pass',
-        errorCount,
-        phase: card.phase,
-      },
-    });
-  }
-
-  if (mode === 'refresh' && card.phase === 'editing') {
-    void emitBridgeGuestEvent({
-      runtimeId,
-      name: BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
-      eventPayload: {
-        ossKey,
-        quoteId: readString(card.data, 'quoteId') ?? undefined,
-        phase: card.phase,
-        url,
-      },
-    });
-  }
-
-  if (mode === 'refresh' && card.phase === 'submitted') {
-    void emitBridgeGuestEvent({
-      runtimeId,
-      name: BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
-      eventPayload: {
-        ossKey,
-        quoteId: readString(card.data, 'quoteId') ?? undefined,
-        detailUrl: readString(card.data, 'detailUrl') ?? undefined,
-        phase: card.phase,
-        url,
-      },
-    });
-  }
-}
-
-/** Sync preview for a flow_card — main right / plaza left. */
-export function syncFlowCardPreview(card: FlowCardContentBlock, sessionKey?: string): void {
-  const url = resolveFlowCardPreviewUrl(card);
-  if (!url) return;
   const key = sessionKey ?? useChatStore.getState().currentSessionKey;
+  const url = resolveFlowCardPreviewUrl(card);
   const mode = resolveFlowCardPreviewMode(card);
-  openFlowCardPreview({
-    url,
-    title: readString(card.data, 'previewTitle') || '报价确认',
-    mode,
-    sessionKey: key,
-  });
-  emitQuoteBridgeEvents(card, key, url, mode);
+  if (url) {
+    openFlowCardPreview({
+      url,
+      title: readString(card.data, 'previewTitle') || '报价确认',
+      mode,
+      sessionKey: key,
+    });
+  }
+  if (!notify) return;
+  const runtimeId = resolveEmbedRuntimeId(key);
+  if (runtimeId) {
+    emitQuoteFlowCardBridgeEvents(card, runtimeId, url, mode, notify);
+  }
 }

@@ -933,81 +933,57 @@ SClaw **不会**无差别推送给所有 webview。业务页需先 `subscribe` /
 ```typescript
 import {
   stoClaw,
-  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
-  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
+  BRIDGE_EVENT_QUOTE,
+  type QuoteBridgeEventPayload,
 } from '@sto/claw-bridge-sdk';
 
-// 推荐：按业务语义分别注册
-const offValidation = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE, (payload) => {
-  const { pass, ossKey } = payload as { pass: boolean; ossKey: string };
+const off = await stoClaw.addListener(BRIDGE_EVENT_QUOTE, (payload) => {
+  const { channel, ...data } = payload as QuoteBridgeEventPayload;
+  switch (channel) {
+    case 'preview.open':
+      break;
+    case 'save.complete':
+    case 'batch-adjust.params-ready':
+    case 'batch-adjust.validate-fail':
+    case 'batch-adjust.draft-complete':
+      break;
+    default:
+      break;
+  }
 });
 
-const offSave = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_SAVE_COMPLETE, (payload) => {
-  const { quoteId, ossKey } = payload as { quoteId?: string; ossKey: string };
-});
-
-const offSubmit = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE, (payload) => {
-  const { detailUrl, quoteId } = payload as { detailUrl?: string; quoteId?: string };
-});
-
-// 导航同步（可选）
-const offPreview = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH, (payload) => {
-  const { ossKey, mode, url } = payload as { ossKey: string; mode?: string; url?: string };
-});
-
-offValidation();
-```
-
-或手动两步：
-
-```typescript
-await stoClaw.subscribe([
-  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
-  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
-]);
-
-stoClaw.on(BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE, ({ pass, ossKey }) => {
-  if (!pass) return;
-  // 校验通过
-});
+off();
 ```
 
 
-| 事件名 | 语义 | payload 示例 |
-| --------------------------- | ------------------------------ | -------------------------------------- |
-| `quote:validation-complete` | **校验**结束（通过 / 失败） | `{ ossKey, pass, errorCount?, phase }` |
-| `quote:save-complete` | **保存报价**成功（`phase: editing`） | `{ ossKey, quoteId?, phase, url }` |
-| `quote:submit-complete` | **提交审批**成功（`phase: submitted`） | `{ ossKey, quoteId?, detailUrl?, phase, url }` |
-| `quote:preview-refresh` | 宿主导航到确认页（打开 / 刷新 URL） | `{ ossKey, phase, mode, url }` |
+| 事件名 | 语义 | payload |
+|--------|------|---------|
+| **`quote:event`** | 报价工作台统一事件 | `{ channel: string, cardId?, phase?, url?, … }` |
 | `bridge:session-destroyed` | Bridge 会话销毁（无需 subscribe） | `{ reason? }` |
 
-#### Payload 字段说明（报价业务）
+#### `quote:event` 常用 channel
 
-| 事件 | 字段 | 类型 | 说明 |
-|------|------|------|------|
-| `quote:validation-complete` | `ossKey` | `string` | 当前报价表 OSS 路径 |
-| | `pass` | `boolean` | `true` 校验通过；`false` 校验失败 |
-| | `errorCount` | `number?` | 失败时的错误条数 |
-| | `phase` | `string?` | 发卡阶段，如 `errors` / `ready_to_save` |
-| `quote:save-complete` | `ossKey` | `string` | 已保存报价的 OSS key |
-| | `quoteId` | `string?` | 保存后的报价单号 |
-| | `phase` | `string?` | 一般为 `editing` |
-| | `url` | `string?` | 宿主导航 URL（`clawQuotation?ossKey=`） |
-| `quote:submit-complete` | `ossKey` | `string` | 提交关联的 OSS key |
-| | `quoteId` | `string?` | 报价单号 |
-| | `detailUrl` | `string?` | 审批详情页 URL，**页面应优先跳转此字段** |
-| | `phase` | `string?` | 一般为 `submitted` |
-| | `url` | `string?` | 宿主同步导航 URL |
-| `quote:preview-refresh` | `ossKey` | `string` | 导航关联的 OSS key |
-| | `phase` | `string?` | 触发时的卡阶段 |
-| | `mode` | `'open' \| 'refresh'?` | `open` 首次/重传打开；`refresh` 保存或提交后重开 |
-| | `url` | `string?` | 宿主已导航到的 URL |
+| channel | 语义 |
+|---------|------|
+| `preview.open` | 宿主已在页面中打开/重新打开 URL |
+| `save.complete` | 提交报价成功 |
+| `batch-adjust.params-ready` | 批量调价 NL → CLI 参数 |
+| `batch-adjust.validate-fail` | 批量调价参数校验失败（pass 不通知） |
+| `batch-adjust.draft-complete` | 批量调价草案已生成 |
 
-> `quote:preview-refresh` 只表示宿主导航，**校验 / 保存 / 提交** 的业务语义请分别监听上表前三个事件。
+新增业务场景只需约定新 `channel` 字符串，**无需**在 JSBridge / SDK 增加 event 常量。
+
+#### Payload 字段说明（按 channel）
+
+公共：`channel`（必填）、`cardId?`、`phase?`、`url?`
+
+| channel | 主要字段 |
+|---------|---------|
+| `preview.open` | `ossKey?`, `mode` (`open` \| `refresh`) |
+| `save.complete` | `ossKey?`, `quoteId?`, `scene?`, `detailUrl?` |
+| `batch-adjust.params-ready` | `objectList`, `objectListJson`, `freightFeeType?`, `summary?` |
+| `batch-adjust.validate-fail` | `pass: false`, `warnings?`, `preCheckErrors?`, … |
+| `batch-adjust.draft-complete` | `quotationList?`, `quoteId?` |
 
 catalog 应用默认允许订阅 `quote:*`；其它事件需在应用 `bridgePolicy.allowedEventPatterns` 中配置。
 

@@ -3,7 +3,7 @@ name: quote-assistant
 description: >-
   报价工作台 AI 助手：新建报价、上传报价表、校验纠错、自然语言改参与提交报价。
   当用户提到新建报价、上传 Excel/CSV、调价、续重、首重、报价测算或提交报价时使用。
-version: 1.2.8
+version: 1.3.3
 ---
 
 # 报价助手（quote-assistant）
@@ -38,11 +38,12 @@ version: 1.2.8
 
 平台行为（你只需在卡里写对 `ossKey` / `previewUrl` / `previewMode`）：
 
-1. **校验过程中**（`validating` / `errors` / `ready_to_save`）：有 `ossKey` 即自动打开。
-   - **主会话**：右侧预览浏览器。
-   - **应用广场**：左侧业务 webview（右侧是 AI）。
-2. **失败后重新上传**：新文件拿到**新** `ossKey` 后再次写入卡；平台会**重新打开**对应链接，保证会话与预览一致。
-3. **保存 / 提交成功**：`editing` / `submitted` 卡继续带同一 `ossKey`，并设 `"previewMode": "refresh"`。平台会**再次导航到** `clawQuotation?ossKey=…`（**禁止**指望 webview `reload`——业务改过地址后直接刷新会回首页）。
+1. **校验过程中**（`validating` / `errors` / `ready_to_save`）：有 `ossKey` 即自动打开业务页。
+   - **主会话**：预览区展示业务页。
+   - **应用广场**：业务 webview 展示（AI 在另一侧）。
+2. **批量调价**：参数齐备后写 `data.previewUrl`（或 CLI 返回的业务页 URL），平台同样会**在页面中打开**，引导用户在**页面里查看并确认**调价方案（**不要说「左侧/右侧」**，统一说「在页面中」）。
+3. **失败后重新上传**：新文件拿到**新** `ossKey` 后再次写入卡；平台会**重新打开**对应链接，保证会话与预览一致。
+4. **提交成功**：`submitted` 卡（或批量调价完成后的 `editing` 卡）继续带同一 `ossKey`，并设 `"previewMode": "refresh"`。平台会**再次导航到** `clawQuotation?ossKey=…`（**禁止**指望 webview `reload`——业务改过地址后直接刷新会回首页）。
 
 推荐：只写 `ossKey`，让平台按当前客户端环境拼 host；若你自拼 `previewUrl`，必须与上表环境一致。
 
@@ -50,108 +51,79 @@ version: 1.2.8
 
 **应用广场**左侧 webview 加载 `clawQuotation` 等业务页时，页面需用 `@sto/claw-bridge-sdk` 的 `stoClaw.addListener` **主动注册**后，宿主才会推送事件（无注册 = 无推送）。
 
-你（Skill）**不调用** `addListener`；你只需在 `flow_card.data` 写对字段，平台在以下时机自动 `emit`：
+你（Skill）**不调用** `addListener`；你只需在 `flow_card.data` 写对字段，平台统一推送 **`quote:event`**，业务页根据 **`payload.channel`** 分支处理（**不要再为每个场景定义新 event 名**）。
 
-| 业务时机 | 你应在卡里写什么 | 平台推送事件 | payload 要点 |
-|---------|----------------|-------------|-------------|
-| 首次上传 / 校验中打开确认页 | `data.ossKey` + `phase: validating` | `quote:preview-refresh` | `{ ossKey, phase, mode: 'open', url }` — **仅导航同步** |
-| 重新上传（新文件） | **新** `data.ossKey` | `quote:preview-refresh` | `mode: 'open'`，`ossKey` 为新值 |
-| **校验结束**（通过 / 失败） | `data.validationOutcome: "pass"` 或 `"fail"` | **`quote:validation-complete`** | `{ ossKey, pass, errorCount?, phase }` |
-| **保存成功** | `phase: editing` + `ossKey` + `"previewMode": "refresh"` | **`quote:save-complete`** + `quote:preview-refresh` | save: `{ ossKey, quoteId?, url }` |
-| **提交成功** | `phase: submitted` + `ossKey` + `"previewMode": "refresh"` | **`quote:submit-complete`** + `quote:preview-refresh` | submit: `{ ossKey, quoteId?, detailUrl?, url }` |
+| 业务时机 | 你应在卡里写什么 | `channel` | payload 要点 |
+|---------|----------------|-----------|-------------|
+| 打开 / 重新打开业务页 | `data.ossKey` 或 `data.previewUrl` 变化 | `preview.open` | `{ ossKey?, mode, url, phase? }` |
+| **提交成功** | `phase: submitted` + `previewMode: refresh`（或批量调价 `editing`） | `save.complete` | `{ ossKey?, quoteId?, scene?, detailUrl? }` |
+| 批量调价 · 参数已提炼 | `data.batchAdjustParams` | `batch-adjust.params-ready` | `{ objectList, objectListJson, summary? }` |
+| 批量调价 · **校验失败** | `data.batchAdjustValidation` 且 `pass: false` | `batch-adjust.validate-fail` | `{ pass: false, warnings?, …Errors? }` |
+| 批量调价 · 草案生成 | `data.batchAdjustDraft` | `batch-adjust.draft-complete` | `{ quotationList?, quoteId? }` |
 
-**三类业务事件务必区分（不要混用）：**
+**channel 约定（可扩展，无需改 JSBridge）：**
 
-| 事件 | 语义 | 页面侧处理 |
-|------|------|-----------|
-| `quote:validation-complete` | Excel **校验**完成 | `pass === true` → 可编辑；`pass === false` → 展示错误数 / 引导重传 |
-| `quote:save-complete` | **保存报价**成功（`vip quotation save` 后） | 刷新列表 / 跳转详情草稿态 |
-| `quote:submit-complete` | **提交审批**成功 | 跳转审批详情 `detailUrl` |
-
-`quote:preview-refresh` 只表示宿主做了**页面导航**（打开 / 刷新 `clawQuotation?ossKey=`），不单独承载「校验 / 保存 / 提交」语义；业务逻辑请监听上表三个专用事件。
+| channel | 语义 | 页面侧处理 |
+|---------|------|-----------|
+| `preview.open` | 宿主已在**页面中**打开/重新打开 URL | SPA 内同步即可 |
+| `save.complete` | 提交报价成功（上传 / 批量调价） | 刷新列表 / 进入审批态 |
+| `batch-adjust.params-ready` | NL → CLI 参数 | 在页面中展示/回填调价方案 |
+| `batch-adjust.validate-fail` | 批量调价参数校验失败 | 展示错误并引导补参（**pass 不通知**） |
+| `batch-adjust.draft-complete` | 批量调价草案 | 在页面中确认后保存 |
 
 **铁律（与事件相关）：**
 
-1. 凡需通知业务页的卡，`data.ossKey` **不得缺失**（含 `editing` / `submitted`）。
-2. 重新上传必须写**新** `ossKey`。
-3. 校验结果卡必须写 `validationOutcome`（`pass` / `fail`），才会发 `quote:validation-complete`。
-4. 保存成功用 `phase: editing` + `previewMode: refresh` → 发 `quote:save-complete`。
-5. 提交成功用 `phase: submitted` + `previewMode: refresh` → 发 `quote:submit-complete`。
-6. 事件仅在**应用广场 embed** 投递。
+1. Excel 上传流程：**校验通过不通知**业务页；仅 `ossKey`/`previewUrl` 变化发 `preview.open`，**提交报价**（`vip quotation save`）成功发 `save.complete`。
+2. 批量调价可无 `ossKey`；提交成功须带 `previewMode: refresh`。
+3. 事件仅在**应用广场 embed** 投递。
 
-业务页接入示例（给前端同学，完整 API 见 `packages/claw-bridge-sdk/jsbridge-api.md` §宿主→页面事件）：
+业务页接入（**只注册一个 event**）：
 
 ```typescript
 import {
   stoClaw,
   isStoClawBridgeAvailable,
-  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
-  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
+  BRIDGE_EVENT_QUOTE,
+  type QuoteBridgeEventPayload,
 } from '@sto/claw-bridge-sdk';
 
 if (isStoClawBridgeAvailable()) {
-  const offValidation = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE, (payload) => {
-    const { ossKey, pass, errorCount } = payload as {
-      ossKey: string;
-      pass: boolean;
-      errorCount?: number;
-    };
-    if (pass) {
-      // 校验通过，可进入编辑
-    } else {
-      // 展示 errorCount，引导重新上传
+  const off = await stoClaw.addListener(BRIDGE_EVENT_QUOTE, (payload) => {
+    const { channel, ...data } = payload as QuoteBridgeEventPayload;
+    switch (channel) {
+      case 'preview.open':
+        break;
+      case 'save.complete':
+        break;
+      case 'batch-adjust.params-ready': {
+        const { objectListJson, summary } = data as { objectListJson: string; summary?: string };
+        break;
+      }
+      case 'batch-adjust.validate-fail':
+        break;
+      case 'batch-adjust.draft-complete':
+        break;
+      default:
+        break;
     }
   });
-
-  const offSave = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_SAVE_COMPLETE, (payload) => {
-    const { ossKey, quoteId, url } = payload as { ossKey: string; quoteId?: string; url?: string };
-    // 保存成功：刷新当前页数据（勿 location.reload）
-  });
-
-  const offSubmit = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE, (payload) => {
-    const { detailUrl, quoteId } = payload as { detailUrl?: string; quoteId?: string };
-    // 提交成功：跳转审批详情 detailUrl
-  });
-
-  // 可选：仅关心宿主导航时监听
-  const offPreview = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH, (payload) => {
-    const { ossKey, mode, url } = payload as { ossKey: string; mode?: string; url?: string };
-    // mode === 'open' | 'refresh' — 宿主已导航，业务页做 SPA 内同步即可
-  });
-
-  // 页面卸载：offValidation(); offSave(); offSubmit(); offPreview();
+  // 页面卸载：off();
 }
 ```
 
-### Payload 字段说明（业务页对接用）
+### Payload 字段说明（按 channel）
 
-| 事件 | payload | 字段说明 |
-|------|---------|----------|
-| `quote:validation-complete` | `{ ossKey, pass, errorCount?, phase? }` | **校验结束**（与保存/提交无关） |
-| | `ossKey` | 当前报价表 OSS 路径，用于定位是哪次上传/校验 |
-| | `pass` | `true` = 校验通过，可进入编辑；`false` = 校验失败 |
-| | `errorCount?` | 校验失败时的错误条数（`pass === false` 时可能有） |
-| | `phase?` | 发卡时的阶段，如 `errors` / `ready_to_save` |
-| `quote:save-complete` | `{ ossKey, quoteId?, phase?, url? }` | **`vip quotation save` 成功后**（`phase: editing`） |
-| | `ossKey` | 已保存报价关联的 OSS key |
-| | `quoteId?` | 保存后业务返回的报价单号（卡里 `data.quoteId`） |
-| | `phase?` | 一般为 `editing` |
-| | `url?` | 宿主导航目标 URL（多为 `…/clawQuotation?ossKey=`） |
-| `quote:submit-complete` | `{ ossKey, quoteId?, detailUrl?, phase?, url? }` | **提交审批成功后**（`phase: submitted`） |
-| | `ossKey` | 提交关联的 OSS key |
-| | `quoteId?` | 报价单号 |
-| | `detailUrl?` | 审批详情页完整 URL（卡里 `data.detailUrl`，页面应跳转此地址） |
-| | `phase?` | 一般为 `submitted` |
-| | `url?` | 宿主同步导航 URL（可与 `detailUrl` 不同，业务跳转优先用 `detailUrl`） |
-| `quote:preview-refresh` | `{ ossKey, phase?, mode?, url? }` | **仅宿主导航同步**，不表示校验/保存/提交结果 |
-| | `ossKey` | 本次导航关联的 OSS key |
-| | `phase?` | 触发导航时的卡阶段 |
-| | `mode?` | `open` = 首次打开或重新上传后打开；`refresh` = 保存/提交后重新打开 |
-| | `url?` | 宿主已导航到的完整 URL |
+公共字段：`channel`（必填）、`cardId?`、`phase?`、`url?`
 
-**注册方式**：`await stoClaw.addListener('<事件名>', handler)`（内部会 `bridge.subscribe`）。catalog 应用默认可订阅 `quote:*`。
+| channel | 主要字段 |
+|---------|---------|
+| `preview.open` | `ossKey?`, `mode` (`open` \| `refresh`), `url?` |
+| `save.complete` | `ossKey?`, `quoteId?`, `scene?`, `detailUrl?` |
+| `batch-adjust.params-ready` | `objectList`, `objectListJson`, `freightFeeType?`, `summary?` |
+| `batch-adjust.validate-fail` | `pass: false`, `warnings?`, `preCheckErrors?`, … |
+| `batch-adjust.draft-complete` | `quotationList?`, `quoteId?` |
+
+**注册方式**：`await stoClaw.addListener(BRIDGE_EVENT_QUOTE, handler)`（即 `quote:event`）。catalog 应用默认可订阅 `quote:*`。
 
 ## 输出格式
 
@@ -171,11 +143,11 @@ if (isStoClawBridgeAvailable()) {
 |------|--------|
 | `composer.openFilePicker` | `{ "accept": ".xlsx,.xls,.csv", "multiple": true }`（默认选完即发送；若只要暂存可加 `"autoSend": false`） |
 | `nav.openPreviewTab` | `{ "ossKey": "…" }` 或 `{ "urlKey": "previewUrl", "title": "报价确认" }`（主会话右侧 / 广场左侧） |
-| `nav.refreshPreview` | `{ "ossKey": "…" }` — 保存后重新打开确认页（不要用 reload） |
+| `nav.refreshPreview` | `{ "ossKey": "…" }` — 提交后重新打开确认页（不要用 reload） |
 | `nav.openExternal` | `{ "urlKey": "ossUrl" }` 或 `{ "url": "https://..." }`（下载校验失败文件等） |
-| `chat.sendMessage` | `{ "text": "保存报价", "skillSlugs": ["quote-assistant"], "ossKey": "<可选>", "scene": "EXCEL_UPLOAD" }` |
+| `chat.sendMessage` | `{ "text": "提交报价", "skillSlugs": ["quote-assistant"], "ossKey": "<可选>", "scene": "EXCEL_UPLOAD" }` |
 
-**禁止**自造 `kind`（如 `quote.save`）。保存 / 提交一律用 `chat.sendMessage`，由平台发一条用户消息再走本 Skill。
+**禁止**自造 `kind`（如 `quote.save`）。提交一律用 `chat.sendMessage`，由平台发一条用户消息再走本 Skill。
 
 ---
 
@@ -250,9 +222,11 @@ if (isStoClawBridgeAvailable()) {
 
 拿到 `ossKey` 后立刻写入上卡并开始校验；平台会打开确认页。**不要**在结果出来前输出「已完成」或把三步写死为全部成功。
 
-### 校验通过 · 待保存
+### 校验通过 · 待提交
 
-接口返回 `pass: true` 时，**先发卡等用户点「保存报价」**，**不要**自动调用 `vip quotation save`。
+接口返回 `pass: true` 时，**先发卡等用户点「提交报价」**，**不要**自动调用 `vip quotation save`。
+
+> **语义**：业务上「保存报价」即「提交报价」；`vip quotation save` 即提交动作，成功后直接出「已提交」卡，**不要**再出带「提交报价」按钮的中间卡。
 
 ```flow_card
 {
@@ -284,12 +258,12 @@ if (isStoClawBridgeAvailable()) {
   },
   "actions": [
     {
-      "id": "save",
-      "label": "保存报价",
+      "id": "submit",
+      "label": "提交报价",
       "variant": "primary",
       "kind": "chat.sendMessage",
       "params": {
-        "text": "保存报价",
+        "text": "提交报价",
         "skillSlugs": ["quote-assistant"],
         "ossKey": "vip/osstmp/…",
         "scene": "EXCEL_UPLOAD"
@@ -306,7 +280,7 @@ if (isStoClawBridgeAvailable()) {
 }
 ```
 
-用户点击「保存报价」或主动说「保存报价」后，再执行 `vip quotation save`（带上消息里的 `ossKey` / `scene`），成功后出下方「解析成功」卡（带 `previewMode: "refresh"`）。
+用户点击「提交报价」或主动说「提交报价」后，再执行 `vip quotation save`（带上消息里的 `ossKey` / `scene`），成功后**直接**出下方「已提交」卡（带 `previewMode: "refresh"`）。
 
 ### 校验失败
 
@@ -367,20 +341,20 @@ if (isStoClawBridgeAvailable()) {
 
 重新上传后：再次 `import` → 新 `ossKey` → 新 `validating` 卡（写入新 key），平台会重新打开确认页。
 
-### 解析成功
+### 改参中（可选）
+
+用户提交前若在对话中改参，可出 `editing` 卡说明当前草稿；**不要**再放「提交报价」按钮（提交只在「校验通过 · 待提交」卡或用户主动说「提交报价」时触发）。
 
 ```flow_card
 {
   "cardId": "quote-active",
   "domain": "quote",
   "phase": "editing",
-  "title": "解析完成",
-  "body": "报价已创建。可在右侧详情页查看，或通过对话继续补充说明。",
+  "title": "报价草稿",
+  "body": "已根据您的说明更新方案，确认无误后请说「提交报价」或点上一张卡上的提交按钮。",
   "data": {
     "quoteId": "Q-DEMO",
     "ossKey": "vip/osstmp/…",
-    "previewMode": "refresh",
-    "detailUrl": "https://wd-vip.sto.cn/vipLogin#/quote-ops-console/confirm/Q-DEMO",
     "errorCount": 0
   },
   "actions": [
@@ -389,14 +363,7 @@ if (isStoClawBridgeAvailable()) {
       "label": "打开详情页",
       "variant": "secondary",
       "kind": "nav.openPreviewTab",
-      "params": { "urlKey": "detailUrl", "title": "报价确认" }
-    },
-    {
-      "id": "submit",
-      "label": "提交报价",
-      "variant": "primary",
-      "kind": "chat.sendMessage",
-      "params": { "text": "提交报价", "skillSlugs": ["quote-assistant"] }
+      "params": { "ossKey": "vip/osstmp/…", "title": "报价确认" }
     }
   ]
 }
@@ -433,9 +400,9 @@ if (isStoClawBridgeAvailable()) {
 | 上传本地表拿 ossKey | `finance quotation import --file <本地路径> --companycode <网点编码>` |
 | 上传文件校验 | `vip quotation-check validate --ossKey <ossKey> --source CLI` |
 | 草案预览 | `vip quotation-draft parse` |
-| 确认保存报价 | `vip quotation save` |
+| 确认提交报价 | `vip quotation save`（工具 `description` 写 **「提交报价」**，勿写「保存报价」） |
 | 批量调价草案 | `vip quotation-draft create` |
-| 批量调价参数校验 | `vip quotation batch-check validate` |
+| 批量调价参数校验 | `vip quotation-batch-check validate` |
 
 ### 新建报价 · 有附件时的最短调用顺序
 
@@ -447,18 +414,111 @@ if (isStoClawBridgeAvailable()) {
    - **立刻**用同一 `cardId` 再发 `validating` 卡写入 `ossKey`（平台打开确认页）。
 3. `sai-cli vip quotation-check validate --ossKey <上一步的key> --source CLI`
 4. 校验失败 → `errors` 卡：`progressSteps` + `validationOutcome: "fail"` + `ossKey` + `data.ossUrl` + 下载按钮；`body` 写错误摘要。重新上传后重复 1–3（新 `ossKey` 必须再打开预览）。
-5. 校验成功 → 出「校验通过 · 待保存」卡（`validationOutcome: "pass"` + `ossKey` + `chat.sendMessage` 保存按钮）。**禁止** `kind: "quote.save"`。
-6. 用户确认「保存报价」→ `vip quotation save` → `editing` 卡（`ossKey` + `previewMode: refresh` + `quoteId` / `detailUrl`）；平台推送 **`quote:save-complete`**（及导航用 `quote:preview-refresh`）。
-7. 用户「提交报价」完成 → `submitted` 卡（`ossKey` + `previewMode: refresh` + `detailUrl`）；平台推送 **`quote:submit-complete`**。
-8. 若返回无 `detailUrl`：`https://wd-vip.sto.cn/vipLogin#/quote-ops-console/confirm/{quoteId}`。
+5. 校验成功 → 出「校验通过 · 待提交」卡（`validationOutcome: "pass"` + `ossKey` + `chat.sendMessage` 提交按钮）。**禁止** `kind: "quote.save"`。
+6. 用户确认「提交报价」→ `vip quotation save` → **`submitted` 卡**（`ossKey` + `previewMode: refresh` + `quoteId` / `detailUrl`）；平台推送 `save.complete`。
+7. 若返回无 `detailUrl`：`https://wd-vip.sto.cn/vipLogin#/quote-ops-console/confirm/{quoteId}`。
 
 仅当某步返回 `ARGUMENT_INVALID` 且缺参不明确时，才允许对该命令执行一次 `sai-cli help <三段命令>`（仍不要加引号）。
 
-### 批量调价
+### 批量调价（自然语言 → CLI → 页面同步）
 
-- 建草案：`vip quotation-draft create`
-- 参数校验：`vip quotation batch-check validate`
-- 缺参文本追问；阶段卡仍用同一套 `flow_card`（`editing` / `errors`）。
+**适用**：用户说「给某某涨价/降价/加0.2元」「全部客户」「某流向某重量段调价」等，**无需上传 Excel**。
+
+**页面引导（重要）**：
+- 参数齐备、校验或草案生成后，提示用户：**「请在页面中查看并确认调价方案」**（主会话 / 应用广场布局不同，**禁止**写「左侧」「右侧」）。
+- 卡里写 `data.previewUrl`（业务批量调价/报价工作台地址）；平台会在宿主**页面区域**打开该 URL。
+- `data.scene` 固定写 `"batch_adjust"`。
+
+**缺参处理（铁律 3）**：
+- 从用户话里提炼 `objectList`；**缺任何必填项时只用普通文本追问**，不新发卡。
+- 一次只问 1～2 个最关键的缺失项，并给示例。
+- 常见必填：报价对象、生效起止日期、流向、重量段、调价方式（加/减/设值及幅度）。
+
+**自然语言 → 字段映射（示例）**：
+
+| 用户说法 | 映射 |
+|---------|------|
+| 李佳明 / 全部客户 / 所有客户 | `objectName`: `李佳明` / `ALL`；`sceneType`: `CUSTOMER`（默认客户，除非明确电子面单/业务员/承包区） |
+| 3公斤以上 / 3kg+ | `startWeight: "3"`, `startWeightMark: "<"`, `endWeight: "999"`, `endWeightMark: "<="` |
+| 0-1kg / 首重1kg | `startWeight: "0"`, `startWeightMark: "<"`, `endWeight: "1"`, `endWeightMark: "<="` |
+| 上涨0.2元/票 / 加0.2 | `adjustType: "ADD"`, `adjustValue: "0.2"` |
+| 下降0.1 / 减0.1 | `adjustType: "SUBTRACT"`, `adjustValue: "0.1"` |
+| 打九折 | `adjustType: "MULTIPLY"`, `adjustValue: "0.9"` |
+| 设为1.5元 | `adjustType: "SET"`, `adjustValue: "1.5"` |
+| 黑吉辽 / 浙江 | `areaDetail`: 拆成**多条** `items`（省/直辖市名），或让用户确认是否「全部流向」`ALL` |
+| 2026-11-01 ~ 2027-02-30 | `startDate` / `endDate`（**校验非法日期**，如 2 月 30 日改为当月最后一天） |
+| 基础运费 / 运费 | `freightFeeType: "BASE_FREIGHT_FEE"`（默认） |
+| 加收费 | 与用户确认科目；若 CLI 不支持该科目批量调价，**如实说明**并建议改走上传 Excel 或其它流程 |
+
+**示例 1** —「帮我给李佳明3公斤以上价格上涨0.2元/票」  
+缺：生效起止日期 → 追问：「请补充新报价生效的起止日期（例如 2026-08-01 至 2026-12-31）。」  
+齐备后 `batchAdjustParams` 示例：
+
+```json
+{
+  "freightFeeType": "BASE_FREIGHT_FEE",
+  "summary": "李佳明，3kg以上，运费+0.2元/票",
+  "objectList": [{
+    "objectName": "李佳明",
+    "sceneType": "CUSTOMER",
+    "startDate": "2026-08-01",
+    "endDate": "2026-12-31",
+    "items": [{
+      "areaDetail": "ALL",
+      "startWeight": "3",
+      "startWeightMark": "<",
+      "endWeight": "999",
+      "endWeightMark": "<=",
+      "adjustType": "ADD",
+      "adjustValue": "0.2"
+    }]
+  }]
+}
+```
+
+**示例 2** —「帮我给全部的客户，做一个黑吉辽2026-11-01 ~ 2027-02-30的加收费，单票0.2元」  
+- `objectName: "ALL"`, `sceneType: "CUSTOMER"`  
+- 日期修正为 `2027-02-28`  
+- 黑吉辽 → 三条 `items`（黑龙江/吉林/辽宁）或追问是否三省统一规则  
+- **加收费**：先确认 `freightFeeType`；若 `quotation-draft create` 不支持该科目，告知用户并勿强行调用  
+
+**调用顺序**（参数齐备后）：
+
+1. 出 `batch_adjust` 卡：写入 `data.batchAdjustParams` + `data.previewUrl`（业务工作台 URL）+ `data.scene: "batch_adjust"` → 平台推送 `batch-adjust.params-ready`（`quote:event`），并在**页面中**打开预览。
+2. `sai-cli vip quotation-batch-check validate --freightFeeType BASE_FREIGHT_FEE --objectListJson <上表 JSON 字符串> --source CLI`  
+   - 将返回的 `pass`、`warnings`、各类 `*Errors` 写入 `data.batchAdjustValidation`  
+   - `pass: false`：平台推送 `batch-adjust.validate-fail`；文本 + 卡 `body` 摘要错误，引导用户在页面中改参或补充自然语言。**`pass: true` 不通知业务页。**
+3. `pass: true` → `sai-cli vip quotation-draft create --freightFeeType BASE_FREIGHT_FEE --objectListJson <同上> --source CLI`  
+   - 将 `quotationList` 等写入 `data.batchAdjustDraft` → `batch-adjust.draft-complete`  
+   - 提示：**「草案已生成，请在页面中确认后提交。」**
+4. 用户确认提交 → `vip quotation save`（`scene: BATCH_ADJUST`，按 CLI 返回字段传参）→ `submitted` 或 `editing` 卡 + `previewMode: refresh`。
+
+**`batch_adjust` 卡模板**（`phase: "batch_adjust"`）：
+
+```flow_card
+{
+  "cardId": "quote-active",
+  "domain": "quote",
+  "phase": "batch_adjust",
+  "title": "批量调价",
+  "body": "已根据您的描述生成调价方案，请在页面中查看并确认。",
+  "data": {
+    "scene": "batch_adjust",
+    "previewUrl": "https://wd-vip.sto.cn/vipLogin#/quote-ops-console",
+    "batchAdjustParams": { }
+  },
+  "actions": [
+    {
+      "id": "confirm_validate",
+      "label": "开始校验",
+      "kind": "chat.sendMessage",
+      "params": { "text": "请按当前方案校验批量调价参数" }
+    }
+  ]
+}
+```
+
+校验 / 草案结果卡：在同一 `cardId` 上更新 `batchAdjustValidation` 或 `batchAdjustDraft`，并刷新 `body`；**不要**在卡外重复贴大段 JSON。
 
 ### 降级（命令失败或未登录）
 
@@ -469,8 +529,7 @@ if (isStoClawBridgeAvailable()) {
 
 不要在思考里罗列命令表；直接调用即可。
 
-## 改参 / 保存 / 提交
+## 改参 / 提交
 
-- 改参：尽量映射到校验 / 调价相关命令；否则文本确认并更新 `editing` 卡 `body`
-- 「保存报价」：用消息中的 `ossKey`（及 `scene`）调用 `vip quotation save`；成功后出 `editing` 卡并带 `previewMode: "refresh"`（重新打开确认页，禁止依赖 reload）
-- 「提交报价」：若有提交/审批类命令则调用；成功后出 `submitted` 卡（同样带 `ossKey` + `previewMode: "refresh"`）
+- 改参：尽量映射到校验 / 调价相关命令；否则文本确认并更新 `editing` 卡 `body`（**不放提交按钮**）
+- 「提交报价」：用消息中的 `ossKey`（及 `scene`）调用 `vip quotation save`；成功后出 **`submitted` 卡**并带 `previewMode: "refresh"`（重新打开确认页，禁止依赖 reload）。**不要**再出第二张带「提交报价」按钮的卡。

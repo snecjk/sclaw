@@ -116,13 +116,13 @@ describe('jsbridge dispatcher', () => {
     const subscribe = await dispatchBridgeInvoke({
       request: {
         ...makeRequest(session!.sessionId, 'bridge.subscribe'),
-        params: { events: ['quote:preview-refresh'] },
+        params: { events: ['quote:event'] },
       },
       webContentsId: 401,
       sessionToken: session!.sessionToken,
     });
     expect(subscribe.ok).toBe(true);
-    expect((subscribe.data as { subscribed?: string[] })?.subscribed).toContain('quote:preview-refresh');
+    expect((subscribe.data as { subscribed?: string[] })?.subscribed).toContain('quote:event');
 
     const denied = await dispatchBridgeInvoke({
       request: {

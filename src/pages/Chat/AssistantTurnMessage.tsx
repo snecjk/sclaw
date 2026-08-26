@@ -37,6 +37,7 @@ import {
   isWorkflowPreambleAssistantMessage,
 } from './message-utils';
 import { extractFlowCard } from '@/lib/flow-card-patch';
+import { isFlowCardCompanionText } from '@/lib/flow-card-marker';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
@@ -354,10 +355,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         return {
           ...base,
           role: 'assistant' as const,
-          content: [
-            { type: 'text', text: thinkingLayout.finalReplyText },
-            preservedCard,
-          ],
+          content: [preservedCard],
         } as RawMessage;
       }
       return {
@@ -459,15 +457,21 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     } as RawMessage;
   }, [replyMessage, hasDingTalkSentPreview, assistantReplyText, dingTalkSentPreviews]);
 
-  const replyDisplayHasText = replyDisplayMessage
-    ? extractText(replyDisplayMessage).trim().length > 0
-    : false;
-
   const chatDisplayMessage = replyDisplayMessage;
   const chatDisplayHasWorkflowCard = false;
   const chatDisplayHasFlowCard = Boolean(
     replyMessage && extractFlowCard(replyMessage),
   );
+
+  const replyDisplayHasText = replyDisplayMessage
+    ? (() => {
+        const trimmed = extractText(replyDisplayMessage).trim();
+        if (!trimmed) return false;
+        if (chatDisplayHasFlowCard && isFlowCardCompanionText(trimmed)) return false;
+        if (isStreaming && isFlowCardCompanionText(trimmed)) return false;
+        return true;
+      })()
+    : false;
 
   const replyTimestamp = useMemo(() => {
     if (chatDisplayMessage?.timestamp != null) return chatDisplayMessage.timestamp;
@@ -558,10 +562,14 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isStillExecuting={isStillExecuting}
       streamingTools={bakedStreamingTools}
       hasFinalReply={hasThinkingFinalReply}
-      finalReplyText={
-        thinkingLayout.finalReplyText
-          ?? (replyDisplayHasText && replyMessage ? extractText(replyMessage) : null)
-      }
+      finalReplyText={(() => {
+        const raw = thinkingLayout.finalReplyText
+          ?? (replyDisplayHasText && replyMessage ? extractText(replyMessage) : null);
+        if (!raw?.trim()) return null;
+        if (chatDisplayHasFlowCard && isFlowCardCompanionText(raw)) return null;
+        if (isStreaming && isFlowCardCompanionText(raw)) return null;
+        return raw;
+      })()}
       connectingLabelKey={connectingLabelKey}
       processStatus={processStatus}
     />

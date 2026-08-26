@@ -8,19 +8,11 @@ export {
 export { StoClawBridgeError, wrapNativeError } from './errors';
 
 export {
-  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
-  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SAVE_COMPLETE,
-  BRIDGE_EVENT_QUOTE_SUBMIT_COMPLETE,
+  BRIDGE_EVENT_QUOTE,
   BRIDGE_EVENT_SESSION_DESTROYED,
 } from './events';
 
-export type {
-  QuotePreviewRefreshPayload,
-  QuoteValidationCompletePayload,
-  QuoteSaveCompletePayload,
-  QuoteSubmitCompletePayload,
-} from './events';
+export type { QuoteBridgeEventPayload } from './events';
 
 export type {
   AppGetInfoResult,

@@ -1,13 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FlowCardAction, FlowCardContentBlock } from '../../../shared/flow-card-protocol';
 import { dispatchFlowCardAction } from '@/lib/flow-card-actions';
+import { filterQuoteFlowCardActions } from '@/lib/flow-card-quote-actions';
 import { syncFlowCardPreview } from '@/lib/flow-card-preview';
+import type { QuoteBridgeNotifyKind } from '../../../shared/quote-bridge-channels';
+import {
+  parseBatchAdjustDraft,
+  parseBatchAdjustParams,
+  parseBatchAdjustValidation,
+} from '../../../shared/quote-batch-adjust';
 import {
   parseFlowCardProgressSteps,
-  parseFlowCardValidationOutcome,
-  resolveGatedProgressStatuses,
+  useFlowCardProgressAnimation,
   type FlowCardProgressStep,
   type FlowCardProgressStepStatus,
 } from '@/lib/flow-card-progress';
@@ -49,7 +55,7 @@ function readHttpDataUrl(card: FlowCardContentBlock, keys: string[]): string | n
 
 /** Ensure validation-failure cards expose a download button when ossUrl is present. */
 function resolveCardActions(card: FlowCardContentBlock): FlowCardAction[] {
-  const actions = [...(card.actions ?? [])];
+  const actions = filterQuoteFlowCardActions(card, [...(card.actions ?? [])]);
   const downloadUrl = readHttpDataUrl(card, ['downloadUrl', 'ossUrl', 'errorFileUrl']);
   if (!downloadUrl) return actions;
 
@@ -65,7 +71,7 @@ function resolveCardActions(card: FlowCardContentBlock): FlowCardAction[] {
     kind: 'nav.openExternal',
     params: { url: downloadUrl },
   });
-  return actions;
+  return filterQuoteFlowCardActions(card, actions);
 }
 
 function StepStatusIcon({ status }: { status: FlowCardProgressStepStatus }) {
@@ -90,34 +96,21 @@ function StepStatusIcon({ status }: { status: FlowCardProgressStepStatus }) {
  * Design-like multi-step progress.
  * Hold on step 1 until validationOutcome arrives, then advance to the end.
  */
-function FlowCardProgress({ card }: { card: FlowCardContentBlock }) {
-  const steps = parseFlowCardProgressSteps(card.data);
-  const outcome = parseFlowCardValidationOutcome(card.data);
-  const [finishingIndex, setFinishingIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!outcome || steps.length === 0) {
-      setFinishingIndex(null);
-      return;
-    }
-    setFinishingIndex(0);
-    const timers: number[] = [];
-    for (let i = 1; i <= steps.length; i += 1) {
-      timers.push(
-        window.setTimeout(() => {
-          setFinishingIndex(i >= steps.length ? null : i);
-        }, i * 280),
-      );
-    }
-    return () => {
-      for (const id of timers) window.clearTimeout(id);
-    };
-  }, [outcome, steps.length, card.cardId]);
-
+function FlowCardProgress({
+  card,
+  steps,
+  outcome,
+  statuses,
+  allDone,
+}: {
+  card: FlowCardContentBlock;
+  steps: FlowCardProgressStep[];
+  outcome: ReturnType<typeof useFlowCardProgressAnimation>['outcome'];
+  statuses: FlowCardProgressStepStatus[];
+  allDone: boolean;
+}) {
   if (steps.length === 0) return null;
 
-  const statuses = resolveGatedProgressStatuses(steps.length, outcome, finishingIndex);
-  const allDone = outcome != null && finishingIndex == null;
   const rawTitle = card.title?.trim() || '正在解析报价表';
   const headerLabel = allDone
     ? (outcome === 'fail' ? '校验未通过' : '已完成')
@@ -188,41 +181,119 @@ export function FlowCard({ card }: FlowCardProps) {
   const actions = resolveCardActions(card);
   const progressSteps = parseFlowCardProgressSteps(card.data);
   const showProgress = progressSteps.length > 0;
+  const {
+    steps: progressStepList,
+    outcome,
+    statuses,
+    allDone,
+    progressSettled,
+  } = useFlowCardProgressAnimation(card);
   const previewSyncRef = useRef<{
     ossKey: string;
     previewUrl: string;
     previewMode: string;
     phase: string;
+    batchParamsSig: string;
+    batchValidationSig: string;
+    batchDraftSig: string;
   } | null>(null);
 
-  // Only navigate when preview-driving fields change (new ossKey / phase refresh).
-  // Skip initial mount so opening embed chat or scrolling history does not jump the left browser.
+  function fieldSignature(value: unknown): string {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '';
+    }
+  }
+
+  function runBridgeNotifies(card: FlowCardContentBlock, notifies: QuoteBridgeNotifyKind[]) {
+    for (const notify of notifies) {
+      syncFlowCardPreview(card, undefined, notify);
+    }
+  }
+
+  // Navigate + notify on ossKey/previewUrl / batch-adjust data changes, or save succeeds.
   useEffect(() => {
     const ossKey = typeof card.data?.ossKey === 'string' ? card.data.ossKey.trim() : '';
     const previewUrl = typeof card.data?.previewUrl === 'string' ? card.data.previewUrl.trim() : '';
     const previewMode = typeof card.data?.previewMode === 'string' ? card.data.previewMode.trim() : '';
-    const current = { ossKey, previewUrl, previewMode, phase: card.phase };
+    const data = card.data ?? {};
+    const batchParamsSig = fieldSignature(parseBatchAdjustParams(data));
+    const batchValidation = parseBatchAdjustValidation(data);
+    const batchValidationSig = batchValidation ? fieldSignature(batchValidation) : '';
+    const batchDraftSig = fieldSignature(parseBatchAdjustDraft(data));
+
+    const current = {
+      ossKey,
+      previewUrl,
+      previewMode,
+      phase: card.phase,
+      batchParamsSig,
+      batchValidationSig,
+      batchDraftSig,
+    };
     const prev = previewSyncRef.current;
+    const navigable = Boolean(ossKey || previewUrl);
+
+    if (card.phase === 'awaiting_upload') {
+      previewSyncRef.current = current;
+      return;
+    }
+
+    if (!prev) {
+      previewSyncRef.current = current;
+      const initial: QuoteBridgeNotifyKind[] = [];
+      if (navigable) initial.push('preview');
+      if (batchParamsSig) initial.push('batch-adjust-params');
+      if (batchValidation && !batchValidation.pass) initial.push('batch-adjust-validate-fail');
+      if (batchDraftSig) initial.push('batch-adjust-draft');
+      if (initial.length > 0) runBridgeNotifies(card, initial);
+      return;
+    }
+
     previewSyncRef.current = current;
 
-    if (!ossKey && !previewUrl) return;
-    if (card.phase === 'awaiting_upload') return;
-    if (!prev) return;
+    const notifies: QuoteBridgeNotifyKind[] = [];
 
-    const previewChanged =
-      prev.ossKey !== ossKey
-      || prev.previewUrl !== previewUrl
-      || prev.previewMode !== previewMode
-      || prev.phase !== card.phase;
-    if (!previewChanged) return;
+    if (prev.ossKey !== ossKey || prev.previewUrl !== previewUrl) {
+      notifies.push('preview');
+    }
+    if (prev.batchParamsSig !== batchParamsSig && batchParamsSig) {
+      notifies.push('batch-adjust-params');
+      if (!notifies.includes('preview') && navigable) {
+        notifies.push('preview');
+      }
+    }
+    if (
+      prev.batchValidationSig !== batchValidationSig
+      && batchValidation
+      && !batchValidation.pass
+    ) {
+      notifies.push('batch-adjust-validate-fail');
+    }
+    if (prev.batchDraftSig !== batchDraftSig && batchDraftSig) {
+      notifies.push('batch-adjust-draft');
+    }
 
-    syncFlowCardPreview(card);
+    const submitSuccess =
+      (card.phase === 'submitted' || card.phase === 'editing')
+      && previewMode === 'refresh'
+      && (prev.phase !== card.phase || prev.previewMode !== 'refresh');
+    if (submitSuccess) {
+      notifies.push('save');
+    }
+
+    if (notifies.length > 0) runBridgeNotifies(card, notifies);
   }, [
     card.cardId,
     card.phase,
     card.data?.ossKey,
     card.data?.previewUrl,
     card.data?.previewMode,
+    card.data?.batchAdjustParams,
+    card.data?.batchAdjustValidation,
+    card.data?.batchAdjustDraft,
+    card.data?.scene,
   ]);
 
   return (
@@ -235,7 +306,15 @@ export function FlowCard({ card }: FlowCardProps) {
       data-flow-card-id={card.cardId}
       data-flow-card-phase={card.phase}
     >
-      {showProgress ? <FlowCardProgress card={card} /> : null}
+      {showProgress ? (
+        <FlowCardProgress
+          card={card}
+          steps={progressStepList}
+          outcome={outcome}
+          statuses={statuses}
+          allDone={allDone}
+        />
+      ) : null}
 
       {!showProgress ? (
         <div className="flex items-start gap-2">
@@ -275,7 +354,7 @@ export function FlowCard({ card }: FlowCardProps) {
         </div>
       ) : null}
 
-      {showProgress && (card.body || errorCount !== null) && card.phase !== 'validating' ? (
+      {showProgress && progressSettled && (card.body || errorCount !== null) && card.phase !== 'validating' ? (
         <div className="mt-3 border-t border-[#EEF0F3] pt-2.5">
           {card.body ? (
             <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0">
@@ -292,7 +371,7 @@ export function FlowCard({ card }: FlowCardProps) {
         </div>
       ) : null}
 
-      {actions.length > 0 ? (
+      {actions.length > 0 && (!showProgress || progressSettled) ? (
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           {actions.map((action) => {
             const isSecondary = action.variant === 'secondary';

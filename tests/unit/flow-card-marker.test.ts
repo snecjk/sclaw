@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   findBareFlowCardJsonInText,
   findFlowCardInText,
+  findStreamingFlowCardInText,
+  hasOpenFlowCardFence,
+  isFlowCardCompanionText,
   parseFlowCardFence,
   parseFlowCardPayload,
   stripFlowCardFences,
@@ -65,9 +68,22 @@ describe('flow-card-marker', () => {
     );
   });
 
-  it('parses ```json fence when model uses generic code block', () => {
-    const text = '说明\n```json\n{"cardId":"c","phase":"awaiting_upload"}\n```';
-    expect(findFlowCardInText(text)?.cardId).toBe('c');
-    expect(stripFlowCardFences(text)).toBe('说明');
+  it('strips companion validation text when flow_card fence is present', () => {
+    const text = '校验通过!\n```flow_card\n{"cardId":"c","phase":"validating"}\n```';
+    expect(stripFlowCardFences(text)).toBe('');
+  });
+
+  it('detects open flow_card fence during streaming', () => {
+    const text = '校验通过\n```flow_card\n{"cardId":"quote-active","phase":"validating","data":{"progressSteps":[';
+    expect(hasOpenFlowCardFence(text)).toBe(true);
+    const parsed = findStreamingFlowCardInText(text);
+    expect(parsed?.cardId).toBe('quote-active');
+    expect(parsed?.phase).toBe('validating');
+  });
+
+  it('treats validation status lines as companion text', () => {
+    expect(isFlowCardCompanionText('校验通过!')).toBe(true);
+    expect(isFlowCardCompanionText('报价对象 王豪生/V236330000002 校验通过。')).toBe(true);
+    expect(isFlowCardCompanionText('请点击下方按钮上传报价表。')).toBe(false);
   });
 });
