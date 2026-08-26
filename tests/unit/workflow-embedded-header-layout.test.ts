@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -55,5 +57,15 @@ describe('embedded workflow header ownership', () => {
       editorActive: false,
       embeddedHeaderOwned: true,
     });
+  });
+
+  it('does not overlay a second transparent back target on the iframe header', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/pages/Workflow/components/workflow-mc-iframe-editor.tsx'),
+      'utf8',
+    );
+
+    expect(source).not.toContain('aria-label="返回工作流列表"');
+    expect(source).not.toContain('text-transparent');
   });
 });

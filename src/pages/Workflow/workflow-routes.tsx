@@ -154,6 +154,10 @@ function WorkflowEditorSession({
   useWorkflowEditorContentHeader({
     workflowId,
     onBack,
+    backDisabled: embeddedTryRun.confirmOpen
+      || embeddedTryRun.requestInFlight
+      || tryRun.isStartupDialogOpen
+      || (tryRun.isStarting && !tryRun.runId),
     prompt,
     promptCacheId,
     enabled: !embeddedHeaderOwned && !embeddedHeaderNegotiating,

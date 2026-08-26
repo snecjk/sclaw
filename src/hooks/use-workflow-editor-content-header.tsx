@@ -18,6 +18,8 @@ export interface UseWorkflowEditorContentHeaderOptions {
   workflowId: string;
   /** 返回列表 */
   onBack: () => void;
+  /** 启动确认/准备期间锁定返回，避免卸载编辑会话。 */
+  backDisabled?: boolean;
   /** AI 创建：用户 prompt（sto-claw 侧展示，不进 MC URL 时仍可作为副文案） */
   prompt?: string;
   /** AI 创建：MC 缓存 prompt 的短 ID */
@@ -44,6 +46,7 @@ function truncatePrompt(prompt: string, maxLen = 50): string {
 export function useWorkflowEditorContentHeader({
   workflowId,
   onBack,
+  backDisabled = false,
   prompt,
   promptCacheId,
   enabled = true,
@@ -76,7 +79,11 @@ export function useWorkflowEditorContentHeader({
         <button
           type="button"
           aria-label={t('editor.backAria')}
-          onClick={() => onBackRef.current()}
+          disabled={backDisabled}
+          onClick={() => {
+            if (backDisabled) return;
+            onBackRef.current();
+          }}
           className={cn(contentHeaderActionBtnClass, 'text-foreground/80 hover:bg-muted')}
         >
           <ChevronLeft className="h-4 w-4" aria-hidden />
@@ -97,7 +104,7 @@ export function useWorkflowEditorContentHeader({
         </p>
       </div>
     );
-  }, [enabled, create, isAiCreateMode, secondaryLabel, secondaryTitle, t]);
+  }, [backDisabled, enabled, create, isAiCreateMode, secondaryLabel, secondaryTitle, t]);
 
   const actions = useMemo((): ReactNode => {
     if (!enabled || !workflowId) return null;

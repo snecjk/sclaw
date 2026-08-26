@@ -137,6 +137,33 @@ describe('TestRunDrawer trial mode', () => {
     expect(screen.getAllByTestId('trial-run-timeline-line')).toHaveLength(2);
   });
 
+  it('renders consecutive answer deltas as one realtime output row', () => {
+    const runtime = runtimeFixture('running');
+    runtime.run.events = [
+      {
+        id: 'event-1',
+        type: 'agent.answer_delta',
+        nodeId: 'node-1',
+        payload: { message: '工资', rawText: '工资' },
+        timestamp: '2026-08-12T10:11:35.100+08:00',
+      },
+      {
+        id: 'event-2',
+        type: 'agent.answer_delta',
+        nodeId: 'node-1',
+        payload: { message: '数据', rawText: '工资数据' },
+        timestamp: '2026-08-12T10:11:35.200+08:00',
+      },
+    ];
+
+    renderDrawer('running', runtime);
+
+    expect(screen.queryByText('agent.answer_delta')).not.toBeInTheDocument();
+    expect(screen.getByText('实时输出')).toBeInTheDocument();
+    expect(screen.getByText('工资数据')).toBeInTheDocument();
+    expect(screen.getAllByTestId('trial-run-timeline-dot')).toHaveLength(1);
+  });
+
   it.each([
     ['cancelled', '运行已取消', '继续运行'],
     ['failed', '运行失败', '重新运行'],
