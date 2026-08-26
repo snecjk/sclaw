@@ -25,6 +25,7 @@ export const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 export interface ChatDraftWorkflowMeta {
   id: string;
   name: string;
+  /** `'mine'` = 实例；`'template'` = 模版（学习中心 / 首页推荐） */
   source?: string;
 }
 

@@ -110,6 +110,46 @@ describe('composer echo pairing & display', () => {
     expect(patched._composerSegments?.[0]).toMatchObject({ type: 'workflow', id: 'wf-42' });
   });
 
+  it('pairs learning-center / template workflow handoff (no source) after unified bake', () => {
+    const suffix = '按客户维度拆解发件成本与利润，自动识别成本异常并生成分析报告';
+    const optimistic = {
+      id: 'local-wf-tpl-1',
+      role: 'user',
+      content: suffix,
+      timestamp: 1710000000,
+      _composerSegments: [
+        { type: 'workflow', id: 'wf_tpl_cost', name: '客户成本分析' },
+        { type: 'text', text: suffix },
+      ],
+    } as RawMessage;
+
+    // 旧行为：无 source 时 gateway 把名字当纯文本 → strip 后对不上 displayText。
+    // 统一 bake 后 history 与 mine 同形，可配对。
+    const historyUser = {
+      id: 'history-wf-tpl-1',
+      role: 'user',
+      content: `帮我执行 id 为：wf_tpl_cost 的工作流 【客户成本分析】${suffix}`,
+      timestamp: 1710000002,
+    } as RawMessage;
+
+    expect(stripComposerModelBakeForDisplay(String(historyUser.content))).toBe(suffix);
+    expect(isSameUserMessage(historyUser, optimistic, 1710000000000)).toBe(true);
+
+    const merged = mergeOptimisticUserIntoHistory([historyUser], [optimistic], {
+      userMessageAt: 1710000000000,
+      sending: true,
+      cachedOptimistic: optimistic,
+    });
+    const user = merged.find((m) => m.role === 'user');
+    expect(user?.content).toBe(suffix);
+    expect(user?._composerSegments?.[0]).toMatchObject({
+      type: 'workflow',
+      id: 'wf_tpl_cost',
+      name: '客户成本分析',
+    });
+    expect(merged.filter((m) => m.role === 'user')).toHaveLength(1);
+  });
+
   it('does not append optimistic when projection already has a paired user', () => {
     const optimistic = {
       id: 'local-1',

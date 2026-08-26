@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
-import { ChevronRight, PanelRightClose, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { ChevronRight, Maximize2, Minimize2, PanelRightClose, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -12,13 +12,14 @@ import sectionEmptyIcon from '@/assets/learning-center/case-empty-icon.svg';
 import titleStepUnderline from '@/assets/learning-center/title-step-underline.svg';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { useContentHeader } from '@/components/layout/content-header-context';
+import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { invokeIpc } from '@/lib/api-client';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
 import { resolveLearningCaseChipTitle } from '@/lib/learning-case-chip-title';
-import { contentHeaderActionBtnClass } from '@/lib/surfaces';
+import { contentHeaderActionBtnClass, stoSplitRowContentsClass } from '@/lib/surfaces';
+import { cn } from '@/lib/utils';
 import {
   pageLearningCases,
   pageLearningCategories,
@@ -42,31 +43,10 @@ import { TutorialPanel } from './TutorialPanel';
 import './LearningCenterPage.css';
 
 const CONTENT_PAGE_SIZE = 6;
-const WINDOW_DEFAULT_MIN_WIDTH = 960;
-const WINDOW_DEFAULT_MIN_HEIGHT = 640;
-const DETAIL_LEFT_MIN_WIDTH = 563;
-
-function syncTutorialWindowMinSize(page: HTMLElement | null, detailOpen: boolean) {
-  if (!detailOpen || !page || window.innerWidth < 1024) {
-    void invokeIpc('window:setMinimumSize', {
-      width: WINDOW_DEFAULT_MIN_WIDTH,
-      height: WINDOW_DEFAULT_MIN_HEIGHT,
-    }).catch(() => undefined);
-    return;
-  }
-
-  const leftWidth = page.getBoundingClientRect().width;
-  const minWidth = Math.max(
-    WINDOW_DEFAULT_MIN_WIDTH,
-    Math.round(window.outerWidth + (DETAIL_LEFT_MIN_WIDTH - leftWidth)),
-  );
-  void invokeIpc('window:setMinimumSize', {
-    width: minWidth,
-    height: WINDOW_DEFAULT_MIN_HEIGHT,
-  }).catch(() => undefined);
-}
-
 const STEP_COUNT_PATTERN = /(\d+)\s*步/;
+const TUTORIAL_PANEL_MIN_PERCENT = 30;
+const TUTORIAL_PANEL_MAX_PERCENT = 90;
+const TUTORIAL_PANEL_COMPACT_WIDTH_PX = 564;
 type CategoryArt = {
   source: string;
   composed?: boolean;
@@ -209,7 +189,10 @@ export function LearningCenterPage() {
   const [tutorials, setTutorials] = useState<ResourceState<LearningTutorial>>({ status: 'idle' });
   const [cases, setCases] = useState<ResourceState<LearningCaseTemplate>>({ status: 'idle' });
   const [tutorialId, setTutorialId] = useState<string | null>(null);
-  const [tutorialPanelContainer, setTutorialPanelContainer] = useState<HTMLElement | null>(null);
+  const [tutorialPanelPercent, setTutorialPanelPercent] = useState(50);
+  const [isTutorialExpanded, setIsTutorialExpanded] = useState(false);
+  const [isTutorialResizing, setIsTutorialResizing] = useState(false);
+  const [tutorialWorkspaceContainer, setTutorialWorkspaceContainer] = useState<HTMLElement | null>(null);
   const [detailCase, setDetailCase] = useState<LearningCaseTemplate | null>(null);
   const [previewCase, setPreviewCase] = useState<LearningCaseTemplate | null>(null);
   const selectedCategoryRef = useRef<string | null>(null);
@@ -220,55 +203,125 @@ export function LearningCenterPage() {
   const caseUseInFlightRef = useRef(false);
   const contentRegionRef = useRef<HTMLDivElement | null>(null);
   const pageRootRef = useRef<HTMLElement | null>(null);
-  const tutorialSlotRef = useRef<HTMLDivElement | null>(null);
   const stepsRef = useRef<HTMLElement | null>(null);
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
-  const closeTutorial = useCallback(() => setTutorialId(null), []);
-
-  useLayoutEffect(() => {
-    setTutorialPanelContainer(tutorialSlotRef.current);
+  const splitRowRef = useRef<HTMLDivElement | null>(null);
+  const tutorialResizeCleanupRef = useRef<(() => void) | null>(null);
+  const previousPreviewColumnRef = useRef<string | null>(null);
+  const closeTutorial = useCallback(() => {
+    setTutorialId(null);
+    setIsTutorialExpanded(false);
   }, []);
 
   useEffect(() => {
-    const page = pageRootRef.current;
-    const detailOpen = Boolean(tutorialId);
-    syncTutorialWindowMinSize(page, detailOpen);
+    if (!tutorialId) return;
+    const closeFromLearningCenterPage = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !pageRootRef.current?.contains(target)) return;
+      closeTutorial();
+    };
+    document.addEventListener('pointerdown', closeFromLearningCenterPage, true);
+    return () => document.removeEventListener('pointerdown', closeFromLearningCenterPage, true);
+  }, [closeTutorial, tutorialId]);
 
-    if (!detailOpen || !page) {
-      return () => {
-        syncTutorialWindowMinSize(null, false);
-      };
-    }
+  useLayoutEffect(() => {
+    setTutorialWorkspaceContainer(
+      splitRowRef.current?.closest('main') ?? splitRowRef.current?.parentElement ?? null,
+    );
+  }, []);
 
-    const observer = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(() => {
-        syncTutorialWindowMinSize(page, true);
-      });
-    observer?.observe(page);
-    const onResize = () => syncTutorialWindowMinSize(page, true);
-    window.addEventListener('resize', onResize);
+  useLayoutEffect(() => {
+    if (!tutorialId) return;
+    const workspaceMain = splitRowRef.current?.closest('main');
+    if (!workspaceMain) return;
+    previousPreviewColumnRef.current = workspaceMain.style.getPropertyValue('--sto-split-preview-col');
     return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', onResize);
-      syncTutorialWindowMinSize(null, false);
+      const previous = previousPreviewColumnRef.current;
+      if (previous) {
+        workspaceMain.style.setProperty('--sto-split-preview-col', previous);
+      } else {
+        workspaceMain.style.removeProperty('--sto-split-preview-col');
+      }
+      previousPreviewColumnRef.current = null;
     };
   }, [tutorialId]);
 
   useLayoutEffect(() => {
     if (!tutorialId) return;
-    const workspaceMain = pageRootRef.current?.parentElement?.closest('main');
-    if (!workspaceMain) return;
-    const previousWidth = workspaceMain.style.getPropertyValue('--sto-split-preview-col');
-    workspaceMain.style.setProperty('--sto-split-preview-col', '35.25rem');
-    return () => {
-      if (previousWidth) {
-        workspaceMain.style.setProperty('--sto-split-preview-col', previousWidth);
-      } else {
-        workspaceMain.style.removeProperty('--sto-split-preview-col');
-      }
+    const workspaceMain = splitRowRef.current?.closest('main');
+    workspaceMain?.style.setProperty(
+      '--sto-split-preview-col',
+      isTutorialExpanded ? '100%' : `${tutorialPanelPercent}%`,
+    );
+  }, [isTutorialExpanded, tutorialId, tutorialPanelPercent]);
+
+  useEffect(() => () => tutorialResizeCleanupRef.current?.(), []);
+
+  const adjustTutorialPanelPercent = (deltaPercent: number) => {
+    setTutorialPanelPercent((current) => Math.max(
+      TUTORIAL_PANEL_MIN_PERCENT,
+      Math.min(TUTORIAL_PANEL_MAX_PERCENT, current + deltaPercent),
+    ));
+  };
+
+  const resolveCompactTutorialPanelPercent = () => {
+    const workspaceWidth = splitRowRef.current?.closest('main')?.clientWidth || window.innerWidth;
+    return Math.max(
+      TUTORIAL_PANEL_MIN_PERCENT,
+      Math.min(TUTORIAL_PANEL_MAX_PERCENT, (TUTORIAL_PANEL_COMPACT_WIDTH_PX / workspaceWidth) * 100),
+    );
+  };
+
+  const toggleTutorialPanelExpanded = useCallback(() => {
+    setIsTutorialExpanded((current) => !current);
+  }, []);
+
+  const startTutorialResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    tutorialResizeCleanupRef.current?.();
+
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startPercent = tutorialPanelPercent;
+    const workspaceWidth = splitRowRef.current?.closest('main')?.clientWidth || window.innerWidth;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    setIsTutorialResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const cleanup = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerEnd);
+      window.removeEventListener('pointercancel', handlePointerEnd);
+      window.removeEventListener('blur', cleanup);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      tutorialResizeCleanupRef.current = null;
+      setIsTutorialResizing(false);
     };
-  }, [tutorialId]);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      const deltaPercent = ((startX - moveEvent.clientX) / workspaceWidth) * 100;
+      setTutorialPanelPercent(Math.max(
+        TUTORIAL_PANEL_MIN_PERCENT,
+        Math.min(TUTORIAL_PANEL_MAX_PERCENT, startPercent + deltaPercent),
+      ));
+    };
+
+    const handlePointerEnd = (endEvent: PointerEvent) => {
+      if (endEvent.pointerId === pointerId) cleanup();
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerEnd);
+    window.addEventListener('pointercancel', handlePointerEnd);
+    window.addEventListener('blur', cleanup);
+    tutorialResizeCleanupRef.current = cleanup;
+  };
 
   useEffect(() => {
     let active = true;
@@ -332,7 +385,7 @@ export function LearningCenterPage() {
     selectedCategoryRef.current = selectedCategoryId;
     tutorialTokenRef.current += 1;
     caseTokenRef.current += 1;
-    setTutorialId(null);
+    closeTutorial();
     setDetailCase(null);
     setPreviewCase(null);
     detailReturnFocusRef.current = contentRegionRef.current;
@@ -468,30 +521,53 @@ export function LearningCenterPage() {
 
   const tutorialHeaderActions = useMemo(() => (
     tutorialId ? (
-      <button
-        type="button"
-        className={contentHeaderActionBtnClass}
-        aria-label={t('close')}
-        onClick={closeTutorial}
-      >
-        <PanelRightClose className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className={contentHeaderActionBtnClass}
+          aria-label={isTutorialExpanded ? t('restoreTutorial') : t('expandTutorial')}
+          onClick={toggleTutorialPanelExpanded}
+        >
+          {isTutorialExpanded
+            ? <Minimize2 className="h-4 w-4" aria-hidden />
+            : <Maximize2 className="h-4 w-4" aria-hidden />}
+        </button>
+        <button
+          type="button"
+          className={contentHeaderActionBtnClass}
+          aria-label={t('close')}
+          onClick={closeTutorial}
+        >
+          <PanelRightClose className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+        </button>
+      </div>
     ) : null
-  ), [closeTutorial, t, tutorialId]);
+  ), [closeTutorial, isTutorialExpanded, t, toggleTutorialPanelExpanded, tutorialId]);
 
   useContentHeader({
     title: null,
     previewTabs: tutorialHeaderTitle,
     previewActions: tutorialHeaderActions,
-    layoutMode: tutorialId ? 'split' : 'conversation',
+    layoutMode: isTutorialExpanded ? 'preview-expanded' : tutorialId ? 'split' : 'conversation',
   });
 
   return (
     <>
-      <div className={`learning-center-split h-full min-h-0${tutorialId ? ' learning-center-split--open' : ''}`}>
+      <div
+        ref={splitRowRef}
+        className={cn(
+          'learning-center-split h-full min-h-0',
+          tutorialId && 'learning-center-split--open',
+          isTutorialExpanded && 'learning-center-split--expanded',
+          tutorialId && stoSplitRowContentsClass,
+        )}
+        style={{ '--lc-tutorial-panel-percent': `${tutorialPanelPercent}%` } as CSSProperties}
+      >
       <main
         ref={pageRootRef}
-        className={`learning-center-page h-full min-h-0 overflow-x-hidden overflow-y-auto px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
+        className={cn(
+          'learning-center-page h-full min-h-0 overflow-x-hidden overflow-y-auto px-4 py-5 sm:px-6 lg:px-8',
+        )}
       >
         <div className="learning-center-page__inner flex flex-col gap-8">
           {state.status === 'loading' && (
@@ -621,9 +697,11 @@ export function LearningCenterPage() {
                                 className="learning-center-tutorial-link h-auto px-0 py-0 text-primary hover:text-primary"
                                 onClick={(event) => {
                                   detailReturnFocusRef.current = event.currentTarget;
-                                  setTutorialPanelContainer(tutorialSlotRef.current);
                                   setDetailCase(null);
                                   setPreviewCase(null);
+                                  const compactPercent = resolveCompactTutorialPanelPercent();
+                                  setTutorialPanelPercent(compactPercent);
+                                  setIsTutorialExpanded(false);
                                   setTutorialId(tutorial.id);
                                 }}
                               >
@@ -639,17 +717,11 @@ export function LearningCenterPage() {
                 </section>
               )}
 
-              {selectedCategoryId && (
+              {selectedCategoryId && !(cases.status === 'ready' && cases.items.length === 0) && (
                 <section className="learning-center-cases" aria-labelledby="learning-center-cases-heading" aria-live="polite" aria-busy={cases.status === 'loading'}>
                   <h2 id="learning-center-cases-heading" className="learning-center-cases__title">{t('casesTitle')}</h2>
                   {cases.status === 'loading' && <FeedbackState state="loading" title={t('casesLoading')} />}
                   {cases.status === 'error' && <FeedbackState state="error" title={t('casesErrorTitle')} description={cases.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestCasePage(selectedCategoryId, cases.pageNum)}>{t('retry')}</Button>} />}
-                  {cases.status === 'ready' && cases.items.length === 0 && (
-                    <div className="learning-center-empty learning-center-cases__empty" role="status">
-                      <img src={sectionEmptyIcon} alt="" aria-hidden className="learning-center-empty__icon" width={48} height={48} />
-                      <p className="learning-center-empty__text">{t('casesEmptyTitle')}</p>
-                    </div>
-                  )}
                   {cases.status === 'ready' && cases.items.length > 0 && (
                     <>
                       <ul className="learning-center-cases__grid" aria-label={t('casesTitle')}>
@@ -689,17 +761,25 @@ export function LearningCenterPage() {
           )}
         </div>
       </main>
-      <div
-        ref={tutorialSlotRef}
-        className="learning-center-split__aside"
-        aria-hidden={!tutorialId}
-      />
       </div>
       <TutorialPanel
         key={tutorialId ?? 'closed'}
         tutorialId={tutorialId}
-        portalContainer={tutorialPanelContainer}
+        portalContainer={tutorialWorkspaceContainer}
+        panelPercent={tutorialPanelPercent}
+        expanded={isTutorialExpanded}
         returnFocusRef={detailReturnFocusRef}
+        resizeHandle={tutorialId && !isTutorialExpanded ? (
+          <SplitPanelResizeHandle
+            valuePercent={tutorialPanelPercent}
+            minPercent={TUTORIAL_PANEL_MIN_PERCENT}
+            maxPercent={TUTORIAL_PANEL_MAX_PERCENT}
+            isResizing={isTutorialResizing}
+            ariaLabel={t('resizeTutorial')}
+            onResizeStart={startTutorialResize}
+            onKeyboardAdjust={adjustTutorialPanelPercent}
+          />
+        ) : null}
         onClose={closeTutorial}
       />
       <CaseCoverPreviewDialog

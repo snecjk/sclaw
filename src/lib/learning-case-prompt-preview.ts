@@ -16,14 +16,14 @@ export function composeLearningCasePromptPreview(input: {
   promptText?: string | null;
 }): LearningCasePromptPreview {
   const suffix = input.promptText?.trim() ?? '';
-  const title = (input.chipTitle?.trim() || input.targetCode?.trim() || '');
+  const title = input.chipTitle?.trim() || '';
 
   if (input.targetType === 'CHAT') {
     return suffix ? { visible: true, kind: 'CHAT', text: suffix } : { visible: false };
   }
 
   if (input.targetType === 'SKILL' || input.targetType === 'WORKFLOW') {
-    if (!title) return { visible: false };
+    if (!title && !suffix) return { visible: false };
     return { visible: true, kind: input.targetType, title, suffix };
   }
 
