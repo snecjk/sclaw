@@ -102,4 +102,38 @@ describe('jsbridge dispatcher', () => {
     expect(response.error?.code).toBe('METHOD_NOT_FOUND');
     destroyBridgeSession(session!.sessionId);
   });
+
+  it('registers bridge event subscriptions for catalog apps', async () => {
+    const session = createBridgeSession({
+      runtimeId: 'rt-sub',
+      webContentsId: 401,
+      pageUrl: 'https://wd-vip-test.sto.cn/sclaw/clawQuotation',
+      appId: 'customer-quote',
+      bound: true,
+    });
+    expect(session).toBeTruthy();
+
+    const subscribe = await dispatchBridgeInvoke({
+      request: {
+        ...makeRequest(session!.sessionId, 'bridge.subscribe'),
+        params: { events: ['quote:preview-refresh'] },
+      },
+      webContentsId: 401,
+      sessionToken: session!.sessionToken,
+    });
+    expect(subscribe.ok).toBe(true);
+    expect((subscribe.data as { subscribed?: string[] })?.subscribed).toContain('quote:preview-refresh');
+
+    const denied = await dispatchBridgeInvoke({
+      request: {
+        ...makeRequest(session!.sessionId, 'bridge.subscribe'),
+        params: { events: ['chat:not-allowed'] },
+      },
+      webContentsId: 401,
+      sessionToken: session!.sessionToken,
+    });
+    expect(denied.ok).toBe(false);
+
+    destroyBridgeSession(session!.sessionId);
+  });
 });

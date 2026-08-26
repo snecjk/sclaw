@@ -6,6 +6,12 @@
 import { buildVipClawQuotationUrl } from '../../shared/vip-claw-quotation-url';
 import type { FlowCardContentBlock } from '../../shared/flow-card-protocol';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
+import {
+  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+  emitBridgeGuestEvent,
+} from '@/lib/jsbridge/emit-guest-event';
+import { parseFlowCardValidationOutcome } from '@/lib/flow-card-progress';
 import { openChatBrowserPreview } from '@/stores/chat-browser-preview';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useChatStore } from '@/stores/chat';
@@ -59,14 +65,65 @@ export function openFlowCardPreview(input: {
   openChatBrowserPreview({ sessionKey, url, title, force: true });
 }
 
+function resolveEmbedRuntimeId(sessionKey: string): string | null {
+  if (!isSclawBrowserEmbedChatSessionKey(sessionKey)) return null;
+  const shell = useAppPlazaShellStore.getState();
+  const tab = shell.browserTabs.find(
+    (entry) => entry.chatSessionKey === sessionKey && entry.status === 'live',
+  ) ?? shell.browserTabs.find((entry) => entry.id === shell.activeTabId && entry.status === 'live');
+  return tab?.embedRuntimeId ?? null;
+}
+
+function emitQuoteBridgeEvents(
+  card: FlowCardContentBlock,
+  sessionKey: string,
+  url: string,
+  mode: FlowCardPreviewMode,
+): void {
+  const runtimeId = resolveEmbedRuntimeId(sessionKey);
+  if (!runtimeId) return;
+
+  const ossKey = readString(card.data, 'ossKey');
+  if (!ossKey) return;
+
+  void emitBridgeGuestEvent({
+    runtimeId,
+    name: BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+    eventPayload: {
+      ossKey,
+      phase: card.phase,
+      mode,
+      url,
+    },
+  });
+
+  const outcome = parseFlowCardValidationOutcome(card.data);
+  if (outcome) {
+    const errorCount = typeof card.data?.errorCount === 'number' ? card.data.errorCount : undefined;
+    void emitBridgeGuestEvent({
+      runtimeId,
+      name: BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+      eventPayload: {
+        ossKey,
+        pass: outcome === 'pass',
+        errorCount,
+        phase: card.phase,
+      },
+    });
+  }
+}
+
 /** Sync preview for a flow_card — main right / plaza left. */
 export function syncFlowCardPreview(card: FlowCardContentBlock, sessionKey?: string): void {
   const url = resolveFlowCardPreviewUrl(card);
   if (!url) return;
+  const key = sessionKey ?? useChatStore.getState().currentSessionKey;
+  const mode = resolveFlowCardPreviewMode(card);
   openFlowCardPreview({
     url,
     title: readString(card.data, 'previewTitle') || '报价确认',
-    mode: resolveFlowCardPreviewMode(card),
-    sessionKey,
+    mode,
+    sessionKey: key,
   });
+  emitQuoteBridgeEvents(card, key, url, mode);
 }

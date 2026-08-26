@@ -772,8 +772,54 @@ const { value } = await window.stoClaw.call('storage.get', { key: 'draft' });
 | `cancel()` | `chat.cancel` | 取消 AI 调用 |
 | `call('storage.*', …)` | `storage.*` | JSON KV 读写 |
 | `call(method, params)` | 任意 | 底层调用 |
-| `on(event, handler)` | — | 订阅 Bridge 事件（payload 为 JSON） |
+| `subscribe(events)` | `bridge.subscribe` | 向宿主注册关心的事件（必须先注册才会推送） |
+| `unsubscribe(events?)` | `bridge.unsubscribe` | 取消注册；不传则清空 |
+| `on(event, handler)` | — | 本地监听推送（配合 subscribe） |
+| `addListener(event, handler)` | `bridge.subscribe` + `on` | 推荐：注册 + 监听 + 一键 cleanup |
 | `isStoClawBridgeAvailable()` | — | 环境检测（静态） |
+
+### 宿主 → 页面事件（主动注册）
+
+SClaw **不会**无差别推送给所有 webview。业务页需先 `subscribe` / `addListener`，宿主才会 `emit`。
+
+```typescript
+import {
+  stoClaw,
+  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+} from '@sto/claw-bridge-sdk';
+
+// 推荐：一步注册 + 监听
+const off = await stoClaw.addListener(BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH, (payload) => {
+  const { ossKey, mode, url } = payload as { ossKey: string; mode?: string; url?: string };
+  // 同页刷新 clawQuotation（勿依赖 location.reload）
+});
+
+// 卸载
+off();
+```
+
+或手动两步：
+
+```typescript
+await stoClaw.subscribe([
+  BRIDGE_EVENT_QUOTE_PREVIEW_REFRESH,
+  BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE,
+]);
+
+stoClaw.on(BRIDGE_EVENT_QUOTE_VALIDATION_COMPLETE, ({ pass, ossKey }) => {
+  if (!pass) return;
+  // ...
+});
+```
+
+| 事件名 | 说明 | payload 示例 |
+|--------|------|----------------|
+| `quote:preview-refresh` | SClaw 打开/刷新报价确认页 | `{ ossKey, phase, mode, url }` |
+| `quote:validation-complete` | 校验结果到达 | `{ ossKey, pass, errorCount?, phase }` |
+| `bridge:session-destroyed` | Bridge 会话销毁（生命周期，无需 subscribe） | `{ reason? }` |
+
+catalog 应用默认允许订阅 `quote:*`；其它事件需在应用 `bridgePolicy.allowedEventPatterns` 中配置。
 
 ---
 

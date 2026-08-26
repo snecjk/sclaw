@@ -11,6 +11,7 @@ import {
   originFromUrl,
 } from '../../../../shared/jsbridge/origin-policy';
 import type { BridgeBootstrap } from '../../../../shared/jsbridge/protocol';
+import { JSBRIDGE_PROTOCOL, JSBRIDGE_VERSION } from '../../../../shared/jsbridge/protocol';
 import type { BridgeContainerKind, ResolveTrustPolicyInput } from '../../../../shared/jsbridge/trust-policy';
 import { resolveTrustPolicy } from '../../../../shared/jsbridge/trust-policy';
 import { hasBridgeConsent } from './consent-store';
@@ -21,7 +22,6 @@ import {
   isBridgeEventAllowed,
   resolveAllowedBridgeEventPatterns,
 } from '../../../../shared/jsbridge/bridge-events';
-import { buildBridgeEventEnvelope } from './handlers/bridge-events';
 
 export interface BridgeSession {
   sessionId: string;
@@ -223,7 +223,15 @@ export function destroyBridgeSession(sessionId: string, reason?: string): void {
   const wc = resolveWebContents(session.webContentsId);
   if (wc && !wc.isDestroyed()) {
     try {
-      wc.send('jsbridge:event', buildBridgeEventEnvelope(session, 'bridge:session-destroyed', { reason }));
+      wc.send('jsbridge:event', {
+        protocol: JSBRIDGE_PROTOCOL,
+        version: JSBRIDGE_VERSION,
+        type: 'event',
+        sessionId: session.sessionId,
+        name: 'bridge:session-destroyed',
+        payload: { reason },
+        timestamp: Date.now(),
+      });
     } catch {
       // guest may be gone
     }
@@ -304,7 +312,15 @@ export function emitBridgeEvent(input: EmitBridgeEventInput): boolean {
   if (!wc || wc.isDestroyed()) return false;
 
   try {
-    wc.send('jsbridge:event', buildBridgeEventEnvelope(session, eventName, input.payload));
+    wc.send('jsbridge:event', {
+      protocol: JSBRIDGE_PROTOCOL,
+      version: JSBRIDGE_VERSION,
+      type: 'event',
+      sessionId: session.sessionId,
+      name: eventName,
+      payload: input.payload,
+      timestamp: Date.now(),
+    });
     return true;
   } catch (error) {
     logger.warn('[jsbridge] emit event failed', { eventName, error });

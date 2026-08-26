@@ -3,8 +3,8 @@ import {
   isValidBridgeEventName,
   normalizeBridgeEventList,
   resolveAllowedBridgeEventPatterns,
-} from '../../../../shared/jsbridge/bridge-events';
-import { JSBRIDGE_PROTOCOL, JSBRIDGE_VERSION } from '../../../../shared/jsbridge/protocol';
+} from '../../../../../shared/jsbridge/bridge-events';
+import { JSBRIDGE_PROTOCOL, JSBRIDGE_VERSION } from '../../../../../shared/jsbridge/protocol';
 import type { BridgeHandlerFn } from './types';
 import type { BridgeSession } from '../session-registry';
 
