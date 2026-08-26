@@ -1,16 +1,8 @@
-import { useEffect, useRef } from 'react';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FlowCardAction, FlowCardContentBlock } from '../../../shared/flow-card-protocol';
 import { dispatchFlowCardAction } from '@/lib/flow-card-actions';
 import { filterQuoteFlowCardActions } from '@/lib/flow-card-quote-actions';
-import { syncFlowCardPreview } from '@/lib/flow-card-preview';
-import type { QuoteBridgeNotifyKind } from '../../../shared/quote-bridge-channels';
-import {
-  parseBatchAdjustDraft,
-  parseBatchAdjustParams,
-  parseBatchAdjustValidation,
-} from '../../../shared/quote-batch-adjust';
 import {
   parseFlowCardProgressSteps,
   useFlowCardProgressAnimation,
@@ -188,113 +180,6 @@ export function FlowCard({ card }: FlowCardProps) {
     allDone,
     progressSettled,
   } = useFlowCardProgressAnimation(card);
-  const previewSyncRef = useRef<{
-    ossKey: string;
-    previewUrl: string;
-    previewMode: string;
-    phase: string;
-    batchParamsSig: string;
-    batchValidationSig: string;
-    batchDraftSig: string;
-  } | null>(null);
-
-  function fieldSignature(value: unknown): string {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return '';
-    }
-  }
-
-  function runBridgeNotifies(card: FlowCardContentBlock, notifies: QuoteBridgeNotifyKind[]) {
-    for (const notify of notifies) {
-      syncFlowCardPreview(card, undefined, notify);
-    }
-  }
-
-  // Navigate + notify on ossKey/previewUrl / batch-adjust data changes, or save succeeds.
-  useEffect(() => {
-    const ossKey = typeof card.data?.ossKey === 'string' ? card.data.ossKey.trim() : '';
-    const previewUrl = typeof card.data?.previewUrl === 'string' ? card.data.previewUrl.trim() : '';
-    const previewMode = typeof card.data?.previewMode === 'string' ? card.data.previewMode.trim() : '';
-    const data = card.data ?? {};
-    const batchParamsSig = fieldSignature(parseBatchAdjustParams(data));
-    const batchValidation = parseBatchAdjustValidation(data);
-    const batchValidationSig = batchValidation ? fieldSignature(batchValidation) : '';
-    const batchDraftSig = fieldSignature(parseBatchAdjustDraft(data));
-
-    const current = {
-      ossKey,
-      previewUrl,
-      previewMode,
-      phase: card.phase,
-      batchParamsSig,
-      batchValidationSig,
-      batchDraftSig,
-    };
-    const prev = previewSyncRef.current;
-    const navigable = Boolean(ossKey || previewUrl);
-
-    if (card.phase === 'awaiting_upload') {
-      previewSyncRef.current = current;
-      return;
-    }
-
-    if (!prev) {
-      previewSyncRef.current = current;
-      const initial: QuoteBridgeNotifyKind[] = [];
-      if (navigable) initial.push('preview');
-      if (batchParamsSig) initial.push('batch-adjust-params');
-      if (batchValidation && !batchValidation.pass) initial.push('batch-adjust-validate-fail');
-      if (batchDraftSig) initial.push('batch-adjust-draft');
-      if (initial.length > 0) runBridgeNotifies(card, initial);
-      return;
-    }
-
-    previewSyncRef.current = current;
-
-    const notifies: QuoteBridgeNotifyKind[] = [];
-
-    if (prev.ossKey !== ossKey || prev.previewUrl !== previewUrl) {
-      notifies.push('preview');
-    }
-    if (prev.batchParamsSig !== batchParamsSig && batchParamsSig) {
-      notifies.push('batch-adjust-params');
-      if (!notifies.includes('preview') && navigable) {
-        notifies.push('preview');
-      }
-    }
-    if (
-      prev.batchValidationSig !== batchValidationSig
-      && batchValidation
-      && !batchValidation.pass
-    ) {
-      notifies.push('batch-adjust-validate-fail');
-    }
-    if (prev.batchDraftSig !== batchDraftSig && batchDraftSig) {
-      notifies.push('batch-adjust-draft');
-    }
-
-    const submitSuccess =
-      (card.phase === 'submitted' || card.phase === 'editing')
-      && previewMode === 'refresh'
-      && (prev.phase !== card.phase || prev.previewMode !== 'refresh');
-    if (submitSuccess) {
-      notifies.push('save');
-    }
-
-    if (notifies.length > 0) runBridgeNotifies(card, notifies);
-  }, [
-    card.cardId,
-    card.phase,
-    card.data?.ossKey,
-    card.data?.previewUrl,
-    card.data?.previewMode,
-    card.data?.batchAdjustParams,
-    card.data?.batchAdjustValidation,
-    card.data?.batchAdjustDraft,
-    card.data?.scene,
-  ]);
 
   return (
     <div

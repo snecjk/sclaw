@@ -69,16 +69,17 @@ function resolveEmbedRuntimeId(sessionKey: string): string | null {
   return tab?.embedRuntimeId ?? null;
 }
 
-/** Sync preview — navigate business page and emit `quote:event` when requested. */
+/** Sync preview — optionally navigate business page; always emit `quote:event` when requested. */
 export function syncFlowCardPreview(
   card: FlowCardContentBlock,
   sessionKey?: string,
   notify?: QuoteBridgeNotifyKind,
+  options?: { navigate?: boolean },
 ): void {
   const key = sessionKey ?? useChatStore.getState().currentSessionKey;
   const url = resolveFlowCardPreviewUrl(card);
   const mode = resolveFlowCardPreviewMode(card);
-  if (url) {
+  if (url && options?.navigate) {
     openFlowCardPreview({
       url,
       title: readString(card.data, 'previewTitle') || '报价确认',

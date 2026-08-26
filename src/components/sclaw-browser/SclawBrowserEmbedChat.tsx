@@ -24,6 +24,7 @@ import {
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
+import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
 import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
 interface SclawBrowserEmbedChatProps {
@@ -46,6 +47,10 @@ export function SclawBrowserEmbedChat({
   const closeChatPanel = useSclawBrowserOverlayStore((s) => s.closeChatPanel);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const messages = useCurrentChatDisplayMessages();
+  useQuoteFlowCardSessionSync(
+    currentSessionKey === sessionKey ? sessionKey : '',
+    currentSessionKey === sessionKey ? messages : [],
+  );
   const loading = useChatStore((s) => s.loading);
   const {
     sending,

@@ -66,6 +66,8 @@ import {
   workflowAnchorRepairRevision,
 } from '@/lib/workflow-chat-card-registration';
 import { getCurrentChatDisplayMessages, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
+
 export function Chat() {
   const navigate = useNavigate();
   const { t } = useTranslation('chat');
@@ -74,6 +76,7 @@ export function Chat() {
 
   const messages = useCurrentChatDisplayMessages();
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  useQuoteFlowCardSessionSync(currentSessionKey, messages);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
   const loading = useChatStore((s) => s.loading);
