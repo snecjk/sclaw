@@ -67,6 +67,7 @@ export function useChatDisplay(params: {
   messages: RawMessage[];
   sending: boolean;
   pendingFinal: boolean;
+  transcriptPending: boolean;
   showThinking: boolean;
   lastChatEventAt: number;
   streamMsg: { role?: string; content?: unknown; timestamp?: number; id?: string } | null;
@@ -74,13 +75,14 @@ export function useChatDisplay(params: {
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
   streamingTools: StreamingTool[];
-  lastUserMessageAt: number | null;
+  turnAnchorAt: number | null;
   workflowCards?: ChatWorkflowCardRef[];
 }) {
   const {
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     lastChatEventAt,
     streamMsg,
@@ -89,7 +91,7 @@ export function useChatDisplay(params: {
     streamingToolResults = [],
     streamingTools = [],
     workflowCards = [],
-    lastUserMessageAt,
+    turnAnchorAt,
   } = params;
 
   const [, staleTick] = useState(0);
@@ -116,7 +118,11 @@ export function useChatDisplay(params: {
     streamingTools,
     showThinking,
   );
-  const shouldRenderStreaming = sending && hasAnyStreamContent;
+  // Keep the completed payload mounted until authoritative transcript history
+  // takes over, preventing a blank frame between stream completion and refresh.
+  const retainFinalOverlay = transcriptPending && hasAnyStreamContent;
+  const displayActive = sending || retainFinalOverlay;
+  const shouldRenderStreaming = displayActive && hasAnyStreamContent;
 
   const isStillExecuting = useMemo(() => {
     if (!sending || pendingFinal) return false;
@@ -126,7 +132,7 @@ export function useChatDisplay(params: {
   }, [sending, pendingFinal, hasAnyStreamContent, lastChatEventAt, staleTick]);
 
   const { staticItems, activeTurn } = useMemo(() => {
-    if (!sending) {
+    if (!displayActive) {
       return { staticItems: displayItems, activeTurn: null as null | {
         turnStableKey: string;
         turnMessages: RawMessage[];
@@ -154,19 +160,20 @@ export function useChatDisplay(params: {
       streamingTools,
       streamingMessages,
       streamingToolResults,
+      isRunActive: sending,
       isConnecting: !pendingFinal && !hasAnyStreamContent && !isStillExecuting,
       isProcessing: pendingFinal && sending && !hasLiveStreamContent,
       isStillExecuting,
     };
 
     // Only promote the last assistant turn/message into activeTurn when the
-    // current send was triggered by a user message (lastUserMessageAt is set).
-    // For cron/background triggers (lastUserMessageAt === null), creating a
+    // current send was triggered by a user message (turnAnchorAt is set).
+    // For cron/background triggers (turnAnchorAt === null), creating a
     // fresh activeTurn ensures the loading indicator appears as a new line
     // rather than overlaying the previous completed answer.
     const last = displayItems[displayItems.length - 1];
     if (
-      lastUserMessageAt != null
+      turnAnchorAt != null
       && last?.type === 'single'
       && last.message.role === 'user'
     ) {
@@ -186,7 +193,7 @@ export function useChatDisplay(params: {
       };
     }
 
-    if (lastUserMessageAt != null && last?.type === 'assistant-turn') {
+    if (turnAnchorAt != null && last?.type === 'assistant-turn') {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
@@ -199,7 +206,7 @@ export function useChatDisplay(params: {
       };
     }
 
-    if (lastUserMessageAt != null && last?.type === 'single' && isAssistantRole(last.message.role)) {
+    if (turnAnchorAt != null && last?.type === 'single' && isAssistantRole(last.message.role)) {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
@@ -232,8 +239,10 @@ export function useChatDisplay(params: {
     };
   }, [
     displayItems,
+    displayActive,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     streamMsg,
     streamText,
@@ -241,7 +250,7 @@ export function useChatDisplay(params: {
     streamingToolResults,
     streamingTools,
     isStillExecuting,
-    lastUserMessageAt,
+    turnAnchorAt,
   ]);
 
   const visibleWorkflowCards = activeTurn?.precedingUserMessage?.id

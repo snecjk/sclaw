@@ -16,11 +16,17 @@ const ACTIVE_PHASES = new Set<ClientRunState['phase']>([
 export interface ChatSessionRuntimeView {
   sending: boolean;
   activeRunId: string | null;
+  /** The live response is finalizing while the run is still active. */
   pendingFinal: boolean;
+  /** Final overlay is retained until authoritative transcript history takes over. */
+  transcriptPending: boolean;
   error: string | null;
   phase: ClientRunState['phase'] | null;
   lastEventAt: number;
+  /** User timestamp exposed only while the run is active. */
   lastUserMessageAt: number | null;
+  /** User timestamp retained solely to anchor a completed final overlay. */
+  turnAnchorAt: number | null;
   streamingMessage: RawMessage | null;
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
@@ -64,10 +70,12 @@ const EMPTY_RUNTIME_VIEW: ChatSessionRuntimeView = {
   sending: false,
   activeRunId: null,
   pendingFinal: false,
+  transcriptPending: false,
   error: null,
   phase: null,
   lastEventAt: 0,
   lastUserMessageAt: null,
+  turnAnchorAt: null,
   streamingMessage: null,
   streamingMessages: [],
   streamingToolResults: [],
@@ -81,6 +89,8 @@ export function buildChatSessionRuntimeView(
   if (!session) return EMPTY_RUNTIME_VIEW;
   const runtime = session?.runtime ?? null;
   const sending = Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
+  const transcriptPending = Boolean(session?.overlay.awaitingTranscript);
+  const pendingFinal = sending && transcriptPending;
   const lastUser = [...(session?.transcript ?? [])].reverse().find((message) => message.role === 'user');
   const optimisticTimestamp = session?.overlay.optimisticUserMessage?.timestamp;
   const transcriptTimestamp = lastUser?.timestamp;
@@ -96,15 +106,24 @@ export function buildChatSessionRuntimeView(
   const currentTranscriptAt = runtime && transcriptAt !== null && transcriptAt >= runtime.startedAt - 2_000
     ? transcriptAt
     : null;
-  const lastUserMessageAt = sending ? optimisticAt ?? currentTranscriptAt : null;
+  const currentUserMessageAt = optimisticAt ?? currentTranscriptAt;
+  // A terminal run can still be waiting for its authoritative transcript.
+  // Keep a display-only anchor until history takes over without exposing that
+  // retained overlay as an active response to lifecycle/meta consumers.
+  const lastUserMessageAt = sending ? currentUserMessageAt : null;
+  const turnAnchorAt = sending || transcriptPending
+    ? currentUserMessageAt
+    : null;
   const view: ChatSessionRuntimeView = {
     sending,
     activeRunId: sending ? runtime?.runId ?? null : null,
-    pendingFinal: Boolean(session?.overlay.awaitingTranscript),
+    pendingFinal,
+    transcriptPending,
     error: session?.error ? formatChatRuntimeErrorForDisplay(session.error) : null,
     phase: runtime?.phase ?? null,
     lastEventAt: runtime?.lastEventAt ?? 0,
     lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage: session?.overlay.streamingMessage ?? null,
     streamingMessages: session?.overlay.streamingMessages ?? [],
     streamingToolResults: session?.overlay.streamingToolResults ?? [],

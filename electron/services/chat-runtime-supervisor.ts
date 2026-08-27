@@ -1053,6 +1053,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           { gatewayManager: this.gatewayManager },
           { sessionKey, runId: current.runId, startedAt: current.startedAt, limit: 50 },
         );
+        logger.debug('[chat-runtime] transcript settle inspection', {
+          sessionKey,
+          runId: current.runId,
+          delay,
+          status: inspection.status,
+          messageCount: inspection.currentTurnMessages?.length ?? 0,
+          hasRevision: Boolean(inspection.transcriptRevision),
+        });
         if (inspection.currentTurnMessages?.length) {
           // Transcript settling runs independently from live Gateway delivery.
           // Commit projected messages through the same per-session queue as
@@ -1115,6 +1123,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           { gatewayManager: this.gatewayManager },
           { sessionKey, runId: current.runId, startedAt: current.startedAt, limit: 50 },
         );
+        logger.debug('[chat-runtime] transcript compensation inspection', {
+          sessionKey,
+          runId: current.runId,
+          delay,
+          status: inspection.status,
+          messageCount: inspection.currentTurnMessages?.length ?? 0,
+          hasRevision: Boolean(inspection.transcriptRevision),
+        });
         if (inspection.status !== 'completed' || !inspection.transcriptRevision) continue;
         latestRevision = inspection.transcriptRevision;
         if (previousRevision === latestRevision) {

@@ -80,8 +80,10 @@ export function Chat() {
   const {
     sending,
     pendingFinal,
+    transcriptPending,
     lastEventAt: canonicalLastEventAt,
     lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage,
     streamingMessages,
     streamingToolResults,
@@ -200,6 +202,7 @@ export function Chat() {
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     workflowCards,
     lastChatEventAt,
@@ -208,7 +211,7 @@ export function Chat() {
     streamingMessages,
     streamingToolResults,
     streamingTools,
-    lastUserMessageAt,
+    turnAnchorAt,
   });
 
   const streamContentKey = useMemo(
@@ -222,6 +225,7 @@ export function Chat() {
         streamingToolResults.length,
         streamingTools.length,
         pendingFinal ? 1 : 0,
+        transcriptPending ? 1 : 0,
         shouldRenderStreaming ? 1 : 0,
       ].join(':'),
     [
@@ -233,6 +237,7 @@ export function Chat() {
       streamingToolResults.length,
       streamingTools.length,
       pendingFinal,
+      transcriptPending,
       shouldRenderStreaming,
     ],
   );

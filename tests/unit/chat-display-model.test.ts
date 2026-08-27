@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildChatDisplayModel } from '@/stores/chat/display-model';
+import { buildChatDisplayModel, materializeCompletedOverlay } from '@/stores/chat/display-model';
 import { createClientSessionState } from '@/stores/chat/client-session-reducer';
 
 describe('chat display model', () => {
@@ -85,5 +85,31 @@ describe('chat display model', () => {
 
     expect(displayed).toHaveLength(1);
     expect(displayed[0]?._composerSegments?.[0]).toMatchObject({ type: 'workflow', name: '日报' });
+  });
+
+  it('materializes a completed overlay in chronological display order', () => {
+    const overlay = {
+      ...createClientSessionState().overlay,
+      optimisticUserMessage: {
+        id: 'user-1', role: 'user' as const, content: '你是谁', timestamp: 1,
+      },
+      streamingMessages: [
+        { id: 'assistant-thinking', role: 'assistant' as const, content: '思考', timestamp: 2 },
+      ],
+      streamingToolResults: [
+        { id: 'tool-1', role: 'toolresult' as const, content: '工具结果', timestamp: 3 },
+      ],
+      streamingMessage: {
+        id: 'assistant-final', role: 'assistant' as const, content: '我是最终回复', timestamp: 4,
+      },
+      awaitingTranscript: true,
+    };
+
+    expect(materializeCompletedOverlay([], overlay).map((message) => message.id)).toEqual([
+      'user-1',
+      'assistant-thinking',
+      'tool-1',
+      'assistant-final',
+    ]);
   });
 });

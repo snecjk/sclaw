@@ -281,9 +281,11 @@ export function reduceSessionEvent(
           : toolUpdates.length > 0
             ? upsertToolStatuses(state.overlay.streamingTools, toolUpdates)
             : state.overlay.streamingTools,
-        awaitingTranscript: event.type === 'transcript.updated'
-          ? false
-          : preserveCompletedOverlay || (!terminal && awaitingTranscript),
+        // transcript.updated only announces that authoritative history changed.
+        // Keep the final overlay mounted until setTranscript verifies that the
+        // current user turn and assistant reply are both present; clearing here
+        // creates a blank frame while the async history refresh is still pending.
+        awaitingTranscript: preserveCompletedOverlay || (!terminal && awaitingTranscript),
       },
       error: startsNewRun
         ? null
