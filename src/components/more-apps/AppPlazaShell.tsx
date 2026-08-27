@@ -12,6 +12,7 @@ import {
 } from '@/stores/app-plaza-shell';
 import { bindAppNavigate, unbindAppNavigate } from '@/lib/app-navigate';
 import { closeSclawBrowser } from '@/lib/open-sclaw-browser';
+import { useAppPlazaSidebarCollapse } from '@/hooks/use-app-plaza-sidebar-collapse';
 import { useSclawBrowserChatShortcut } from '@/components/sclaw-browser/use-sclaw-browser-chat-shortcut';
 import { useSclawBrowserDevToolsShortcut } from '@/components/sclaw-browser/use-sclaw-browser-devtools-shortcut';
 import { useSclawBrowserOpenUrl } from '@/components/sclaw-browser/use-sclaw-browser-open-url';
@@ -26,6 +27,11 @@ export function AppPlazaShell() {
   const activeTabId = useAppPlazaShellStore((s) => s.activeTabId);
   const browserTabs = useAppPlazaShellStore((s) => s.browserTabs);
   const toggleChatPanel = useAppPlazaShellStore((s) => s.toggleChatPanel);
+  const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
+  const viewingSpecificApp = Boolean(
+    routeActive && activeBrowser && activeBrowser.status !== 'blank',
+  );
+  useAppPlazaSidebarCollapse(viewingSpecificApp);
 
   useEffect(() => {
     setRouteActive(routeActive);
@@ -47,7 +53,6 @@ export function AppPlazaShell() {
 
   useEffect(() => installJsBridgeHostListeners(), []);
 
-  const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
   const chatShortcutEnabled = routeActive && activeBrowser?.status === 'live';
   useSclawBrowserChatShortcut(Boolean(chatShortcutEnabled), () => {
     if (activeBrowser) toggleChatPanel(activeBrowser.id);

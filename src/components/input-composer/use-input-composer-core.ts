@@ -39,8 +39,8 @@ export interface UseInputComposerCoreOptions {
   initialSnapshot?: MentionComposerSnapshot;
   /** Chat：选工作流时清 pending；Task 不传以免碰 Chat store */
   onClearPendingWorkflow?: () => void;
-  /** 收起工具栏时共用触发钮 ref */
-  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
+  /** 收起工具栏时共用锚点（扳手外层 span） */
+  toolbarAnchorRef?: RefObject<HTMLElement | null>;
 }
 
 export function useInputComposerCore({

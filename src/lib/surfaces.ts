@@ -1317,7 +1317,7 @@ export const skillMessageTagClass = skillComposerTagClass;
 
 /** Composer 技能 Picker 浮层容器 */
 export const skillPickerShellClass = cn(
-  'absolute left-0 bottom-full z-50 mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2',
+  'absolute left-0 bottom-full z-[100001] mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2',
   'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
 );
 

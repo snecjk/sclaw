@@ -57,7 +57,9 @@ export function ComposerAttachMenu({
   useEffect(() => {
     if (!open) return;
 
+    const openedAt = Date.now();
     const onPointerDown = (event: MouseEvent) => {
+      if (Date.now() - openedAt < 150) return;
       const target = event.target as Node | null;
       if (!target) return;
       if (menuRef.current?.contains(target)) return;
@@ -101,7 +103,7 @@ export function ComposerAttachMenu({
       ref={menuRef}
       role="menu"
       className={cn(
-        'fixed z-[120] min-w-[180px] overflow-hidden rounded-[10px] border border-[#E5E6EB]',
+        'fixed z-[100001] min-w-[180px] overflow-hidden rounded-[10px] border border-[#E5E6EB]',
         'bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]',
         'dark:border-border dark:bg-popover',
       )}

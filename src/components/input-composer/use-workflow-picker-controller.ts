@@ -35,6 +35,8 @@ export interface UseWorkflowPickerControllerOptions {
   setQuickInputPickerOpen: (open: boolean) => void;
   /** mutex 提供的工具栏互斥 toggle */
   toggleToolbarFromMutex: () => void;
+  /** mutex：下拉菜单打开工作流（只开不关） */
+  openToolbarFromMutex: () => void;
   /** MentionEditor 句柄（插工作流 / 保存光标） */
   mentionEditorRef: RefObject<DingTalkMentionEditorHandle | null>;
   /** 当前纯文本，用于提取 slash query */
@@ -47,8 +49,8 @@ export interface UseWorkflowPickerControllerOptions {
   closeOthers?: () => void;
   /** 选中工作流后清除 pending workflow（Chat 注入 useChatStore.clearPendingWorkflow）。 */
   onClearPendingWorkflow?: () => void;
-  /** 收起工具栏时共用触发钮 ref */
-  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
+  /** 收起工具栏时共用锚点 */
+  toolbarAnchorRef?: RefObject<HTMLElement | null>;
 }
 
 export function useWorkflowPickerController({
@@ -58,6 +60,7 @@ export function useWorkflowPickerController({
   setSkillPickerOpen,
   setQuickInputPickerOpen,
   toggleToolbarFromMutex,
+  openToolbarFromMutex,
   mentionEditorRef,
   plainText,
   isComposingRef,
@@ -91,9 +94,16 @@ export function useWorkflowPickerController({
     toggleToolbarFromMutex();
   }, [mentionEditorRef, toggleToolbarFromMutex]);
 
+  const openToolbar = useCallback(() => {
+    mentionEditorRef.current?.saveCaret();
+    openToolbarFromMutex();
+  }, [mentionEditorRef, openToolbarFromMutex]);
+
   useEffect(() => {
     if (!open) return;
+    const openedAt = Date.now();
     const handlePointerDown = (event: MouseEvent) => {
+      if (Date.now() - openedAt < 150) return;
       const target = event.target as Node;
       if (
         !pickerRef.current?.contains(target)
@@ -195,6 +205,7 @@ export function useWorkflowPickerController({
     buttonRef: buttonRef as MutableRefObject<HTMLButtonElement | null>,
     pickerRef: pickerRef as MutableRefObject<HTMLDivElement | null>,
     toggleToolbar,
+    openToolbar,
     close,
     handleTextInput,
     onSnapshotChange,

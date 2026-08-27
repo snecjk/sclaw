@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  activateSclawBrowserEmbedChat,
   deactivateSclawBrowserEmbedChat,
   switchSclawBrowserEmbedChatSession,
 } from '@/lib/sclaw-browser-chat-lifecycle';
@@ -17,7 +18,12 @@ vi.mock('@/lib/app-plaza-ephemeral-chat-purge', () => ({
 }));
 
 vi.mock('@/lib/sclaw-browser-chat-lifecycle', () => ({
-  activateSclawBrowserEmbedChat: vi.fn(),
+  activateSclawBrowserEmbedChat: vi.fn((appId: string, embedRuntimeId: string) => ({
+    chatSessionKey: `agent:main:session-embed-${appId}`,
+    savedMainSessionKey: 'agent:main:main',
+    embedRuntimeId,
+    appId,
+  })),
   createSclawBrowserEmbedChatSession: vi.fn(),
   deactivateSclawBrowserEmbedChat: vi.fn(),
   deleteSclawBrowserEmbedChatSession: vi.fn(),
@@ -264,5 +270,76 @@ describe('useAppPlazaShellStore embed chat route sync', () => {
       liveTab.chatSessionKey,
       liveTab.savedMainSessionKey,
     );
+  });
+});
+
+describe('useAppPlazaShellStore default embed chat', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppPlazaShellStore.setState({
+      routeActive: true,
+      activeTabId: APP_PLAZA_HOME_TAB_ID,
+      browserTabs: [],
+    });
+  });
+
+  it('opens the AI chat panel when creating a new live app tab', async () => {
+    useAppPlazaShellStore.getState().openOrFocusBrowserTab({
+      url: 'https://shenjishop.sto.cn/',
+      title: '申集商城',
+      appId: 'shenji',
+      bound: true,
+    });
+
+    await vi.waitFor(() => {
+      const tab = useAppPlazaShellStore.getState().browserTabs[0];
+      expect(tab?.status).toBe('live');
+      expect(tab?.chatPanelOpen).toBe(true);
+      expect(tab?.chatSessionKey).toBe('agent:main:session-embed-shenji');
+    });
+    expect(activateSclawBrowserEmbedChat).toHaveBeenCalled();
+  });
+
+  it('does not reopen chat when focusing an existing tab that already closed it', async () => {
+    useAppPlazaShellStore.getState().openOrFocusBrowserTab({
+      url: 'https://shenjishop.sto.cn/',
+      title: '申集商城',
+      appId: 'shenji',
+      bound: true,
+    });
+    await vi.waitFor(() => {
+      expect(useAppPlazaShellStore.getState().browserTabs[0]?.chatPanelOpen).toBe(true);
+    });
+
+    const tabId = useAppPlazaShellStore.getState().browserTabs[0]!.id;
+    useAppPlazaShellStore.getState().closeChatPanel(tabId);
+    expect(useAppPlazaShellStore.getState().browserTabs[0]?.chatPanelOpen).toBe(false);
+    vi.mocked(activateSclawBrowserEmbedChat).mockClear();
+
+    useAppPlazaShellStore.getState().openOrFocusBrowserTab({
+      url: 'https://shenjishop.sto.cn/',
+      title: '申集商城',
+      appId: 'shenji',
+      bound: true,
+    });
+    await vi.waitFor(() => {
+      expect(useAppPlazaShellStore.getState().browserTabs).toHaveLength(1);
+    });
+
+    expect(useAppPlazaShellStore.getState().browserTabs[0]?.chatPanelOpen).toBe(false);
+    expect(activateSclawBrowserEmbedChat).not.toHaveBeenCalled();
+  });
+
+  it('opens the AI chat panel when a blank tab becomes a live page', async () => {
+    useAppPlazaShellStore.getState().addBlankTab();
+    const blankId = useAppPlazaShellStore.getState().activeTabId;
+    expect(blankId).not.toBe(APP_PLAZA_HOME_TAB_ID);
+
+    useAppPlazaShellStore.getState().submitBlankTabUrl(blankId, 'https://example.com/app');
+    await vi.waitFor(() => {
+      const tab = useAppPlazaShellStore.getState().browserTabs.find((t) => t.id === blankId);
+      expect(tab?.status).toBe('live');
+      expect(tab?.chatPanelOpen).toBe(true);
+    });
   });
 });

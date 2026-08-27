@@ -25,16 +25,19 @@ export interface UseQuickInputPickerControllerOptions {
   setOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   /** mutex 提供的互斥 toggle */
   toggleFromMutex: () => void;
+  /** mutex：下拉菜单打开快捷输入（只开不关） */
+  openFromMutex: () => void;
   /** MentionEditor 句柄（选中后插入纯文本） */
   mentionEditorRef: RefObject<DingTalkMentionEditorHandle | null>;
-  /** 收起工具栏时共用触发钮 ref */
-  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
+  /** 收起工具栏时共用锚点 */
+  toolbarAnchorRef?: RefObject<HTMLElement | null>;
 }
 
 export function useQuickInputPickerController({
   open,
   setOpen,
   toggleFromMutex,
+  openFromMutex,
   mentionEditorRef,
   toolbarAnchorRef,
 }: UseQuickInputPickerControllerOptions) {
@@ -50,9 +53,15 @@ export function useQuickInputPickerController({
     toggleFromMutex();
   }, [toggleFromMutex]);
 
+  const openToolbar = useCallback(() => {
+    openFromMutex();
+  }, [openFromMutex]);
+
   useEffect(() => {
     if (!open) return;
+    const openedAt = Date.now();
     const handlePointerDown = (event: MouseEvent) => {
+      if (Date.now() - openedAt < 150) return;
       const target = event.target as Node;
       if (
         !pickerRef.current?.contains(target)
@@ -87,6 +96,7 @@ export function useQuickInputPickerController({
     buttonRef: buttonRef as MutableRefObject<HTMLButtonElement | null>,
     pickerRef: pickerRef as MutableRefObject<HTMLDivElement | null>,
     toggle,
+    openToolbar,
     close,
     panelProps,
   };

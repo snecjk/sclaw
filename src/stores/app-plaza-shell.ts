@@ -611,6 +611,10 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       });
       // After reuse path, also select existing if suspended
       const after = get();
+      const created = after.browserTabs.find((t) => t.id === tabId);
+      if (created?.status === 'live') {
+        get().openChatPanel(tabId);
+      }
       const focus = findReusableBrowserTab(after.browserTabs, { url: resolvedUrl });
       if (focus && focus.status === 'suspended') {
         get().selectTab(focus.id);
@@ -860,6 +864,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           activeTabId: live.id,
         };
       });
+      get().openChatPanel(get().activeTabId);
     })();
   },
 

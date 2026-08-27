@@ -36,14 +36,16 @@ export interface UseSkillPickerControllerOptions {
   setMode: (mode: SkillPickerMode) => void;
   /** mutex 提供的工具栏互斥 toggle */
   toggleToolbarFromMutex: () => void;
+  /** mutex：下拉菜单打开技能（只开不关，避免 Radix onSelect 再 toggle 关掉） */
+  openToolbarFromMutex: () => void;
   /** MentionEditor 句柄（插技能 / 消费行内触发） */
   mentionEditorRef: RefObject<DingTalkMentionEditorHandle | null>;
   /** 当前纯文本，用于提取 inline query */
   plainText: string;
   /** 定位 host（inline 点击外部判断） */
   mentionPopoverHostRef: RefObject<HTMLElement | null>;
-  /** 收起工具栏时共用触发钮 ref */
-  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
+  /** 收起工具栏时共用锚点 */
+  toolbarAnchorRef?: RefObject<HTMLElement | null>;
 }
 
 export function useSkillPickerController({
@@ -52,6 +54,7 @@ export function useSkillPickerController({
   mode,
   setMode: _setMode,
   toggleToolbarFromMutex,
+  openToolbarFromMutex,
   mentionEditorRef,
   plainText,
   mentionPopoverHostRef,
@@ -81,9 +84,16 @@ export function useSkillPickerController({
     toggleToolbarFromMutex();
   }, [mentionEditorRef, toggleToolbarFromMutex]);
 
+  const openToolbar = useCallback(() => {
+    mentionEditorRef.current?.saveCaret();
+    openToolbarFromMutex();
+  }, [mentionEditorRef, openToolbarFromMutex]);
+
   useEffect(() => {
     if (!open) return;
+    const openedAt = Date.now();
     const handlePointerDown = (event: MouseEvent) => {
+      if (Date.now() - openedAt < 150) return;
       const target = event.target as Node;
       if (pickerRef.current?.contains(target)) return;
       if (buttonRef.current?.contains(target)) return;
@@ -138,6 +148,7 @@ export function useSkillPickerController({
     buttonRef: buttonRef as MutableRefObject<HTMLButtonElement | null>,
     pickerRef: pickerRef as MutableRefObject<HTMLDivElement | null>,
     toggleToolbar,
+    openToolbar,
     close,
     panelProps,
   };

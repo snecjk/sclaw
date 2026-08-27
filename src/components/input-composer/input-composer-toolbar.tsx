@@ -79,8 +79,8 @@ export interface InputComposerToolbarProps {
   extra?: React.ReactNode;
   /** inline=平铺图标；dropdown=收起到下拉（应用广场窄栏） */
   toolsLayout?: 'inline' | 'dropdown';
-  /** dropdown 模式下触发钮 ref，供附件菜单 / picker 定位 */
-  dropdownToolsAnchorRef?: RefObject<HTMLButtonElement | null>;
+  /** dropdown 模式下扳手外层锚点，供附件菜单 / picker 定位（不要绑 Radix Trigger） */
+  dropdownToolsAnchorRef?: RefObject<HTMLElement | null>;
 }
 
 const homeIconBtn = cn(
@@ -171,41 +171,45 @@ export function InputComposerToolbar({
 
     return (
       <>
-        <DropdownMenu open={toolsMenuOpen} onOpenChange={setToolsMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              ref={dropdownToolsAnchorRef ?? attachButtonRef}
-              variant="ghost"
-              type="button"
-              className={cn(homeIconBtn, (anyToolPanelActive || toolsMenuOpen) && homeIconActive)}
-              onMouseDown={(event) => event.preventDefault()}
-              disabled={disabled}
-              title={labels.toolsMenu ?? labels.skill}
-              aria-label={labels.toolsMenu ?? labels.skill}
-            >
-              <SkillToolIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="start" className="min-w-[9rem]">
-            {menuItems.map((item) => (
-              <DropdownMenuItem
-                key={item.key}
-                className="gap-2"
+        <span ref={dropdownToolsAnchorRef} className="inline-flex shrink-0">
+          <DropdownMenu modal={false} open={toolsMenuOpen} onOpenChange={setToolsMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                type="button"
+                className={cn(homeIconBtn, (anyToolPanelActive || toolsMenuOpen) && homeIconActive)}
                 disabled={disabled}
-                onSelect={(event) => {
-                  event.preventDefault();
-                  setToolsMenuOpen(false);
-                  window.setTimeout(() => item.onSelect(), 0);
-                }}
+                title={labels.toolsMenu ?? labels.skill}
+                aria-label={labels.toolsMenu ?? labels.skill}
               >
-                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&_svg]:h-4 [&_svg]:w-4">
-                  {item.icon}
-                </span>
-                {item.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <SkillToolIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="start"
+              className="z-[100001] min-w-[9rem]"
+              onCloseAutoFocus={(event) => event.preventDefault()}
+            >
+              {menuItems.map((item) => (
+                <DropdownMenuItem
+                  key={item.key}
+                  className="gap-2"
+                  disabled={disabled}
+                  onSelect={() => {
+                    setToolsMenuOpen(false);
+                    window.setTimeout(() => item.onSelect(), 50);
+                  }}
+                >
+                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&_svg]:h-4 [&_svg]:w-4">
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
         {extra}
       </>
     );

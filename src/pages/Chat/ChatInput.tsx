@@ -172,7 +172,7 @@ export function ChatInput({
   const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const collapsedToolsAnchorRef = useRef<HTMLButtonElement>(null);
+  const collapsedToolsAnchorRef = useRef<HTMLElement>(null);
   const handleSendRef = useRef<() => void>(() => undefined);
 
   const agents = useAgentsStore((s) => s.agents);
@@ -571,13 +571,13 @@ export function ChatInput({
     ? collapsedToolsAnchorRef
     : attachSource.attachButtonRef;
   const toolbarSkillButtonRef = useCollapsedToolbarTools
-    ? collapsedToolsAnchorRef
+    ? undefined
     : skillPicker.buttonRef;
   const toolbarWorkflowButtonRef = useCollapsedToolbarTools
-    ? collapsedToolsAnchorRef
+    ? undefined
     : workflowPicker.buttonRef;
   const toolbarQuickInputButtonRef = useCollapsedToolbarTools
-    ? collapsedToolsAnchorRef
+    ? undefined
     : quickInputPicker.buttonRef;
 
   const shell = (
@@ -684,9 +684,9 @@ export function ChatInput({
             toolsMenu: t('composer.toolsMenu', { defaultValue: '工具' }),
           }}
           onAttach={attachSource.openAttachMenu}
-          onSkill={skillPicker.toggleToolbar}
-          onWorkflow={workflowPicker.toggleToolbar}
-          onQuickInput={quickInputPicker.toggle}
+          onSkill={useCollapsedToolbarTools ? skillPicker.openToolbar : skillPicker.toggleToolbar}
+          onWorkflow={useCollapsedToolbarTools ? workflowPicker.openToolbar : workflowPicker.toggleToolbar}
+          onQuickInput={useCollapsedToolbarTools ? quickInputPicker.openToolbar : quickInputPicker.toggle}
           onSaveCaret={() => mentionEditorRef.current?.saveCaret()}
           skillActive={skillPicker.open && skillPicker.mode === 'toolbar'}
           workflowActive={workflowPicker.open}

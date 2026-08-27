@@ -97,10 +97,11 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     }, [fetchLocalSkills, loading, mySkills.length, open]);
 
     useLayoutEffect(() => {
-      if (!open || !anchorRef?.current) {
+      if (!open) {
         setPosition(null);
         return;
       }
+      if (!anchorRef) return;
 
       const updatePosition = () => {
         const rect = anchorRef.current?.getBoundingClientRect();
@@ -113,7 +114,9 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
         });
       };
 
-      // scroll/resize 走 rAF 节流，与提及浮层一致，避免滚动中每帧多次强制布局
+      updatePosition();
+      const retryId = window.requestAnimationFrame(updatePosition);
+
       let rafId: number | null = null;
       const scheduleUpdate = () => {
         if (rafId !== null) cancelAnimationFrame(rafId);
@@ -123,10 +126,10 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
         });
       };
 
-      updatePosition();
       window.addEventListener('resize', scheduleUpdate);
       window.addEventListener('scroll', scheduleUpdate, { capture: true, passive: true });
       return () => {
+        if (retryId != null) cancelAnimationFrame(retryId);
         if (rafId !== null) cancelAnimationFrame(rafId);
         window.removeEventListener('resize', scheduleUpdate);
         window.removeEventListener('scroll', scheduleUpdate, { capture: true });
@@ -152,6 +155,7 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     );
 
     if (!open) return null;
+    if (anchorRef && !position) return null;
 
     const setRefs = (node: HTMLDivElement | null) => {
       localRef.current = node;
