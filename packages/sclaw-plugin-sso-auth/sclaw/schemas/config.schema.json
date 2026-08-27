@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sto-sso-auth/v1",
+  "title": "STO SSO Auth Runtime Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "applicationId",
+    "pageType",
+    "runtimeMode",
+    "deployEnv"
+  ],
+  "properties": {
+    "protocolVersion": { "const": "sto-sso-auth/v1" },
+    "applicationId": { "type": "string", "minLength": 1 },
+    "pageType": { "const": "site" },
+    "runtimeMode": { "enum": ["local", "published"] },
+    "deployEnv": { "enum": ["daily", "stage", "online"] },
+    "sso": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "systemCode", "loginOrigin", "apiOrigin"],
+      "properties": {
+        "environment": { "enum": ["daily", "pre", "prod"] },
+        "systemCode": { "const": "STO_CLAW_APP" },
+        "loginOrigin": { "type": "string", "format": "uri" },
+        "apiOrigin": { "type": "string", "format": "uri" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "runtimeMode": { "const": "published" } } },
+      "then": { "required": ["sso"] }
+    },
+    {
+      "if": { "properties": { "deployEnv": { "const": "daily" } } },
+      "then": {
+        "properties": {
+          "sso": {
+            "properties": {
+              "environment": { "const": "daily" },
+              "loginOrigin": { "const": "https://baseinfo-usercenterserviceapi-hq-test.sto.cn" },
+              "apiOrigin": { "const": "https://baseinfo-usercenterapi-test.sto.cn" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "deployEnv": { "const": "stage" } } },
+      "then": {
+        "properties": {
+          "sso": {
+            "properties": {
+              "environment": { "const": "pre" },
+              "loginOrigin": { "const": "https://pre-baseinfo-usercenterservice-api-hq.sto.cn" },
+              "apiOrigin": { "const": "https://pre-baseinfo-usercenterapi.sto.cn" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "deployEnv": { "const": "online" } } },
+      "then": {
+        "properties": {
+          "sso": {
+            "properties": {
+              "environment": { "const": "prod" },
+              "loginOrigin": { "const": "https://baseinfo-usercenterserviceapi.sto.cn" },
+              "apiOrigin": { "const": "https://baseinfo-usercenterapi.sto.cn" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

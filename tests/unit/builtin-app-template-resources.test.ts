@@ -20,13 +20,23 @@ describe('built-in app template resources', () => {
     });
   }
 
-  it('site 自行完成 SSO，assets 只接收宿主身份', () => {
+  it('site 通过 SSO Auth 插件认证，assets 只接收宿主身份', () => {
     const siteMain = readFileSync(join(resources, 'site-minimal', 'src', 'main.tsx'), 'utf8');
     const assetsMain = readFileSync(join(resources, 'assets-minimal', 'src', 'main.tsx'), 'utf8');
+    const sitePackage = JSON.parse(
+      readFileSync(join(resources, 'site-minimal', 'package.json'), 'utf8'),
+    );
+    const assetsPackage = JSON.parse(
+      readFileSync(join(resources, 'assets-minimal', 'package.json'), 'utf8'),
+    );
 
-    expect(siteMain).toContain('checkAndRedirectToLogin');
+    expect(sitePackage.dependencies).toMatchObject({
+      '@sto/sclaw-plugin-sso-auth': '0.1.0',
+    });
+    expect(siteMain).toContain('bootstrapInstalledPlugins');
+    expect(assetsPackage.dependencies).not.toHaveProperty('@sto/sclaw-plugin-sso-auth');
     expect(assetsMain).toContain('captureStoTokenFromUrl');
-    expect(assetsMain).not.toContain('checkAndRedirectToLogin');
+    expect(assetsMain).not.toContain('@sto/sclaw-plugin-sso-auth');
   });
 
   it('assets 提供 Policy Ontology SDK 开发能力插件', () => {

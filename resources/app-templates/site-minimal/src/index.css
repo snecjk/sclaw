@@ -12,7 +12,7 @@ body {
   color: #1f2329;
 }
 
-.sso-auth-shell {
+.runtime-bootstrap-shell {
   display: flex;
   min-height: 100vh;
   align-items: center;

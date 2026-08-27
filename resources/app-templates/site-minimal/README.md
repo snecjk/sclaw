@@ -19,8 +19,8 @@ import { http, request } from '@/lib/request';
 await http.get('/proxy/some-key/api/xxx');
 await http.post('/proxy/some-key/api/xxx', { id: 1 });
 
-// URL 若带 ?stoToken=...，启动时写入 sessionStorage，
-// 后续请求自动附加 Header：stoToken / stotoken
+// 身份由 @sto/sclaw-plugin-sso-auth 初始化，
+// 后续请求自动附加 Header：stoToken / Authorization
 ```
 
 开发环境**禁止**浏览器直连 `https://*.sto.cn`（会 CORS）。新接口域名先注册代理：
@@ -41,9 +41,9 @@ node scripts/ensure-dev-proxy.mjs "https://baseinfo-chatbotapi-test.sto.cn/api/r
 |---|---|
 | `src/layouts/` | 顶部 / 侧栏布局与导航配置 |
 | `src/pages/` | 首页、组件示例、占位业务页 |
-| `src/lib/request.ts` | fetch 封装（cookie + stoToken + 生产 proxy 还原） |
+| `src/lib/request.ts` | fetch 封装（插件身份 + 生产 proxy 还原） |
 | `src/lib/resolve-api-url.ts` | `/proxy/<key>` ↔ 真实域名 |
-| `src/lib/auth-token.ts` | URL / session stoToken |
+| `src/sclaw/` | SClaw 插件静态注册与启动入口 |
 | `contracts/dev-proxy.v1.json` | 代理合约：key → target（dev + prod 共用） |
 | `scripts/ensure-dev-proxy.mjs` | 引入新绝对 URL 时自动登记 proxy |
 | `src/catalog/` `src/runtime/` `src/pages/*.page.json` | 保留的 A2UI 能力（可选扩展） |
@@ -64,3 +64,7 @@ npm run typecheck    # 可选：tsc -b
 ```
 
 产物输出到 `build/`。
+
+## 身份认证
+
+Site 默认安装 `@sto/sclaw-plugin-sso-auth`。本地预览通过 Vite 同源端点复用当前登录 SClaw 的用户身份；发布后由部署平台注入 `window.__STO_SSO_AUTH_CONFIG__`，插件负责单点登录、Code 换票和会话管理。业务页面不得自行读取 Cookie、拼接 SSO URL 或调用换票接口。

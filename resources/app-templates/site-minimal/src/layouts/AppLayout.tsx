@@ -8,8 +8,7 @@ import {
   toRoutePath,
   TOP_NAV,
 } from './nav-config';
-import { getUserDisplayFromToken } from '../lib/auth-token';
-import { logout } from '../lib/sso';
+import { getSsoAuth } from '@sto/sclaw-plugin-sso-auth';
 
 const { Header, Sider, Content } = Layout;
 
@@ -19,7 +18,11 @@ export function AppLayout() {
   const location = useLocation();
   const path = pathFromLocation(location.pathname) || DEFAULT_PATH;
   const { topKey, sideKey, sideItems } = findNavByPath(path);
-  const user = getUserDisplayFromToken();
+  const currentUser = getSsoAuth().getUser();
+  const user = {
+    name: currentUser?.userName || '已登录用户',
+    code: currentUser?.userCode,
+  };
 
   const go = (next: string) => {
     navigate(toRoutePath(next));
@@ -51,7 +54,7 @@ export function AppLayout() {
     {
       key: 'logout',
       label: '退出登录',
-      onClick: () => logout(),
+      onClick: () => void getSsoAuth().logout(),
     },
   ];
 

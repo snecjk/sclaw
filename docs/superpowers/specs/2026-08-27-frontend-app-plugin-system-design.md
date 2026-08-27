@@ -82,7 +82,8 @@ flowchart LR
 
     subgraph Artifact["制品分发面"]
         NPM["公司内部 npm"]
-        Package["@sto/sclaw-plugin-policy-ontology<br/>Runtime + Manifest + Skill + Schema"]
+        SsoPackage["@sto/sclaw-plugin-sso-auth<br/>Site SSO Runtime + Manifest + Skill"]
+        PolicyPackage["@sto/sclaw-plugin-policy-ontology<br/>Runtime + Manifest + Skill + Schema"]
     end
 
     subgraph Desktop["SClaw 开发环境"]
@@ -110,8 +111,10 @@ flowchart LR
     Market --> Registry
     Registry -->|"选择固定版本"| Installer
     Installer -->|"npm install --save-exact"| NPM
-    NPM --> Package
-    Package --> Validator
+    NPM --> SsoPackage
+    NPM --> PolicyPackage
+    SsoPackage --> Validator
+    PolicyPackage --> Validator
     Validator --> SkillLoader
     Validator --> RegistryGen
 
@@ -415,7 +418,7 @@ sequenceDiagram
 
 对于 Policy Ontology 插件，业务代码应使用插件提供的受控 Operation，不直接拼接 Host、Path、Method 或认证 Header。
 
-## 13. 基础 Runtime 与身份边界
+## 13. 插件宿主与身份边界
 
 Policy Ontology 插件不自行实现 Site SSO，也不自行实现 Assets 宿主认证。它只依赖稳定的宿主能力：
 
@@ -431,14 +434,117 @@ Assets 应用
   → Policy Ontology 插件
 ```
 
-插件从宿主上下文获取：
+插件从 SClaw 生成的应用插件宿主上下文获取：
 
 - 当前部署环境。
 - 当前应用类型。
 - 当前用户身份和 `stoToken`。
 - 受控 HTTP Transport。
 
-因此，基础 Runtime 不建议整体改名为 `app-sso`：SSO 只适用于 Site，而环境、HTTP 和 Assets 宿主身份是 Site/Assets 共享能力。如果需要拆包，可以让 `@sto/app-sso` 成为 Site 专用认证模块，保留一个同时服务 Site 和 Assets 的宿主 Runtime 内核。
+插件宿主是应用模板中的平台基础代码以及 SClaw 生成的静态注册文件，不使用独立的通用 Runtime npm 包。Site SSO 是一个具体插件，正式包名固定为 `@sto/sclaw-plugin-sso-auth`。
+
+### 13.1 当前实现状态
+
+当前仓库已经存在以下内容：
+
+- Site/Assets 模板内的 `sso.ts`、`sso-config.ts` 和 `SsoAuthShell.tsx`。
+- Site SSO 的旧合并设计与现行独立设计文档。
+- `@sto/policy-ontology-sdk` 的源码包。
+
+当前仓库尚不存在以下可安装制品：
+
+- 独立的 `sso-auth` npm 插件包。
+- 由插件静态注册表驱动的身份 Provider 注册机制。
+
+因此，`auth.sto-token` 目前只是设计中的宿主能力，还没有可以被插件系统安装和启动的正式提供者。`policy-ontology` 插件不能先于该能力独立交付。
+
+### 13.2 SSO Auth 插件定位
+
+建议将 Site 单点登录能力定义为平台维护的基础插件：
+
+```text
+@sto/sclaw-plugin-sso-auth
+├── dist/
+│   ├── runtime.js
+│   ├── runtime.d.ts
+│   └── sso-client.js
+└── sclaw/
+    ├── plugin.json
+    ├── skills/sso-auth/SKILL.md
+    └── schemas/config.schema.json
+```
+
+其 Manifest 核心声明为：
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "sto.sso-auth",
+  "displayName": "STO Site SSO",
+  "pageTypes": ["site"],
+  "runtime": {
+    "entry": "./runtime",
+    "activation": "bootstrap"
+  },
+  "provides": {
+    "hostCapabilities": ["auth.sto-token"]
+  }
+}
+```
+
+第一期行为固定如下：
+
+| 场景 | `sso-auth` 行为 |
+|---|---|
+| 本地 Site 预览 | 使用 SClaw 注入的当前登录身份，不执行浏览器 SSO 跳转 |
+| 发布 Site | 检查 Token；处理回跳 Code；调用用户中心换票；保存 Token；清理 URL；必要时跳转登录 |
+| 本地 Assets | 不安装、不启动 |
+| 发布 Assets | 不安装、不启动，由 Assets Host Bridge 提供身份 |
+
+### 13.3 与 Policy Ontology 插件的关系
+
+`policy-ontology` 不应直接依赖 `sso-auth` 的 npm 包，因为 Assets 应用不使用 Site SSO。两个插件通过宿主能力契约解耦：
+
+```mermaid
+flowchart LR
+    subgraph Site["Site 应用"]
+        SiteRuntime["SClaw 应用插件宿主"]
+        SsoAuth["sso-auth 插件"]
+        SiteToken["auth.sto-token"]
+        SiteRuntime --> SsoAuth
+        SsoAuth --> SiteToken
+    end
+
+    subgraph Assets["Assets 应用"]
+        AssetsRuntime["SClaw 应用插件宿主"]
+        HostBridge["Assets Host Bridge"]
+        AssetsToken["auth.sto-token"]
+        AssetsRuntime --> HostBridge
+        HostBridge --> AssetsToken
+    end
+
+    Policy["policy-ontology 插件"]
+    SiteToken --> Policy
+    AssetsToken --> Policy
+```
+
+安装 `policy-ontology` 时，SClaw 只检查当前应用是否已经提供 `auth.sto-token`：
+
+- Site 应用由 `sso-auth` 提供。
+- Assets 应用由模板内置的 Host Bridge Provider 提供。
+- 如果当前应用没有任何 Provider，安装必须在修改 npm 依赖前失败。
+
+### 13.4 Site 新建应用默认行为
+
+`sso-auth` 对 Site 不是普通选装插件，而是平台基础插件：
+
+1. 新建 `site` 应用时默认安装并启用。
+2. 在插件列表中显示为“基础插件”。
+3. 第一期不允许卸载或禁用。
+4. 版本仍由应用 `package.json` 和 `package-lock.json` 固化。
+5. 后续升级由用户在 SClaw 中手动确认，不自动跟随平台版本。
+
+新建 `assets` 应用不安装 `sso-auth`，避免 iframe 内发生错误的 SSO 跳转。
 
 ## 14. Site 与 Assets 兼容性
 
@@ -565,15 +671,17 @@ Assets 应用
 
 ## 20. 验收标准
 
-1. 用户可以从插件市场将 `@sto/sclaw-plugin-policy-ontology` 的固定版本安装到当前应用。
-2. 安装后 `package.json`、`package-lock.json` 和 `.sclaw/plugins.json` 状态一致。
-3. Project Agent 能发现并完整读取插件的 `SKILL.md`。
-4. AI 可以依据 Skill 生成调用 Policy Ontology Operation 的应用代码。
-5. 插件 Runtime 通过静态注册链路进入本地预览和生产构建。
-6. 全新环境从同一个 Git Commit 执行 `npm ci` 和 Vite build 能产生一致应用。
-7. Site 和 Assets 使用同一个 Policy 插件，但分别使用 Site SSO 和 Assets Host Bridge 身份来源。
-8. 任意安装步骤失败时，应用工作区恢复到安装前状态。
-9. 构建产物中不存在 Skill、开发示例或用户凭证。
+1. 新建 Site 应用默认安装并启用 `@sto/sclaw-plugin-sso-auth`，新建 Assets 应用不包含该插件。
+2. 本地 Site 预览使用 SClaw 当前身份，发布 Site 可以通过 `sso-auth` 完成登录、回跳换票和 Token 注册。
+3. 用户可以从插件市场将 `@sto/sclaw-plugin-policy-ontology` 的固定版本安装到当前应用。
+4. 安装后 `package.json`、`package-lock.json` 和 `.sclaw/plugins.json` 状态一致。
+5. Project Agent 能发现并完整读取插件的 `SKILL.md`。
+6. AI 可以依据 Skill 生成调用 Policy Ontology Operation 的应用代码。
+7. 插件 Runtime 通过静态注册链路进入本地预览和生产构建。
+8. 全新环境从同一个 Git Commit 执行 `npm ci` 和 Vite build 能产生一致应用。
+9. Site 和 Assets 使用同一个 Policy 插件，但分别使用 Site SSO 和 Assets Host Bridge 身份来源。
+10. 任意安装步骤失败时，应用工作区恢复到安装前状态。
+11. 构建产物中不存在 Skill、开发示例或用户凭证。
 
 ## 21. 后续演进
 
@@ -587,7 +695,47 @@ Assets 应用
 6. 插件版本废弃、风险通知和安全下架。
 7. 按需激活和代码分包。
 
-## 22. 参考资料
+## 22. 建议实施顺序
+
+插件市场闭环依赖身份能力真实存在，建议按以下顺序实施：
+
+### 阶段一：应用插件宿主
+
+- 定义插件注册、生命周期和宿主能力接口。
+- 在 Site/Assets 模板中建立固定的 `bootstrap.ts` 启动入口。
+- 支持加载 `plugins.generated.ts` 中的静态插件列表。
+- 该宿主作为模板平台代码维护，不发布为通用 Runtime npm 包。
+
+### 阶段二：`sso-auth` 基础插件
+
+- 将 Site 模板中已有的 SSO 逻辑抽取为 `@sto/sclaw-plugin-sso-auth`。
+- 实现本地身份接入和发布态 Site SSO。
+- 注册 `auth.sto-token` 能力。
+- 将其作为 `site-minimal` 的默认基础插件。
+- 确保 `assets-minimal` 不安装、不启动该插件。
+
+### 阶段三：插件安装编排
+
+- 实现 Manifest 校验、npm 精确版本安装和安装事务。
+- 实现 AI Skill 投影、AGENTS 更新和应用插件状态记录。
+- 实现静态 Runtime 注册文件生成。
+- 实现 Site/Assets 与宿主能力的安装前检查。
+
+### 阶段四：Policy Ontology 插件
+
+- 将现有 `@sto/policy-ontology-sdk` 包装或演进为 `@sto/sclaw-plugin-policy-ontology`。
+- 注册 Policy Operation 和客户端能力。
+- 携带 Policy Ontology `SKILL.md`、Schema 和示例。
+- 在 Site 中消费 `sso-auth` 提供的 Token。
+- 在 Assets 中消费 Host Bridge 提供的 Token。
+
+### 阶段五：插件市场界面与发布验收
+
+- 展示平台插件、基础插件、版本和兼容性。
+- 跑通安装、AI 开发、Git 提交和公司部署平台发布。
+- 验证全新环境使用同一 Git Commit 可以恢复和构建。
+
+## 23. 参考资料
 
 - [npm package.json](https://docs.npmjs.com/cli/configuring-npm/package-json/)
 - [npm package-lock.json](https://docs.npmjs.com/cli/configuring-npm/package-lock-json/)

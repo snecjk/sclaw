@@ -10,14 +10,19 @@ import {
   theme,
 } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { getStoToken, getUserDisplayFromToken } from '../lib/auth-token';
+import { getSsoAuth } from '@sto/sclaw-plugin-sso-auth';
 import { toRoutePath } from '../layouts/nav-config';
 
 export function HomePage() {
   const navigate = useNavigate();
   const { token } = theme.useToken();
-  const user = getUserDisplayFromToken();
-  const hasToken = Boolean(getStoToken());
+  const auth = getSsoAuth();
+  const currentUser = auth.getUser();
+  const user = {
+    name: currentUser?.userName || '已登录用户',
+    code: currentUser?.userCode,
+  };
+  const hasToken = Boolean(auth.getToken());
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -35,7 +40,7 @@ export function HomePage() {
           type="info"
           showIcon
           message="尚未登录"
-          description="应用会在启动时检查 cookie 中的 stoToken；未登录将跳转 SSO。SClaw 预览也可在链接上携带 ?stoToken=xxx 注入登录态。"
+          description="应用身份由 SSO Auth 插件统一初始化；本地预览使用当前 SClaw 登录用户，发布后由插件完成单点登录。"
         />
       ) : (
         <Alert

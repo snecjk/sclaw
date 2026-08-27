@@ -1,9 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { SsoExchangeError, SsoExchangeLoading } from './components/SsoAuthShell';
-import { bootstrapAuthFromUrl } from './lib/auth-token';
-import { checkAndRedirectToLogin, hasAuthorizationCode, isLoggedIn } from './lib/sso';
+import { RuntimeBootstrapShell } from './components/RuntimeBootstrapShell';
+import { bootstrapInstalledPlugins } from './sclaw/bootstrap';
 import './index.css';
 
 const container = document.getElementById('root');
@@ -14,21 +13,20 @@ if (!container) {
 
 const root = createRoot(container);
 
-if (hasAuthorizationCode() && !isLoggedIn()) {
-  root.render(<SsoExchangeLoading />);
-}
+root.render(<RuntimeBootstrapShell />);
 
-void bootstrapAuthFromUrl().then((result) => {
-  if (result.status === 'exchange_failed') {
-    root.render(<SsoExchangeError message={result.message} />);
-    return;
-  }
-
-  if (checkAndRedirectToLogin()) return;
-
-  root.render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
-});
+void bootstrapInstalledPlugins()
+  .then(() => {
+    root.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+  })
+  .catch((error) => {
+    root.render(
+      <RuntimeBootstrapShell
+        error={error instanceof Error ? error.message : '应用基础能力启动失败'}
+      />,
+    );
+  });

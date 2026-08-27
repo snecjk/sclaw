@@ -48,6 +48,7 @@ import {
 } from '../../services/sto-app-service';
 import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
 import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
+import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
   const rootPath = await getWorkspaceRootPath(workspaceId);
@@ -64,6 +65,8 @@ export async function handleAppDevRoutes(
   if (!url.pathname.startsWith('/api/app-dev/')) return false;
 
   try {
+    if (await handleAppDevSsoAuthRoute(req, res, url)) return true;
+
     // --- Managed Node runtime (capability: service-node-runtime) ---
     if (url.pathname === '/api/app-dev/environment' && req.method === 'GET') {
       sendJson(res, 200, {

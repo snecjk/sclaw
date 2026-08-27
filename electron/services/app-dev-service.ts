@@ -25,6 +25,7 @@ import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
 import { needsWinShell, quoteForCmd } from '../utils/paths';
 import { createWorkspace, deleteWorkspace, getWorkspaceRootPath, listUserWorkspaces } from './session-catalog-service';
 import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
+import { KeyedGenerationTracker, OperationCanceledError } from './keyed-single-flight';
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
 import { cloneStoApp } from './sto-app-service';
@@ -74,6 +75,7 @@ export interface AppDevStatus {
 }
 
 const statuses = new Map<string, AppDevStatus>();
+const setupPipelineGenerations = new KeyedGenerationTracker();
 
 export const DEFAULT_APPS_PARENT_DIR = join(homedir(), 'SClawApps');
 export const DEFAULT_TEMPLATES_PARENT_DIR = join(homedir(), 'SClawTemplates');
@@ -1279,7 +1281,11 @@ export async function deleteDevApp(
   return { offline, ...removed };
 }
 
-async function runNpmInstall(workspaceId: string, appPath: string): Promise<void> {
+async function runNpmInstall(
+  workspaceId: string,
+  appPath: string,
+  shouldReportProgress: () => boolean,
+): Promise<void> {
   const { npmBin } = getManagedNodePaths();
   const npmCwd = resolveAppNpmCwd(appPath);
   let ratio = 0;
@@ -1295,7 +1301,12 @@ async function runNpmInstall(workspaceId: string, appPath: string): Promise<void
       tail.push(String(chunk));
       if (tail.length > 40) tail.shift();
       ratio = creepRatio(ratio);
-      setStatus(workspaceId, { phase: 'installing', progress: pipelineProgress('installing', ratio) });
+      if (shouldReportProgress()) {
+        setStatus(workspaceId, {
+          phase: 'installing',
+          progress: pipelineProgress('installing', ratio),
+        });
+      }
     };
     child.stdout?.on('data', onActivity);
     child.stderr?.on('data', onActivity);
@@ -1312,31 +1323,43 @@ async function runNpmInstall(workspaceId: string, appPath: string): Promise<void
  * one continuous 0-100 progress. Also used to resume/start an existing app.
  */
 export async function runSetupPipeline(workspaceId: string, appPath: string): Promise<void> {
+  const pipeline = setupPipelineGenerations.begin(workspaceId);
+  const isCurrent = pipeline.isCurrent;
   try {
+    pipeline.throwIfCanceled();
     if (!isNodeRuntimeReady()) {
       setStatus(workspaceId, { appPath, phase: 'preparing-env', progress: pipelineProgress('preparing-env', 0) });
       const poll = setInterval(() => {
         const runtime = getNodeRuntimeStatus();
         const ratio = runtime.totalBytes > 0 ? runtime.receivedBytes / runtime.totalBytes : 0;
-        setStatus(workspaceId, { phase: 'preparing-env', progress: pipelineProgress('preparing-env', ratio) });
+        if (isCurrent()) {
+          setStatus(workspaceId, {
+            phase: 'preparing-env',
+            progress: pipelineProgress('preparing-env', ratio),
+          });
+        }
       }, 500);
       try {
         await setupManagedNode();
       } finally {
         clearInterval(poll);
       }
+      pipeline.throwIfCanceled();
     }
 
     const nodeModules = join(resolveAppNpmCwd(appPath), 'node_modules');
     if (!existsSync(nodeModules)) {
       setStatus(workspaceId, { phase: 'installing', progress: pipelineProgress('installing', 0) });
-      await runNpmInstall(workspaceId, appPath);
+      await runNpmInstall(workspaceId, appPath, isCurrent);
+      pipeline.throwIfCanceled();
     }
 
     setStatus(workspaceId, { phase: 'starting', progress: pipelineProgress('starting', 0.3) });
     const entry = await startDevServer(workspaceId, appPath);
+    pipeline.throwIfCanceled();
     setStatus(workspaceId, { phase: 'ready', progress: 100, previewUrl: entry.previewUrl, error: undefined });
   } catch (err) {
+    if (err instanceof OperationCanceledError || !isCurrent()) return;
     const message = err instanceof Error ? err.message : String(err);
     setStatus(workspaceId, { phase: 'error', progress: 0, error: message, previewUrl: undefined });
     throw err;
@@ -1344,6 +1367,7 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
 }
 
 export function stopApp(workspaceId: string): void {
+  setupPipelineGenerations.cancel(workspaceId);
   stopDevServer(workspaceId);
   setStatus(workspaceId, { phase: 'stopped', progress: 0, previewUrl: undefined });
 }

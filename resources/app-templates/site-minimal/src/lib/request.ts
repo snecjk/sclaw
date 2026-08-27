@@ -1,8 +1,8 @@
-import { captureStoTokenFromUrl, getStoToken } from './auth-token';
+import { getSsoAuth } from '@sto/sclaw-plugin-sso-auth';
 import { proxiesFromContract, resolveApiUrl } from './resolve-api-url';
 import devProxyContract from '../../contracts/dev-proxy.v1.json';
 
-export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export type RequestMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface RequestOptions extends Omit<RequestInit, 'body' | 'method' | 'headers'> {
   method?: RequestMethod;
@@ -51,21 +51,19 @@ function resolveStoToken(explicit?: string | null): string | null {
     const trimmed = explicit.trim();
     return trimmed || null;
   }
-  return getStoToken();
+  return getSsoAuth().getToken();
 }
 
 /**
  * Browser fetch wrapper:
  * - credentials include cookies by default
- * - cookie / URL 中的 stoToken 写入 `stoToken` + `Authorization` headers
+ * - SSO Auth 插件中的 stoToken 写入 `stoToken` + `Authorization` headers
  * - `/proxy/<key>/...` kept in DEV (Vite); rewritten to absolute target in PROD
  */
 export async function request<T = unknown>(
   url: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  captureStoTokenFromUrl();
-
   const {
     method = 'GET',
     data,
@@ -119,6 +117,9 @@ export async function request<T = unknown>(
       : await response.text();
 
     if (!response.ok) {
+      if (response.status === 401) {
+        await getSsoAuth().handleUnauthorized();
+      }
       const message =
         payload && typeof payload === 'object' && 'message' in payload
           ? String((payload as { message?: unknown }).message ?? response.statusText)

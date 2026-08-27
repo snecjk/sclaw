@@ -11,7 +11,7 @@ export type AppEnv = 'dev' | 'daily' | 'pre' | 'prod';
 const SSO_ENV_PRESETS: Record<SsoEnv, { login: string; api: string }> = {
   daily: {
     login: 'https://baseinfo-usercenterserviceapi-hq-test.sto.cn',
-    api: 'https://baseinfo-usercenterapi-hq-test.sto.cn',
+    api: 'https://baseinfo-usercenterapi-test.sto.cn',
   },
   pre: {
     login: 'https://pre-baseinfo-usercenterservice-api-hq.sto.cn',
