@@ -135,6 +135,24 @@ export function ensureTrailingCaretAnchor(root: HTMLElement): void {
   root.appendChild(document.createTextNode(`\u00A0${COMPOSER_CARET_ANCHOR}`));
 }
 
+/** contenteditable.focus() 会把 caret 放到 offset 0；写完草稿后应落到文末。 */
+export function focusMentionEditorAtEnd(root: HTMLElement): void {
+  root.focus();
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  const lastChild = root.lastChild;
+  if (lastChild?.nodeType === Node.TEXT_NODE) {
+    range.setStart(lastChild, lastChild.textContent?.length ?? 0);
+  } else {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 /** 把 segment / 纯文本里的 `\n` 还原成 `<br>`，避免 contenteditable 把换行压成空格。 */
 function appendTextWithLineBreaks(parent: ParentNode, text: string): void {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
