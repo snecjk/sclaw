@@ -658,7 +658,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
               }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
             >
-              <ChevronDown className="h-[22px] w-[22px] text-[#1D2129]" strokeWidth={2} aria-hidden />
+              <ChevronDown className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />
             </motion.button>
           </div>
         </div>

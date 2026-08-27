@@ -85,7 +85,10 @@ import {
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
-import { preferCatalogTaskTitle } from '@/stores/chat/session-list-merge';
+import {
+  resolveCatalogRowTaskName,
+  resolveTaskSidebarRowTitles,
+} from '@/stores/chat/session-list-merge';
 import {
   fetchTaskGroupFirstTriggeredMap,
   isTaskGroupFirstTriggerOptimisticallyCleared,
@@ -1142,17 +1145,24 @@ export function Sidebar() {
   );
 
   // 「任务」：catalog dated cron/claude_task（历史 run/base 已在 store 侧滤掉）。
+  // 行标题在渲染层回落：catalog 标题 → 引擎 label/displayName → 任务定义名；
+  // 三者都无人读标题的才是真正的空壳行，在此过滤（存量无标题真实会话不受影响）。
   const taskListScheduledSessions = useMemo(() => {
     const byKey = new Map(visibleSessions.map((session) => [session.key, session]));
-    return taskCatalogSessions.map((row) => {
+    return taskCatalogSessions.flatMap((row) => {
       const existing = byKey.get(row.sessionKey);
-      const title = row.title?.trim() || undefined;
+      const titles = resolveTaskSidebarRowTitles({
+        catalogTitle: row.title,
+        engineLabel: existing?.label,
+        engineDisplayName: existing?.displayName,
+        taskName: resolveCatalogRowTaskName(row, scheduledTaskNameMaps),
+      });
+      if (!titles) return [];
       const activityMs = row.lastActivityAt ? Date.parse(row.lastActivityAt) : undefined;
-      return {
+      return [{
         key: row.sessionKey,
-        // catalog_sessions.title 已冗余任务名；引擎 displayName/label 常是 agent 品牌「SClaw」。
-        label: preferCatalogTaskTitle(title, existing?.label),
-        displayName: preferCatalogTaskTitle(title, existing?.displayName),
+        label: titles.label,
+        displayName: titles.displayName,
         updatedAt: existing?.updatedAt
           ?? (typeof activityMs === 'number' && Number.isFinite(activityMs) ? activityMs : undefined),
         engineType: existing?.engineType
@@ -1160,9 +1170,9 @@ export function Sidebar() {
         model: existing?.model,
         thinkingLevel: existing?.thinkingLevel,
         spawnedBy: existing?.spawnedBy,
-      };
+      }];
     });
-  }, [taskCatalogSessions, visibleSessions]);
+  }, [taskCatalogSessions, visibleSessions, scheduledTaskNameMaps]);
 
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(

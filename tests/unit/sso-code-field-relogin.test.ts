@@ -85,4 +85,39 @@ describe('ensureSsoCodeFieldReloginOnce', () => {
     ).rejects.toThrow('teardown failed');
     expect(store.get(SSO_CODE_FIELD_RELOGIN_DONE_KEY)).toBeUndefined();
   });
+
+  it('runs sai file removal after clearAuth and marks the key on success', async () => {
+    const store = memoryStore();
+    const calls: string[] = [];
+    const result = await ensureSsoCodeFieldReloginOnce({
+      store,
+      isLoggedIn: async () => true,
+      clearAuth: async () => {
+        calls.push('clearAuth');
+      },
+      enforceSaiFileRemoval: async () => {
+        calls.push('enforceSaiFileRemoval');
+      },
+    });
+    expect(result).toEqual({ skipped: false, cleared: true });
+    expect(calls).toEqual(['clearAuth', 'enforceSaiFileRemoval']);
+    expect(store.get(SSO_CODE_FIELD_RELOGIN_DONE_KEY)).toBe(true);
+  });
+
+  it('does not mark the key when sai file removal fails, so next launch retries', async () => {
+    const store = memoryStore();
+    const clearAuth = vi.fn(async () => {});
+    await expect(
+      ensureSsoCodeFieldReloginOnce({
+        store,
+        isLoggedIn: async () => true,
+        clearAuth,
+        enforceSaiFileRemoval: async () => {
+          throw new Error('unlink EACCES');
+        },
+      }),
+    ).rejects.toThrow('unlink EACCES');
+    expect(clearAuth).toHaveBeenCalledTimes(1);
+    expect(store.get(SSO_CODE_FIELD_RELOGIN_DONE_KEY)).toBeUndefined();
+  });
 });

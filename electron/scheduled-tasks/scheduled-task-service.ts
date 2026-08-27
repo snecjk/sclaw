@@ -40,7 +40,7 @@ import {
 } from './scheduled-task-executor';
 import type { GatewayManager } from '../gateway/manager';
 import { logger } from '../utils/logger';
-import { getAuthState } from '../utils/auth-store';
+import { getAuthSessionSnapshot, getAuthState, isAuthSessionCurrent } from '../utils/auth-store';
 import { getChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
 import {
@@ -276,6 +276,16 @@ export class ScheduledTaskService {
     // 5. 落库
     const updated = await this.taskRepo.update(id, updatePayload);
     if (!updated) return null;
+    // 5.1 改名时同步 catalog 里该任务所有行的标题快照（含历史 dated 会话），
+    // 避免侧栏在任务定义缺失的回退链上长期显示旧名；失败不影响任务更新。
+    const nextName = typeof input.name === 'string' ? input.name.trim() : '';
+    if (nextName && nextName !== existing.name?.trim()) {
+      try {
+        await getCatalogSessionRepository().updateTitlesByTaskId(id, nextName, updatePayload.actor);
+      } catch (error) {
+        logger.warn('[scheduled-task] sync catalog titles after rename failed:', error);
+      }
+    }
     // 6. 拷到任务目录 / 清理不再引用的旧附件
     const withAttachments = await this.persistComposerAttachmentsForTask(updated);
     // 7. 刷新调度；若本次关掉任务，取消在途 run
@@ -470,6 +480,11 @@ export class ScheduledTaskService {
     const code = userCode.trim();
     if (!code) return;
     void (async () => {
+      // 入口取登录世代快照：异步段内若发生登出/切号/强制重登（世代翻转），
+      // 后续认领、刷库、startScheduler 全部放弃，避免旧 code 继续生效。
+      const sessionSnapshot = await getAuthSessionSnapshot();
+      const sessionCurrent = () => isAuthSessionCurrent(sessionSnapshot).catch(() => false);
+      if (!(await sessionCurrent())) return;
       try {
         await claimScheduleTasksOwnership(code, this.taskRepo);
       } catch (error) {
@@ -477,7 +492,9 @@ export class ScheduledTaskService {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+      if (!(await sessionCurrent())) return;
       await this.rewriteLoginNameOwnerSafely(code);
+      if (!(await sessionCurrent())) return;
       this.startScheduler(code);
     })();
   }

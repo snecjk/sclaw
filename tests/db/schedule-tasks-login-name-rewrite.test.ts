@@ -19,6 +19,13 @@ let stoHome = '';
 
 vi.mock('../../electron/utils/auth-store', () => ({
   getAuthState: () => getAuthState(),
+  // 用 getAuthState 的当前返回值模拟世代快照：mock 用户一切换，世代即翻转。
+  getAuthSessionSnapshot: async () => ({
+    key: JSON.stringify((await getAuthState()).user ?? null),
+  }),
+  isAuthSessionCurrent: async (snapshot: { key: string }) => (
+    snapshot.key === JSON.stringify((await getAuthState()).user ?? null)
+  ),
 }));
 
 vi.mock('../../electron/utils/paths', async (importOriginal) => {
@@ -140,6 +147,21 @@ describe('schedule-tasks login-name created_by rewrite', () => {
     expect(await repo.rewriteLoginNameCreatedBy('', LOGIN_NAME)).toBe(0);
   });
 
+  it('rewrites login-name rows case-insensitively', async () => {
+    const { rewriteScheduleTasksLoginNameOwner } = await import(
+      '../../electron/scheduled-tasks/schedule-tasks-ownership'
+    );
+    const upper = await repo.create({ ...baseInput, name: 'upper', actor: LOGIN_NAME.toUpperCase() });
+    const mixed = await repo.create({ ...baseInput, name: 'mixed', actor: 'CjW' });
+    const other = await repo.create({ ...baseInput, name: 'other', actor: 'cjw2' });
+
+    const count = await rewriteScheduleTasksLoginNameOwner(CODE, LOGIN_NAME, repo);
+    expect(count).toBe(2);
+    expect((await repo.getById(upper.id))?.createdBy).toBe(CODE);
+    expect((await repo.getById(mixed.id))?.createdBy).toBe(CODE);
+    expect((await repo.getById(other.id))?.createdBy).toBe('cjw2');
+  });
+
   it('does not rewrite when userName equals code', async () => {
     const { rewriteScheduleTasksLoginNameOwner } = await import(
       '../../electron/scheduled-tasks/schedule-tasks-ownership'
@@ -189,6 +211,29 @@ describe('schedule-tasks login-name created_by rewrite', () => {
       // codeOwned 写出 nextRunAt 说明 startScheduler 首轮 refresh 已跑，rewrite 窗口已过。
       await waitUntil(async () => Boolean((await repo.getById(codeOwned.id))?.nextRunAt));
       expect((await repo.getById(loginNamed.id, { includeDeleted: true }))?.createdBy).toBe(LOGIN_NAME);
+    } finally {
+      svc.stopScheduler();
+    }
+  });
+
+  it('onUserAuthenticated aborts the whole chain when the login session flips mid-flight', async () => {
+    const { ScheduledTaskService } = await import(
+      '../../electron/scheduled-tasks/scheduled-task-service'
+    );
+    const svc = new ScheduledTaskService();
+    const codeOwned = await repo.create({ ...baseInput, name: 'owned', actor: CODE });
+    let calls = 0;
+    // 首次（入口快照）仍是 CODE；随后世代翻转（登出/切号），后续步骤必须全部放弃。
+    getAuthState.mockImplementation(async () => {
+      calls += 1;
+      return { user: calls === 1 ? { code: CODE, userName: LOGIN_NAME } : null };
+    });
+
+    try {
+      svc.onUserAuthenticated(CODE);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      // startScheduler 未执行：首轮 refresh 不会写出 nextRunAt。
+      expect((await repo.getById(codeOwned.id))?.nextRunAt).toBeNull();
     } finally {
       svc.stopScheduler();
     }

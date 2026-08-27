@@ -113,12 +113,23 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
         });
       };
 
+      // scroll/resize 走 rAF 节流，与提及浮层一致，避免滚动中每帧多次强制布局
+      let rafId: number | null = null;
+      const scheduleUpdate = () => {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          updatePosition();
+        });
+      };
+
       updatePosition();
-      window.addEventListener('resize', updatePosition);
-      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', scheduleUpdate);
+      window.addEventListener('scroll', scheduleUpdate, { capture: true, passive: true });
       return () => {
-        window.removeEventListener('resize', updatePosition);
-        window.removeEventListener('scroll', updatePosition, true);
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        window.removeEventListener('resize', scheduleUpdate);
+        window.removeEventListener('scroll', scheduleUpdate, { capture: true });
       };
     }, [open, anchorRef]);
 

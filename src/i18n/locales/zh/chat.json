@@ -65,7 +65,6 @@
         "claudeReadyDetail": "Claude Agent 直连可用，不受 OpenClaw 网关启动状态限制",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "重试失败的附件",
-        "dingtalkMentionTitle": "@联系人/群",
         "dingtalkSearchTitle": "搜索",
         "dingtalkMentionSearchTitle": "搜索「{{query}}」",
         "dingtalkContactsTitle": "联系人",

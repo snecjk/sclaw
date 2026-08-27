@@ -3,8 +3,10 @@ import {
   collapseWhitespaceForPairing,
   normalizeUserMessageForDisplay,
 } from '@/lib/user-message-display';
-import { parseSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
-import { parseSkillTranscriptMarkers } from '../../../shared/skill-transcript-marker';
+import {
+  parseSkillTranscriptMarker,
+  parseSkillTranscriptMarkers,
+} from '@/lib/skill-transcript-marker';
 import { resolveStoredSessionLabel } from '@/lib/session-label';
 import { isWorkflowSessionTitle } from '@/lib/workflow-session';
 import {
@@ -290,6 +292,9 @@ export function isSameUserMessage(
 ): boolean {
   if (candidate.role !== 'user') return false;
   if (candidate.id && optimistic.id && candidate.id === optimistic.id) return true;
+  // 双方技能 slug 均可确定且不相交 → 必为不同轮次。技能 A/B 连发同文案时
+  // 文案/软后缀证据都会命中，必须在所有配对路径之前统一否决。
+  if (hasConflictingSkillSlugs(candidate, optimistic)) return false;
 
   const displayMatches = displayTextMatches(candidate, optimistic);
   const mediaTextMatches = mediaEchoTextMatches(candidate, optimistic);
@@ -385,6 +390,7 @@ export function findHistoryUserEcho(
   return enrichedMessages.find((message) => {
     if (message.role !== 'user') return false;
     if (isSameUserMessage(message, optimistic, userMessageAt)) return true;
+    if (hasConflictingSkillSlugs(message, optimistic)) return false;
     if (!displayTextMatches(message, optimistic) && !composerStructureEchoMatches(message, optimistic)) {
       return false;
     }
@@ -485,9 +491,13 @@ export function dedupeRedundantUserMessages(
         continue;
       }
 
-      const sameTurnByDisplay = displayTextMatches(first, second)
+      // slug 冲突否决不能只留在 composerStructureEchoMatches 里——
+      // displayTextMatches 对「技能 A/B 连发同文案」同样会误判为同一轮。
+      const sameTurnByDisplay = !hasConflictingSkillSlugs(first, second) && (
+        displayTextMatches(first, second)
         || composerStructureEchoMatches(first, second)
-        || composerStructureEchoMatches(second, first);
+        || composerStructureEchoMatches(second, first)
+      );
 
       // Synthetic opener from session label vs real history user (may be non-adjacent).
       const firstSynthetic = typeof first.id === 'string' && first.id.startsWith('session-label-user-');
@@ -538,7 +548,12 @@ export function dedupeRedundantUserMessages(
         }
         const firstText = normalizeUserMessageText(first.content);
         const secondText = normalizeUserMessageText(second.content);
-        if (firstText && firstText === secondText && attachmentsMatch(first, second)) {
+        if (
+          firstText
+          && firstText === secondText
+          && attachmentsMatch(first, second)
+          && !hasConflictingSkillSlugs(first, second)
+        ) {
           patchKeptUser(i, second);
           drop.add(j);
           if (second.id) droppedIds.push(second.id);
@@ -875,8 +890,10 @@ export function reapplyComposerUiFromPreviousDisplay(
     if (message.role !== 'user') return message;
     if (message._composerSegments?.length) return message;
     // 仅严格匹配展示文案——宽松技能配对会在 thinking 期间
-    // 把上一轮拷到编辑重发的这一轮。
-    const donor = donors.find((candidate) => displayTextEquals(message, candidate));
+    // 把上一轮拷到编辑重发的这一轮。同文案不同技能（slug 冲突）同样禁止。
+    const donor = donors.find((candidate) => (
+      displayTextEquals(message, candidate) && !hasConflictingSkillSlugs(message, candidate)
+    ));
     if (!donor) {
       const refAt = userMessageAt
         ?? (message.timestamp ? toMs(message.timestamp) : 0);

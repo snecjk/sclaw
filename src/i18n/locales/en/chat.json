@@ -65,7 +65,6 @@
         "claudeReadyDetail": "Claude Agent direct connection available, unaffected by OpenClaw gateway status",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "Retry failed attachments",
-        "dingtalkMentionTitle": "@Contacts/groups",
         "dingtalkSearchTitle": "Search",
         "dingtalkMentionSearchTitle": "Search for “{{query}}”",
         "dingtalkContactsTitle": "Contacts",

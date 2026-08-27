@@ -95,23 +95,29 @@ export function resolveFileTypeIconSrc(fileName: string, mimeType?: string | nul
  */
 export const ATTACHMENT_CHIP_FILENAME_MAX_CHARS = 22;
 
-/** 文件名中间省略，尽量保留扩展名。 */
+/**
+ * 文件名中间省略，尽量保留扩展名。
+ * 按 code point（`Array.from`）而不是 UTF-16 code unit 切割，
+ * 避免劈开 emoji 代理对产生乱码。
+ */
 export function middleEllipsisFileName(
   fileName: string,
   maxChars = ATTACHMENT_CHIP_FILENAME_MAX_CHARS,
 ): string {
-  if (fileName.length <= maxChars) return fileName;
+  const fileChars = Array.from(fileName);
+  if (fileChars.length <= maxChars) return fileName;
   const dot = fileName.lastIndexOf('.');
   const hasExt = dot > 0 && dot < fileName.length - 1 && fileName.length - dot <= 8;
   const ext = hasExt ? fileName.slice(dot) : '';
   const base = hasExt ? fileName.slice(0, dot) : fileName;
-  const budget = maxChars - ext.length - 1;
+  const baseChars = Array.from(base);
+  const budget = maxChars - Array.from(ext).length - 1;
   if (budget < 4) {
-    return `${fileName.slice(0, Math.max(1, maxChars - 1))}…`;
+    return `${fileChars.slice(0, Math.max(1, maxChars - 1)).join('')}…`;
   }
   const head = Math.ceil(budget / 2);
   const tail = Math.floor(budget / 2);
-  return `${base.slice(0, head)}…${base.slice(-tail)}${ext}`;
+  return `${baseChars.slice(0, head).join('')}…${baseChars.slice(-tail).join('')}${ext}`;
 }
 
 /** 输入 token / 气泡共用的 chip 外观（与设计稿对齐）。 */

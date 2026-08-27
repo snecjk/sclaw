@@ -5,6 +5,7 @@ import {
   stripComposerModelBakeForDisplay,
 } from '@/lib/user-message-display';
 import {
+  dedupeRedundantUserMessages,
   findHistoryUserEcho,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
@@ -434,6 +435,51 @@ describe('composer echo pairing & display', () => {
     expect(users).toHaveLength(2);
     expect(users[0]?._skillMeta).toBeUndefined();
     expect(users[1]?.id).toBe('local-xlsx');
+  });
+
+  it('does not pair same-text turns carrying different skills (A/B consecutive sends)', () => {
+    // 技能 A 发「分析财报」后技能 B 又发「分析财报」：文案与软后缀证据都会命中，
+    // slug 冲突必须在所有配对路径上否决，否则 B 的乐观消息被贴到 A 的回显上。
+    const echoA = {
+      id: 'history-a',
+      role: 'user' as const,
+      content: '分析财报\n<!-- SClaw-Skill {"slug":"skill-a","title":"技能A","userText":"分析财报"} -->',
+      timestamp: 1710000001,
+    } as RawMessage;
+    const optimisticB = {
+      id: 'local-b',
+      role: 'user' as const,
+      content: '分析财报',
+      timestamp: 1710000002, // 1 秒后——仍在 OPTIMISTIC_SEND_WINDOW_MS 内
+      _skillMeta: { slug: 'skill-b', title: '技能B' },
+      _composerSegments: [
+        { type: 'skill' as const, slug: 'skill-b', title: '技能B' },
+        { type: 'text' as const, text: '分析财报' },
+      ],
+    } as RawMessage;
+
+    expect(isSameUserMessage(echoA, optimisticB, 1710000002000)).toBe(false);
+    expect(findHistoryUserEcho([echoA], optimisticB, 1710000002000)).toBeUndefined();
+  });
+
+  it('dedupe keeps adjacent same-text user turns with conflicting skill slugs', () => {
+    const first = {
+      id: 'u-a',
+      role: 'user' as const,
+      content: '分析财报',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'skill-a', title: '技能A' },
+    } as RawMessage;
+    const second = {
+      id: 'u-b',
+      role: 'user' as const,
+      content: '分析财报',
+      timestamp: 1710000001,
+      _skillMeta: { slug: 'skill-b', title: '技能B' },
+    } as RawMessage;
+
+    const out = dedupeRedundantUserMessages([first, second], null);
+    expect(out).toHaveLength(2);
   });
 
   it('still pairs skill-only optimistic with a same-skill echo', () => {

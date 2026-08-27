@@ -386,13 +386,15 @@ export class ScheduleTaskRepository {
   /**
    * 把历史登录名写成的 `created_by` 刷成当前工号（含软删）。
    * `userName` 空或与工号相同则 0。不碰 NULL/空白（仍走认领）。
+   * 匹配大小写不敏感：同一登录名在不同客户端/版本可能写成不同大小写（如 `CJW`/`cjw`），
+   * 漏刷会导致这些行对新会话不可见。SQLite `lower()` 仅折叠 ASCII，登录名即 ASCII。
    */
   async rewriteLoginNameCreatedBy(userCode: string, userName: string): Promise<number> {
     const db = getKyselyDatabase();
     const timestamp = nowIso();
     const code = userCode.trim();
     const name = userName.trim();
-    if (!code || !name || name === code) return 0;
+    if (!code || !name || name.toLowerCase() === code.toLowerCase()) return 0;
     const result = await db
       .updateTable('schedule_tasks')
       .set({
@@ -401,7 +403,7 @@ export class ScheduleTaskRepository {
         updated_at: timestamp,
         sync_status: 'pending',
       })
-      .where(sql`trim(created_by)`, '=', name)
+      .where(sql`lower(trim(created_by))`, '=', name.toLowerCase())
       .executeTakeFirst();
     return Number(result.numUpdatedRows ?? 0);
   }

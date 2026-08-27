@@ -65,7 +65,6 @@
         "claudeReadyDetail": "Claude Agent ダイレクト接続利用可能、OpenClaw ゲートウェイの状態に影響されません",
         "gatewayStatus": "ゲートウェイ {{state}} | ポート: {{port}} {{pid}}",
         "retryFailedAttachments": "失敗した添付を再試行",
-        "dingtalkMentionTitle": "@連絡先/グループ",
         "dingtalkSearchTitle": "検索",
         "dingtalkMentionSearchTitle": "「{{query}}」を検索",
         "dingtalkContactsTitle": "連絡先",

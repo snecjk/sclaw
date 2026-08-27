@@ -33,4 +33,15 @@ describe('file-type-icon', () => {
     expect(shown).toContain('…');
     expect(shown).not.toMatch(/\.\.\.$/);
   });
+
+  it('never splits emoji surrogate pairs when ellipsizing', () => {
+    const name = '月度报表🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉最终版.xlsx';
+    const shown = middleEllipsisFileName(name);
+    expect(shown.endsWith('.xlsx')).toBe(true);
+    expect(shown).toContain('…');
+    // 输出不含孤代理（lone surrogate）：按 code point 切割的直接证据
+    expect(shown).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    // 预算按 code point 计：… 前后字符数不超过 maxChars
+    expect(Array.from(shown).length).toBeLessThanOrEqual(22);
+  });
 });

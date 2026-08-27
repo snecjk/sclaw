@@ -89,7 +89,8 @@ const QueueItem = memo(function QueueItem({
       ) : (
         <span className="min-w-0 flex-1 text-foreground/80">
           {hasSegments ? (
-            <span className="flex flex-wrap items-center [&_.skill-token]:mt-0 [&_.attachment-token]:mt-0 [&_span:has(>.workflow-token-label)]:mt-0">
+            // 单行截断：segments 文本可能几百字，flex-wrap 会把队列项撑高
+            <span className="block min-w-0 truncate [&_.skill-token]:mt-0 [&_.attachment-token]:mt-0 [&_span:has(>.workflow-token-label)]:mt-0">
               <UserComposerSegmentsContent segments={item.composerSegments!} />
             </span>
           ) : hasChips ? (
