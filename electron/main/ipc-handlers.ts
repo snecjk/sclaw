@@ -102,6 +102,9 @@ export function registerIpcHandlers(
   void import('./services/sclaw-embed-browser-guest-preferences').then(({ installSclawEmbedBrowserGuestPreferencesHook }) => {
     installSclawEmbedBrowserGuestPreferencesHook();
   });
+  void import('./services/sclaw-embed-browser-session').then(({ installSclawEmbedBrowserSessionHooks }) => {
+    installSclawEmbedBrowserSessionHooks();
+  });
 
   // Unified request protocol (non-breaking: legacy channels remain available)
   registerUnifiedRequestHandlers(gatewayManager);

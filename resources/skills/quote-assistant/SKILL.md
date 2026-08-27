@@ -3,7 +3,7 @@ name: quote-assistant
 description: >-
   报价工作台 AI 助手：新建报价、上传报价表、校验纠错、自然语言改参与提交报价。
   当用户提到新建报价、上传 Excel/CSV、调价、续重、首重、报价测算或提交报价时使用。
-version: 1.3.5
+version: 1.3.6
 ---
 
 # 报价助手（quote-assistant）
@@ -133,7 +133,7 @@ if (isStoClawBridgeAvailable()) {
 
 | kind | params |
 |------|--------|
-| `composer.openFilePicker` | `{ "accept": ".xlsx,.xls,.csv", "multiple": true }`（默认选完即发送；若只要暂存可加 `"autoSend": false`） |
+| `composer.openFilePicker` | `{ "accept": ".xlsx,.xls,.csv" }`（默认选完即发送；若只要暂存可加 `"autoSend": false`；多选需显式 `"multiple": true`） |
 | `nav.openPreviewTab` | `{ "ossKey": "…" }` 或 `{ "urlKey": "previewUrl", "title": "报价确认" }`（主会话右侧 / 广场左侧） |
 | `nav.refreshPreview` | `{ "ossKey": "…" }` — 提交后重新打开确认页（不要用 reload） |
 | `nav.openExternal` | `{ "urlKey": "ossUrl" }` 或 `{ "url": "https://..." }`（下载校验失败文件等） |
@@ -154,15 +154,15 @@ if (isStoClawBridgeAvailable()) {
   "phase": "awaiting_upload",
   "title": "好的，开始**新建报价**。",
   "body": "请点击下方**上传报价表**选择本地文件。",
-  "hint": "选择文件后将直接发送并开始解析；支持一次多选。",
+  "hint": "选择文件后将直接发送并开始解析。",
   "data": {},
   "actions": [
     {
       "id": "upload",
-      "label": "上传报价表(支持多选文件)",
+      "label": "上传报价表",
       "variant": "primary",
       "kind": "composer.openFilePicker",
-      "params": { "accept": ".xlsx,.xls,.csv", "multiple": true }
+      "params": { "accept": ".xlsx,.xls,.csv" }
     }
   ]
 }
@@ -266,7 +266,7 @@ if (isStoClawBridgeAvailable()) {
       "label": "重新上传报价表",
       "variant": "secondary",
       "kind": "composer.openFilePicker",
-      "params": { "accept": ".xlsx,.xls,.csv", "multiple": true }
+      "params": { "accept": ".xlsx,.xls,.csv" }
     }
   ]
 }
@@ -325,7 +325,7 @@ if (isStoClawBridgeAvailable()) {
       "label": "重新上传报价表",
       "variant": "primary",
       "kind": "composer.openFilePicker",
-      "params": { "accept": ".xlsx,.xls,.csv", "multiple": true }
+      "params": { "accept": ".xlsx,.xls,.csv" }
     }
   ]
 }
@@ -427,7 +427,7 @@ if (isStoClawBridgeAvailable()) {
 **页面引导**：
 - 参数齐备并出卡后，正文一句：**「请在页面中查看并确认调价方案」**（**禁止**写「左侧」「右侧」）。
 - **不要**为批量调价写 `data.previewUrl` 指望宿主跳转；应用广场**只**推 `batch-adjust.params-ready`，用户应已在业务页。
-- 平台从会话消息里解析 `batchAdjustParams`（常为 `flow_card.data`，仅作结构化载体），按 CLI 草案入参格式校验通过后**直接**推 `batch-adjust.params-ready`；**不依赖 card 快照 diff**。
+- 平台从会话消息里解析 `batchAdjustParams`（常为 `flow_card.data`，仅作结构化载体），按 CLI 草案入参格式校验通过后**直接**推 `batch-adjust.params-ready`；**不依赖 card 快照 / 参数内容 diff**。同一会话再出一张 `flow_card`（含「原样再推一次」）即再推一次。
 - `data.scene` 固定写 `"batch_adjust"`。
 
 **缺参处理（铁律 3）**：
@@ -487,7 +487,7 @@ if (isStoClawBridgeAvailable()) {
 
 1. 出 `batch_adjust` 卡：写入 `data.batchAdjustParams` + `data.scene: "batch_adjust"` → 平台推送 `batch-adjust.params-ready`（**不重定向**业务页）。**会话结束**，不再执行任何 CLI。
 
-用户补充或修改说法时：只重新整理意图、更新 `batchAdjustParams`，同一 `cardId` 再发卡（业务页收新的 `params-ready`）。
+用户补充、修改说法，或要求「原样再推一次」时：输出同一 `cardId` 的新 `flow_card`（参数可完全相同）；平台按新消息再推 `params-ready`。
 
 **`batch_adjust` 卡模板**（`phase: "batch_adjust"`）：
 
@@ -519,6 +519,6 @@ if (isStoClawBridgeAvailable()) {
 
 ## 改参 / 提交
 
-- **批量调价**：用户在会话里补充说明 → **只重新整理意图**、更新 `batchAdjustParams` 与 `batch_adjust` 卡；业务页收新的 `params-ready`。**禁止**校验、草案、提交。
+- **批量调价**：用户在会话里补充说明或要求「原样再推一次」→ **只重新整理意图**、再出 `batch_adjust` 卡（参数可完全相同）；业务页收新的 `params-ready`。**禁止**校验、草案、提交。
 - **上传报价改参**：尽量映射到校验相关命令；否则文本确认并更新 `editing` 卡 `body`（**不放提交按钮**）。
 - **上传报价「提交报价」**：用消息中的 `ossKey`（及 `scene`）调用 `vip quotation save`；成功后出 **`submitted` 卡**并带 `previewMode: "refresh"`。**不要**再出第二张带「提交报价」按钮的卡。

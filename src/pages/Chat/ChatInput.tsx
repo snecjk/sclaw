@@ -281,10 +281,10 @@ export function ChatInput({
 
   useEffect(() => {
     if (!filePickerRequest) return;
-    const request = filePickerRequest;
-    useComposerFlowStore.getState().consumeFilePickerRequest(request.requestId);
+    const request = useComposerFlowStore.getState().takeFilePickerRequest();
+    if (!request) return;
     void (async () => {
-      const picked = await pickFiles();
+      const picked = await pickFiles({ multiple: request.multiple });
       if (!request.autoSend || picked.length === 0 || disabled) return;
 
       // Remove just-staged files from the composer strip — they go out with this send.
@@ -293,11 +293,40 @@ export function ChatInput({
       }
 
       const sendText = request.sendText?.trim() || '';
+      const payload = await buildComposerGatewayPayload({
+        segments: picked.map((file) => ({ type: 'file' as const, attachmentId: file.id })),
+        plainText: sendText,
+        attachments: picked,
+        resolveSkillPrompt,
+      });
+      const extras: ChatSendExtras = {
+        composerSegments: payload.persistedSegments.length ? payload.persistedSegments : undefined,
+        gatewayText: payload.gatewayText,
+      };
+
       if (sending && onQueue) {
-        onQueue(sendText, picked, targetAgentId, undefined, null, undefined);
+        onQueue(
+          payload.displayText,
+          payload.attachments,
+          targetAgentId,
+          undefined,
+          null,
+          undefined,
+          extras,
+        );
         return;
       }
-      onSend(sendText, picked, targetAgentId, undefined, null, null, null, undefined);
+      onSend(
+        payload.displayText,
+        payload.attachments,
+        targetAgentId,
+        undefined,
+        null,
+        null,
+        null,
+        undefined,
+        extras,
+      );
     })();
   }, [filePickerRequest, pickFiles, removeAttachment, disabled, sending, onQueue, onSend, targetAgentId]);
 

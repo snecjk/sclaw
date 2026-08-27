@@ -31,9 +31,23 @@ import { invokeIpc } from '@/lib/api-client';
 import { isStoEmbedBrowserUrl } from '../../shared/sclaw-embed-browser';
 import type { AppTone } from '@/types/more-apps';
 import type { EmbedComposerAction } from '../../shared/embed-composer-actions';
+import {
+  DEFAULT_QUOTE_EMBED_COMPOSER_ACTIONS,
+  isQuoteEmbedPageUrl,
+  QUOTE_EMBED_APP_ID,
+} from '../../shared/quote-embed-app';
 
 export const APP_PLAZA_HOME_TAB_ID = 'home';
 export const APP_PLAZA_MAX_LIVE_BROWSER_TABS = 5;
+
+function resolveEmbedComposerActionsForTab(tab: AppPlazaBrowserTab): EmbedComposerAction[] | null {
+  if (tab.embedComposerActions?.length) return tab.embedComposerActions;
+  const pageUrl = tab.currentPageUrl ?? tab.url;
+  if (tab.appId === QUOTE_EMBED_APP_ID || isQuoteEmbedPageUrl(pageUrl)) {
+    return DEFAULT_QUOTE_EMBED_COMPOSER_ACTIONS;
+  }
+  return null;
+}
 
 export type AppPlazaBrowserTabStatus = 'blank' | 'live' | 'suspended';
 
@@ -347,7 +361,7 @@ function rebindEmbedChatAfterRemount(tab: AppPlazaBrowserTab | undefined): void 
     return;
   }
   void ensureSclawBrowserBridge(tab.embedRuntimeId);
-  useComposerFlowStore.getState().setEmbedComposerActions(tab.embedComposerActions ?? null);
+  useComposerFlowStore.getState().setEmbedComposerActions(resolveEmbedComposerActionsForTab(tab));
   switchSclawBrowserEmbedChatSession(
     tab.appId,
     tab.embedRuntimeId,
@@ -905,7 +919,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     if (!tab?.embedRuntimeId || !tab.appId || tab.status !== 'live') return;
     if (tab.chatPanelOpen) return;
     void ensureSclawBrowserBridge(tab.embedRuntimeId);
-    useComposerFlowStore.getState().setEmbedComposerActions(tab.embedComposerActions ?? null);
+    useComposerFlowStore.getState().setEmbedComposerActions(resolveEmbedComposerActionsForTab(tab));
     const activation = activateSclawBrowserEmbedChat(tab.appId, tab.embedRuntimeId);
     set((prev) => ({
       browserTabs: prev.browserTabs.map((t) =>

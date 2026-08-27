@@ -56,23 +56,33 @@ describe('sclaw-browser-chat-session', () => {
 });
 
 describe('sclaw-browser-embed-context', () => {
-  it('includes bridgeSessionId and bridge tools hint', () => {
-    const text = buildSclawBrowserEmbedContextText({
-      embedRuntimeId: 'br-test',
-      bridgeSessionId: 'embed-br-test',
-      appTitle: '政策管家',
-      pageUrl: 'https://zc.sto.cn/',
-      pageTitle: 'STO 政策管家',
-      visibleTextExcerpt: '业务量完成率 33.94%',
-      capturedAt: 1,
-      recentNetworkRequests: [{ method: 'GET', url: 'https://zc.sto.cn/api/metrics', statusCode: 200 }],
-    });
+  const baseContext = {
+    embedRuntimeId: 'br-test',
+    bridgeSessionId: 'embed-br-test',
+    appTitle: '政策管家',
+    pageUrl: 'https://zc.sto.cn/',
+    pageTitle: 'STO 政策管家',
+    visibleTextExcerpt: '业务量完成率 33.94%',
+    capturedAt: 1,
+    recentNetworkRequests: [{ method: 'GET', url: 'https://zc.sto.cn/api/metrics', statusCode: 200 }],
+  };
+
+  it('includes bridgeSessionId and bridge tools hint by default', () => {
+    const text = buildSclawBrowserEmbedContextText(baseContext);
     expect(text).toContain('embedRuntimeId');
     expect(text).toContain('br-test');
     expect(text).toContain('bridge_snapshot');
     expect(text).toContain('ba_observe');
     expect(text).toContain('embed-br-test');
     expect(text).toContain('业务量完成率');
+  });
+
+  it('uses quote-skill priority prompt when quoteSkillActive', () => {
+    const text = buildSclawBrowserEmbedContextText(baseContext, { quoteSkillActive: true });
+    expect(text).toContain('报价助手技能已激活');
+    expect(text).toContain('调价上传弹窗');
+    expect(text).not.toContain('ba_observe');
+    expect(text).not.toContain('automationTools');
   });
 
   it('strips hidden context for display', () => {

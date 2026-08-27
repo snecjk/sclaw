@@ -25,6 +25,8 @@ interface ComposerFlowState {
     autoSend?: boolean;
     sendText?: string;
   }) => string;
+  /** Atomically take the pending request (only one consumer wins). */
+  takeFilePickerRequest: () => ComposerFilePickerRequest | null;
   consumeFilePickerRequest: (requestId: string) => ComposerFilePickerRequest | null;
   setEmbedComposerActions: (actions: EmbedComposerAction[] | null) => void;
 }
@@ -45,12 +47,19 @@ export const useComposerFlowStore = create<ComposerFlowState>((set, get) => ({
       filePickerRequest: {
         requestId,
         accept: input?.accept,
-        multiple: input?.multiple ?? true,
+        multiple: input?.multiple === true,
         autoSend: input?.autoSend === true,
         sendText: typeof input?.sendText === 'string' ? input.sendText : undefined,
       },
     });
     return requestId;
+  },
+
+  takeFilePickerRequest: () => {
+    const current = get().filePickerRequest;
+    if (!current) return null;
+    set({ filePickerRequest: null });
+    return current;
   },
 
   consumeFilePickerRequest: (requestId) => {

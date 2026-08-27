@@ -2,12 +2,15 @@
  * Embed browser session — isolated persist partition with first-party cookie context.
  * Syncs STO domain cookies from defaultSession before each embed navigation.
  */
-import { session, type Cookie } from 'electron';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { app, session, type Cookie } from 'electron';
 import {
   SCLAW_EMBED_BROWSER_PARTITION,
   SCLAW_EMBED_COOKIE_DOMAIN_SUFFIXES,
   isStoEmbedBrowserUrl,
 } from '../../../shared/sclaw-embed-browser';
+import { SCLAW_EMBED_BROWSER_XHR_PATCH_SCRIPT } from '../../../shared/sclaw-embed-browser-xhr-patch';
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import {
   STO_POLICY_AUTH_COOKIE_NAMES,
@@ -19,6 +22,44 @@ import { logger } from '../../utils/logger';
 
 /** Prefer Chinese for DingTalk / STO SSO widgets that key off Accept-Language. */
 const EMBED_ACCEPT_LANGUAGE = 'zh-CN,zh;q=0.9';
+const EMBED_XHR_PATCH_PRELOAD_ID = 'sclaw-embed-xhr-patch';
+
+let sessionHooksInstalled = false;
+
+function getEmbedXhrPatchPreloadPath(): string {
+  const dir = join(app.getPath('userData'), 'jsbridge');
+  mkdirSync(dir, { recursive: true });
+  const filePath = join(dir, 'embed-xhr-patch-preload.cjs');
+  const source = `const { webFrame } = require('electron');
+webFrame.executeJavaScript(${JSON.stringify(SCLAW_EMBED_BROWSER_XHR_PATCH_SCRIPT)});
+`;
+  writeFileSync(filePath, source, 'utf8');
+  return filePath;
+}
+
+function ensureEmbedXhrPatchPreload(embedSession: Electron.Session): void {
+  try {
+    const scripts = embedSession.getPreloadScripts();
+    if (scripts.some((entry) => entry.id === EMBED_XHR_PATCH_PRELOAD_ID)) return;
+    embedSession.registerPreloadScript({
+      id: EMBED_XHR_PATCH_PRELOAD_ID,
+      type: 'frame',
+      filePath: getEmbedXhrPatchPreloadPath(),
+    });
+  } catch (error) {
+    logger.warn('[SclawEmbedBrowser] session XHR patch preload registration failed:', error);
+  }
+}
+
+/** Install embed partition hooks once (locale headers + early XHR patch preload). */
+export function installSclawEmbedBrowserSessionHooks(): void {
+  if (sessionHooksInstalled) return;
+  sessionHooksInstalled = true;
+
+  const embedSession = session.fromPartition(SCLAW_EMBED_BROWSER_PARTITION);
+  ensureEmbedLocaleHeaders(embedSession);
+  ensureEmbedXhrPatchPreload(embedSession);
+}
 
 let localeHeadersInstalled = false;
 

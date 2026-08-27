@@ -4,7 +4,8 @@ import {
   type FlowCardPayload,
   isFlowCardContentBlock,
 } from '../../shared/flow-card-protocol';
-import { findFlowCardFenceInMessage, findStreamingFlowCardInMessage } from '@/lib/flow-card-marker';
+import { normalizeQuoteFlowCard } from '@/lib/flow-card-quote-actions';
+import { findStreamingFlowCardInMessage } from '@/lib/flow-card-marker';
 import { updateCurrentChatDisplayProjection, updateSessionDisplayProjection } from '@/stores/chat/display-selectors';
 import type { ContentBlock, RawMessage } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
@@ -26,11 +27,11 @@ export function extractFlowCard(message: RawMessage): FlowCardContentBlock | nul
   const content = message.content;
   if (Array.isArray(content)) {
     for (const block of content as ContentBlock[]) {
-      if (isFlowCardContentBlock(block)) return block;
+      if (isFlowCardContentBlock(block)) return normalizeQuoteFlowCard(block);
     }
   }
   const fromFence = findStreamingFlowCardInMessage(content);
-  return fromFence ? createFlowCardBlock(fromFence) : null;
+  return fromFence ? normalizeQuoteFlowCard(createFlowCardBlock(fromFence)) : null;
 }
 
 export function findMessageIndexByFlowCardId(

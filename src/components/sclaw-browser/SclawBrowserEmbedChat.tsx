@@ -1,7 +1,7 @@
 /**
  * Ephemeral AI chat pane for the in-app browser drawer (right column).
  */
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
@@ -28,6 +28,17 @@ import {
   dispatchJsBridgeStructuredComposerSeed,
   shouldApplyJsBridgeStructuredComposerSeed,
 } from '@/lib/jsbridge/apply-composer-seed';
+import {
+  CHAT_EDIT_DRAFT_EVENT,
+  type ChatEditDraftEventDetail,
+} from '@/components/input-composer/use-input-composer-edit-draft';
+import {
+  isQuoteEmbedContextForRuntime,
+} from '@/lib/resolve-embed-quote-skill';
+import {
+  QUOTE_ASSISTANT_SKILL_SLUG,
+  QUOTE_ASSISTANT_SKILL_TITLE,
+} from '../../../shared/quote-embed-app';
 import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
 import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
@@ -116,10 +127,29 @@ export function SclawBrowserEmbedChat({
   ));
   const composerReady = currentSessionKey === sessionKey;
   const structuredSeed = shouldApplyJsBridgeStructuredComposerSeed(embedSeedEntry);
+  const quoteSkillSeededRef = useRef<string | null>(null);
   useEffect(() => {
     if (!composerReady) return;
     dispatchJsBridgeStructuredComposerSeed(embedSeedEntry);
   }, [composerReady, embedSeedEntry]);
+  useEffect(() => {
+    if (!composerReady || messages.length > 0) return;
+    if (structuredSeed) return;
+    if (!embedRuntimeId) return;
+    if (quoteSkillSeededRef.current === sessionKey) return;
+    if (!isQuoteEmbedContextForRuntime(embedRuntimeId)) return;
+    quoteSkillSeededRef.current = sessionKey;
+    window.dispatchEvent(new CustomEvent<ChatEditDraftEventDetail>(CHAT_EDIT_DRAFT_EVENT, {
+      detail: {
+        segments: [{
+          type: 'skill',
+          slug: QUOTE_ASSISTANT_SKILL_SLUG,
+          title: QUOTE_ASSISTANT_SKILL_TITLE,
+        }],
+        text: '',
+      },
+    }));
+  }, [composerReady, embedRuntimeId, messages.length, sessionKey, structuredSeed]);
   const composerSeed = structuredSeed ? undefined : embedSeedEntry?.text;
   const composerScenarioActions = resolveEmbedComposerActions(
     useComposerFlowStore((s) => s.embedComposerActions),

@@ -3,6 +3,7 @@ import { createFlowCardBlock } from '../../shared/flow-card-protocol';
 import {
   filterQuoteFlowCardActions,
   isQuoteSubmitAction,
+  normalizeQuoteFlowCard,
   shouldHideQuoteSubmitActions,
 } from '@/lib/flow-card-quote-actions';
 
@@ -74,5 +75,24 @@ describe('flow-card-quote-actions', () => {
       actions: [openDetailAction, submitAction],
     });
     expect(filterQuoteFlowCardActions(card, card.actions ?? [])).toEqual([openDetailAction]);
+  });
+
+  it('normalizes quote upload card text and forces single-file picker', () => {
+    const card = normalizeQuoteFlowCard(createFlowCardBlock({
+      cardId: 'quote-active',
+      domain: 'quote',
+      phase: 'awaiting_upload',
+      hint: '选择文件后将直接发送并开始解析；支持一次多选。',
+      actions: [{
+        id: 'upload',
+        label: '上传报价表(支持多选文件)',
+        kind: 'composer.openFilePicker',
+        params: { accept: '.xlsx,.xls,.csv', multiple: true },
+      }],
+    }));
+
+    expect(card.hint).toBe('选择文件后将直接发送并开始解析');
+    expect(card.actions?.[0]?.label).toBe('上传报价表');
+    expect(card.actions?.[0]?.params?.multiple).toBe(false);
   });
 });

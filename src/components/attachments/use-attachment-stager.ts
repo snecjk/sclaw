@@ -76,15 +76,22 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
     setAttachments(next);
   }, []);
 
-  const pickFiles = useCallback(async (): Promise<FileAttachment[]> => {
+  const pickFiles = useCallback(async (options?: { multiple?: boolean }): Promise<FileAttachment[]> => {
     try {
+      const allowMultiple = options?.multiple ?? true;
+      const properties: Array<'openFile' | 'multiSelections'> = allowMultiple
+        ? ['openFile', 'multiSelections']
+        : ['openFile'];
       const result = await invokeIpc('dialog:open', {
-        properties: ['openFile', 'multiSelections'],
+        properties,
       }) as { canceled: boolean; filePaths?: string[] };
       if (result.canceled || !result.filePaths?.length) return [];
 
+      const filePaths = allowMultiple
+        ? result.filePaths
+        : result.filePaths.slice(0, 1);
       const tempIds: string[] = [];
-      for (const filePath of result.filePaths) {
+      for (const filePath of filePaths) {
         const tempId = crypto.randomUUID();
         tempIds.push(tempId);
         const fileName = filePath.split(/[\\/]/).pop() || 'file';
@@ -109,7 +116,7 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
         preview: string | null;
       }>>('/api/files/stage-paths', {
         method: 'POST',
-        body: JSON.stringify({ filePaths: result.filePaths }),
+        body: JSON.stringify({ filePaths }),
       });
 
       const ready: FileAttachment[] = [];

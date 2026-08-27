@@ -25,8 +25,12 @@ export function messageHasSclawBrowserEmbedContext(message: string): boolean {
 
 export function buildSclawBrowserEmbedContextText(
   context: SclawBrowserEmbedContextBlock,
-  options?: { longSessionNotice?: string | null },
+  options?: { longSessionNotice?: string | null; quoteSkillActive?: boolean },
 ): string {
+  if (options?.quoteSkillActive) {
+    return buildQuoteSkillEmbedContextText(context, options);
+  }
+
   const payload = {
     version: 4,
     source: 'stoclaw-embed-browser',
@@ -102,10 +106,67 @@ export function buildSclawBrowserEmbedContextText(
   ].filter(Boolean).join('\n');
 }
 
+function buildQuoteSkillEmbedContextText(
+  context: SclawBrowserEmbedContextBlock,
+  options?: { longSessionNotice?: string | null },
+): string {
+  const payload = {
+    version: 4,
+    source: 'stoclaw-embed-browser',
+    quoteSkillActive: true,
+    embedRuntimeId: context.embedRuntimeId,
+    bridgeSessionId: context.bridgeSessionId,
+    appTitle: context.appTitle,
+    pageUrl: context.pageUrl,
+    pageTitle: context.pageTitle,
+    visibleTextExcerpt: context.visibleTextExcerpt,
+    capturedAt: context.capturedAt,
+    recentNetworkRequests: context.recentNetworkRequests ?? [],
+  };
+
+  const excerptBlock = context.visibleTextExcerpt.trim()
+    ? `页面可见文字摘要（截断）：\n${context.visibleTextExcerpt.trim()}`
+    : '（无法读取页面正文，仅提供 URL 与标题）';
+
+  const networkBlock = (context.recentNetworkRequests?.length ?? 0) > 0
+    ? `最近网络请求（60s 内，最多 20 条）：\n${
+      context.recentNetworkRequests!.map((item) => (
+        `- ${item.method} ${item.statusCode ?? '?'} ${item.url}`
+      )).join('\n')
+    }`
+    : '';
+
+  return [
+    SCLAW_BROWSER_EMBED_CONTEXT_MARKER,
+    '',
+    options?.longSessionNotice ?? null,
+    '【报价助手技能已激活 — 优先级高于浏览器自动化】',
+    '用户正在应用广场左侧业务页操作报价相关功能。已绑定 quote-assistant 技能，**必须严格遵循技能与 flow_card 协议**。',
+    '',
+    '**禁止（报价场景铁律）：**',
+    '- **禁止**调用 bridge_* / ba_* 去点击页面自带的「调价上传弹窗」「AI 批量调价确认」等原生批量调价/上传弹窗。',
+    '- **禁止**在未输出 flow_card 的情况下声称已完成上传/调价/提交。',
+    '- 上传报价：用 flow_card + composer.openFilePicker；批量调价：整理 batchAdjustParams 并推送 batch-adjust.params-ready。',
+    '- 批量调价**禁止** sai-cli 校验/草案/提交；业务页自行处理草案与提交。',
+    '',
+    '**允许（只读观察）：**',
+    '- 可用 bridge_snapshot 了解页面状态，但不要用 bridge_click / ba_act 驱动报价业务流程。',
+    '',
+    '```json',
+    JSON.stringify(payload, null, 2),
+    '```',
+    '',
+    excerptBlock,
+    networkBlock,
+    '',
+    SCLAW_BROWSER_EMBED_CONTEXT_MARKER,
+  ].filter(Boolean).join('\n');
+}
+
 export function appendSclawBrowserEmbedContext(
   text: string,
   context?: SclawBrowserEmbedContextBlock | null,
-  options?: { longSessionNotice?: string | null },
+  options?: { longSessionNotice?: string | null; quoteSkillActive?: boolean },
 ): string {
   if (!context) return text;
   if (messageHasSclawBrowserEmbedContext(text)) return text;

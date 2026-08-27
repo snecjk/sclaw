@@ -52,7 +52,7 @@ describe('flow-card-marker', () => {
       title: '好的，开始**新建报价**。',
       actions: [{
         id: 'upload',
-        label: '上传报价表(支持多选文件)',
+        label: '上传报价表',
         kind: 'composer.openFilePicker',
       }],
     };

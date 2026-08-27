@@ -37,9 +37,9 @@ const batchParams = {
   }],
 };
 
-function batchMessages(): RawMessage[] {
-  return [{
-    id: 'm1',
+function batchMessage(id: string): RawMessage {
+  return {
+    id,
     role: 'assistant',
     content: [
       createFlowCardBlock({
@@ -52,7 +52,11 @@ function batchMessages(): RawMessage[] {
         },
       }),
     ],
-  }];
+  };
+}
+
+function batchMessages(id = 'm1'): RawMessage[] {
+  return [batchMessage(id)];
 }
 
 describe('quote-batch-adjust-bridge-sync', () => {
@@ -68,7 +72,7 @@ describe('quote-batch-adjust-bridge-sync', () => {
     expect(payload?.previewUrl).toContain('quote-ops-console');
   });
 
-  it('emits batch-adjust.params-ready from params signature (not card diff)', () => {
+  it('emits batch-adjust.params-ready from a new message (not card / params-content diff)', () => {
     syncBatchAdjustParamsBridge('sess-batch-live', batchMessages());
 
     expect(emitMock).toHaveBeenCalledTimes(1);
@@ -77,6 +81,28 @@ describe('quote-batch-adjust-bridge-sync', () => {
       params: batchParams,
       cardId: 'quote-active',
       phase: 'batch_adjust',
+      sourceMessageId: 'm1',
+    });
+  });
+
+  it('does not re-emit the same message on repeated sync', () => {
+    const messages = batchMessages();
+    syncBatchAdjustParamsBridge('sess-batch-repeat', messages);
+    syncBatchAdjustParamsBridge('sess-batch-repeat', messages);
+    expect(emitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-emits identical params when a new assistant message appears', () => {
+    const first = batchMessages('m1');
+    syncBatchAdjustParamsBridge('sess-batch-resend', first);
+    expect(emitMock).toHaveBeenCalledTimes(1);
+
+    const resent = [...first, batchMessage('m2')];
+    syncBatchAdjustParamsBridge('sess-batch-resend', resent);
+    expect(emitMock).toHaveBeenCalledTimes(2);
+    expect(emitMock.mock.calls[1]?.[0]).toMatchObject({
+      sourceMessageId: 'm2',
+      params: batchParams,
     });
   });
 

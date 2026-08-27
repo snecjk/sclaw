@@ -32,9 +32,10 @@ function emitQuoteChannel(
   runtimeId: string,
   channel: string,
   payload: Omit<QuoteBridgeEventPayload, 'channel'>,
+  sourceKey?: string,
 ): void {
   const full: QuoteBridgeEventPayload = { channel, ...payload };
-  const key = `${runtimeId}:${channel}:${payload.cardId ?? 'no-card'}`;
+  const key = `${runtimeId}:${channel}:${payload.cardId ?? 'no-card'}:${sourceKey ?? ''}`;
   const signature = signatureFor(full);
   if (emittedSignatures.get(key) === signature) return;
   emittedSignatures.set(key, signature);
@@ -118,13 +119,15 @@ function emitNotifyKind(
   }
 }
 
-/** Push `batch-adjust.params-ready` from parsed CLI params (not tied to flow_card diff). */
+/** Push `batch-adjust.params-ready` from parsed CLI params (not tied to flow_card / params-content diff). */
 export function emitBatchAdjustParamsReady(input: {
   runtimeId: string;
   params: BatchAdjustParams;
   cardId?: string;
   phase?: string;
   url?: string | null;
+  /** Distinct assistant message — identical params from a new turn still emit. */
+  sourceMessageId?: string;
 }): void {
   const cardId = input.cardId?.trim() || 'batch-adjust';
   const phase = input.phase?.trim() || 'batch_adjust';
@@ -136,7 +139,7 @@ export function emitBatchAdjustParamsReady(input: {
     objectList: input.params.objectList,
     objectListJson: serializeBatchAdjustObjectListJson(input.params.objectList),
     summary: input.params.summary,
-  });
+  }, input.sourceMessageId);
 }
 
 /** Push quote notifications to embed business page (`quote:event` + channel). */

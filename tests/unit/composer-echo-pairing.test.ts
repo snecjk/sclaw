@@ -30,6 +30,11 @@ describe('composer echo pairing & display', () => {
     )).toBe('使用 生成 html');
   });
 
+  it('strips gateway file-only placeholder text for display', () => {
+    expect(normalizeUserMessageForDisplay('运费报价模版.xlsx (file attached)')).toBe('运费报价模版.xlsx');
+    expect(normalizeUserMessageForDisplay('(file attached)')).toBe('');
+  });
+
   it('normalizeUserMessageForDisplay preserves newlines for bubble rendering', () => {
     expect(normalizeUserMessageForDisplay(
       '要求：\n\n📊 核心数据\n- 总发件量：1\n- 活跃客户：2',

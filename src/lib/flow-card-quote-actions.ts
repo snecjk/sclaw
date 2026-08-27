@@ -1,5 +1,8 @@
 import type { FlowCardAction, FlowCardContentBlock } from '../../shared/flow-card-protocol';
 
+const QUOTE_UPLOAD_MULTI_HINT_RE = /[；;]?\s*支持一次多选[。.]?/g;
+const QUOTE_UPLOAD_MULTI_LABEL_RE = /[（(]支持多选文件[）)]/g;
+
 function readTrimmedString(data: Record<string, unknown> | undefined, key: string): string {
   const value = data?.[key];
   return typeof value === 'string' ? value.trim() : '';
@@ -33,4 +36,38 @@ export function filterQuoteFlowCardActions(
 ): FlowCardAction[] {
   if (!shouldHideQuoteSubmitActions(card)) return actions;
   return actions.filter((action) => !isQuoteSubmitAction(action));
+}
+
+function normalizeQuoteUploadPickerAction(action: FlowCardAction): FlowCardAction {
+  if (action.kind !== 'composer.openFilePicker') return action;
+  const label = action.label
+    .replace(QUOTE_UPLOAD_MULTI_LABEL_RE, '')
+    .trim();
+  return {
+    ...action,
+    label: label || '上传报价表',
+    params: {
+      ...action.params,
+      multiple: false,
+    },
+  };
+}
+
+/**
+ * Quote 卡片的客户端规范化：剥掉模型仍可能输出的「多选」文案，并强制单文件上传。
+ * SKILL 更新后旧会话/旧模型输出仍走此路径。
+ */
+export function normalizeQuoteFlowCard(card: FlowCardContentBlock): FlowCardContentBlock {
+  if (card.domain !== 'quote') return card;
+
+  const hint = card.hint
+    ? card.hint.replace(QUOTE_UPLOAD_MULTI_HINT_RE, '').trim()
+    : card.hint;
+  const actions = card.actions?.map((action) => normalizeQuoteUploadPickerAction(action));
+
+  return {
+    ...card,
+    hint,
+    actions,
+  };
 }

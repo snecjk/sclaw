@@ -6,6 +6,7 @@
  * - `InputComposerToolbarProps` — layout、labels、回调、active 态、button refs、show*、extra 槽
  */
 import type { RefObject, ReactNode } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -122,6 +123,7 @@ export function InputComposerToolbar({
   const isHome = layout === 'home';
   const useDropdownTools = toolsLayout === 'dropdown';
   const anyToolPanelActive = skillActive || workflowActive || quickInputActive;
+  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
 
   if (isHome && useDropdownTools) {
     const menuItems: Array<{
@@ -169,13 +171,13 @@ export function InputComposerToolbar({
 
     return (
       <>
-        <DropdownMenu>
+        <DropdownMenu open={toolsMenuOpen} onOpenChange={setToolsMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               ref={dropdownToolsAnchorRef ?? attachButtonRef}
               variant="ghost"
               type="button"
-              className={cn(homeIconBtn, anyToolPanelActive && homeIconActive)}
+              className={cn(homeIconBtn, (anyToolPanelActive || toolsMenuOpen) && homeIconActive)}
               onMouseDown={(event) => event.preventDefault()}
               disabled={disabled}
               title={labels.toolsMenu ?? labels.skill}
@@ -192,6 +194,7 @@ export function InputComposerToolbar({
                 disabled={disabled}
                 onSelect={(event) => {
                   event.preventDefault();
+                  setToolsMenuOpen(false);
                   window.setTimeout(() => item.onSelect(), 0);
                 }}
               >

@@ -61,7 +61,9 @@ export function dispatchFlowCardAction(action: FlowCardAction, card: FlowCardCon
   switch (action.kind) {
     case 'composer.openFilePicker': {
       const accept = readStringParam(action.params, 'accept') ?? undefined;
-      const multiple = action.params?.multiple !== false;
+      const multiple = card.domain === 'quote'
+        ? false
+        : action.params?.multiple === true;
       // Default autoSend=true for flow_card upload — select then send immediately.
       const autoSend = action.params?.autoSend !== false;
       const sendText = readStringParam(action.params, 'sendText') ?? undefined;
