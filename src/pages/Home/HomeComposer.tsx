@@ -65,6 +65,10 @@ export interface HomeComposerProps {
   footerAlign?: 'center' | 'right';
   /** 新对话落地页：输入框下展示「进入项目工作」选择条 */
   showProjectPicker?: boolean;
+  /** Embed / 业务场景快捷 pill */
+  composerScenarioActions?: import('../../../shared/embed-composer-actions').EmbedComposerAction[];
+  /** 应用广场窄栏：工具收起到下拉 */
+  toolbarToolsLayout?: 'inline' | 'dropdown';
 }
 
 export function HomeComposer({
@@ -79,6 +83,8 @@ export function HomeComposer({
   showDisclaimer = true,
   footerAlign = 'center',
   showProjectPicker = false,
+  composerScenarioActions,
+  toolbarToolsLayout,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
   const agents = useAgentsStore((s) => s.agents);
@@ -144,6 +150,8 @@ export function HomeComposer({
           toolbarInlineSelectors={inlineToolbarSelectors}
           engineType={resolvedEngineType}
           showProjectPicker={showProjectPicker}
+          composerScenarioActions={composerScenarioActions}
+          toolbarToolsLayout={toolbarToolsLayout}
         />
       </section>
       {showDisclaimer ? (

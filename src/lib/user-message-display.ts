@@ -56,7 +56,9 @@ function stripGatewayUserMetadata(text: string): string {
 
 /** 仅剥离 Gateway `[media attached: …]`（气泡 / 编辑回填共用）。 */
 export function stripGatewayMediaAttached(text: string): string {
-  return text.replace(/\s*\[media attached:[^\]]*\]/gi, '');
+  return text
+    .replace(/\s*\[media attached:[^\]]*\]/gi, '')
+    .replace(/\s*\(file attached\)/gi, '');
 }
 
 /**
@@ -101,7 +103,7 @@ export function stripComposerModelBakeForDisplay(text: string): string {
 }
 
 function stripAllUserDisplayNoise(text: string): string {
-  return stripUserNoiseKeepComposerBake(text);
+  return stripGatewayMediaAttached(stripUserNoiseKeepComposerBake(text));
 }
 
 /** 配对用：把换行与连续空白统一压成单空格。 */

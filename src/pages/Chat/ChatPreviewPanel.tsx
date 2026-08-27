@@ -1,7 +1,11 @@
 /**
- * ChatPreviewPanel — 三栏预览区右侧面板（圆角内容壳 + 文件预览）
+ * ChatPreviewPanel — 统一预览面板（Kimi Work 式右侧面板）
  *
- * Tab 行（☰ + 产物 pill）在 ContentHeader 与搜索/刷新等 icon 同一行。
+ * 单一 L2 壳内按活跃 tab 类型切换内容：
+ * - file    → 操作行（刷新/下载/分享/打开/存数据中心/编辑工作流）+ FilePreviewViewer
+ * - browser → BrowserPreviewView（自带 chrome：导航/地址栏/进度条）
+ *
+ * Tab 行（文件 + 网页混排 pill）由 ChatPreviewHeaderTabs 渲染在 ContentHeader。
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -16,12 +20,12 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { OnEditWorkflowNavigate } from '@/lib/preview-workflow-navigation';
-import { isHttpUrl, inferMimeTypeFromUrl, resolvePreviewMimeType } from '@/lib/preview-url';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { SaveArtifactDialog } from '@/components/file-preview/SaveArtifactDialog';
+import { BrowserPreviewView } from '@/components/chat-browser/BrowserPreviewView';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   buildArtifactShareDialogDraft,
@@ -35,13 +39,16 @@ import {
   stoPreviewContentShellClass,
 } from '@/lib/surfaces';
 import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+import type { ChatBrowserPreviewTab } from '@/stores/chat-browser-preview';
+import type { ChatPreviewTab } from '@/hooks/use-chat-preview-panel';
 
 const previewActionTooltipClass = 'border-none bg-[#1D2129] px-2.5 py-1.5 text-[12px] font-medium leading-4 text-white shadow-none dark:bg-[#1D2129] dark:text-white';
 
 export interface ChatPreviewPanelProps {
-  /** 当前可见的产物列表（已过滤 dismissed） */
-  files: AttachedFileMeta[];
-  activeFilePath: string | null;
+  /** 统一 tab 序列（文件产物 + 业务网页） */
+  tabs: ChatPreviewTab[];
+  activeTabId: string | null;
+  sessionKey: string;
   /** 有工作流上下文时在操作行展示「编辑工作流」（跳转，不切换预览内容） */
   showEditWorkflow?: boolean;
   workflowId?: string | null;
@@ -50,8 +57,9 @@ export interface ChatPreviewPanelProps {
 }
 
 export function ChatPreviewPanel({
-  files,
-  activeFilePath,
+  tabs,
+  activeTabId,
+  sessionKey,
   showEditWorkflow = false,
   workflowId = null,
   onEditWorkflow,
@@ -64,22 +72,18 @@ export function ChatPreviewPanel({
   const [saveArtifactOpen, setSaveArtifactOpen] = useState(false);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
 
-  const activeFile = useMemo(() => {
-    if (!activeFilePath) return null;
-    const found = files.find((f) => f.filePath === activeFilePath);
-    if (found) return found;
-    if (isHttpUrl(activeFilePath)) {
-      const inferredMime = inferMimeTypeFromUrl(activeFilePath);
-      return {
-        filePath: activeFilePath,
-        fileName: activeFilePath.replace(/^https?:\/\//, ''),
-        mimeType: resolvePreviewMimeType(inferredMime, activeFilePath),
-        fileSize: 0,
-        preview: null,
-      } satisfies AttachedFileMeta;
-    }
-    return null;
-  }, [files, activeFilePath]);
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[tabs.length - 1] ?? null,
+    [tabs, activeTabId],
+  );
+
+  const activeFile: AttachedFileMeta | null = activeTab?.kind === 'file' ? activeTab.file : null;
+
+  const browserTabs = useMemo(
+    () => tabs.filter((tab): tab is Extract<ChatPreviewTab, { kind: 'browser' }> => tab.kind === 'browser').map((tab) => tab.tab),
+    [tabs],
+  );
+  const activeBrowserTabId = activeTab?.kind === 'browser' ? activeTab.tab.id : null;
 
   const saveableActiveFile = useMemo(() => {
     if (!activeFile?.filePath) return activeFile;
@@ -157,66 +161,77 @@ export function ChatPreviewPanel({
     onEditWorkflow?.(workflowId);
   }, [workflowId, onEditWorkflow]);
 
-  if (files.length === 0) return null;
+  if (tabs.length === 0) return null;
 
   return (
     <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', className)}>
       <div className={stoPreviewContentShellClass}>
-        <div className={stoPreviewActionRowClass}>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium leading-5 text-foreground">
-              {activeFile?.fileName ?? t('preview.emptyHint')}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {activeFile ? (
-              <>
-                <PreviewActionButton onClick={handleRefresh} aria-label={t('preview.refresh')}>
-                  <RefreshCw className="h-4 w-4" aria-hidden />
-                </PreviewActionButton>
-                <PreviewActionButton onClick={handleDownload} aria-label={t('preview.download')}>
-                  <Download className="h-4 w-4" aria-hidden />
-                </PreviewActionButton>
-                <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
-                  <ShareMessageIcon className="h-4 w-4" />
-                </PreviewActionButton>
-                <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
-                  <ExternalLink className="h-4 w-4" aria-hidden />
-                </PreviewActionButton>
-                <PreviewActionButton onClick={() => setSaveArtifactOpen(true)} aria-label={t('common:dataCenterPage.saveArtifact.saveToDataCenterTitle')}>
-                  <CloudUpload className="h-4 w-4" aria-hidden />
-                </PreviewActionButton>
-                {showEditWorkflow && workflowId ? (
-                  <button
-                    type="button"
-                    className="shrink-0 text-sm leading-[18px] text-foreground transition-colors hover:text-primary"
-                    onClick={handleEditWorkflow}
-                  >
-                    {t('preview.editWorkflow')}
-                  </button>
+        {activeTab?.kind === 'browser' ? (
+          <BrowserPreviewView
+            sessionKey={sessionKey}
+            tabs={browserTabs as ChatBrowserPreviewTab[]}
+            activeTabId={activeBrowserTabId}
+            className="min-h-0 flex-1"
+          />
+        ) : (
+          <>
+            <div className={stoPreviewActionRowClass}>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium leading-5 text-foreground">
+                  {activeFile?.fileName ?? t('preview.emptyHint')}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {activeFile ? (
+                  <>
+                    <PreviewActionButton onClick={handleRefresh} aria-label={t('preview.refresh')}>
+                      <RefreshCw className="h-4 w-4" aria-hidden />
+                    </PreviewActionButton>
+                    <PreviewActionButton onClick={handleDownload} aria-label={t('preview.download')}>
+                      <Download className="h-4 w-4" aria-hidden />
+                    </PreviewActionButton>
+                    <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
+                      <ShareMessageIcon className="h-4 w-4" />
+                    </PreviewActionButton>
+                    <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
+                      <ExternalLink className="h-4 w-4" aria-hidden />
+                    </PreviewActionButton>
+                    <PreviewActionButton onClick={() => setSaveArtifactOpen(true)} aria-label={t('common:dataCenterPage.saveArtifact.saveToDataCenterTitle')}>
+                      <CloudUpload className="h-4 w-4" aria-hidden />
+                    </PreviewActionButton>
+                    {showEditWorkflow && workflowId ? (
+                      <button
+                        type="button"
+                        className="shrink-0 text-sm leading-[18px] text-foreground transition-colors hover:text-primary"
+                        onClick={handleEditWorkflow}
+                      >
+                        {t('preview.editWorkflow')}
+                      </button>
+                    ) : null}
+                  </>
                 ) : null}
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-preview-viewer>
-          {activeFile ? (
-            <FilePreviewViewer
-              key={`${activeFile.filePath}-${refreshKey}`}
-              filePath={activeFile.filePath!}
-              fileName={activeFile.fileName}
-              mimeType={activeFile.mimeType}
-              className="h-full w-full"
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
-              <Eye className="h-8 w-8 opacity-30" aria-hidden />
-              <p>{t('preview.emptyHint')}</p>
-              <p className="text-xs opacity-50">{t('preview.emptyHintSub')}</p>
+              </div>
             </div>
-          )}
-        </div>
+
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-preview-viewer>
+              {activeFile ? (
+                <FilePreviewViewer
+                  key={`${activeFile.filePath}-${refreshKey}`}
+                  filePath={activeFile.filePath!}
+                  fileName={activeFile.fileName}
+                  mimeType={activeFile.mimeType}
+                  className="h-full w-full"
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+                  <Eye className="h-8 w-8 opacity-30" aria-hidden />
+                  <p>{t('preview.emptyHint')}</p>
+                  <p className="text-xs opacity-50">{t('preview.emptyHintSub')}</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <ArtifactShareDialog

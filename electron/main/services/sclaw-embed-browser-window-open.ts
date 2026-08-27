@@ -7,7 +7,12 @@
  */
 import { app, BrowserWindow, webContents, type WebContents } from 'electron';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
-import { resolveSclawEmbedWindowOpenAction } from '../../../shared/sclaw-embed-browser-window-open';
+import {
+  isSclawEmbedSameFrameWindowOpen,
+  resolveSclawEmbedWindowOpenAction,
+} from '../../../shared/sclaw-embed-browser-window-open';
+import { ensureSclawEmbedBrowserXhrPatch } from './sclaw-embed-browser-xhr-patch';
+import { logger } from '../../utils/logger';
 
 const runtimeByWebContentsId = new Map<number, string>();
 const handlerAttachedIds = new Set<number>();
@@ -44,6 +49,8 @@ function resolveHostWebContents(guest: WebContents): WebContents | null {
 
 function notifyOpenUrl(url: string, runtimeId: string | null, guest: WebContents): void {
   const target = resolveHostWebContents(guest);
+  // TEMP-DIAG: trace window.open forwarding
+  logger.info(`[SclawEmbedBrowser][diag] notifyOpenUrl url=${url} runtimeId=${runtimeId ?? 'null'} target=${target && !target.isDestroyed() ? target.id : 'none'}`);
   if (!target || target.isDestroyed()) return;
   target.send('sclaw-browser:open-url', {
     url,
@@ -56,9 +63,33 @@ function applyWindowOpenHandler(wc: WebContents): void {
   const webContentsId = wc.id;
   if (handlerAttachedIds.has(webContentsId)) return;
 
-  wc.setWindowOpenHandler(({ url }) => {
+  void ensureSclawEmbedBrowserXhrPatch(wc);
+
+  wc.setWindowOpenHandler(({ url, frameName }) => {
     if (wc.isDestroyed()) return { action: 'deny' };
     const action = resolveSclawEmbedWindowOpenAction(url);
+    // TEMP-DIAG: trace every intercepted window.open
+    logger.info(`[SclawEmbedBrowser][diag] window.open intercepted wc=${webContentsId} url=${url} frameName=${frameName ?? ''} action=${action.kind}`);
+    if (isSclawEmbedSameFrameWindowOpen(frameName)) {
+      if (action.kind === 'download') {
+        try {
+          wc.downloadURL(action.url);
+        } catch {
+          // best-effort
+        }
+        return { action: 'deny' };
+      }
+      if (action.kind === 'open-tab') {
+        try {
+          // TEMP-DIAG
+          logger.info(`[SclawEmbedBrowser][diag] same-frame loadURL wc=${webContentsId} url=${action.url}`);
+          void wc.loadURL(action.url);
+        } catch {
+          // best-effort
+        }
+      }
+      return { action: 'deny' };
+    }
     if (action.kind === 'download') {
       try {
         wc.downloadURL(action.url);
@@ -76,6 +107,8 @@ function applyWindowOpenHandler(wc: WebContents): void {
   });
 
   handlerAttachedIds.add(webContentsId);
+  // TEMP-DIAG: confirm handler attach
+  logger.info(`[SclawEmbedBrowser][diag] window-open handler attached wc=${webContentsId}`);
   wc.once('destroyed', () => {
     handlerAttachedIds.delete(webContentsId);
     runtimeByWebContentsId.delete(webContentsId);
@@ -124,7 +157,12 @@ export function detachSclawEmbedBrowserWindowOpenHandler(
 
   const wc = webContents.fromId(webContentsId);
   if (wc && !wc.isDestroyed()) {
-    wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+    // TEMP-DIAG: trace silent deny-all replacement
+    logger.info(`[SclawEmbedBrowser][diag] window-open handler DETACHED (deny-all) wc=${webContentsId}`);
+    wc.setWindowOpenHandler(({ url }) => {
+      logger.info(`[SclawEmbedBrowser][diag] deny-all handler intercepted wc=${webContentsId} url=${url}`);
+      return { action: 'deny' };
+    });
   }
   handlerAttachedIds.delete(webContentsId);
 }

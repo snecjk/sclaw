@@ -1108,3 +1108,46 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   border-color: hsl(var(--glass-border)) !important;
   box-shadow: var(--glass-shadow) !important;
 }
+
+/* ===== 预览面板（统一预览体验） ===== */
+
+/* 内置工作浏览器：顶部加载进度条（indeterminate） */
+@keyframes browser-preview-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+
+.browser-preview-progress {
+  animation: browser-preview-progress 1.1s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* PPT 放映：隐藏 pptx-preview 库自带的粗糙翻页控件（由 PptxDeckViewer 自绘导航条替代） */
+.sclaw-pptx-host .pptx-preview-wrapper-next,
+.sclaw-pptx-host .pptx-preview-wrapper-pagination {
+  display: none !important;
+}
+
+.sclaw-pptx-host .pptx-preview-wrapper {
+  background: #fff;
+}
+
+/* Word 高保真渲染（docx-preview）：页面卡片外观，容器背景由外层提供 */
+.sclaw-docx-host .docx-wrapper {
+  background: transparent;
+  padding: 0;
+}
+
+.sclaw-docx-host .docx-wrapper > section.docx {
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  margin-bottom: 16px;
+}
+
+.dark .sclaw-docx-host .docx-wrapper > section.docx {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}

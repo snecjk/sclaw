@@ -2,7 +2,12 @@ import { StoClawBridgeError, wrapNativeError } from './errors';
 import type {
   AppGetInfoResult,
   AuthGetAuthModeResult,
+  BridgeSubscribeResult,
   CallOptions,
+  ChatCancelParams,
+  ChatCancelResult,
+  ChatCompleteParams,
+  ChatCompleteResult,
   ChatFillComposerParams,
   ChatOpenSessionParams,
   ChatSendMessageParams,
@@ -17,6 +22,7 @@ import type {
   UiToastParams,
   UserGetInfoResult,
 } from './types';
+import { BRIDGE_AI_DEFAULT_TIMEOUT_MS } from './types';
 
 function resolveNativeBridge(): StoClawBridgeNative {
   if (typeof window === 'undefined') {
@@ -46,6 +52,36 @@ async function callNative<T>(
   }
 }
 
+/** Ref-count host subscriptions per event name (multiple addListener on same event). */
+const subscriptionRefCounts = new Map<string, number>();
+
+function normalizeEventList(events: string | string[]): string[] {
+  const list = Array.isArray(events) ? events : [events];
+  const out: string[] = [];
+  for (const item of list) {
+    const trimmed = item.trim();
+    if (!trimmed || out.includes(trimmed)) continue;
+    out.push(trimmed);
+  }
+  return out;
+}
+
+async function bumpSubscription(event: string, delta: number): Promise<void> {
+  const prev = subscriptionRefCounts.get(event) ?? 0;
+  const next = prev + delta;
+  if (next <= 0) {
+    subscriptionRefCounts.delete(event);
+    if (prev > 0) {
+      await callNative<BridgeSubscribeResult>('bridge.unsubscribe', { events: [event] });
+    }
+    return;
+  }
+  subscriptionRefCounts.set(event, next);
+  if (prev === 0) {
+    await callNative<BridgeSubscribeResult>('bridge.subscribe', { events: [event] });
+  }
+}
+
 export class StoClawBridgeClient {
   /** Raw bridge invoke — method names follow stoclaw-bridge/v1 registry. */
   call<T = unknown>(method: string, params?: unknown, options?: CallOptions): Promise<T> {
@@ -68,6 +104,46 @@ export class StoClawBridgeClient {
 
   off(event: string, handler: (payload: unknown) => void): void {
     resolveNativeBridge().off?.(event, handler);
+  }
+
+  /** Register interest with the host (required before events are delivered). */
+  subscribe(events: string | string[]): Promise<BridgeSubscribeResult> {
+    const list = normalizeEventList(events);
+    if (list.length === 0) {
+      return Promise.resolve({ subscribed: [] });
+    }
+    return callNative<BridgeSubscribeResult>('bridge.subscribe', { events: list });
+  }
+
+  /** Remove host subscriptions. Omit events to clear all. */
+  unsubscribe(events?: string | string[]): Promise<BridgeSubscribeResult> {
+    const list = events ? normalizeEventList(events) : undefined;
+    if (!list?.length) {
+      for (const event of [...subscriptionRefCounts.keys()]) {
+        subscriptionRefCounts.delete(event);
+      }
+      return callNative<BridgeSubscribeResult>('bridge.unsubscribe', {});
+    }
+    for (const event of list) {
+      subscriptionRefCounts.delete(event);
+    }
+    return callNative<BridgeSubscribeResult>('bridge.unsubscribe', { events: list });
+  }
+
+  /**
+   * Subscribe + local listener in one call. Cleanup unsubscribes from host
+   * when the last ref-counted listener for that event is removed.
+   */
+  async addListener<T = unknown>(
+    event: string,
+    handler: (payload: T) => void,
+  ): Promise<() => void> {
+    await bumpSubscription(event, 1);
+    const offLocal = this.on(event, handler as (payload: unknown) => void);
+    return () => {
+      offLocal();
+      void bumpSubscription(event, -1);
+    };
   }
 
   // ── 1. 用户信息 ──
@@ -132,6 +208,29 @@ export class StoClawBridgeClient {
 
   toggleChatPanel(): Promise<{ ok: boolean }> {
     return callNative('chat.togglePanel');
+  }
+
+  // ── 6. Headless AI（Text prompt + JSON context → Text / JSON） ──
+
+  /**
+   * One-shot Agent invocation without opening the chat panel.
+   * Sets default `timeoutMs` and ensures the bridge IPC timeout exceeds the agent budget.
+   */
+  complete(params: ChatCompleteParams, options?: CallOptions): Promise<ChatCompleteResult> {
+    const timeoutMs = params.timeoutMs ?? BRIDGE_AI_DEFAULT_TIMEOUT_MS;
+    return callNative<ChatCompleteResult>(
+      'chat.complete',
+      { ...params, timeoutMs },
+      {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? timeoutMs + 5_000,
+      },
+    );
+  }
+
+  /** Cancel an in-flight {@link complete} call by `requestId`. */
+  cancel(params: ChatCancelParams, options?: CallOptions): Promise<ChatCancelResult> {
+    return callNative<ChatCancelResult>('chat.cancel', params, options);
   }
 
   ping(): Promise<{ pong: boolean; timestamp: number }> {

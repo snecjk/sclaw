@@ -45,11 +45,10 @@ export interface UseWorkflowPickerControllerOptions {
   composerShellRef: RefObject<HTMLElement | null>;
   /** 开 slash 时由装配层注入（如关 dingTalk mention） */
   closeOthers?: () => void;
-  /**
-   * 选中工作流后清除 pending workflow（Chat 注入 useChatStore.clearPendingWorkflow）。
-   * Task 等非 Chat 场景不传，避免误碰 Chat store。
-   */
+  /** 选中工作流后清除 pending workflow（Chat 注入 useChatStore.clearPendingWorkflow）。 */
   onClearPendingWorkflow?: () => void;
+  /** 收起工具栏时共用触发钮 ref */
+  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export function useWorkflowPickerController({
@@ -65,8 +64,10 @@ export function useWorkflowPickerController({
   composerShellRef,
   closeOthers,
   onClearPendingWorkflow,
+  toolbarAnchorRef,
 }: UseWorkflowPickerControllerOptions) {
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const internalButtonRef = useRef<HTMLButtonElement>(null);
+  const buttonRef = toolbarAnchorRef ?? internalButtonRef;
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const query = useMemo(() => {

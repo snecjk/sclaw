@@ -68,6 +68,9 @@ import {
   clearMainChatComposerDraft,
   publishMainChatComposerDraft,
 } from '@/lib/main-chat-composer-draft';
+import { ComposerScenarioPills } from '@/components/flow-card/ComposerScenarioPills';
+import { useComposerFlowStore } from '@/stores/composer-flow';
+import type { EmbedComposerAction } from '../../../shared/embed-composer-actions';
 
 export { CHAT_EDIT_DRAFT_EVENT };
 export type { FileAttachment } from '@/components/attachments';
@@ -138,6 +141,10 @@ interface ChatInputProps {
   composerLayout?: 'default' | 'home';
   toolbarInlineSelectors?: ReactNode;
   showProjectPicker?: boolean;
+  /** Scenario pills above composer (e.g. quote workbench quick actions). */
+  composerScenarioActions?: EmbedComposerAction[];
+  /** 工具栏布局：应用广场窄栏用 dropdown 收起附件/技能等 */
+  toolbarToolsLayout?: 'inline' | 'dropdown';
 }
 
 export function ChatInput({
@@ -157,12 +164,15 @@ export function ChatInput({
   composerLayout = 'default',
   toolbarInlineSelectors,
   showProjectPicker = false,
+  composerScenarioActions,
+  toolbarToolsLayout = 'inline',
 }: ChatInputProps) {
   void _isEmpty;
   const { t } = useTranslation('chat');
   const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const collapsedToolsAnchorRef = useRef<HTMLButtonElement>(null);
   const handleSendRef = useRef<() => void>(() => undefined);
 
   const agents = useAgentsStore((s) => s.agents);
@@ -217,6 +227,7 @@ export function ChatInput({
       }
       return false;
     },
+    toolbarAnchorRef: toolbarToolsLayout === 'dropdown' ? collapsedToolsAnchorRef : undefined,
   });
   coreRef.current = core;
 
@@ -231,6 +242,7 @@ export function ChatInput({
     clearAttachments,
     setAttachmentsSilent,
     pickFiles,
+    removeAttachment,
     stageDataCenterFiles,
     handleAttachmentRemoveFromEditor,
     dragOver,
@@ -262,6 +274,61 @@ export function ChatInput({
     pickFiles,
     stageDataCenterFiles,
   });
+
+  const filePickerRequest = useComposerFlowStore((s) => s.filePickerRequest);
+  const composerPhaseHint = useComposerFlowStore((s) => s.phaseHint);
+  const activeScenarioId = useComposerFlowStore((s) => s.activeScenarioId);
+
+  useEffect(() => {
+    if (!filePickerRequest) return;
+    const request = useComposerFlowStore.getState().takeFilePickerRequest();
+    if (!request) return;
+    void (async () => {
+      const picked = await pickFiles({ multiple: request.multiple });
+      if (!request.autoSend || picked.length === 0 || disabled) return;
+
+      // Remove just-staged files from the composer strip — they go out with this send.
+      for (const file of picked) {
+        removeAttachment(file.id);
+      }
+
+      const sendText = request.sendText?.trim() || '';
+      const payload = await buildComposerGatewayPayload({
+        segments: picked.map((file) => ({ type: 'file' as const, attachmentId: file.id })),
+        plainText: sendText,
+        attachments: picked,
+        resolveSkillPrompt,
+      });
+      const extras: ChatSendExtras = {
+        composerSegments: payload.persistedSegments.length ? payload.persistedSegments : undefined,
+        gatewayText: payload.gatewayText,
+      };
+
+      if (sending && onQueue) {
+        onQueue(
+          payload.displayText,
+          payload.attachments,
+          targetAgentId,
+          undefined,
+          null,
+          undefined,
+          extras,
+        );
+        return;
+      }
+      onSend(
+        payload.displayText,
+        payload.attachments,
+        targetAgentId,
+        undefined,
+        null,
+        null,
+        null,
+        undefined,
+        extras,
+      );
+    })();
+  }, [filePickerRequest, pickFiles, removeAttachment, disabled, sending, onQueue, onSend, targetAgentId]);
 
   const voice = useInputComposerVoice({
     mentionEditorRef,
@@ -499,6 +566,20 @@ export function ChatInput({
     />
   ) : null;
 
+  const useCollapsedToolbarTools = toolbarToolsLayout === 'dropdown';
+  const toolbarAttachButtonRef = useCollapsedToolbarTools
+    ? collapsedToolsAnchorRef
+    : attachSource.attachButtonRef;
+  const toolbarSkillButtonRef = useCollapsedToolbarTools
+    ? collapsedToolsAnchorRef
+    : skillPicker.buttonRef;
+  const toolbarWorkflowButtonRef = useCollapsedToolbarTools
+    ? collapsedToolsAnchorRef
+    : workflowPicker.buttonRef;
+  const toolbarQuickInputButtonRef = useCollapsedToolbarTools
+    ? collapsedToolsAnchorRef
+    : quickInputPicker.buttonRef;
+
   const shell = (
     <InputComposerShell
       ref={composerShellRef}
@@ -592,12 +673,15 @@ export function ChatInput({
       toolbarLeft={(
         <InputComposerToolbar
           layout={layout}
+          toolsLayout={toolbarToolsLayout}
+          dropdownToolsAnchorRef={useCollapsedToolbarTools ? collapsedToolsAnchorRef : undefined}
           disabled={disabled || voicePanelOpen}
           labels={{
             attach: t('composer.attachFiles'),
             skill: t('composer.pickSkill'),
             workflow: t('composer.pickWorkflow'),
             quickInput: t('composer.quickInputTitle'),
+            toolsMenu: t('composer.toolsMenu', { defaultValue: '工具' }),
           }}
           onAttach={attachSource.openAttachMenu}
           onSkill={skillPicker.toggleToolbar}
@@ -607,10 +691,10 @@ export function ChatInput({
           skillActive={skillPicker.open && skillPicker.mode === 'toolbar'}
           workflowActive={workflowPicker.open}
           quickInputActive={quickInputPicker.open}
-          skillButtonRef={skillPicker.buttonRef}
-          workflowButtonRef={workflowPicker.buttonRef}
-          quickInputButtonRef={quickInputPicker.buttonRef}
-          attachButtonRef={attachSource.attachButtonRef}
+          skillButtonRef={toolbarSkillButtonRef}
+          workflowButtonRef={toolbarWorkflowButtonRef}
+          quickInputButtonRef={toolbarQuickInputButtonRef}
+          attachButtonRef={toolbarAttachButtonRef}
           extra={agentPickerExtra}
         />
       )}
@@ -680,9 +764,16 @@ export function ChatInput({
 
   return (
     <div className={cn('w-full pb-0 pt-2 transition-all duration-300', className)}>
-      <FlyToTargetLayer targetRef={quickInputPicker.buttonRef}>
+      <FlyToTargetLayer targetRef={toolbarQuickInputButtonRef}>
         <QuickInputIcon className="h-full w-full text-foreground" />
       </FlyToTargetLayer>
+      {composerScenarioActions?.length ? (
+        <ComposerScenarioPills
+          actions={composerScenarioActions}
+          activeId={activeScenarioId}
+          disabled={disabled || sending}
+        />
+      ) : null}
       {showProjectPicker ? (
         <div className={chatComposerHomeStackShellClass}>
           {shell}
@@ -691,10 +782,15 @@ export function ChatInput({
       ) : (
         shell
       )}
+      {composerPhaseHint ? (
+        <p className="mt-2 px-1 text-center text-[11px] leading-relaxed text-muted-foreground">
+          {composerPhaseHint}
+        </p>
+      ) : null}
       <ComposerAttachMenu
         open={attachSource.menuOpen}
         onOpenChange={attachSource.setMenuOpen}
-        anchorRef={attachSource.attachButtonRef}
+        anchorRef={toolbarAttachButtonRef}
         showSharedArtifact={attachSource.showSharedArtifact}
         onSelect={attachSource.handleMenuSelect}
         labels={{

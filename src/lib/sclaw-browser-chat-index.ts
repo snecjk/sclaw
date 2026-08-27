@@ -6,6 +6,7 @@ import {
   createSclawBrowserChatSessionKeyForApp,
   createSclawBrowserEmbedConversationId,
   isSclawBrowserEmbedChatSessionForApp,
+  parseSclawBrowserEmbedAppId,
 } from '@/lib/sclaw-browser-chat-session';
 
 export interface EmbedChatIndexItem {
@@ -104,11 +105,9 @@ export function setActiveEmbedChatSessionKey(appId: string, sessionKey: string):
   if (!isSclawBrowserEmbedChatSessionForApp(sessionKey, appId)) {
     return index;
   }
-  const now = Date.now();
-  let items = index.items.map((item) => (
-    item.key === sessionKey ? { ...item, updatedAt: now } : item
-  ));
+  let items = index.items;
   if (!items.some((item) => item.key === sessionKey)) {
+    const now = Date.now();
     items = [
       {
         key: sessionKey,
@@ -144,6 +143,13 @@ export function createEmbedChatIndexItem(
   };
   writeRaw(appId, next);
   return { index: next, item };
+}
+
+/** Bump last-active time after the user actually sends a message. No-op for non-embed keys. */
+export function touchEmbedChatActivity(sessionKey: string): void {
+  const appId = parseSclawBrowserEmbedAppId(sessionKey);
+  if (!appId) return;
+  touchEmbedChatIndexItem(appId, sessionKey);
 }
 
 export function touchEmbedChatIndexItem(

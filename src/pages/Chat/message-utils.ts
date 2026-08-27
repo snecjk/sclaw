@@ -14,6 +14,7 @@ import {
   PARAM_FORM_MARKER_REGEX,
   parseParameterFormMarker,
 } from '@/lib/parameter-form-marker';
+import { stripFlowCardFences } from '@/lib/flow-card-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { AttachedFileMeta, RawMessage, ContentBlock } from '@/stores/chat';
@@ -669,6 +670,11 @@ export function extractText(message: RawMessage | unknown): string {
   // Strip <ParameterForm ... /> marker from text for clean display
   if (result) {
     result = result.replace(PARAM_FORM_MARKER_REGEX, '').trim();
+  }
+
+  // Strip ```flow_card fences — rendered as FlowCard UI, not markdown
+  if (result) {
+    result = stripFlowCardFences(result);
   }
 
   // Strip Gateway metadata from user messages for clean display

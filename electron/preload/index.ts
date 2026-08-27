@@ -221,6 +221,7 @@ const electronAPI = {
         'bridge:listConsents',
         'bridge:revokeApp',
         'bridge:revokeCapability',
+        'bridge:emitEvent',
       ];
 
       if (validChannels.includes(channel)) {

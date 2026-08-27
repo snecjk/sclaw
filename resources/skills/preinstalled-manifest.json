@@ -41,6 +41,11 @@
       "slug": "long-output-saver",
       "local": true,
       "autoEnable": true
+    },
+    {
+      "slug": "quote-assistant",
+      "local": true,
+      "autoEnable": true
     }
   ]
 }

@@ -7,9 +7,9 @@ import {
 import { ensureSclawBrowserBridge } from '@/lib/sclaw-browser-host-api';
 
 vi.mock('@/lib/sclaw-browser-host-api', () => ({
-  registerSclawBrowserRuntime: vi.fn(async () => undefined),
-  unregisterSclawBrowserRuntime: vi.fn(async () => undefined),
-  ensureSclawBrowserBridge: vi.fn(async () => undefined),
+  registerSclawBrowserRuntime: vi.fn(async () => ({ ok: true })),
+  unregisterSclawBrowserRuntime: vi.fn(async () => ({ ok: true })),
+  ensureSclawBrowserBridge: vi.fn(async () => true),
 }));
 
 vi.mock('@/lib/app-plaza-ephemeral-chat-purge', () => ({
@@ -232,6 +232,35 @@ describe('useAppPlazaShellStore embed chat route sync', () => {
     expect(switchSclawBrowserEmbedChatSession).toHaveBeenCalledWith(
       liveTab.appId,
       liveTab.embedRuntimeId,
+      liveTab.chatSessionKey,
+      liveTab.savedMainSessionKey,
+    );
+  });
+
+  it('keeps embed chat open when navigating the same tab to a new preview link', async () => {
+    useAppPlazaShellStore.getState().navigateBrowserTabUrl(
+      liveTab.id,
+      'https://vip.sto.cn/clawQuotation?ossKey=test-oss-key',
+      { force: true },
+    );
+
+    await vi.waitFor(() => {
+      const tab = useAppPlazaShellStore.getState().browserTabs[0];
+      expect(tab?.url).toContain('clawQuotation');
+      expect(tab?.embedRuntimeId).not.toBe(liveTab.embedRuntimeId);
+      expect(tab?.chatPanelOpen).toBe(true);
+      expect(tab?.chatSessionKey).toBe(liveTab.chatSessionKey);
+    });
+
+    const remounted = useAppPlazaShellStore.getState().browserTabs[0]!;
+
+    expect(deactivateSclawBrowserEmbedChat).toHaveBeenCalledWith(
+      liveTab.chatSessionKey,
+      liveTab.savedMainSessionKey,
+    );
+    expect(switchSclawBrowserEmbedChatSession).toHaveBeenCalledWith(
+      liveTab.appId,
+      remounted.embedRuntimeId,
       liveTab.chatSessionKey,
       liveTab.savedMainSessionKey,
     );

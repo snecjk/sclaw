@@ -70,8 +70,7 @@ export function createSendActions(
       } = options;
       const userDisplayText = text.trim();
       /** 正式坐标：skillMetas；skillMeta 仅 deprecated 兼容派生 */
-      const resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
-      const primarySkillMeta = resolvedSkillMetas[0];
+      let resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
       const hasWorkflowPayload = Boolean(
         (workflows && workflows.length > 0)
         || composerSegments?.some((seg) => seg.type === 'workflow')
@@ -123,6 +122,11 @@ export function createSendActions(
         attachmentCount: attachments?.length ?? 0,
         hasDingTalkMentions: Boolean(dingTalkMentions?.length),
       });
+
+      const { resolveEmbedQuoteSkillInjection } = await import('@/lib/resolve-embed-quote-skill');
+      resolvedSkillMetas = await resolveEmbedQuoteSkillInjection(currentSessionKey, resolvedSkillMetas);
+      const primarySkillMeta = resolvedSkillMetas[0];
+
       if (buildChatSessionRuntimeView(
         useChatRuntimeV2Store.getState().sessionsByKey[currentSessionKey],
       ).sending) {
@@ -181,6 +185,7 @@ export function createSendActions(
         messages: get().currentSessionKey === currentSessionKey ? getSessionDisplayMessages(currentSessionKey) : [],
         workflowContext,
         embedBrowserContext,
+        skillMetas: resolvedSkillMetas,
         clearPendingWorkflow: get().clearPendingWorkflow,
       });
       const { messageWithContext } = preparedContext;

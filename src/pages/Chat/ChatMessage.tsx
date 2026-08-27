@@ -82,6 +82,13 @@ import { applyDisplayNameHints, dedupeAttachedFiles, mergePreviewFileLists, norm
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
+import { FlowCard } from '@/components/flow-card/FlowCard';
+import { extractFlowCard } from '@/lib/flow-card-patch';
+import {
+  hasOpenFlowCardFence,
+  isFlowCardCompanionText,
+  stripFlowCardCompanionText,
+} from '@/lib/flow-card-marker';
 import { PARAMETER_FORM_USE_FLOAT_DOCK } from '@/components/parameter-form/constants';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import {
@@ -273,6 +280,11 @@ export const ChatMessage = memo(function ChatMessage({
     });
   }, [isUser, message, pendingWorkflow, sessionMessages, sessionKey]);
 
+  const flowCard = useMemo(() => {
+    if (isUser) return null;
+    return extractFlowCard(message);
+  }, [isUser, message]);
+
   useEffect(() => {
     if (!parameterForm || parameterForm.formContext.source !== 'workflow') return;
     ensureWorkflowParameterFormHandler(
@@ -432,8 +444,18 @@ export const ChatMessage = memo(function ChatMessage({
     );
   const showAssistantParamsFold =
     !isUser && workflowCard !== null && /参数已确认/.test(text);
-  const assistantBubbleText =
-    (showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text)) || isWorkflowCompletionMessage ? '' : text;
+  // flow_card 已承载文案时，不再另开灰色 Markdown 气泡（避免空壳 / ".." 残片）
+  const assistantBubbleText = (() => {
+    if (flowCard) return '';
+    const rawMessageText = extractPlainTextFromContent(message.content);
+    if (hasOpenFlowCardFence(rawMessageText)) return '';
+    const withoutCompanion = stripFlowCardCompanionText(text);
+    if (isStreaming && isFlowCardCompanionText(text)) return '';
+    if ((showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text)) || isWorkflowCompletionMessage) {
+      return '';
+    }
+    return withoutCompanion;
+  })();
   const showAssistantTextBubble = assistantBubbleText.trim().length > 0;
   const assistantCopyShareContent = useMemo(
     () => {
@@ -516,6 +538,7 @@ export const ChatMessage = memo(function ChatMessage({
   const hasAssistantMetaContent =
     showAssistantTextBubble
     || workflowCard !== null
+    || flowCard !== null
     || previewFiles.length > 0
     || showAssistantParamsFold;
   /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间（TurnLifecycle.canShowMeta） */
@@ -606,6 +629,7 @@ export const ChatMessage = memo(function ChatMessage({
     && !hasStreamingToolStatus
     && !parameterForm
     && !workflowCard
+    && !flowCard
     && !showAssistantParamsFold
     && !showAssistantParamsPanel
   )) {
@@ -842,6 +866,8 @@ export const ChatMessage = memo(function ChatMessage({
             }}
           />
         ) : null}
+
+        {flowCard ? <FlowCard card={flowCard} /> : null}
 
         {/* Images from content blocks — assistant messages (below text) */}
         {!isUser && images.length > 0 && (

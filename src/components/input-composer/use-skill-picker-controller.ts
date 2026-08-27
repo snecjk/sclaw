@@ -42,6 +42,8 @@ export interface UseSkillPickerControllerOptions {
   plainText: string;
   /** 定位 host（inline 点击外部判断） */
   mentionPopoverHostRef: RefObject<HTMLElement | null>;
+  /** 收起工具栏时共用触发钮 ref */
+  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export function useSkillPickerController({
@@ -53,10 +55,12 @@ export function useSkillPickerController({
   mentionEditorRef,
   plainText,
   mentionPopoverHostRef,
+  toolbarAnchorRef,
 }: UseSkillPickerControllerOptions) {
   void _setMode;
   const navigate = useNavigate();
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const internalButtonRef = useRef<HTMLButtonElement>(null);
+  const buttonRef = toolbarAnchorRef ?? internalButtonRef;
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const inlineQuery = useMemo(() => {

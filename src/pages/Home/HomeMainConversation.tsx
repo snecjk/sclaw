@@ -343,18 +343,18 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,
-    activePreviewFilePath,
-    setActivePreviewFilePath,
-    previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
     openPreviewPanel,
     closePreviewPanel,
     expandPreview,
     restorePreview,
-    dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
+    previewTabs,
+    activePreviewTabId,
+    selectPreviewTab,
+    dismissPreviewTab,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
@@ -457,21 +457,21 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && previewableFiles.length > 0 ? (
+      showPreviewPanel && previewTabs.length > 0 ? (
         <ChatPreviewHeaderTabs
-          files={previewableFiles}
-          activeFilePath={activePreviewFilePath}
-          onSelectFile={setActivePreviewFilePath}
-          onDismissFile={dismissPreviewFile}
+          tabs={previewTabs}
+          activeTabId={activePreviewTabId}
+          onSelectTab={selectPreviewTab}
+          onDismissTab={dismissPreviewTab}
         />
       ) : null
     ),
     [
       showPreviewPanel,
-      previewableFiles,
-      activePreviewFilePath,
-      setActivePreviewFilePath,
-      dismissPreviewFile,
+      previewTabs,
+      activePreviewTabId,
+      selectPreviewTab,
+      dismissPreviewTab,
     ],
   );
 
@@ -698,8 +698,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           />
         ) : null}
         <ChatPreviewPanel
-          files={previewableFiles}
-          activeFilePath={activePreviewFilePath}
+          tabs={previewTabs}
+          activeTabId={activePreviewTabId}
+          sessionKey={currentSessionKey}
           showEditWorkflow={showEditWorkflow}
           workflowId={sessionWorkflowId}
           onEditWorkflow={openWorkflowPreview}

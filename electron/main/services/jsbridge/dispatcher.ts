@@ -13,7 +13,10 @@ import {
 import { handleAppGetInfo } from './handlers/app';
 import { handleAuthGetAuthMode, handleAuthGetToken, handleAuthGetUser, handleAuthRequestLogin } from './handlers/auth';
 import { handleBridgeGetCapabilities, handleBridgePing } from './handlers/bridge-meta';
+import { handleBridgeSubscribe, handleBridgeUnsubscribe } from './handlers/bridge-events';
 import { handleChatFillComposer, handleChatOpenSession, handleChatSendMessage } from './handlers/chat';
+import { handleChatCancel, handleChatComplete } from './handlers/chat-ai';
+import { handleComposerOpenFilePicker, handleNavOpenPreviewTab } from './handlers/composer';
 import {
   handleNavCloseSelf,
   handleNavGoBack,
@@ -46,6 +49,8 @@ const replayGuard = new ReplayGuard();
 const HANDLERS: Record<string, BridgeHandlerFn> = {
   'bridge.ping': handleBridgePing,
   'bridge.getCapabilities': handleBridgeGetCapabilities,
+  'bridge.subscribe': handleBridgeSubscribe,
+  'bridge.unsubscribe': handleBridgeUnsubscribe,
   'app.getInfo': handleAppGetInfo,
   'user.getInfo': handleUserGetInfo,
   'auth.getUser': handleAuthGetUser,
@@ -71,6 +76,10 @@ const HANDLERS: Record<string, BridgeHandlerFn> = {
   'chat.fillComposer': handleChatFillComposer,
   'chat.openSession': handleChatOpenSession,
   'chat.sendMessage': handleChatSendMessage,
+  'chat.complete': handleChatComplete,
+  'chat.cancel': handleChatCancel,
+  'composer.openFilePicker': handleComposerOpenFilePicker,
+  'nav.openPreviewTab': handleNavOpenPreviewTab,
 };
 
 const RATE_LIMIT_BY_TIER: Record<BridgeSession['trustPolicy']['trustTier'], number> = {
@@ -119,9 +128,6 @@ function assertSessionAuthorized(
   if (!validateRequestTimestamp(request.timestamp)) {
     return bridgeFailure(request, 'REPLAY_DETECTED', 'Request timestamp out of range');
   }
-  if (!replayGuard.consume(`${session.sessionId}:${request.id}`)) {
-    return bridgeFailure(request, 'REPLAY_DETECTED', 'Duplicate request id');
-  }
 
   const pageUrl = resolveCurrentPageUrl(session);
   if (!pageUrl) {
@@ -144,12 +150,18 @@ function assertSessionAuthorized(
   }
   if (!session.grantedCapabilities.has(method)) {
     if ((CONSENT_CAPABILITIES as readonly string[]).includes(method)) {
+      // Do not consume the request id here — Host may retry the same envelope
+      // after the user grants consent (see maybeGrantConsent).
       return bridgeFailure(request, 'USER_CONSENT_REQUIRED', 'User consent required', {
         capability: method,
         appId: session.trustPolicy.appId,
       });
     }
     return bridgeFailure(request, 'CAPABILITY_DENIED', `Capability denied: ${method}`);
+  }
+
+  if (!replayGuard.consume(`${session.sessionId}:${request.id}`)) {
+    return bridgeFailure(request, 'REPLAY_DETECTED', 'Duplicate request id');
   }
 
   const limit = RATE_LIMIT_BY_TIER[session.trustPolicy.trustTier];
@@ -217,6 +229,24 @@ export async function dispatchBridgeInvoke(input: {
     }
     if (code === 'ORIGIN_DENIED') {
       return bridgeFailure(request, 'ORIGIN_DENIED', err.message || 'Origin denied');
+    }
+    if (code === 'AI_NOT_ENABLED') {
+      return bridgeFailure(request, 'AI_NOT_ENABLED', err.message || 'AI is not enabled for this app');
+    }
+    if (code === 'AI_INVALID_PARAMS') {
+      return bridgeFailure(request, 'INVALID_PARAMS', err.message || 'Invalid AI parameters', { aiCode: code });
+    }
+    if (code === 'AI_CONTEXT_TOO_LARGE') {
+      return bridgeFailure(request, 'INVALID_PARAMS', err.message || 'AI context too large', { aiCode: code });
+    }
+    if (code === 'AI_RUN_FAILED') {
+      return bridgeFailure(request, 'INTERNAL_ERROR', err.message || 'AI run failed', { aiCode: code });
+    }
+    if (code === 'AI_SKILL_NOT_ALLOWED') {
+      return bridgeFailure(request, 'PERMISSION_DENIED', err.message || 'Skill not allowed', { aiCode: code });
+    }
+    if (code === 'AI_QUOTA_EXCEEDED' || code === 'AI_CONCURRENCY_EXCEEDED') {
+      return bridgeFailure(request, 'RATE_LIMITED', err.message || 'AI quota exceeded', { aiCode: code });
     }
     logger.warn('[jsbridge] handler error', { method: request.method, error: err.message });
     return bridgeFailure(request, 'INTERNAL_ERROR', err.message || 'Internal bridge error');

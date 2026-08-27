@@ -66,6 +66,8 @@ import {
   workflowAnchorRepairRevision,
 } from '@/lib/workflow-chat-card-registration';
 import { getCurrentChatDisplayMessages, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
+
 export function Chat() {
   const navigate = useNavigate();
   const { t } = useTranslation('chat');
@@ -74,6 +76,7 @@ export function Chat() {
 
   const messages = useCurrentChatDisplayMessages();
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  useQuoteFlowCardSessionSync(currentSessionKey, messages);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
   const loading = useChatStore((s) => s.loading);
@@ -472,18 +475,18 @@ export function Chat() {
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,
-    activePreviewFilePath,
-    setActivePreviewFilePath,
-    previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
     openPreviewPanel,
     closePreviewPanel,
     expandPreview,
     restorePreview,
-    dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
+    previewTabs,
+    activePreviewTabId,
+    selectPreviewTab,
+    dismissPreviewTab,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
@@ -581,21 +584,21 @@ export function Chat() {
 
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && previewableFiles.length > 0 ? (
+      showPreviewPanel && previewTabs.length > 0 ? (
         <ChatPreviewHeaderTabs
-          files={previewableFiles}
-          activeFilePath={activePreviewFilePath}
-          onSelectFile={setActivePreviewFilePath}
-          onDismissFile={dismissPreviewFile}
+          tabs={previewTabs}
+          activeTabId={activePreviewTabId}
+          onSelectTab={selectPreviewTab}
+          onDismissTab={dismissPreviewTab}
         />
       ) : null
     ),
     [
       showPreviewPanel,
-      previewableFiles,
-      activePreviewFilePath,
-      setActivePreviewFilePath,
-      dismissPreviewFile,
+      previewTabs,
+      activePreviewTabId,
+      selectPreviewTab,
+      dismissPreviewTab,
     ],
   );
 
@@ -850,8 +853,9 @@ export function Chat() {
             />
           ) : null}
           <ChatPreviewPanel
-            files={previewableFiles}
-            activeFilePath={activePreviewFilePath}
+            tabs={previewTabs}
+            activeTabId={activePreviewTabId}
+            sessionKey={currentSessionKey}
             showEditWorkflow={showEditWorkflow}
             workflowId={sessionWorkflowId}
             onEditWorkflow={openWorkflowPreview}

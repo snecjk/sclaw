@@ -3,7 +3,7 @@ export const CHAT_RUNTIME_PROTOCOL_VERSION = 1 as const;
 export type ChatEngineType = 'openclaw' | 'claude';
 
 export interface ChatRuntimePolicy {
-  origin: 'interactive' | 'scheduled_task' | 'channel';
+  origin: 'interactive' | 'scheduled_task' | 'channel' | 'bridge';
   ownerId?: string;
   deadlineAt?: number | null;
 }

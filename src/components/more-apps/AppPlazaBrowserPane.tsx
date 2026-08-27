@@ -371,6 +371,7 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
                 sessionKey={tab.chatSessionKey}
                 appTitle={tab.title}
                 embedRuntimeId={tab.embedRuntimeId}
+                toolbarToolsLayout="dropdown"
                 onClose={() => closeChatPanel(tab.id)}
                 sessionsProps={{
                   chatSessionKey: tab.chatSessionKey,

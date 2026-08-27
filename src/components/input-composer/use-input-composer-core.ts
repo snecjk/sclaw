@@ -39,6 +39,8 @@ export interface UseInputComposerCoreOptions {
   initialSnapshot?: MentionComposerSnapshot;
   /** Chat：选工作流时清 pending；Task 不传以免碰 Chat store */
   onClearPendingWorkflow?: () => void;
+  /** 收起工具栏时共用触发钮 ref */
+  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export function useInputComposerCore({
@@ -55,6 +57,7 @@ export function useInputComposerCore({
   onKeyDownExtra,
   initialSnapshot,
   onClearPendingWorkflow,
+  toolbarAnchorRef,
 }: UseInputComposerCoreOptions) {
   const mentionEditorRef = useRef<DingTalkMentionEditorHandle>(null);
   const composerShellRef = useRef<HTMLDivElement>(null);
@@ -153,6 +156,7 @@ export function useInputComposerCore({
     enableSkill,
     enableWorkflow,
     enableQuickInput,
+    toolbarAnchorRef,
   });
 
   const handleComposerSnapshotChange = useCallback(

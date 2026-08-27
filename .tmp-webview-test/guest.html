@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<body>
+  <a id="lnk" href="https://example.com/" target="_blank">blank link</a>
+  <script>
+    setTimeout(() => {
+      try {
+        const r = window.open('https://example.com/window-open', '_blank');
+        console.log('window.open returned:', r);
+      } catch (e) {
+        console.log('window.open threw:', e);
+      }
+      document.getElementById('lnk').click();
+    }, 1500);
+  </script>
+</body>
+</html>

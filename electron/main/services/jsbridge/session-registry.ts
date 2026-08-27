@@ -11,11 +11,17 @@ import {
   originFromUrl,
 } from '../../../../shared/jsbridge/origin-policy';
 import type { BridgeBootstrap } from '../../../../shared/jsbridge/protocol';
+import { JSBRIDGE_PROTOCOL, JSBRIDGE_VERSION } from '../../../../shared/jsbridge/protocol';
 import type { BridgeContainerKind, ResolveTrustPolicyInput } from '../../../../shared/jsbridge/trust-policy';
 import { resolveTrustPolicy } from '../../../../shared/jsbridge/trust-policy';
 import { hasBridgeConsent } from './consent-store';
 import { issueSessionToken, newSessionId } from './auth-service';
+import { abortBridgeAiRunsForWebContents } from './bridge-ai-registry';
 import { logger } from '../../../utils/logger';
+import {
+  isBridgeEventAllowed,
+  resolveAllowedBridgeEventPatterns,
+} from '../../../../shared/jsbridge/bridge-events';
 
 export interface BridgeSession {
   sessionId: string;
@@ -36,6 +42,8 @@ export interface BridgeSession {
   invokeCount: number;
   rateWindowStart: number;
   navigationGuardInstalled: boolean;
+  /** Guest-registered event names — host emits only when subscribed. */
+  eventSubscriptions: Set<string>;
 }
 
 export interface CreateBridgeSessionInput extends ResolveTrustPolicyInput {
@@ -150,6 +158,7 @@ export function createBridgeSession(input: CreateBridgeSessionInput): BridgeSess
     invokeCount: 0,
     rateWindowStart: Date.now(),
     navigationGuardInstalled: false,
+    eventSubscriptions: new Set(),
   };
 
   session.sessionToken = issueSessionToken({
@@ -204,6 +213,8 @@ export function destroyBridgeSession(sessionId: string, reason?: string): void {
   session.destroyed = true;
   session.destroyReason = reason;
 
+  abortBridgeAiRunsForWebContents(session.webContentsId);
+
   byWebContentsId.delete(session.webContentsId);
   if (session.runtimeId) {
     byRuntimeId.delete(session.runtimeId);
@@ -213,8 +224,8 @@ export function destroyBridgeSession(sessionId: string, reason?: string): void {
   if (wc && !wc.isDestroyed()) {
     try {
       wc.send('jsbridge:event', {
-        protocol: 'stoclaw-bridge/v1',
-        version: '1.0.0',
+        protocol: JSBRIDGE_PROTOCOL,
+        version: JSBRIDGE_VERSION,
         type: 'event',
         sessionId: session.sessionId,
         name: 'bridge:session-destroyed',
@@ -265,4 +276,54 @@ export function grantCapabilityToSession(sessionId: string, capability: Capabili
 
 export function listActiveBridgeSessions(): BridgeSession[] {
   return [...sessions.values()].filter((session) => !session.destroyed);
+}
+
+export interface EmitBridgeEventInput {
+  sessionId?: string;
+  runtimeId?: string;
+  webContentsId?: number;
+  name: string;
+  payload?: unknown;
+}
+
+/**
+ * Push an event to a guest webview. Skips delivery when the session has not
+ * subscribed to `name` (except lifecycle events handled elsewhere).
+ */
+export function emitBridgeEvent(input: EmitBridgeEventInput): boolean {
+  const session = input.sessionId
+    ? getBridgeSession(input.sessionId)
+    : input.runtimeId
+      ? getBridgeSessionByRuntimeId(input.runtimeId)
+      : typeof input.webContentsId === 'number'
+        ? getBridgeSessionByWebContentsId(input.webContentsId)
+        : null;
+
+  if (!session) return false;
+
+  const eventName = input.name.trim();
+  if (!eventName) return false;
+
+  const patterns = resolveAllowedBridgeEventPatterns(session.trustPolicy);
+  if (!isBridgeEventAllowed(eventName, patterns)) return false;
+  if (!session.eventSubscriptions.has(eventName)) return false;
+
+  const wc = resolveWebContents(session.webContentsId);
+  if (!wc || wc.isDestroyed()) return false;
+
+  try {
+    wc.send('jsbridge:event', {
+      protocol: JSBRIDGE_PROTOCOL,
+      version: JSBRIDGE_VERSION,
+      type: 'event',
+      sessionId: session.sessionId,
+      name: eventName,
+      payload: input.payload,
+      timestamp: Date.now(),
+    });
+    return true;
+  } catch (error) {
+    logger.warn('[jsbridge] emit event failed', { eventName, error });
+    return false;
+  }
 }
