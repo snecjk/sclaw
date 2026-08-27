@@ -3,7 +3,24 @@
  * Written to userData at runtime — avoids adding a separate Vite preload entry.
  */
 export const JSBRIDGE_GUEST_PRELOAD_CJS = String.raw`/* sto-claw jsbridge guest preload */
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// Patch main-world XHR before page scripts (e.g. baxiaCommon.js) run — forbidden
+// headers like Origin throw and break link-click handlers in embed webviews.
+webFrame.executeJavaScript(\`(function() {
+  if (window.__STOCLAW_XHR_PATCHED__) return;
+  window.__STOCLAW_XHR_PATCHED__ = true;
+  var original = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+    try {
+      return original.call(this, name, value);
+    } catch (err) {
+      var msg = err && err.message ? String(err.message) : '';
+      if (msg.indexOf('unsafe header') >= 0 || msg.indexOf('Refused to set') >= 0) return;
+      throw err;
+    }
+  };
+})();\`);
 
 const PROTOCOL = 'stoclaw-bridge/v1';
 const VERSION = '1.0.0';

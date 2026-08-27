@@ -35,6 +35,12 @@ export function isSclawEmbedHttpUrl(url: string): boolean {
   }
 }
 
+/** window.open(url, '_self'|'_top'|'_parent') should navigate the current guest. */
+export function isSclawEmbedSameFrameWindowOpen(frameName: string | undefined): boolean {
+  const name = (frameName ?? '').trim().toLowerCase();
+  return name === '_self' || name === '_top' || name === '_parent';
+}
+
 /** Decide how an embed guest window.open URL should be handled. */
 export function resolveSclawEmbedWindowOpenAction(url: string): SclawEmbedWindowOpenAction {
   const trimmed = typeof url === 'string' ? url.trim() : '';

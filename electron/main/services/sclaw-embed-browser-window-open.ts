@@ -7,7 +7,10 @@
  */
 import { app, BrowserWindow, webContents, type WebContents } from 'electron';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
-import { resolveSclawEmbedWindowOpenAction } from '../../../shared/sclaw-embed-browser-window-open';
+import {
+  isSclawEmbedSameFrameWindowOpen,
+  resolveSclawEmbedWindowOpenAction,
+} from '../../../shared/sclaw-embed-browser-window-open';
 
 const runtimeByWebContentsId = new Map<number, string>();
 const handlerAttachedIds = new Set<number>();
@@ -56,9 +59,27 @@ function applyWindowOpenHandler(wc: WebContents): void {
   const webContentsId = wc.id;
   if (handlerAttachedIds.has(webContentsId)) return;
 
-  wc.setWindowOpenHandler(({ url }) => {
+  wc.setWindowOpenHandler(({ url, frameName }) => {
     if (wc.isDestroyed()) return { action: 'deny' };
     const action = resolveSclawEmbedWindowOpenAction(url);
+    if (isSclawEmbedSameFrameWindowOpen(frameName)) {
+      if (action.kind === 'download') {
+        try {
+          wc.downloadURL(action.url);
+        } catch {
+          // best-effort
+        }
+        return { action: 'deny' };
+      }
+      if (action.kind === 'open-tab') {
+        try {
+          void wc.loadURL(action.url);
+        } catch {
+          // best-effort
+        }
+      }
+      return { action: 'deny' };
+    }
     if (action.kind === 'download') {
       try {
         wc.downloadURL(action.url);

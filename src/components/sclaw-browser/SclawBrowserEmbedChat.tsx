@@ -38,6 +38,8 @@ interface SclawBrowserEmbedChatProps {
   embedRuntimeId?: string | null;
   onClose?: () => void;
   sessionsProps?: SclawBrowserEmbedChatSessionsProps;
+  /** 仅应用广场窄栏：收起输入框工具为下拉 */
+  toolbarToolsLayout?: 'inline' | 'dropdown';
 }
 
 export function SclawBrowserEmbedChat({
@@ -46,6 +48,7 @@ export function SclawBrowserEmbedChat({
   embedRuntimeId,
   onClose,
   sessionsProps,
+  toolbarToolsLayout,
 }: SclawBrowserEmbedChatProps) {
   const { t } = useTranslation(['chat', 'common']);
   const closeChatPanel = useSclawBrowserOverlayStore((s) => s.closeChatPanel);
@@ -222,6 +225,7 @@ export function SclawBrowserEmbedChat({
           footerAlign="center"
           seedText={composerSeed}
           composerScenarioActions={composerScenarioActions}
+          toolbarToolsLayout={toolbarToolsLayout}
         />
       </div>
     </div>

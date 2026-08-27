@@ -5,8 +5,14 @@
  * ## Types
  * - `InputComposerToolbarProps` — layout、labels、回调、active 态、button refs、show*、extra 槽
  */
-import type { RefObject } from 'react';
+import type { RefObject, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import {
   AttachFileIcon,
@@ -33,6 +39,8 @@ export interface InputComposerToolbarProps {
     workflow: string;
     /** 快捷输入 */
     quickInput: string;
+    /** 工具下拉触发钮（收起模式） */
+    toolsMenu?: string;
   };
   /** 点附件 */
   onAttach: () => void;
@@ -68,6 +76,10 @@ export interface InputComposerToolbarProps {
   showQuickInput?: boolean;
   /** Agent picker 等装配层额外按钮 */
   extra?: React.ReactNode;
+  /** inline=平铺图标；dropdown=收起到下拉（应用广场窄栏） */
+  toolsLayout?: 'inline' | 'dropdown';
+  /** dropdown 模式下触发钮 ref，供附件菜单 / picker 定位 */
+  dropdownToolsAnchorRef?: RefObject<HTMLButtonElement | null>;
 }
 
 const homeIconBtn = cn(
@@ -104,8 +116,97 @@ export function InputComposerToolbar({
   showWorkflow = true,
   showQuickInput = true,
   extra,
+  toolsLayout = 'inline',
+  dropdownToolsAnchorRef,
 }: InputComposerToolbarProps) {
   const isHome = layout === 'home';
+  const useDropdownTools = toolsLayout === 'dropdown';
+  const anyToolPanelActive = skillActive || workflowActive || quickInputActive;
+
+  if (isHome && useDropdownTools) {
+    const menuItems: Array<{
+      key: string;
+      label: string;
+      icon: ReactNode;
+      onSelect: () => void;
+      show: boolean;
+    }> = [
+      {
+        key: 'attach',
+        label: labels.attach,
+        icon: <AttachFileIcon />,
+        onSelect: onAttach,
+        show: showAttach,
+      },
+      {
+        key: 'skill',
+        label: labels.skill,
+        icon: <SkillToolIcon />,
+        onSelect: () => {
+          onSaveCaret?.();
+          onSkill();
+        },
+        show: showSkill,
+      },
+      {
+        key: 'workflow',
+        label: labels.workflow,
+        icon: <WorkflowNodesIcon />,
+        onSelect: () => {
+          onSaveCaret?.();
+          onWorkflow();
+        },
+        show: showWorkflow,
+      },
+      {
+        key: 'quickInput',
+        label: labels.quickInput,
+        icon: <QuickInputIcon />,
+        onSelect: onQuickInput,
+        show: showQuickInput,
+      },
+    ].filter((item) => item.show);
+
+    return (
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              ref={dropdownToolsAnchorRef ?? attachButtonRef}
+              variant="ghost"
+              type="button"
+              className={cn(homeIconBtn, anyToolPanelActive && homeIconActive)}
+              onMouseDown={(event) => event.preventDefault()}
+              disabled={disabled}
+              title={labels.toolsMenu ?? labels.skill}
+              aria-label={labels.toolsMenu ?? labels.skill}
+            >
+              <SkillToolIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="min-w-[9rem]">
+            {menuItems.map((item) => (
+              <DropdownMenuItem
+                key={item.key}
+                className="gap-2"
+                disabled={disabled}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  window.setTimeout(() => item.onSelect(), 0);
+                }}
+              >
+                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&_svg]:h-4 [&_svg]:w-4">
+                  {item.icon}
+                </span>
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {extra}
+      </>
+    );
+  }
 
   if (isHome) {
     return (

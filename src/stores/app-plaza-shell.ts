@@ -312,6 +312,50 @@ type LiveTabIcons = {
   embedComposerActions?: EmbedComposerAction[];
 };
 
+/** Embed chat UI state to restore after same-tab browser remount (link reload / navigate). */
+type PreservedEmbedChatSnapshot = {
+  chatPanelOpen: true;
+  chatSessionKey: string;
+  savedMainSessionKey: string | null;
+  chatSplitPercent: number;
+  chatSessions: EmbedChatIndexItem[];
+};
+
+function shouldPreserveEmbedChatOnNavigate(tab: AppPlazaBrowserTab, nextAppId: string): boolean {
+  if (!tab.chatPanelOpen || !tab.chatSessionKey) return false;
+  return tab.appId === nextAppId;
+}
+
+function captureEmbedChatSnapshot(tab: AppPlazaBrowserTab): PreservedEmbedChatSnapshot | undefined {
+  if (!tab.chatPanelOpen || !tab.chatSessionKey) return undefined;
+  return {
+    chatPanelOpen: true,
+    chatSessionKey: tab.chatSessionKey,
+    savedMainSessionKey: tab.savedMainSessionKey,
+    chatSplitPercent: tab.chatSplitPercent,
+    chatSessions: tab.chatSessions,
+  };
+}
+
+function rebindEmbedChatAfterRemount(tab: AppPlazaBrowserTab | undefined): void {
+  if (
+    !tab?.chatPanelOpen
+    || !tab.embedRuntimeId
+    || !tab.appId
+    || !tab.chatSessionKey
+  ) {
+    return;
+  }
+  void ensureSclawBrowserBridge(tab.embedRuntimeId);
+  useComposerFlowStore.getState().setEmbedComposerActions(tab.embedComposerActions ?? null);
+  switchSclawBrowserEmbedChatSession(
+    tab.appId,
+    tab.embedRuntimeId,
+    tab.chatSessionKey,
+    tab.savedMainSessionKey,
+  );
+}
+
 /** Register in Main before exposing embedRuntimeId — bindWebContents requires the entry. */
 async function registerEmbedRuntime(input: {
   appTitle: string;
@@ -339,6 +383,7 @@ function buildLiveTab(
   appId: string,
   bound: boolean,
   icons?: LiveTabIcons,
+  preservedChat?: PreservedEmbedChatSnapshot,
 ): AppPlazaBrowserTab {
   // Catalog hints optional; pageFaviconUrl comes from webview after load (Chrome-like).
   const iconUrl = icons?.iconUrl?.trim() || tab.iconUrl;
@@ -353,10 +398,11 @@ function buildLiveTab(
     status: 'live',
     lastActiveAt: Date.now(),
     embedRuntimeId,
-    chatPanelOpen: false,
-    chatSessionKey: null,
-    savedMainSessionKey: null,
-    chatSessions: listSclawBrowserEmbedChatSessions(appId),
+    chatPanelOpen: preservedChat?.chatPanelOpen ?? false,
+    chatSessionKey: preservedChat?.chatSessionKey ?? null,
+    savedMainSessionKey: preservedChat?.savedMainSessionKey ?? null,
+    chatSessions: preservedChat?.chatSessions ?? listSclawBrowserEmbedChatSessions(appId),
+    chatSplitPercent: preservedChat?.chatSplitPercent ?? tab.chatSplitPercent,
     iconUrl,
     sourceUrl: icons?.sourceUrl?.trim() || tab.sourceUrl,
     systemCode: icons?.systemCode?.trim() || tab.systemCode,
@@ -634,7 +680,11 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           tabs = tabs.map((t) => (t.id === victim.id ? suspendTab(t) : t));
         }
 
-        const current = tearDownTabRuntime(tabs[idx]!);
+        const source = tabs[idx]!;
+        const preservedChat = shouldPreserveEmbedChatOnNavigate(source, appId)
+          ? captureEmbedChatSnapshot(source)
+          : undefined;
+        const current = tearDownTabRuntime(source);
         tabs[idx] = buildLiveTab(current, embedRuntimeId, resolvedUrl, title, appId, bound, {
           iconUrl: current.iconUrl,
           iconKey: current.iconKey,
@@ -643,9 +693,13 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           sourceUrl: current.sourceUrl,
           systemCode: current.systemCode,
           skipLoginEligible: current.skipLoginEligible,
-        });
+        }, preservedChat);
         return { browserTabs: tabs, activeTabId: tabId };
       });
+
+      if (get().routeActive) {
+        rebindEmbedChatAfterRemount(get().browserTabs.find((t) => t.id === tabId));
+      }
 
       const focus = get().browserTabs.find((t) =>
         t.url && appPlazaTabUrlsMatch(t.url, resolvedUrl) && (
@@ -719,7 +773,11 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
               tabs = tabs.map((t) => (t.id === victim.id ? suspendTab(t) : t));
             }
 
-            const current = tearDownTabRuntime(tabs[idx]!);
+            const source = tabs[idx]!;
+            const preservedChat = shouldPreserveEmbedChatOnNavigate(source, nextAppId)
+              ? captureEmbedChatSnapshot(source)
+              : undefined;
+            const current = tearDownTabRuntime(source);
             tabs[idx] = buildLiveTab(current, embedRuntimeId, resolvedUrl, remountTitle, nextAppId, nextBound, {
               iconUrl: icons.iconUrl || current.iconUrl,
               iconKey: icons.iconKey || current.iconKey,
@@ -730,9 +788,14 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
               systemCode: icons.systemCode || current.systemCode,
               skipLoginEligible: icons.skipLoginEligible ?? current.skipLoginEligible,
               embedComposerActions: icons.embedComposerActions ?? current.embedComposerActions,
-            });
+            }, preservedChat);
             return { browserTabs: tabs, activeTabId: existing.id };
           });
+          if (get().routeActive) {
+            rebindEmbedChatAfterRemount(
+              get().browserTabs.find((t) => t.id === existing.id),
+            );
+          }
           return;
         }
 

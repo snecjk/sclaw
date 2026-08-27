@@ -27,6 +27,8 @@ export interface UseQuickInputPickerControllerOptions {
   toggleFromMutex: () => void;
   /** MentionEditor 句柄（选中后插入纯文本） */
   mentionEditorRef: RefObject<DingTalkMentionEditorHandle | null>;
+  /** 收起工具栏时共用触发钮 ref */
+  toolbarAnchorRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export function useQuickInputPickerController({
@@ -34,8 +36,10 @@ export function useQuickInputPickerController({
   setOpen,
   toggleFromMutex,
   mentionEditorRef,
+  toolbarAnchorRef,
 }: UseQuickInputPickerControllerOptions) {
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const internalButtonRef = useRef<HTMLButtonElement>(null);
+  const buttonRef = toolbarAnchorRef ?? internalButtonRef;
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => {

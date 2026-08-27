@@ -12,7 +12,10 @@ import {
   bindSclawBrowserWebContents,
   updateSclawBrowserPageState,
 } from '@/lib/sclaw-browser-host-api';
-import { resolveSclawEmbedWindowOpenAction } from '../../../shared/sclaw-embed-browser-window-open';
+import {
+  isSclawEmbedSameFrameWindowOpen,
+  resolveSclawEmbedWindowOpenAction,
+} from '../../../shared/sclaw-embed-browser-window-open';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { getJsBridgeGuestPreloadUrl } from '@/lib/jsbridge/host-api';
 import {
@@ -340,11 +343,26 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       };
 
       const onNewWindow = (event: Event) => {
-        const detail = event as Event & { url?: string; preventDefault?: () => void };
-        detail.preventDefault?.();
+        const detail = event as Event & {
+          url?: string;
+          frameName?: string;
+          preventDefault?: () => void;
+        };
         const rawUrl = typeof detail.url === 'string' ? detail.url.trim() : '';
         if (!rawUrl) return;
         const action = resolveSclawEmbedWindowOpenAction(rawUrl);
+        if (isSclawEmbedSameFrameWindowOpen(detail.frameName)) {
+          detail.preventDefault?.();
+          if (action.kind === 'open-tab') {
+            try {
+              void el.loadURL?.(action.url);
+            } catch {
+              // best-effort
+            }
+          }
+          return;
+        }
+        detail.preventDefault?.();
         if (action.kind !== 'open-tab') return;
         if (onOpenWindowRef.current) {
           onOpenWindowRef.current(rawUrl);

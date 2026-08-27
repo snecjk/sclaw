@@ -91,6 +91,7 @@
     "dingtalkSentPreviewMessageTitle": "Title: {{title}}",
     "pickWorkflow": "Choose workflow",
     "pickSkill": "Choose skill",
+    "toolsMenu": "Tools",
     "skillPickerTitle": "Skills",
     "skillSearchPlaceholder": "Search skills",
     "skillLoading": "Loading...",
