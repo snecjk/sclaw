@@ -206,6 +206,8 @@
     "downloadArtifact": "下载产物",
     "expandProcess": "展开执行过程",
     "collapseProcess": "收起执行过程",
+    "expandNodeDetail": "展开{{name}}内容",
+    "collapseNodeDetail": "收起{{name}}内容",
     "cancelRun": "取消运行",
     "cancelling": "取消中",
     "continueRun": "继续运行",

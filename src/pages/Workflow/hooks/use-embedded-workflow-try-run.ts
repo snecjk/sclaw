@@ -360,7 +360,6 @@ export function useEmbeddedWorkflowTryRun({
   }, []);
 
   useEffect(() => {
-    const running = isRunActive || isRunStarting;
     const displayState = mapWorkflowRunStatusToTryRunState(runStatus);
     const request = activeRequestRef.current;
     const current = Boolean(
@@ -372,12 +371,14 @@ export function useEmbeddedWorkflowTryRun({
       request.sessionIdentity === sessionIdentityRef.current,
     );
     if (!request || !current) return;
-    if (running && request.phase !== 'running') {
+    if (
+      request.phase === 'preparing' &&
+      runId &&
+      runId !== request.previousRunId
+    ) {
       request.phase = 'running';
-      sendState(request, 'running');
-    }
-    if (request.phase === 'running' && runId && runId !== request.previousRunId) {
       request.runId = runId;
+      sendState(request, 'running');
     }
     if (
       request.phase === 'running' &&
@@ -393,7 +394,7 @@ export function useEmbeddedWorkflowTryRun({
       if (activeRequestRef.current === request) activeRequestRef.current = null;
       setUiState({ sessionIdentity, confirmOpen: false, requestInFlight: false });
     }
-  }, [isRunActive, isRunStarting, launchError, runId, runStatus, sessionIdentity, workflowId]);
+  }, [launchError, runId, runStatus, sessionIdentity, workflowId]);
 
   useEffect(() => {
     const request = activeRequestRef.current;

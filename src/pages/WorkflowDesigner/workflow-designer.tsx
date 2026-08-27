@@ -413,7 +413,7 @@ export function WorkflowDesigner({
           isStartupDialogOpen: tryRun.isStartupDialogOpen,
           isDrawerOpen: tryRun.isDrawerOpen,
         })}
-        schema={tryRun.startupSchema}
+        schema={tryRun.runtimeUploadNodes.length > 0 ? null : tryRun.startupSchema}
         defaultValues={tryRun.startupDefaultValues}
         runtimeUploadNodes={tryRun.runtimeUploadNodes}
         isStarting={tryRun.isStarting}

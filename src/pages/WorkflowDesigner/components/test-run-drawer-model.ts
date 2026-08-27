@@ -93,6 +93,51 @@ function eventDetail(event: Record<string, unknown>, type: string) {
   }
 }
 
+const AGENT_OUTPUT_DELTA_TYPES = new Set([
+  'agent.answer_delta',
+  'agent.output.delta',
+]);
+
+function isAgentOutputDelta(type: string) {
+  return AGENT_OUTPUT_DELTA_TYPES.has(type);
+}
+
+function eventNodeId(event: Record<string, unknown>) {
+  return typeof event.nodeId === 'string' ? event.nodeId : undefined;
+}
+
+function agentDeltaDetail(
+  event: Record<string, unknown>,
+  type: string,
+  previousRawText: string | undefined,
+) {
+  const payload = event.payload;
+  if (payload && typeof payload === 'object') {
+    const rawText = (payload as Record<string, unknown>).rawText;
+    if (typeof rawText === 'string' && rawText.length > 0) {
+      return {
+        text: previousRawText && rawText.startsWith(previousRawText)
+          ? rawText.slice(previousRawText.length)
+          : rawText,
+        rawText,
+        replacesSegment: Boolean(previousRawText && !rawText.startsWith(previousRawText)),
+      };
+    }
+  }
+  const text = eventDetail(event, type);
+  return {
+    text,
+    rawText: mergeAgentDeltaText(previousRawText, text),
+    replacesSegment: false,
+  };
+}
+
+function mergeAgentDeltaText(previous: string | undefined, next: string | undefined) {
+  if (!next) return previous;
+  if (previous && next.startsWith(previous)) return next;
+  return `${previous ?? ''}${next}`;
+}
+
 function eventLabel(type: string) {
   const labels: Record<string, string> = {
     'agent.started': 'Agent 开始执行',
@@ -104,6 +149,7 @@ function eventLabel(type: string) {
     'node.failed': '节点失败',
     'agent.tool_start': '请求工具',
     'agent.tool_end': '工具完成',
+    'agent.answer_delta': '实时输出',
     'agent.output.delta': '实时输出',
     'agent.attempt.succeeded': 'Agent 执行完成',
     'agent.attempt.failed': 'Agent 执行失败',
@@ -126,15 +172,35 @@ export function buildTrialRunTimeline(
   run: WorkflowRunResponse | null,
   executionState: WorkflowExecutionState | null,
 ): TrialRunTimelineItem[] {
-  const events = (run?.events ?? [])
-    .filter((event): event is Record<string, unknown> => Boolean(event && typeof event === 'object'))
-    .reduce<TrialRunTimelineItem[]>((items, event, index) => {
+  const sourceEvents = (run?.events ?? [])
+    .filter((event): event is Record<string, unknown> => Boolean(event && typeof event === 'object'));
+  const lastRawTextByNode = new Map<string | undefined, string>();
+  const events = sourceEvents.reduce<TrialRunTimelineItem[]>((items, event, index) => {
       const type = typeof event.type === 'string' ? event.type : 'event';
-      const detail = eventDetail(event, type);
+      const nodeId = eventNodeId(event);
+      if (type === 'agent.attempt.start') lastRawTextByNode.delete(nodeId);
+      const delta = isAgentOutputDelta(type)
+        ? agentDeltaDetail(event, type, lastRawTextByNode.get(nodeId))
+        : null;
+      if (delta?.rawText) lastRawTextByNode.set(nodeId, delta.rawText);
+      const detail = delta?.text ?? eventDetail(event, type);
       const previous = items.at(-1);
-      if (type === 'agent.output.delta' && previous?.label === '实时输出') {
-        previous.detail = `${previous.detail ?? ''}${detail ?? ''}`;
-        previous.timestamp = typeof event.timestamp === 'string' ? event.timestamp : previous.timestamp;
+      const previousEvent = sourceEvents[index - 1];
+      const previousType = previousEvent && typeof previousEvent.type === 'string'
+        ? previousEvent.type
+        : '';
+      const sameNode = previousEvent !== undefined
+        && eventNodeId(previousEvent) === eventNodeId(event);
+
+      if (delta && previous && isAgentOutputDelta(previousType) && sameNode) {
+        previous.detail = delta.replacesSegment
+          ? delta.text
+          : delta.text && previous.detail && delta.text.startsWith(previous.detail)
+            ? delta.text
+            : mergeAgentDeltaText(previous.detail, delta.text);
+        previous.timestamp = typeof event.timestamp === 'string'
+          ? event.timestamp
+          : previous.timestamp;
         return items;
       }
       items.push({
@@ -210,13 +276,20 @@ export function collectTrialRunArtifacts(
   for (const artifact of executionState?.result?.artifacts ?? []) {
     items.push({ ...artifact, source: 'final' });
   }
-  const seen = new Set<string>();
-  return items.filter((artifact) => {
-    const key = artifact.id || artifact.filePath || artifact.previewUrl || artifact.url;
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const byFile = new Map<string, TrialRunDisplayArtifact>();
+  for (const artifact of items) {
+    const key = artifact.name.trim().toLowerCase()
+      || artifact.filePath?.trim().toLowerCase()
+      || artifact.previewUrl?.trim().toLowerCase()
+      || artifact.url.trim().toLowerCase()
+      || artifact.id;
+    if (!key) continue;
+    const existing = byFile.get(key);
+    if (!existing || (existing.source === 'process' && artifact.source === 'final')) {
+      byFile.set(key, artifact);
+    }
+  }
+  return [...byFile.values()];
 }
 
 export function getTrialRunArtifactTarget(artifact: TrialRunDisplayArtifact) {
