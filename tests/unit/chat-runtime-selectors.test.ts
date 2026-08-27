@@ -42,7 +42,9 @@ describe('canonical chat runtime selectors', () => {
       sending: false,
       activeRunId: null,
       pendingFinal: false,
+      transcriptPending: false,
       lastUserMessageAt: null,
+      turnAnchorAt: null,
     });
   });
 
@@ -76,8 +78,10 @@ describe('canonical chat runtime selectors', () => {
     expect(buildChatSessionRuntimeView(state)).toMatchObject({
       sending: false,
       activeRunId: null,
-      pendingFinal: true,
-      lastUserMessageAt: 2_000,
+      pendingFinal: false,
+      transcriptPending: true,
+      lastUserMessageAt: null,
+      turnAnchorAt: 2_000,
     });
   });
 
@@ -118,6 +122,35 @@ describe('canonical chat runtime selectors', () => {
     ]);
     expect(useChatRuntimeV2Store.getState().sessionsByKey.session.overlay.streamingMessage).toBeNull();
     expect(useChatRuntimeV2Store.getState().sessionsByKey.session.overlay.optimisticUserMessage).toBeNull();
+  });
+
+  it('keeps a transcript-pending completed turn visible when a follow-up starts', () => {
+    const state = createClientSessionState();
+    state.runtime = {
+      phase: 'completed', runId: 'run-1', idempotencyKey: 'message-1', engineType: 'claude',
+      epoch: 1, sequence: 4, startedAt: 1_000, lastEventAt: 2_000,
+    };
+    state.overlay.optimisticUserMessage = {
+      id: 'message-1', role: 'user', content: '你是谁', timestamp: 1,
+    };
+    state.overlay.streamingMessage = {
+      id: 'answer-1', role: 'assistant', content: '我是上一轮回答', timestamp: 2,
+    };
+    state.overlay.awaitingTranscript = true;
+    useChatRuntimeV2Store.setState({ sessionsByKey: { followup: state } });
+
+    useChatRuntimeV2Store.getState().setOptimisticUserMessage('followup', {
+      id: 'message-2', role: 'user', content: '你有哪些技能', timestamp: 3,
+    });
+
+    const session = useChatRuntimeV2Store.getState().sessionsByKey.followup;
+    expect(getSessionDisplayMessages('followup').map((message) => message.content)).toEqual([
+      '你是谁',
+      '我是上一轮回答',
+      '你有哪些技能',
+    ]);
+    expect(session.overlay.streamingMessage).toBeNull();
+    expect(session.overlay.awaitingTranscript).toBe(false);
   });
 
   it('does not synthesize an optimistic user turn for scheduled runs (X2)', () => {

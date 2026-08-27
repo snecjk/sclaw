@@ -7,9 +7,9 @@ This directory contains the renderer transcript/decorations store and canonical 
 - `shared/chat-runtime-protocol.ts` defines the versioned event and snapshot contract.
 - `runtime-v2-store.ts` subscribes before active-snapshot hydration, buffers bootstrap events, and consumes monotonic `(epoch, sequence)` events. Sequence gaps pause projection, single-flight hydrate, and replay only contiguous buffered events.
 - `client-session-reducer.ts` is the pure per-session reducer; foreground and background events share it.
-- `display-model.ts` projects immutable transcript data with optimistic overlay and display-only decorations. Streaming remains an active-turn overlay and is never copied into transcript.
+- `display-model.ts` projects immutable transcript data with optimistic overlay and display-only decorations. Streaming remains an active-turn overlay and is never copied into transcript; when a follow-up starts before transcript takeover, the completed turn is materialized only into the display projection.
 - Renderer no longer subscribes to raw `gateway:notification` / `gateway:engine-event` chat events. A single `chat-runtime:event` subscription updates the canonical per-session reducer and then runs non-runtime effects such as history refresh, unread marking, and tool-result dispatch.
-- `runtime-selectors.ts` exposes phase-derived session views for chat pages, input controls, model selectors, queues, parameter forms, and sidebar status.
+- `runtime-selectors.ts` exposes phase-derived session views for chat pages, input controls, model selectors, queues, parameter forms, and sidebar status. Active run state is distinct from the completed overlay's transcript-takeover state, so terminal UI controls do not wait for history reconciliation.
 - `ChatState` no longer contains top-level messages, run fields, or `runtimeBySessionKey`; transcript, decoration, streaming, optimistic, tool, error, sync, and phase state live only in `sessionsByKey`.
 
 - `store.ts` is now the composition layer. It wires state, persistence, helper dependencies, and action factories.

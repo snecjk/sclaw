@@ -69,6 +69,52 @@ export function buildChatDisplayModel(
   return messages;
 }
 
+/**
+ * Freeze a completed, transcript-pending turn into the display projection
+ * before the next optimistic turn replaces the single active overlay slot.
+ * The authoritative transcript remains untouched and a later history refresh
+ * can reconcile/replace this display-only snapshot.
+ */
+export function materializeCompletedOverlay(
+  transcript: RawMessage[],
+  overlay: ChatTurnOverlay,
+  decorations?: ChatMessageDecorations,
+): RawMessage[] {
+  const messages = buildChatDisplayModel(
+    transcript,
+    overlay,
+    decorations,
+    { includeStreaming: false },
+  );
+  const overlayMessages = [
+    ...overlay.streamingMessages,
+    ...overlay.streamingToolResults,
+  ].map((message, index) => ({ message, index }));
+
+  overlayMessages.sort((left, right) => {
+    const leftAt = typeof left.message.timestamp === 'number' ? toMs(left.message.timestamp) : null;
+    const rightAt = typeof right.message.timestamp === 'number' ? toMs(right.message.timestamp) : null;
+    if (leftAt !== null && rightAt !== null && leftAt !== rightAt) return leftAt - rightAt;
+    return left.index - right.index;
+  });
+
+  const upsert = (message: RawMessage) => {
+    const existingIndex = message.id
+      ? messages.findIndex((candidate) => candidate.id === message.id)
+      : -1;
+    if (existingIndex >= 0) {
+      messages[existingIndex] = message;
+      return;
+    }
+    if (!message.id && messages.includes(message)) return;
+    messages.push(message);
+  };
+
+  for (const entry of overlayMessages) upsert(entry.message);
+  if (overlay.streamingMessage) upsert(overlay.streamingMessage);
+  return messages;
+}
+
 function isSyntheticSessionLabelUser(message: RawMessage): boolean {
   return typeof message.id === 'string' && message.id.startsWith('session-label-user-');
 }

@@ -48,8 +48,9 @@ export function SclawBrowserEmbedChat({
   const {
     sending,
     pendingFinal,
+    transcriptPending,
     lastEventAt: canonicalLastEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage,
     streamingMessages,
     streamingToolResults,
@@ -77,6 +78,7 @@ export function SclawBrowserEmbedChat({
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     lastChatEventAt,
     streamMsg,
@@ -84,7 +86,7 @@ export function SclawBrowserEmbedChat({
     streamingMessages,
     streamingToolResults,
     streamingTools,
-    lastUserMessageAt,
+    turnAnchorAt,
   });
 
   const showLoadingPlaceholder = useMemo(

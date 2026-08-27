@@ -92,8 +92,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const {
     sending,
     pendingFinal,
+    transcriptPending,
     lastEventAt: canonicalLastEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage,
     streamingMessages,
     streamingToolResults,
@@ -181,6 +182,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     workflowCards,
     lastChatEventAt,
@@ -189,7 +191,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingMessages,
     streamingToolResults,
     streamingTools,
-    lastUserMessageAt,
+    turnAnchorAt,
   });
 
   useEffect(() => {

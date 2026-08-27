@@ -81,6 +81,8 @@ export interface ActiveTurnStream {
   streamingTools: StreamingTool[];
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
+  /** True only while the engine run is active; retained transcript overlays set this false. */
+  isRunActive: boolean;
   isConnecting: boolean;
   isProcessing: boolean;
   isStillExecuting?: boolean;
@@ -153,7 +155,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const engineType = useChatSessionEngineType();
 
-  const isStreaming = !!activeStream;
+  const isStreaming = activeStream?.isRunActive === true;
   const streamingTools = activeStream?.streamingTools ?? EMPTY_STREAMING_TOOLS;
   const streamingToolResults = activeStream?.streamingToolResults ?? EMPTY_STREAMING_TOOL_RESULTS;
 
@@ -340,7 +342,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isStillExecuting);
 
   const replyMessage = useMemo(() => {
-    const replySources = isStreaming ? streamSources : turnMessages;
+    // A completed run can still be displayed from the retained overlay while
+    // authoritative transcript history catches up. Runtime activity controls
+    // spinners and action locks; overlay presence controls the content source.
+    const replySources = activeStream ? streamSources : turnMessages;
     const fromHistory = pickAssistantReplyMessage(replySources);
     const base = fromHistory ?? replySources[replySources.length - 1] ?? null;
     if (!base) return null;
@@ -376,7 +381,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     }
 
     return fromHistory;
-  }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText, thinkingLayout.segments]);
+  }, [turnMessages, streamSources, activeStream, thinkingLayout.finalReplyText, thinkingLayout.segments]);
 
   const preambleMessages = useMemo(() => {
     if (!replyMessage) return [];
