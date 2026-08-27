@@ -47,10 +47,10 @@ export const DEFAULT_QUOTE_EMBED_COMPOSER_ACTIONS: EmbedComposerAction[] = [
     sendText: '新建报价',
     skillSlugs: [QUOTE_ASSISTANT_SKILL_SLUG],
   },
-  {
-    id: 'quote-upload',
-    label: '上传报价表',
-    sendText: '上传报价表',
-    skillSlugs: [QUOTE_ASSISTANT_SKILL_SLUG],
-  },
+  // {
+  //   id: 'quote-upload',
+  //   label: '上传报价表',
+  //   sendText: '上传报价表',
+  //   skillSlugs: [QUOTE_ASSISTANT_SKILL_SLUG],
+  // },
 ];
