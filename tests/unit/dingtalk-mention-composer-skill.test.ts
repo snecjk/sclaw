@@ -1,14 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   createAttachmentSpan,
   createSkillSpan,
   consumeSkillTriggerText,
+  focusMentionEditorAtEnd,
   insertMentionAtTrigger,
   insertSkillSpan,
   MENTION_SPAN_CLASS,
+  readCaretPlainTextOffset,
   serializeMentionEditor,
   setMentionEditorSegments,
 } from '@/lib/dingtalk-mention-composer';
+
+afterEach(() => {
+  document.body.replaceChildren();
+  window.getSelection()?.removeAllRanges();
+});
 
 describe('dingtalk-mention-composer skill token', () => {
   it('does not include skill token text in plainText', () => {
@@ -149,5 +156,37 @@ describe('dingtalk-mention-composer skill token', () => {
     expect(snapshot.plainText).toBe('正文');
     expect(snapshot.skillOffset).toBe(0);
     expect(snapshot.segments[0]?.type).toBe('file');
+  });
+
+  it('focusMentionEditorAtEnd places caret after skill+text fill', () => {
+    const root = document.createElement('div');
+    root.contentEditable = 'true';
+    document.body.appendChild(root);
+
+    setMentionEditorSegments(root, [
+      { type: 'skill', slug: 'quote-assistant', title: '报价助手' },
+      { type: 'text', text: '帮我新建报价' },
+    ]);
+    focusMentionEditorAtEnd(root);
+    expect(readCaretPlainTextOffset(root)).toBe('帮我新建报价'.length);
+  });
+
+  it('focusMentionEditorAtEnd places caret after skill-only fill', () => {
+    const root = document.createElement('div');
+    root.contentEditable = 'true';
+    document.body.appendChild(root);
+
+    setMentionEditorSegments(root, [
+      { type: 'skill', slug: 'quote-assistant', title: '报价助手' },
+    ]);
+    focusMentionEditorAtEnd(root);
+    expect(readCaretPlainTextOffset(root)).toBe(0);
+    expect(root.lastChild?.nodeType).toBe(Node.TEXT_NODE);
+    const selection = window.getSelection();
+    expect(selection?.rangeCount).toBe(1);
+    const range = selection!.getRangeAt(0);
+    expect(range.collapsed).toBe(true);
+    expect(range.startContainer).toBe(root.lastChild);
+    expect(range.startOffset).toBe(root.lastChild?.textContent?.length ?? 0);
   });
 });

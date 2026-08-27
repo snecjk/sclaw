@@ -20,6 +20,7 @@ import {
   consumeSkillTriggerText,
   consumeSlashTriggerText,
   ensureTrailingCaretAnchor,
+  focusMentionEditorAtEnd,
   insertLineBreakAtCaret,
   readAttachmentIdFromSpan,
   readCaretPlainTextOffset,
@@ -43,27 +44,10 @@ import {
 } from '@/lib/dingtalk-mention-composer';
 import { resolveSkillFromPlaza, resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 
-function focusEditorAtEnd(root: HTMLElement): void {
-  root.focus();
-
-  const selection = window.getSelection();
-  if (!selection) return;
-
-  const range = document.createRange();
-  const lastChild = root.lastChild;
-  if (lastChild?.nodeType === Node.TEXT_NODE) {
-    range.setStart(lastChild, lastChild.textContent?.length ?? 0);
-  } else {
-    range.selectNodeContents(root);
-    range.collapse(false);
-  }
-  range.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
 export interface DingTalkMentionEditorHandle {
   focus: () => void;
+  /** 聚焦并把光标放到文末（fillComposer / seedText / 学习中心回填） */
+  focusAtEnd: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
   readSkillMeta: () => SkillMeta | undefined;
@@ -193,6 +177,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
     useImperativeHandle(ref, () => ({
       focus: () => editorRef.current?.focus(),
+      focusAtEnd: () => {
+        const root = editorRef.current;
+        if (!root) return;
+        focusMentionEditorAtEnd(root);
+      },
       clear: () => {
         const root = editorRef.current;
         if (!root) return;
@@ -342,7 +331,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         if (lastAppliedSeedRef.current === trimmed) return;
         lastAppliedSeedRef.current = trimmed;
         setMentionEditorPlainText(root, `${trimmed} `);
-        focusEditorAtEnd(root);
+        focusMentionEditorAtEnd(root);
         syncFromDom();
         return;
       }
