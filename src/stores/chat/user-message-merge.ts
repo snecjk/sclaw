@@ -3,7 +3,10 @@ import {
   collapseWhitespaceForPairing,
   normalizeUserMessageForDisplay,
 } from '@/lib/user-message-display';
-import { parseSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
+import {
+  parseSkillTranscriptMarker,
+  parseSkillTranscriptMarkers,
+} from '@/lib/skill-transcript-marker';
 import { resolveStoredSessionLabel } from '@/lib/session-label';
 import { isWorkflowSessionTitle } from '@/lib/workflow-session';
 import {
@@ -140,8 +143,30 @@ function emptyDisplayBoth(a: RawMessage, b: RawMessage): boolean {
   return !normalizeUserMessageForPairing(a.content) && !normalizeUserMessageForPairing(b.content);
 }
 
+/** 配对用的技能 slug 集合：结构化 meta 优先，transcript marker 兜底。 */
+function skillSlugsForPairing(message: RawMessage): string[] {
+  const slugs = new Set<string>();
+  const metas = message._skillMetas ?? (message._skillMeta ? [message._skillMeta] : []);
+  for (const meta of metas) {
+    if (meta?.slug) slugs.add(meta.slug);
+  }
+  for (const marker of parseSkillTranscriptMarkers(getMessageText(message.content))) {
+    if (marker?.slug) slugs.add(marker.slug);
+  }
+  return [...slugs];
+}
+
+/** 双方技能均可确定且 slug 集合不相交 → 必为不同轮次（纯技能连发时 content 均为空）。 */
+function hasConflictingSkillSlugs(a: RawMessage, b: RawMessage): boolean {
+  const aSlugs = skillSlugsForPairing(a);
+  const bSlugs = skillSlugsForPairing(b);
+  if (!aSlugs.length || !bSlugs.length) return false;
+  return !aSlugs.some((slug) => bSlugs.includes(slug));
+}
+
 function composerStructureEchoMatches(candidate: RawMessage, optimistic: RawMessage): boolean {
   if (!hasComposerPairingEvidence(optimistic)) return false;
+  if (hasConflictingSkillSlugs(candidate, optimistic)) return false;
 
   // 两轮已完成且显式附件不同，视为不同轮次。
   const optimisticKeys = getAttachmentKeys(optimistic);
@@ -267,6 +292,9 @@ export function isSameUserMessage(
 ): boolean {
   if (candidate.role !== 'user') return false;
   if (candidate.id && optimistic.id && candidate.id === optimistic.id) return true;
+  // 双方技能 slug 均可确定且不相交 → 必为不同轮次。技能 A/B 连发同文案时
+  // 文案/软后缀证据都会命中，必须在所有配对路径之前统一否决。
+  if (hasConflictingSkillSlugs(candidate, optimistic)) return false;
 
   const displayMatches = displayTextMatches(candidate, optimistic);
   const mediaTextMatches = mediaEchoTextMatches(candidate, optimistic);
@@ -362,6 +390,7 @@ export function findHistoryUserEcho(
   return enrichedMessages.find((message) => {
     if (message.role !== 'user') return false;
     if (isSameUserMessage(message, optimistic, userMessageAt)) return true;
+    if (hasConflictingSkillSlugs(message, optimistic)) return false;
     if (!displayTextMatches(message, optimistic) && !composerStructureEchoMatches(message, optimistic)) {
       return false;
     }
@@ -462,9 +491,13 @@ export function dedupeRedundantUserMessages(
         continue;
       }
 
-      const sameTurnByDisplay = displayTextMatches(first, second)
+      // slug 冲突否决不能只留在 composerStructureEchoMatches 里——
+      // displayTextMatches 对「技能 A/B 连发同文案」同样会误判为同一轮。
+      const sameTurnByDisplay = !hasConflictingSkillSlugs(first, second) && (
+        displayTextMatches(first, second)
         || composerStructureEchoMatches(first, second)
-        || composerStructureEchoMatches(second, first);
+        || composerStructureEchoMatches(second, first)
+      );
 
       // Synthetic opener from session label vs real history user (may be non-adjacent).
       const firstSynthetic = typeof first.id === 'string' && first.id.startsWith('session-label-user-');
@@ -515,7 +548,12 @@ export function dedupeRedundantUserMessages(
         }
         const firstText = normalizeUserMessageText(first.content);
         const secondText = normalizeUserMessageText(second.content);
-        if (firstText && firstText === secondText && attachmentsMatch(first, second)) {
+        if (
+          firstText
+          && firstText === secondText
+          && attachmentsMatch(first, second)
+          && !hasConflictingSkillSlugs(first, second)
+        ) {
           patchKeptUser(i, second);
           drop.add(j);
           if (second.id) droppedIds.push(second.id);
@@ -852,8 +890,10 @@ export function reapplyComposerUiFromPreviousDisplay(
     if (message.role !== 'user') return message;
     if (message._composerSegments?.length) return message;
     // 仅严格匹配展示文案——宽松技能配对会在 thinking 期间
-    // 把上一轮拷到编辑重发的这一轮。
-    const donor = donors.find((candidate) => displayTextEquals(message, candidate));
+    // 把上一轮拷到编辑重发的这一轮。同文案不同技能（slug 冲突）同样禁止。
+    const donor = donors.find((candidate) => (
+      displayTextEquals(message, candidate) && !hasConflictingSkillSlugs(message, candidate)
+    ));
     if (!donor) {
       const refAt = userMessageAt
         ?? (message.timestamp ? toMs(message.timestamp) : 0);

@@ -509,7 +509,7 @@ export const TaskInstructionComposer = forwardRef<
         onDragLeave={enableAttachments ? handleDragLeave : undefined}
         onDrop={enableAttachments ? handleDrop : undefined}
         className={cn(
-          'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] shadow-none ring-0',
+          'flex h-[276px] flex-col rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] shadow-none ring-0',
           'hover:shadow-none dark:hover:shadow-none',
           formFieldHoverBorderClass,
           formFieldFocusWithinClass,
@@ -525,14 +525,16 @@ export const TaskInstructionComposer = forwardRef<
         }
         chips={null}
         editorOrOverlay={(
-          <div ref={mentionPopoverHostRef} className="relative flex-1 overflow-visible">
+          <div ref={mentionPopoverHostRef} className="relative flex min-h-0 flex-1 flex-col overflow-visible">
             <DingTalkMentionEditor
               ref={mentionEditorRef}
               placeholder={placeholder}
               disabled={disabled}
               className={cn(
-                'min-h-[160px] max-h-[280px] text-[12px] leading-relaxed',
-                'empty:before:whitespace-pre-wrap empty:before:text-[12px] empty:before:font-normal empty:before:leading-[22px] empty:before:text-[#86909C]',
+                // 字号/行高/占位色与首页 ChatInput 共用 DingTalkMentionEditor 默认
+                //（text-[14px] leading-8）；仅保留任务框高度与多行 placeholder
+                'h-full min-h-0 max-h-none flex-1',
+                'empty:before:whitespace-pre-wrap',
                 editorClassName,
               )}
               onSnapshotChange={handleComposerSnapshot}

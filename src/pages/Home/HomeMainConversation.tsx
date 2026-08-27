@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowDown, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Loader2, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -150,7 +150,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     }
     const distanceFromBottom =
       scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
-    setShowJumpToLatest(distanceFromBottom > 240);
+    setShowJumpToLatest(distanceFromBottom > 180);
   }, [scrollRef]);
 
   useEffect(() => {
@@ -284,6 +284,36 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       setShowJumpToLatest(false);
     },
     [scrollToBottom],
+  );
+
+  /** 用户主动发送时强制滚到底并重新粘底（即使之前已上滑离开） */
+  const handleComposerSend = useCallback(
+    (
+      text: string,
+      attachments?: FileAttachment[],
+      targetAgentId?: string | null,
+      dingTalkMentions?: DingTalkMention[],
+      workflowId?: string | null,
+      workflowSource?: string | null,
+      workflowName?: string | null,
+      skillMeta?: SkillMeta,
+      ...rest: unknown[]
+    ) => {
+      scrollToLatest('auto');
+      // ChatInput 会多传 extras；父级 handleHubSend 需要它，props 类型暂未声明
+      (onSend as ((...args: unknown[]) => void) | undefined)?.(
+        text,
+        attachments,
+        targetAgentId,
+        dingTalkMentions,
+        workflowId,
+        workflowSource,
+        workflowName,
+        skillMeta,
+        ...rest,
+      );
+    },
+    [onSend, scrollToLatest],
   );
 
   const { composeSeed: subitemComposeSeed } = useStoTaskSubitemEntry({
@@ -605,37 +635,42 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
         </div>
       ) : null}
 
-      <div
-        className={cn(
-          'pointer-events-none shrink-0 overflow-hidden',
-          showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
-        )}
-      >
-        <div className="flex justify-center">
-          <motion.button
-            type="button"
-            onClick={() => scrollToLatest('smooth')}
-            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
-            initial={false}
-            animate={{
-              opacity: showJumpToLatest ? 1 : 0,
-              y: showJumpToLatest ? 0 : 6,
-              scale: showJumpToLatest ? 1 : 0.96,
-              pointerEvents: showJumpToLatest ? 'auto' : 'none',
-            }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-          >
-            <ArrowDown className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden />
-            <span>{t('chat:streaming.jumpToLatest')}</span>
-          </motion.button>
+      <div className="relative">
+        {/* 上浮渐隐带：叠在消息区底部，不占布局高度；全程半透，底部也不完全实色 */}
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-x-0 bottom-full z-[1] overflow-hidden transition-[height] duration-200',
+            showJumpToLatest ? 'h-[72px]' : 'h-0',
+            showJumpToLatest &&
+              'bg-[linear-gradient(180deg,#fafafa00_0%,#fafafa66_35%,#fafafab0_70%,#fafafae6_100%)] dark:bg-[linear-gradient(180deg,hsl(220_22%_11%/0)_0%,hsl(220_22%_11%/0.4)_35%,hsl(220_22%_11%/0.69)_70%,hsl(220_22%_11%/0.9)_100%)]',
+          )}
+        >
+          <div className="flex h-full items-center justify-center">
+            <motion.button
+              type="button"
+              onClick={() => scrollToLatest('smooth')}
+              aria-label={t('chat:streaming.jumpToLatest')}
+              className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-white/70 text-foreground/80 shadow-[0_1px_4px_rgba(15,23,42,0.08)] backdrop-blur-md transition-colors hover:bg-white/90 hover:text-foreground dark:border-white/12 dark:bg-white/[0.1] dark:text-foreground/90 dark:shadow-[0_1px_4px_rgba(0,0,0,0.35)] dark:hover:bg-white/[0.16]"
+              initial={false}
+              animate={{
+                opacity: showJumpToLatest ? 1 : 0,
+                y: showJumpToLatest ? 0 : 6,
+                scale: showJumpToLatest ? 1 : 0.96,
+                pointerEvents: showJumpToLatest ? 'auto' : 'none',
+              }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <ChevronDown className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />
+            </motion.button>
+          </div>
         </div>
-      </div>
 
       <HomeComposer
         seedText={effectiveComposerSeed}
         seedSkillSlug={subitemComposeSeed ? undefined : seedSkillSlug}
-        onSend={onSend}
+        onSend={onSend ? handleComposerSend : undefined}
       />
+      </div>
         </div>
       </div>
 

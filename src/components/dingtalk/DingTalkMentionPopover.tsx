@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, Info, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getHostApiBase } from '@/lib/host-api';
+import type { ActiveMentionTrigger } from '@/lib/dingtalk-mention-composer';
 import { cn } from '@/lib/utils';
 import type { MentionSearchItem } from '@/types/dingtalk-mention';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
+import { useMentionPopoverDismissOutside } from './use-mention-popover-dismiss-outside';
+import { useMentionPopoverPosition } from './use-mention-popover-position';
+import { scrollChildIntoNearestView } from './mention-popover-scroll';
 
 type IndexedMentionSearchItem = MentionSearchItem & { sourceIndex: number };
 
@@ -134,21 +138,14 @@ interface DingTalkMentionPopoverProps {
    * overflow 裁切（问题一）。无则退回 absolute 定位保持兼容（如 DingTalkRecipientField）。
    */
   anchorRef?: RefObject<HTMLElement | null>;
+  /** 有则优先按光标（trigger.endOffset）定位浮层 */
+  mentionTrigger?: ActiveMentionTrigger | null;
+  getEditorElement?: () => HTMLElement | null;
+  /** 点击浮层与 excludeRef 外部时关闭（如清除 @ 提及 trigger） */
+  onDismissOutside?: () => void;
+  /** 点击该区域内部时不触发 onDismissOutside（通常为编辑器 host） */
+  dismissOutsideExcludeRef?: RefObject<HTMLElement | null>;
 }
-
-/** 向上空间不足时翻转向下的阈值（px） */
-const MENTION_POPOVER_MIN_UPWARD_HEIGHT = 240;
-/** 浮层宽度 */
-const MENTION_POPOVER_WIDTH = 320;
-/** 浮层最大高度上限（含标题/鉴权/列表） */
-const MENTION_POPOVER_MAX_HEIGHT = 400;
-
-type PopoverPosition = {
-  left: number;
-  top?: number;
-  bottom?: number;
-  maxHeight: number;
-};
 
 export function DingTalkMentionPopover({
   open,
@@ -170,61 +167,39 @@ export function DingTalkMentionPopover({
   onInstall,
   onLoadMore,
   anchorRef,
+  mentionTrigger,
+  getEditorElement,
+  onDismissOutside,
+  dismissOutsideExcludeRef,
 }: DingTalkMentionPopoverProps) {
   const { t } = useTranslation('chat');
+  const panelRef = useRef<HTMLDivElement>(null);
   const loadMoreLockRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const listContentRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<PopoverPosition | null>(null);
+
+  useMentionPopoverDismissOutside({
+    open,
+    panelRef,
+    excludeRef: dismissOutsideExcludeRef,
+    onDismissOutside,
+  });
+
+  const position = useMentionPopoverPosition({
+    open,
+    anchorRef,
+    mentionTrigger,
+    getEditorElement,
+    ignoreScrollRootRef: panelRef,
+  });
 
   useEffect(() => {
     if (!open || items.length === 0) return;
     const container = listRef.current;
     if (!container) return;
     const activeEl = container.querySelector<HTMLElement>(`[data-mention-index="${activeIndex}"]`);
-    activeEl?.scrollIntoView({ block: 'nearest' });
+    if (activeEl) scrollChildIntoNearestView(container, activeEl);
   }, [activeIndex, open, items.length]);
-
-  // portal 定位：锚定 anchorRef 的视口矩形，向上弹出为主，向上空间不足时翻转向下。
-  // 监听 scroll（capture）/ resize 更新坐标，跟随 Modal 滚动。
-  useLayoutEffect(() => {
-    if (!open || !anchorRef?.current) {
-      setPosition(null);
-      return;
-    }
-    const updatePosition = () => {
-      const rect = anchorRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.min(MENTION_POPOVER_WIDTH, window.innerWidth - 24);
-      const left = Math.min(
-        Math.max(12, rect.left),
-        window.innerWidth - width - 12,
-      );
-      const upwardSpace = rect.top;
-      const downwardSpace = window.innerHeight - rect.bottom;
-      const flipDown = upwardSpace < MENTION_POPOVER_MIN_UPWARD_HEIGHT;
-      if (flipDown) {
-        const maxHeight = Math.max(
-          160,
-          Math.min(downwardSpace - 16, MENTION_POPOVER_MAX_HEIGHT),
-        );
-        setPosition({ left, top: rect.bottom + 8, maxHeight });
-      } else {
-        const maxHeight = Math.max(
-          160,
-          Math.min(upwardSpace - 16, MENTION_POPOVER_MAX_HEIGHT),
-        );
-        setPosition({ left, bottom: window.innerHeight - rect.top + 8, maxHeight });
-      }
-    };
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [open, anchorRef]);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     if (!recent || !hasMore || loading || loadingMore || !onLoadMore) return;
@@ -243,32 +218,41 @@ export function DingTalkMentionPopover({
   const contactItems = indexedItems.filter((item) => item.type === 'user');
   const groupItems = indexedItems.filter((item) => item.type === 'group');
   const hasVisibleItems = indexedItems.length > 0;
-  const title = recent
-    ? t('composer.dingtalkRecentTitle')
-    : query.trim()
-      ? t('composer.dingtalkSearchTitle')
-      : t('composer.dingtalkMentionTitle');
+  const title = query.trim() ? t('composer.dingtalkSearchTitle') : null;
+
+  const useFixedPortal = Boolean(anchorRef);
+
+  // 有 anchor 时等测量完成再渲染，避免首帧带 bottom-full 挂到 body 上闪一下
+  if (useFixedPortal && !position) return null;
 
   const panel = (
     <div
-      className="left-0 bottom-full z-50 mb-2 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+      ref={panelRef}
+      className={cn(
+        'z-50 flex w-[320px] max-h-[280px] flex-col overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2',
+        'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',
+        // 无 portal 时保持 absolute 上浮；有 fixed 时不可再带 bottom-full，否则会与 top 冲突压成一条缝
+        useFixedPortal ? null : 'absolute left-0 bottom-full mb-2',
+      )}
       style={
-        anchorRef && position
+        useFixedPortal && position
           ? {
               position: 'fixed',
               left: position.left,
-              top: position.top,
-              bottom: position.bottom,
+              top: position.top ?? 'auto',
+              bottom: position.bottom ?? 'auto',
               maxHeight: position.maxHeight,
-              overflowY: 'auto',
+              overflow: 'hidden',
               zIndex: 60000,
             }
           : undefined
       }
     >
-      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
-        {title}
-      </div>
+      {title ? (
+        <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
+          {title}
+        </div>
+      ) : null}
 
       {needsInstall && (
         <div className="space-y-2 px-3 py-2">
@@ -331,10 +315,10 @@ export function DingTalkMentionPopover({
       )}
 
       {!loading && !needsAuth && !needsInstall && !error && (hasVisibleItems || query.trim()) && (
-        <div className="relative max-h-[336px] overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <div
             ref={listRef}
-            className="sto-overlay-scroll-viewport max-h-[336px] overflow-y-auto overscroll-contain"
+            className="sto-overlay-scroll-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain"
             onScroll={handleScroll}
           >
             <div ref={listContentRef}>

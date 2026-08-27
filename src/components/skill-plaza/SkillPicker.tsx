@@ -1,4 +1,14 @@
-import { forwardRef, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Search, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -25,9 +35,18 @@ export interface SkillPickerProps {
   onSelect: (skill: { slug: string; title: string }) => void;
   onClose: () => void;
   onAddMore?: () => void;
+  /** 锚定按钮：有则 portal + fixed，避免被 Task modal / composer overflow 裁切 */
+  anchorRef?: RefObject<HTMLElement | null>;
   className?: string;
+  /** 无 portal 时的绝对定位样式（兼容旧调用方） */
   style?: CSSProperties;
 }
+
+type PickerPosition = {
+  left: number;
+  bottom: number;
+  width: number;
+};
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
   const segments = useMemo(() => splitHighlightSegments(text, query), [text, query]);
@@ -47,16 +66,19 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 }
 
 export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
-  ({ open, mode, query: inlineQuery, onSelect, onClose, onAddMore, className, style }, ref) => {
+  ({ open, mode, query: inlineQuery, onSelect, onClose, onAddMore, anchorRef, className, style }, ref) => {
     const { t } = useTranslation('chat');
     const [toolbarQuery, setToolbarQuery] = useState('');
+    const [position, setPosition] = useState<PickerPosition | null>(null);
     const mySkills = useSkillPlazaStore((s) => s.mySkills);
     const loading = useSkillPlazaStore((s) => s.loading);
     const fetchLocalSkills = useSkillPlazaStore((s) => s.fetchLocalSkills);
 
     const prevOpenRef = useRef(false);
+    const localRef = useRef<HTMLDivElement | null>(null);
     const listViewportRef = useRef<HTMLDivElement>(null);
     const listContentRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
       if (!open) {
         const timer = setTimeout(() => setToolbarQuery(''), 0);
@@ -73,6 +95,43 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
       }
       prevOpenRef.current = open;
     }, [fetchLocalSkills, loading, mySkills.length, open]);
+
+    useLayoutEffect(() => {
+      if (!open || !anchorRef?.current) {
+        setPosition(null);
+        return;
+      }
+
+      const updatePosition = () => {
+        const rect = anchorRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const width = Math.min(280, window.innerWidth - 24);
+        setPosition({
+          left: Math.round(Math.min(Math.max(12, rect.left), window.innerWidth - width - 12)),
+          bottom: Math.round(window.innerHeight - rect.top + 8),
+          width,
+        });
+      };
+
+      // scroll/resize 走 rAF 节流，与提及浮层一致，避免滚动中每帧多次强制布局
+      let rafId: number | null = null;
+      const scheduleUpdate = () => {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          updatePosition();
+        });
+      };
+
+      updatePosition();
+      window.addEventListener('resize', scheduleUpdate);
+      window.addEventListener('scroll', scheduleUpdate, { capture: true, passive: true });
+      return () => {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        window.removeEventListener('resize', scheduleUpdate);
+        window.removeEventListener('scroll', scheduleUpdate, { capture: true });
+      };
+    }, [open, anchorRef]);
 
     const activeQuery = mode === 'toolbar' ? toolbarQuery : inlineQuery;
 
@@ -94,23 +153,41 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
 
     if (!open) return null;
 
-    return (
+    const setRefs = (node: HTMLDivElement | null) => {
+      localRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+    };
+
+    const panel = (
       <div
-        ref={ref}
+        ref={setRefs}
         role="listbox"
         aria-label={t('composer.skillPickerAriaLabel')}
-        className={cn(skillPickerShellClass, className)}
-        style={style}
+        className={cn(
+          skillPickerShellClass,
+          position ? 'fixed' : 'absolute left-0 bottom-full mb-2',
+          className,
+        )}
+        style={
+          position
+            ? {
+                left: position.left,
+                bottom: position.bottom,
+                width: position.width,
+              }
+            : style
+        }
       >
         {mode === 'toolbar' ? (
-          <div className="mb-1 flex h-[34px] w-[264px] items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="mb-1 flex h-[34px] w-[264px] shrink-0 items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
             <Search className="h-4 w-4 shrink-0 text-[#A7ADB8] dark:text-muted-foreground" strokeWidth={2} aria-hidden />
             <input
               value={toolbarQuery}
               onChange={(e) => setToolbarQuery(e.target.value)}
               placeholder={t('composer.skillSearchPlaceholder')}
               aria-label={t('composer.skillSearchPlaceholder')}
-              className="h-full flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4] dark:text-foreground dark:placeholder:text-muted-foreground"
+              className="h-full min-w-0 flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4] dark:text-foreground dark:placeholder:text-muted-foreground"
               autoFocus
             />
           </div>
@@ -173,6 +250,9 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
         </button>
       </div>
     );
+
+    // Portal 到 body，避开 Task modal / 输入壳 overflow 裁切（与 WorkflowPicker / QuickInputPicker 一致）
+    return anchorRef ? createPortal(panel, document.body) : panel;
   },
 );
 

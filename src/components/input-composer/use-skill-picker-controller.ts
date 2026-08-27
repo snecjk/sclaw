@@ -10,11 +10,8 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
-  useState,
-  type CSSProperties,
   type MutableRefObject,
   type RefObject,
 } from 'react';
@@ -27,7 +24,7 @@ import { useSkillPlazaStore } from '@/stores/skill-plaza';
 /** 技能面板打开来源：行内触发 vs 工具栏按钮 */
 export type SkillPickerMode = 'inline' | 'toolbar';
 
-/** 控制器选项；`mentionPopoverHostRef` 用于 inline 定位与点击外部判断 */
+/** 控制器选项；`mentionPopoverHostRef` 用于 inline 点击外部判断 */
 export interface UseSkillPickerControllerOptions {
   /** 面板是否打开（由 mutex 持有） */
   open: boolean;
@@ -43,7 +40,7 @@ export interface UseSkillPickerControllerOptions {
   mentionEditorRef: RefObject<DingTalkMentionEditorHandle | null>;
   /** 当前纯文本，用于提取 inline query */
   plainText: string;
-  /** 定位 host（inline 定位与点击外部判断） */
+  /** 定位 host（inline 点击外部判断） */
   mentionPopoverHostRef: RefObject<HTMLElement | null>;
 }
 
@@ -61,7 +58,6 @@ export function useSkillPickerController({
   const navigate = useNavigate();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<CSSProperties | undefined>(undefined);
 
   const inlineQuery = useMemo(() => {
     if (mode !== 'inline') return '';
@@ -100,34 +96,6 @@ export function useSkillPickerController({
     };
   }, [mentionEditorRef, mentionPopoverHostRef, mode, open, setOpen]);
 
-  useLayoutEffect(() => {
-    if (!open || mode !== 'toolbar') {
-      setStyle(undefined);
-      return undefined;
-    }
-
-    const updatePosition = () => {
-      const button = buttonRef.current;
-      const host = mentionPopoverHostRef.current;
-      if (!button || !host) return;
-
-      const buttonRect = button.getBoundingClientRect();
-      const hostRect = host.getBoundingClientRect();
-      setStyle({
-        left: Math.round(buttonRect.left - hostRect.left),
-        bottom: Math.round(hostRect.bottom - buttonRect.top),
-      });
-    };
-
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    document.addEventListener('scroll', updatePosition, true);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      document.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [mentionPopoverHostRef, mode, open]);
-
   const handleSelect = useCallback(
     ({ slug, title }: { slug: string; title: string }) => {
       setOpen(false);
@@ -152,8 +120,10 @@ export function useSkillPickerController({
     open,
     mode,
     query: inlineQuery,
+    // 工具栏：portal + fixed 锚定按钮，避免 Task 描述框 overflow 裁切
+    // 行内 `$`：不传 anchor，仍相对 host absolute（Chat host 为 overflow-visible）
+    anchorRef: mode === 'toolbar' ? buttonRef : undefined,
     onSelect: handleSelect,
-    style,
     onClose: close,
     onAddMore: handleAddMore,
   };

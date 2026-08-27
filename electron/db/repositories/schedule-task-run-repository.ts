@@ -33,6 +33,13 @@ function stringifyJson(value: unknown): string | null {
   }
 }
 
+/** actor 省略或空：保留原 updated_by，空则回落 created_by。不要写成 null。 */
+function runUpdatedByExpr(actor?: string | null) {
+  const code = typeof actor === 'string' ? actor.trim() : '';
+  if (code) return code;
+  return sql<string | null>`coalesce(updated_by, created_by)`;
+}
+
 function mapRow(row: Record<string, unknown>): ScheduleTaskRun {
   return {
     runId: String(row.run_id),
@@ -238,7 +245,7 @@ export class ScheduleTaskRunRepository {
         status: 'cancelled',
         completed_at: timestamp,
         updated_at: timestamp,
-        updated_by: actor ?? null,
+        updated_by: runUpdatedByExpr(actor),
         version: sql<number>`version + 1`,
       })
       .where('status', 'in', ['queued', 'running'])
@@ -248,20 +255,37 @@ export class ScheduleTaskRunRepository {
   }
 
   async cancelAllQueuedRuns(actor?: string | null): Promise<number> {
+    return this.cancelQueuedRunsForTaskIds(null, actor);
+  }
+
+  /**
+   * 取消 queued run。
+   * - `taskIds === null`：全局（迁移/无 owner 启动清扫）
+   * - `taskIds` 为空数组：不取消（切号后避免误伤他人）
+   * - 非空：只清这些 task 的 queued
+   */
+  async cancelQueuedRunsForTaskIds(
+    taskIds: string[] | null,
+    actor?: string | null,
+  ): Promise<number> {
+    if (Array.isArray(taskIds) && taskIds.length === 0) return 0;
     const db = getKyselyDatabase();
     const timestamp = nowIso();
-    const result = await db
+    let query = db
       .updateTable('schedule_task_runs')
       .set({
         status: 'cancelled',
         completed_at: timestamp,
         updated_at: timestamp,
-        updated_by: actor ?? null,
+        updated_by: runUpdatedByExpr(actor),
         version: sql<number>`version + 1`,
       })
       .where('status', '=', 'queued')
-      .where('deleted_at', 'is', null)
-      .executeTakeFirst();
+      .where('deleted_at', 'is', null);
+    if (taskIds != null) {
+      query = query.where('task_id', 'in', taskIds);
+    }
+    const result = await query.executeTakeFirst();
     return Number(result.numUpdatedRows ?? 0n);
   }
 
@@ -282,7 +306,7 @@ export class ScheduleTaskRunRepository {
         completed_at: timestamp,
         error: input.error ?? null,
         updated_at: timestamp,
-        updated_by: input.actor ?? null,
+        updated_by: runUpdatedByExpr(input.actor),
         version: sql<number>`version + 1`,
       })
       .where('task_id', '=', taskId)
@@ -306,7 +330,7 @@ export class ScheduleTaskRunRepository {
       status: 'cancelled',
       completed_at: input.completedAt ?? timestamp,
       updated_at: timestamp,
-      updated_by: input.actor ?? null,
+      updated_by: runUpdatedByExpr(input.actor),
       version: sql<number>`version + 1`,
     };
     if (input.error !== undefined) set.error = input.error;
@@ -342,7 +366,7 @@ export class ScheduleTaskRunRepository {
       status: 'running',
       started_at: input.startedAt,
       updated_at: timestamp,
-      updated_by: input.actor ?? null,
+      updated_by: runUpdatedByExpr(input.actor),
       version: sql<number>`version + 1`,
     };
     if (input.sessionKey !== undefined) {
@@ -423,7 +447,7 @@ export class ScheduleTaskRunRepository {
             ? stringifyJson(input.runtimeResult)
             : stringifyJson(existing.runtimeResult),
         updated_at: timestamp,
-        updated_by: input.actor ?? existing.createdBy,
+        updated_by: runUpdatedByExpr(input.actor),
         version: sql<number>`version + 1`,
       })
       .where('run_id', '=', runId)
@@ -450,7 +474,7 @@ export class ScheduleTaskRunRepository {
     const timestamp = nowIso();
     const set: Record<string, unknown> = {
       updated_at: timestamp,
-      updated_by: input.actor ?? null,
+      updated_by: runUpdatedByExpr(input.actor),
       version: sql<number>`version + 1`,
     };
     if (input.status !== undefined) set.status = input.status;

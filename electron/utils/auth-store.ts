@@ -224,6 +224,58 @@ export async function clearAuthUser(): Promise<void> {
   await removeSsoAuthFromOpenClaw();
 }
 
+/**
+ * 一次性强制重登：存量 sai 的 Code 曾是登录名，发版不会自动改写。
+ * 键已 true 则跳过。以后别的 SSO 修复必须换新键名，勿复用。
+ * 判定 / 清理抛异常时不打标（异常上抛），留给下次启动重试——clearAuth 幂等。
+ * 注意：常规登出在 sai 文件与本地会话不匹配时会保留该文件，而 getAuthState
+ * 以 sai 文件为首要数据源——文件还在就等于没登出。因此默认路径在 clearAuth 后
+ * 强制删除 sai 文件，删不掉则上抛不打标，避免「打了标但没生效」的静默失效。
+ */
+export const SSO_CODE_FIELD_RELOGIN_DONE_KEY = 'ssoCodeFieldReloginDone';
+
+export interface SsoCodeFieldReloginStore {
+  get(key: string): unknown;
+  set(key: string, value: unknown): void;
+}
+
+export async function ensureSsoCodeFieldReloginOnce(options?: {
+  store?: SsoCodeFieldReloginStore;
+  isLoggedIn?: () => Promise<boolean>;
+  clearAuth?: () => Promise<void>;
+  /** 登出后确保 sai 文件已删除；默认在真实 clearAuth 路径下强制删除，失败上抛不打标。 */
+  enforceSaiFileRemoval?: () => Promise<void>;
+}): Promise<{ skipped: boolean; cleared: boolean }> {
+  const store = options?.store ?? (await getAuthStore());
+  if (store.get(SSO_CODE_FIELD_RELOGIN_DONE_KEY) === true) {
+    return { skipped: true, cleared: false };
+  }
+  let cleared = false;
+  const loggedIn = options?.isLoggedIn
+    ? await options.isLoggedIn()
+    : (await getAuthState()).isAuthenticated;
+  if (loggedIn) {
+    await (options?.clearAuth ?? clearAuthUser)();
+    const enforceSaiFileRemoval = options?.enforceSaiFileRemoval
+      ?? (options?.clearAuth ? undefined : forceRemoveSaiCliSsoAuthFile);
+    await enforceSaiFileRemoval?.();
+    cleared = true;
+  }
+  store.set(SSO_CODE_FIELD_RELOGIN_DONE_KEY, true);
+  return { skipped: false, cleared };
+}
+
+async function forceRemoveSaiCliSsoAuthFile(): Promise<void> {
+  const filePath = join(homedir(), '.sai', 'sso-auth.json');
+  try {
+    await unlink(filePath);
+    logger.info('[auth] Force removed ~/.sai/sso-auth.json for code-field relogin');
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
+}
+
 export async function getImpersonationOrigin(): Promise<SsoUserInfo | null> {
   const store = await getAuthStore();
   return (store.get('impersonationOrigin', null) as SsoUserInfo | null) ?? null;
@@ -405,7 +457,7 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
       UserName: user.userName,
       RealName: user.realName,
       NickName: user.realName,
-      Code: user.userName,
+      Code: user.code,
       CompanyId: user.companyId,
       CompanyCode: user.companyCode,
       CompanyName: user.companyName,

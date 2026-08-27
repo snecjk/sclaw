@@ -38,7 +38,7 @@ export function parseSkillTranscriptMarker(text: string): SkillMeta | null {
   return first ?? null;
 }
 
-export { stripSkillGatewayPrefix };
+export { stripSkillGatewayPrefix, parseSkillTranscriptMarkers };
 
 /** Strip injected defaultPrompt prefix; keep only user-typed text for bubble display. */
 export function deriveSkillUserDisplayText(

@@ -129,6 +129,11 @@ export function useComposerDingTalkMention({
     ],
   );
 
+  const getMentionEditorElement = useCallback(
+    () => mentionEditorRef.current?.getEditorElement() ?? null,
+    [mentionEditorRef],
+  );
+
   return {
     mentionTrigger,
     setMentionTrigger,
@@ -173,6 +178,10 @@ export function useComposerDingTalkMention({
       onInstall: installDingTalkMention,
       onLoadMore: loadMoreDingTalkMentions,
       anchorRef: mentionPopoverHostRef,
+      mentionTrigger,
+      getEditorElement: getMentionEditorElement,
+      onDismissOutside: closeDingTalkMention,
+      dismissOutsideExcludeRef: mentionPopoverHostRef,
     },
   };
 }

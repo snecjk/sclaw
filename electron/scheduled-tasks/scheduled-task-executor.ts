@@ -543,6 +543,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
         status: 'queued',
         idempotencyKey,
         attempt: nextAttempt,
+        actor: task.createdBy,
       });
     } catch (createError) {
       logger.warn('[scheduled-task] retry createRun failed', {

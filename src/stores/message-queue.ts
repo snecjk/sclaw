@@ -75,6 +75,93 @@ function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: 
   return queues.get(sessionKey)!;
 }
 
+type MentionSegment = Extract<PersistedComposerSegment, { type: 'mention' }>;
+
+/**
+ * 以编辑后的新文本为准重建 text/mention 序列：文本里仍存在的 `@displayName`
+ * 还原为 mention 段（否则文本段会被 renderUserMessageMentionNodes 正则再渲染一次，
+ * 与保留的 mention 段双重显示）；文本里已被删掉的 @ 直接丢弃（不再发 DING）。
+ */
+function rebuildTextAndMentionSegments(
+  text: string,
+  mentionSegments: MentionSegment[],
+): PersistedComposerSegment[] {
+  const unused = [...mentionSegments];
+  const out: PersistedComposerSegment[] = [];
+  const pushText = (value: string) => {
+    if (!value) return;
+    const last = out[out.length - 1];
+    if (last?.type === 'text') {
+      last.text += value;
+    } else {
+      out.push({ type: 'text', text: value });
+    }
+  };
+
+  let rest = text;
+  while (rest) {
+    let hit: MentionSegment | null = null;
+    let hitIndex = -1;
+    let hitNeedle = '';
+    for (const seg of unused) {
+      const needle = `@${seg.mention.displayName}`;
+      const index = rest.indexOf(needle);
+      if (index !== -1 && (hitIndex === -1 || index < hitIndex)) {
+        hit = seg;
+        hitIndex = index;
+        hitNeedle = needle;
+      }
+    }
+    if (!hit) break;
+    pushText(rest.slice(0, hitIndex));
+    out.push(hit);
+    unused.splice(unused.indexOf(hit), 1);
+    rest = rest.slice(hitIndex + hitNeedle.length);
+  }
+  pushText(rest);
+  return out;
+}
+
+/**
+ * 编辑队列文本后同步 segments：技能/工作流/文件 chip 原样保留（不在编辑文本中）；
+ * 首个 text/mention 段位置替换为按新文本重建的 text/mention 序列，其余旧
+ * text/mention 段丢弃，避免发送后气泡残留旧文案或 mention 双重渲染。
+ */
+function replaceQueueItemTextSegments(
+  segments: QueuedMessage['composerSegments'],
+  text: string,
+): QueuedMessage['composerSegments'] {
+  if (!segments?.length) return segments;
+  const mentionSegments = segments.filter(
+    (seg): seg is MentionSegment => seg.type === 'mention',
+  );
+  const inline = rebuildTextAndMentionSegments(text, mentionSegments);
+  let inlinePlaced = false;
+  const next: PersistedComposerSegment[] = [];
+  for (const seg of segments) {
+    if (seg.type === 'text' || seg.type === 'mention') {
+      if (!inlinePlaced) {
+        next.push(...inline);
+        inlinePlaced = true;
+      }
+      continue;
+    }
+    next.push(seg);
+  }
+  if (!inlinePlaced) next.unshift(...inline);
+  return next;
+}
+
+/** 文本里仍保留 `@displayName` 的 mention 才保留；被删掉的 @ 不再发 DING。 */
+function filterQueueItemMentionsByText(
+  mentions: QueuedMessage['dingTalkMentions'],
+  text: string,
+): QueuedMessage['dingTalkMentions'] {
+  if (!mentions?.length) return mentions;
+  const kept = mentions.filter((mention) => text.includes(`@${mention.displayName}`));
+  return kept.length === mentions.length ? mentions : kept;
+}
+
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
@@ -117,7 +204,18 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const session = queues.get(sessionKey);
     if (!session) return;
     queues.set(sessionKey, {
-      queue: session.queue.map((item) => (item.id === id ? { ...item, text: trimmed } : item)),
+      queue: session.queue.map((item) => {
+        if (item.id !== id || item.text === trimmed) return item;
+        return {
+          ...item,
+          text: trimmed,
+          // 文本已改：入队时的预烘焙 gateway 文本随之过期，置空后
+          // 投递时走 sendMessage 的现烘焙路径（技能前缀/工作流句按新文本重建）。
+          gatewayText: undefined,
+          composerSegments: replaceQueueItemTextSegments(item.composerSegments, trimmed),
+          dingTalkMentions: filterQueueItemMentionsByText(item.dingTalkMentions, trimmed),
+        };
+      }),
     });
     set({ queues: new Map(queues) });
   },
