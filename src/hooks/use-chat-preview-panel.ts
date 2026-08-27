@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useAppShellLayoutOptional } from '@/components/layout/app-shell-layout-context';
 import type { AttachedFileMeta, RawMessage } from '@/stores/chat';
 import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
 import { filterSessionWorkflowCardStates } from '@/lib/session-workflow-context';
@@ -55,6 +56,14 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   const showPreviewPanel = previewMode !== 'closed';
   const isPreviewSplit = previewMode === 'split';
   const isPreviewExpanded = previewMode === 'expanded';
+  const appShellLayout = useAppShellLayoutOptional();
+  const setPreviewContextCollapsed = appShellLayout?.setPreviewContextCollapsed;
+
+  useLayoutEffect(() => {
+    if (!setPreviewContextCollapsed) return;
+    setPreviewContextCollapsed(isPreviewExpanded);
+    return () => setPreviewContextCollapsed(false);
+  }, [isPreviewExpanded, setPreviewContextCollapsed]);
 
   const prevSessionKeyRef = useRef(sessionKey);
 
