@@ -14,6 +14,13 @@ function parseTarget(value: unknown): JsBridgeChatTarget {
   return 'auto';
 }
 
+function parseComposerFill(params: { text?: unknown; segments?: unknown } | undefined) {
+  return normalizeBridgeComposerFillInput({
+    text: params?.text,
+    segments: params?.segments,
+  });
+}
+
 export const handleChatFillComposer: BridgeHandlerFn = async ({ session, request }) => {
   const params = request.params as {
     text?: string;
@@ -22,10 +29,7 @@ export const handleChatFillComposer: BridgeHandlerFn = async ({ session, request
     send?: boolean;
     openPanel?: boolean;
   } | undefined;
-  const segments = normalizeBridgeComposerFillInput({
-    text: params?.text,
-    segments: params?.segments,
-  });
+  const segments = parseComposerFill(params);
   if (!segments) {
     throw Object.assign(new Error('text or segments is required'), { code: 'INVALID_PARAMS' });
   }
@@ -44,14 +48,17 @@ export const handleChatOpenSession: BridgeHandlerFn = async ({ session, request 
   const params = request.params as {
     target?: 'embed' | 'main';
     text?: string;
+    segments?: unknown;
     send?: boolean;
     title?: string;
   } | undefined;
   const target = params?.target === 'main' ? 'main' : 'embed';
+  const segments = parseComposerFill(params);
   return createHostActionEnvelope({
     type: 'chat.openSession',
     target,
-    text: readText(params?.text) || undefined,
+    text: segments ? bridgeComposerFillPlainText(segments) : undefined,
+    segments: segments ?? undefined,
     send: params?.send === true,
     title: readText(params?.title) || undefined,
     runtimeId: session.runtimeId,
@@ -61,16 +68,18 @@ export const handleChatOpenSession: BridgeHandlerFn = async ({ session, request 
 export const handleChatSendMessage: BridgeHandlerFn = async ({ session, request }) => {
   const params = request.params as {
     text?: string;
+    segments?: unknown;
     target?: JsBridgeChatTarget;
     openPanel?: boolean;
   } | undefined;
-  const text = readText(params?.text);
-  if (!text) {
-    throw Object.assign(new Error('text is required'), { code: 'INVALID_PARAMS' });
+  const segments = parseComposerFill(params);
+  if (!segments) {
+    throw Object.assign(new Error('text or segments is required'), { code: 'INVALID_PARAMS' });
   }
   return createHostActionEnvelope({
     type: 'chat.fillComposer',
-    text,
+    text: bridgeComposerFillPlainText(segments),
+    segments,
     target: parseTarget(params?.target),
     send: true,
     openPanel: params?.openPanel !== false,

@@ -34,7 +34,7 @@ await stoClaw.fillComposer({ text: '请分析当前页面', target: 'embed' });
 | 用户与鉴权 | `user.getInfo` · `auth.getAuthMode` · `auth.getToken` | SSO 用户信息；Token 需 Consent |
 | 导航 | `nav.jump` · `nav.openTab` · `nav.openApp` · `nav.goBack` · `nav.reload` · `nav.closeSelf` | 应用广场 Tab / 内外链跳转 |
 | UI | `ui.toast` · `ui.alert` · `ui.confirm` · `ui.openDrawer` | 宿主统一 UI |
-| **会话联动（UI）** | `chat.fillComposer` · `chat.openSession` · `chat.sendMessage` · `chat.togglePanel` | 打开右栏 AI、回填/发送消息 |
+| **会话联动（UI）** | `chat.fillComposer` · `chat.openSession` · `chat.sendMessage` · `chat.togglePanel` | 打开右栏 AI、回填/发送消息；支持 `text` 或 `segments`（skill / workflow） |
 | **AI 引擎直连** | `chat.complete` · `chat.cancel` | Headless 调 Agent，不弹 UI；需 AI Profile |
 | Storage | `storage.get` · `storage.set` · `storage.remove` · `storage.clear` | 按 appId 隔离的 KV |
 | 预留 | `host.fetch` · `chat.invokeAgent` | 清单已登记，**当前版本尚未实现** |
@@ -54,7 +54,7 @@ Bridge 请求/响应走 **JSON 信封**；`File` / `Blob` 不能直接传参。
 
 | 类型 | 用法 |
 |------|------|
-| **Text** | `fillComposer` / `sendMessage` 的 `text`；`chat.complete` 的 `prompt` |
+| **Text** | `fillComposer` / `openSession` / `sendMessage` 的 `text` 或 `segments`；`chat.complete` 的 `prompt` |
 | **JSON** | `storage.set/get` 的 `value`；`chat.complete` 的 `context`（≤ 128 KiB）；`responseFormat: 'json'` 时读 `parsed` |
 | **文件** | 暂无独立 upload API；推荐 `context.attachments[]` 传 URL/元数据，或小文件 Base64（注意 context 上限） |
 

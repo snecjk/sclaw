@@ -48,7 +48,7 @@ export interface NavJumpParams {
   title?: string;
 }
 
-/** 结构化输入框片段（`chat.fillComposer` segments） */
+/** 结构化输入框片段（`chat.fillComposer` / `chat.openSession` / `chat.sendMessage`） */
 export type ComposerFillSegment =
   | { type: 'text'; text: string }
   | { type: 'skill'; slug: string; title?: string }
@@ -75,14 +75,20 @@ export interface ChatFillComposerParams {
 /** 5. 打开新会话并可选预填/发送 */
 export interface ChatOpenSessionParams {
   target?: 'embed' | 'main';
+  /** 向后兼容：等价于单个 text segment */
   text?: string;
+  /** 结构化片段；与 text 均可选，同时提供时以 segments 为准 */
+  segments?: ComposerFillSegment[];
   send?: boolean;
   /** 新会话标题（main 会话标签 / embed 子会话） */
   title?: string;
 }
 
 export interface ChatSendMessageParams {
-  text: string;
+  /** 向后兼容：等价于单个 text segment */
+  text?: string;
+  /** 结构化片段；与 text 至少提供一个 */
+  segments?: ComposerFillSegment[];
   target?: 'embed' | 'main' | 'auto';
   openPanel?: boolean;
 }

@@ -32,6 +32,7 @@ export type JsBridgeHostAction =
       type: 'chat.openSession';
       target: 'embed' | 'main';
       text?: string;
+      segments?: BridgeComposerFillSegment[];
       send?: boolean;
       title?: string;
       runtimeId?: string | null;

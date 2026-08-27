@@ -1,4 +1,4 @@
-/** Guest-facing composer fill segments for `chat.fillComposer`. */
+/** Guest-facing composer fill segments for `chat.fillComposer` / `chat.openSession` / `chat.sendMessage`. */
 
 export type BridgeComposerFillSegment =
   | { type: 'text'; text: string }
@@ -41,7 +41,7 @@ export function normalizeBridgeComposerFillSegment(value: unknown): BridgeCompos
 }
 
 /**
- * Normalize `chat.fillComposer` content.
+ * Normalize composer fill content for fillComposer / openSession / sendMessage.
  * At least one of `text` or non-empty `segments` is required.
  */
 export function normalizeBridgeComposerFillInput(input: {

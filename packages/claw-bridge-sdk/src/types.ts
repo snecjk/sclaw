@@ -113,7 +113,7 @@ export interface NavOpenAppParams {
 
 export type ChatTarget = 'embed' | 'main' | 'auto';
 
-/** 结构化输入框片段（`chat.fillComposer` segments） */
+/** 结构化输入框片段（`chat.fillComposer` / `chat.openSession` / `chat.sendMessage`） */
 export type ComposerFillSegment =
   | { type: 'text'; text: string }
   | { type: 'skill'; slug: string; title?: string }
@@ -131,13 +131,19 @@ export interface ChatFillComposerParams {
 
 export interface ChatOpenSessionParams {
   target?: 'embed' | 'main';
+  /** 向后兼容：等价于单个 text segment */
   text?: string;
+  /** 结构化片段；与 text 均可选，同时提供时以 segments 为准 */
+  segments?: ComposerFillSegment[];
   send?: boolean;
   title?: string;
 }
 
 export interface ChatSendMessageParams {
-  text: string;
+  /** 向后兼容：等价于单个 text segment */
+  text?: string;
+  /** 结构化片段；与 text 至少提供一个 */
+  segments?: ComposerFillSegment[];
   target?: ChatTarget;
   openPanel?: boolean;
 }

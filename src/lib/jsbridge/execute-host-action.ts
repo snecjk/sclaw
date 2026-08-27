@@ -118,6 +118,7 @@ async function fillEmbedComposer(input: {
     {
       text: input.resolved.plainText,
       segments: input.resolved.segments,
+      send: input.send === true,
     },
   );
 
@@ -248,6 +249,7 @@ export async function executeJsBridgeHostAction(
       if (action.target === 'main') {
         const resolved = resolveHostComposerFill({
           text: action.text ?? '',
+          segments: action.segments,
         });
         const result = await fillMainComposer({
           resolved,
@@ -259,6 +261,7 @@ export async function executeJsBridgeHostAction(
       }
       const resolved = resolveHostComposerFill({
         text: action.text ?? '',
+        segments: action.segments,
       });
       const result = await fillEmbedComposer({
         runtimeId: action.runtimeId,

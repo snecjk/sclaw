@@ -24,6 +24,10 @@ import {
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
+import {
+  dispatchJsBridgeStructuredComposerSeed,
+  shouldApplyJsBridgeStructuredComposerSeed,
+} from '@/lib/jsbridge/apply-composer-seed';
 import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
 import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
@@ -107,7 +111,13 @@ export function SclawBrowserEmbedChat({
   const embedSeedEntry = useJsBridgeHostStore((s) => (
     embedRuntimeId ? s.embedComposerSeedByRuntimeId[embedRuntimeId] : undefined
   ));
-  const composerSeed = embedSeedEntry?.text;
+  const composerReady = currentSessionKey === sessionKey;
+  const structuredSeed = shouldApplyJsBridgeStructuredComposerSeed(embedSeedEntry);
+  useEffect(() => {
+    if (!composerReady) return;
+    dispatchJsBridgeStructuredComposerSeed(embedSeedEntry);
+  }, [composerReady, embedSeedEntry]);
+  const composerSeed = structuredSeed ? undefined : embedSeedEntry?.text;
   const composerScenarioActions = resolveEmbedComposerActions(
     useComposerFlowStore((s) => s.embedComposerActions),
   );

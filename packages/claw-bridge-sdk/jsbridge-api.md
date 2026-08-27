@@ -47,7 +47,8 @@ Guest ↔ Host ↔ Main 之间走 **JSON 结构化信封**（`BridgeRequest` / `
 
 | 载荷类型        | 典型字段                                         | 适用 API                                                     | 说明                   |
 | ----------- | -------------------------------------------- | ---------------------------------------------------------- | -------------------- |
-| **Text**    | `text`、`prompt`、`message`                    | `chat.fillComposer` · `chat.sendMessage` · `chat.complete` | 纯字符串；UI 联动路径仅支持 text |
+| **Text**    | `text`、`prompt`、`message`                    | `chat.fillComposer` · `chat.openSession` · `chat.sendMessage` · `chat.complete` | 纯字符串                 |
+| **Segments** | `segments`（`text` / `skill` / `workflow`）   | `chat.fillComposer` · `chat.openSession` · `chat.sendMessage` | 输入框结构化片段；与 `text` 二选一 |
 | **JSON 对象** | `params` / `context` / `value`               | `storage.set/get` · `chat.complete`                        | 结构化业务数据、配置、列表、表单快照   |
 | **JSON 响应** | `parsed`                                     | `chat.complete`（`responseFormat: 'json'`）                  | 宿主尝试解析模型输出为 JSON     |
 | **文件（间接）**  | `attachments` · `encoding: 'base64'` · `url` | `chat.complete` 的 `context` · `storage.set`                | 见下文「文件传递模式」          |
@@ -66,7 +67,7 @@ JSBridge **尚无**独立的 `bridge.file.upload` / `bridge.file.download` API�
 | ------------------------------------ | -------------------------------------- | ----------------------------------- |
 | `chat.complete` 的 `context` 序列化大小    | **128 KiB**                            | `AI_CONTEXT_TOO_LARGE`，不静默截断        |
 | `storage` 单值                         | 受 electron-store / 磁盘约束，建议 **< 1 MiB** | 写入失败或性能下降                           |
-| UI 联动 `sendMessage` / `fillComposer` | 仅 **text 字符串**                         | 大段数据请改走 `chat.complete` 的 `context` |
+| UI 联动 `sendMessage` / `fillComposer` / `openSession` | `text` 或 `segments`（skill / workflow 标签） | 大段业务数据请改走 `chat.complete` 的 `context` |
 
 
 ```typescript
@@ -238,6 +239,16 @@ await stoClaw.openSession({
   text: '开始新的分析任务',
   title: '报表分析',
   send: false,
+});
+
+// 新建会话并带上技能标签
+await stoClaw.openSession({
+  target: 'embed',
+  title: '报价助手',
+  segments: [
+    { type: 'skill', slug: 'quote-assistant' },
+    { type: 'text', text: '帮我新建一个报价' },
+  ],
 });
 ```
 
@@ -680,9 +691,9 @@ await stoClaw.openApp({ appId: 'my-app-id', title: '我的应用' });
 
 
 
-### 6.5 会话联动（UI · 以 Text 为主）
+### 6.5 会话联动（UI）
 
-以下能力通过 Host Renderer 打开/操作 **可见的 Chat 面板**。参数中的 `text` **为纯字符串**；结构化数据或文件请改用 §6.6 `chat.complete` 的 `context`，或在 text 中嵌入简短摘要 + 引导用户查看右栏。
+以下能力通过 Host Renderer 打开/操作 **可见的 Chat 面板**。支持纯文本 `text`，或结构化 `segments`（技能 / 工作流标签 + 文本）。大段业务 JSON 或文件请改用 §6.6 `chat.complete` 的 `context`。
 
 #### `chat.fillComposer`
 
@@ -745,17 +756,18 @@ await stoClaw.fillComposer({
 
 #### `chat.openSession`
 
-新建会话并可选预填 / 发送。
+新建会话并可选预填 / 发送。`text` / `segments` 与 `chat.fillComposer` 相同；均可选，同时提供时以 `segments` 为准。
 
 **参数**
 
 
-| 字段       | 类型                 | 必填  | 说明         |
-| -------- | ------------------ | --- | ---------- |
-| `target` | `'embed' | 'main'` | 否   | 默认 `embed` |
-| `text`   | `string`           | 否   | 预填内容       |
-| `send`   | `boolean`          | 否   | 是否立即发送     |
-| `title`  | `string`           | 否   | 会话标题       |
+| 字段         | 类型                      | 必填  | 说明                                          |
+| ---------- | ----------------------- | --- | ------------------------------------------- |
+| `target`   | `'embed' | 'main'`      | 否   | 默认 `embed`                                   |
+| `text`     | `string`                | 否   | 向后兼容：等价于单个 `{ type: 'text', text }` segment |
+| `segments` | `ComposerFillSegment[]` | 否   | 结构化片段（skill / workflow / text）               |
+| `send`     | `boolean`               | 否   | 是否立即发送                                       |
+| `title`    | `string`                | 否   | 会话标题                                         |
 
 
 ```typescript
@@ -763,6 +775,16 @@ await stoClaw.openSession({
   target: 'main',
   text: '帮我写一份周报提纲',
   title: '周报助手',
+});
+
+await stoClaw.openSession({
+  target: 'embed',
+  title: '报价助手',
+  send: true,
+  segments: [
+    { type: 'skill', slug: 'quote-assistant' },
+    { type: 'text', text: '帮我新建一个报价' },
+  ],
 });
 ```
 
@@ -772,12 +794,31 @@ await stoClaw.openSession({
 
 #### `chat.sendMessage`
 
-回填并立即发送（等价于 `chat.fillComposer` + `send: true`）。**需用户授权**。
+回填并立即发送（等价于 `chat.fillComposer` + `send: true`）。**需用户授权**。`text` / `segments` 至少提供一个。
+
+**参数**
+
+
+| 字段          | 类型                          | 必填  | 说明                                          |
+| ----------- | --------------------------- | --- | ------------------------------------------- |
+| `text`      | `string`                    | 二选一 | 向后兼容：等价于单个 `{ type: 'text', text }` segment |
+| `segments`  | `ComposerFillSegment[]`     | 二选一 | 结构化片段；与 `text` 至少提供一个                     |
+| `target`    | `'embed' | 'main' | 'auto'` | 否   | 默认 `auto`                                   |
+| `openPanel` | `boolean`                   | 否   | embed 目标时是否先打开右侧面板，默认 `true`                |
+
 
 ```typescript
 await stoClaw.sendMessage({
   text: '开始执行',
   target: 'embed',
+});
+
+await stoClaw.sendMessage({
+  target: 'embed',
+  segments: [
+    { type: 'skill', slug: 'quote-assistant' },
+    { type: 'text', text: '提交这张报价单' },
+  ],
 });
 ```
 
@@ -909,9 +950,9 @@ const { value } = await window.stoClaw.call('storage.get', { key: 'draft' });
 | `jump()`                      | `nav.jump`                | 统一跳转                                         |
 | `openWebview()`               | `nav.openTab`             | 打开 sto.cn tab                                |
 | `openApp()`                   | `nav.openApp`             | 打开应用                                         |
-| `fillComposer()`              | `chat.fillComposer`       | 回填输入框                                        |
-| `openSession()`               | `chat.openSession`        | 新建会话                                         |
-| `sendMessage()`               | `chat.sendMessage`        | 回填并发送                                        |
+| `fillComposer()`              | `chat.fillComposer`       | 回填输入框（`text` 或 `segments`）                    |
+| `openSession()`               | `chat.openSession`        | 新建会话（可带 `segments` 预填/发送）                     |
+| `sendMessage()`               | `chat.sendMessage`        | 回填并发送（`text` 或 `segments`）                    |
 | `toggleChatPanel()`           | `chat.togglePanel`        | 切换 AI 面板                                     |
 | `complete()`                  | `chat.complete`           | Headless AI（Text + JSON context → Text/JSON） |
 | `cancel()`                    | `chat.cancel`             | 取消 AI 调用                                     |
