@@ -39,6 +39,7 @@ import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
+import { ThemeController } from './components/theme/ThemeController';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -117,7 +118,6 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const initSettings = useSettingsStore((state) => state.init);
-  const theme = useSettingsStore((state) => state.theme);
   const language = useSettingsStore((state) => state.language);
   const setupComplete = useSettingsStore((state) => state.setupComplete);
   const initGateway = useGatewayStore((state) => state.init);
@@ -276,21 +276,6 @@ function App() {
     };
   }, []);
 
-  // Apply theme
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
-
   useEffect(() => {
     applyGatewayTransportPreference();
   }, []);
@@ -309,6 +294,7 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <ThemeController />
       <TooltipProvider delayDuration={300}>
       <AppShellLayoutProvider>
         <WorkflowCompletionNotifier />
