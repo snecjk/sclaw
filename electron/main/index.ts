@@ -396,11 +396,11 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
   // Show the window IMMEDIATELY — before loading content.
   // On first run, ready-to-show can take 5-10s because the renderer process
   // must cold-start (V8 init, preload script, HTML parse, first paint).
-  // By showing now, the user sees a dark window instantly (matching the splash
-  // background), and the splash screen content appears as soon as the renderer
+  // By showing now, the user sees the active native appearance background
+  // immediately, and the splash screen content appears as soon as the renderer
   // finishes its first paint. This is much better UX than a blank desktop.
   win.show();
-  _ts('window shown (dark bg)');
+  _ts('window shown (native appearance background)');
 
   // Set window title with environment suffix for non-production builds
   const envCfg = getCurrentEnvConfig();
@@ -544,7 +544,7 @@ async function initialize(): Promise<void> {
   registerDialogHandlers();
 
   // Create the main window as early as possible.
-  // Window shows immediately with dark background (see createWindow).
+  // Window shows immediately with the active native appearance background (see createWindow).
   const window = await createMainWindow();
   _ts('mainWindow created');
 

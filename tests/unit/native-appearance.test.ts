@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const appearanceState = vi.hoisted(() => {
@@ -132,6 +134,8 @@ function handleSettingsRoute(method: string, path: string): Promise<boolean> {
   );
 }
 
+const splashHtml = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+
 describe('native appearance', () => {
   beforeEach(() => {
     appearanceState.setThemeSource('light');
@@ -162,6 +166,12 @@ describe('native appearance', () => {
   it('maps native darkness to the approved shell colors', () => {
     expect(resolveWindowBackgroundColor(false)).toBe('#ededed');
     expect(resolveWindowBackgroundColor(true)).toBe('#0d0d0d');
+  });
+
+  it('uses the native shell colors for the pre-render splash', () => {
+    expect(splashHtml).toContain('background: #ededed;');
+    expect(splashHtml).toContain('@media (prefers-color-scheme: dark)');
+    expect(splashHtml).toContain('background: #0d0d0d;');
   });
 
   it.each(['light', 'dark', 'system'] as const)('accepts the persisted %s preference', (theme) => {
@@ -236,6 +246,18 @@ describe('settings appearance routes', () => {
     appearanceState.syncLaunchAtStartupSettingFromStore.mockReset();
     appearanceState.syncPreventSystemSleepSettingFromStore.mockReset();
     appearanceState.syncApplicationMenuFromStore.mockReset();
+  });
+
+  it('normalizes an invalid stored appearance before returning all settings', async () => {
+    appearanceState.getAllSettings.mockResolvedValue({ theme: 'sepia', language: 'en' });
+
+    await handleSettingsRoute('GET', '/api/settings');
+
+    expect(appearanceState.sendJson).toHaveBeenCalledWith(
+      expect.anything(),
+      200,
+      { theme: 'light', language: 'en' },
+    );
   });
 
   it('rejects an invalid single-setting appearance write before persistence or native updates', async () => {

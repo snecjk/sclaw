@@ -17,6 +17,10 @@ export function isThemePreference(value: unknown): value is AppSettings['theme']
   return value === 'light' || value === 'dark' || value === 'system';
 }
 
+export function normalizeThemePreference(value: unknown): AppSettings['theme'] {
+  return isThemePreference(value) ? value : DEFAULT_THEME_PREFERENCE;
+}
+
 function updateOpaqueWindowBackgrounds(): void {
   const background = resolveWindowBackgroundColor(nativeTheme.shouldUseDarkColors);
   const transparentWindows = new Set([getSpriteWindow(), getFloatIconWindow()]);
@@ -34,8 +38,7 @@ export function applyNativeAppearancePreference(theme: AppSettings['theme']): vo
 }
 
 export async function syncNativeAppearanceFromStore(): Promise<void> {
-  const theme = await getSetting('theme');
-  applyNativeAppearancePreference(isThemePreference(theme) ? theme : DEFAULT_THEME_PREFERENCE);
+  applyNativeAppearancePreference(normalizeThemePreference(await getSetting('theme')));
 }
 
 export function observeNativeAppearanceUpdates(): () => void {

@@ -6,6 +6,7 @@ import { syncPreventSystemSleepSettingFromStore } from '../../main/prevent-sleep
 import {
   applyNativeAppearancePreference,
   isThemePreference,
+  normalizeThemePreference,
   syncNativeAppearanceFromStore,
 } from '../../main/appearance';
 import { syncProxyConfigToOpenClaw } from '../../utils/openclaw-proxy';
@@ -53,7 +54,8 @@ export async function handleSettingsRoutes(
   ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/settings' && req.method === 'GET') {
-    sendJson(res, 200, await getAllSettings());
+    const settings = await getAllSettings();
+    sendJson(res, 200, { ...settings, theme: normalizeThemePreference(settings.theme) });
     return true;
   }
 
