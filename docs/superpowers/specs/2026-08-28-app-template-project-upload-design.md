@@ -1,6 +1,6 @@
 # 应用模板编辑页上传项目设计
 
-**状态：已确认方向，待实施计划**
+**状态：已确认设计，实施计划已完成**
 
 ## 1. 背景
 
@@ -147,14 +147,18 @@ SClaw 已支持在“应用模板管理”中创建或打开 Site、Assets 模�
 
 ### 6.2 Host API
 
-在现有 `/api/app-templates` 路由域下增加两个受控接口：
+在现有 `/api/app-templates` 路由域下增加四个受控接口：
 
 ```text
+GET  /api/app-templates/workspaces/import-source/status?workspaceId=...
 POST /api/app-templates/workspaces/import-source/prepare
 POST /api/app-templates/workspaces/import-source/apply
+POST /api/app-templates/workspaces/import-source/cancel
 ```
 
-`prepare` 输入当前模板 `workspaceId` 和本地来源目录，返回：
+`status` 返回当前模板是否存在上一次来源目录、来源目录名称及本地目录是否仍然可访问，不返回来源绝对路径。
+
+`prepare` 输入当前模板 `workspaceId` 和可选的本地来源目录。首次上传必须提供目录；重新上传省略目录时由 Host 读取本地状态中的上一次路径。接口返回：
 
 - 一次性 `importToken`；
 - 项目识别信息；
@@ -164,6 +168,8 @@ POST /api/app-templates/workspaces/import-source/apply
 - 警告和阻断项。
 
 `apply` 输入 `workspaceId` 和 `importToken`。Host 必须重新校验工作区、来源快照和 Token 有效期，不能信任 Renderer 传回的文件清单。
+
+`cancel` 输入 `workspaceId` 和 `importToken`，只允许取消绑定到该工作区的未使用会话，并立即清理临时快照。
 
 ### 6.3 导入会话
 
