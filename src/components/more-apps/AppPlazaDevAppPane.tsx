@@ -27,6 +27,7 @@ import { AppDevSplitBody } from '@/components/app-dev/AppDevSplitBody';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';
+import { TemplateProjectUploadControl } from './TemplateProjectUploadControl';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -518,6 +519,16 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             >
               提交
             </Button>
+          ) : null}
+
+          {isTemplateWorkspace ? (
+            <TemplateProjectUploadControl
+              workspaceId={workspaceId}
+              onApplied={() => {
+                setSourceRevision((value) => value + 1);
+                toast.success('项目已上传，预览正在刷新');
+              }}
+            />
           ) : null}
 
           {isTemplateWorkspace ? (
