@@ -103,7 +103,7 @@ describe('local SSO Auth Bootstrap route', () => {
     expect(JSON.stringify(mocks.sendJson.mock.calls)).not.toContain('stoTokenExpiresAt');
   });
 
-  it('rejects Assets sessions and expired authentication', async () => {
+  it('allows Assets sessions and rejects expired authentication', async () => {
     const { handleAppDevSsoAuthRoute } = await import('@electron/api/routes/app-dev-sso-auth');
     mocks.validate.mockReturnValue({ ...session, pageType: 'assets' });
     await handleAppDevSsoAuthRoute(
@@ -114,9 +114,14 @@ describe('local SSO Auth Bootstrap route', () => {
       {} as ServerResponse,
       new URL('http://127.0.0.1/api/app-dev/sso-auth/bootstrap'),
     );
-    expect(mocks.sendJson).toHaveBeenLastCalledWith(expect.anything(), 403, {
-      success: false,
-      error: 'SSO_AUTH_PAGE_TYPE_UNSUPPORTED',
+    expect(mocks.sendJson).toHaveBeenLastCalledWith(expect.anything(), 200, {
+      success: true,
+      token: 'token-a',
+      user: {
+        userId: 'u-1',
+        userCode: 'W001',
+        userName: '测试用户',
+      },
     });
 
     mocks.validate.mockReturnValue(session);
