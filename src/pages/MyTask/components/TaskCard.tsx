@@ -3,11 +3,17 @@
  * 我的任务 — 定时任务卡片（图示：图标+标题+开关 / 描述 / 计划时间+立即运行+更多）
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Clock, Loader2, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseScheduleToLabel } from '@/lib/schedule-label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   myTaskCardBodyClass,
   myTaskCardDescriptionClass,
@@ -51,22 +57,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: TaskCardProps) {
   const { t } = useTranslation('tasks');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [running, setRunning] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // 点击外部关闭菜单
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    if (menuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [menuOpen]);
 
   const handleBodyClick = () => {
     onClick?.(task);
@@ -80,16 +71,15 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
       await onRun?.(task);
     } finally {
       setRunning(false);
-      setMenuOpen(false);
     }
   };
 
   const scheduleLabel = task.scheduleText ?? parseScheduleToLabel(task.cronExpr);
-  /** 关联工作流 code，用于显示「工作流任务」badge */
-  const workflowId = task.workflowCode ?? null;
+  // 卡片只标「工作流任务」；技能留在 composer 内，不占卡片徽标
+  const showWorkflowBadge = Boolean(task.hasWorkflow);
 
   return (
-    <article className={cn(myTaskCardShellClass, menuOpen && 'z-30')}>
+    <article className={myTaskCardShellClass}>
       {/* 顶栏：时钟图标 + 标题 + badge | 开关 */}
       <div className={myTaskCardTopRowClass}>
         <div className={myTaskCardTitleRowClass}>
@@ -98,8 +88,8 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             strokeWidth={1.75}
             aria-hidden
           />
-          <h3 className={myTaskCardTitleClass}>{task.name}</h3>
-          {workflowId ? (
+          <h3 className={myTaskCardTitleClass} title={task.name}>{task.name}</h3>
+          {showWorkflowBadge ? (
             <span className={myTaskWorkflowBadgeClass}>
               {t('myTask.card.workflowBadge')}
             </span>
@@ -166,49 +156,40 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             )}
           </button>
 
-          <div className="relative shrink-0" ref={menuRef} data-menu>
-            <button
-              type="button"
-              aria-label={t('myTask.card.moreAria')}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(!menuOpen);
-              }}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground"
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={t('myTask.card.moreAria')}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground"
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              side="bottom"
+              sideOffset={6}
+              collisionPadding={8}
+              className={myTaskCardMenuClass}
+              onCloseAutoFocus={(e) => e.preventDefault()}
+              onClick={(e) => e.stopPropagation()}
             >
-              <MoreHorizontal className="h-4 w-4" aria-hidden />
-            </button>
-            {menuOpen ? (
-              <div className={myTaskCardMenuClass} role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen(false);
-                    onEdit?.(task);
-                  }}
-                  className={myTaskCardMenuItemClass()}
-                >
-                  {t('myTask.card.edit')}
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen(false);
-                    onDelete?.(task);
-                  }}
-                  className={myTaskCardMenuItemClass(true)}
-                >
-                  {t('myTask.card.delete')}
-                </button>
-              </div>
-            ) : null}
-          </div>
+              <DropdownMenuItem
+                className={myTaskCardMenuItemClass()}
+                onSelect={() => onEdit?.(task)}
+              >
+                {t('myTask.card.edit')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className={myTaskCardMenuItemClass(true)}
+                onSelect={() => onDelete?.(task)}
+              >
+                {t('myTask.card.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </article>

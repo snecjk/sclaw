@@ -15,7 +15,17 @@ import { getAuthState } from '../../utils/auth-store';
 /** 解析当前登录用户（梧桐工号 code）作为 actor，写入 created_by/updated_by。未登录则 null。 */
 async function resolveActor(): Promise<string | null> {
   const { user } = await getAuthState();
-  return user?.code ?? null;
+  const code = user?.code?.trim();
+  return code ? code : null;
+}
+
+function sendTaskError(res: ServerResponse, error: unknown, fallbackStatus = 400): void {
+  const msg = String(error);
+  if (msg.includes('无权')) {
+    sendJson(res, 403, { success: false, error: msg });
+    return;
+  }
+  sendJson(res, fallbackStatus, { success: false, error: msg });
 }
 
 /**
@@ -57,6 +67,30 @@ export async function handleScheduledTaskRoutes(
     return true;
   }
 
+  // ---- cloud sync-status: GET /cloud/sync-status（仅 MyTask 挂载） ----
+  if (url.pathname === '/api/scheduled-tasks/cloud/sync-status' && req.method === 'GET') {
+    try {
+      const status = await getScheduledTaskService().getCloudSyncStatus();
+      sendJson(res, 200, status);
+    } catch (error) {
+      const statusCode = (error as { statusCode?: number }).statusCode === 401 ? 401 : 500;
+      sendJson(res, statusCode, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // ---- cloud pull: POST /cloud/pull（仅按钮） ----
+  if (url.pathname === '/api/scheduled-tasks/cloud/pull' && req.method === 'POST') {
+    try {
+      const result = await getScheduledTaskService().pullFromCloud();
+      sendJson(res, 200, result);
+    } catch (error) {
+      const statusCode = (error as { statusCode?: number }).statusCode === 401 ? 401 : 500;
+      sendJson(res, statusCode, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   // ---- beautify instruction: POST /beautify-instruction ----
   // 独立于 CRUD：复用 scheduled-task-instruction-beautifier 服务。
   // 输入：instruction / type?(task|prompt, 默认 task) / workflowId? / workflowName?
@@ -94,7 +128,7 @@ export async function handleScheduledTaskRoutes(
         sendJson(res, 200, task);
       }
     } catch (error) {
-      sendJson(res, 400, { success: false, error: String(error) });
+      sendTaskError(res, error);
     }
     return true;
   }
@@ -119,6 +153,8 @@ export async function handleScheduledTaskRoutes(
       // 单飞：已有 active run → 409（对齐 claude "already running" 语义，UI 可据此提示）
       if (msg.includes('already has an active run')) {
         sendJson(res, 409, { success: false, error: '该任务已有正在执行的运行，请稍后再试' });
+      } else if (msg.includes('无权')) {
+        sendJson(res, 403, { success: false, error: msg });
       } else if (msg.includes('not found')) {
         sendJson(res, 404, { success: false, error: msg });
       } else {
@@ -159,7 +195,7 @@ export async function handleScheduledTaskRoutes(
         sendJson(res, 200, task);
       }
     } catch (error) {
-      sendJson(res, 400, { success: false, error: String(error) });
+      sendTaskError(res, error);
     }
     return true;
   }
@@ -172,7 +208,7 @@ export async function handleScheduledTaskRoutes(
       await getScheduledTaskService().deleteTask(id, await resolveActor());
       sendJson(res, 200, { success: true });
     } catch (error) {
-      sendJson(res, 400, { success: false, error: String(error) });
+      sendTaskError(res, error);
     }
     return true;
   }

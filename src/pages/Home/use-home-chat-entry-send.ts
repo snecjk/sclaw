@@ -24,9 +24,9 @@ export function useHomeChatEntrySend() {
   const agents = useAgentsStore((s) => s.agents);
 
   const handleHubQueue = useCallback(
-    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null, skillMeta?: SkillMeta) => {
+    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null, skillMeta?: SkillMeta, extras?: import('@/pages/Chat/ChatInput').ChatSendExtras) => {
       const { currentSessionKey } = useChatStore.getState();
-      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, _dingTalkMentions, workflowId, skillMeta);
+      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, _dingTalkMentions, workflowId, skillMeta, extras);
     },
     [],
   );
@@ -41,6 +41,7 @@ export function useHomeChatEntrySend() {
       workflowSource?: string | null,
       workflowName?: string | null,
       skillMeta?: SkillMeta,
+      extras?: import('@/pages/Chat/ChatInput').ChatSendExtras,
     ) => {
       const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
       const messages = getCurrentChatDisplayMessages();
@@ -61,7 +62,20 @@ export function useHomeChatEntrySend() {
       }
 
       const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
-      await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta });
+      await dispatchChatSend({
+        text,
+        attachments,
+        targetAgentId,
+        dingTalkMentions: _dingTalkMentions,
+        workflowId,
+        workflowSource,
+        workflowName,
+        skillMeta,
+        skillMetas: extras?.skillMetas,
+        workflows: extras?.workflows,
+        composerSegments: extras?.composerSegments,
+        gatewayText: extras?.gatewayText,
+      });
     },
     [agents, isGatewayRunning, t],
   );

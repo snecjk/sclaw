@@ -3,13 +3,17 @@ import initialSqliteSchemaMigration from './0001-initial-schema';
 import memoryCaptureJobsMigration from './0006-memory-capture-jobs';
 import sessionCatalogSchemaMigration from './0007-session-catalog-schema';
 import sessionTypesAndChannelsMigration from './0008-session-types-and-channels';
+import channelConnectionsStoMobileMigration from './0009-channel-connections-sto-mobile';
 import channelPlaneMigration from './0010-channel-plane';
 import scheduleTasksMigration from './0011-schedule-tasks';
 import artifactSaveRecordsMigration from './0012-artifact-save-records';
 import workflowRuntimeSchemaMigration from './0013-workflow-runtime-schema';
 import artifactSaveRecordsFallbackMigration from './0021-artifact-save-records-fallback';
 import chatRuntimeMigration from './0022-chat-runtime';
-import chatRuntimePiEngineMigration from './0023-chat-runtime-pi-engine';
+import scheduleTasksCloudSyncMigration from './0033-schedule-tasks-cloud-sync';
+import browserAutomationMigration from './0023-browser-automation';
+import chatRuntimeBridgeOriginMigration from './0024-chat-runtime-bridge-origin';
+import chatRuntimePiEngineMigration from './0034-chat-runtime-pi-engine';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -19,11 +23,15 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   memoryCaptureJobsMigration,
   sessionCatalogSchemaMigration,
   sessionTypesAndChannelsMigration,
+  channelConnectionsStoMobileMigration,
   channelPlaneMigration,
   scheduleTasksMigration,
   artifactSaveRecordsMigration,
   workflowRuntimeSchemaMigration,
   artifactSaveRecordsFallbackMigration,
   chatRuntimeMigration,
+  scheduleTasksCloudSyncMigration,
+  browserAutomationMigration,
+  chatRuntimeBridgeOriginMigration,
   chatRuntimePiEngineMigration,
 ].sort((left, right) => left.version - right.version);

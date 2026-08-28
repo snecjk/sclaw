@@ -226,6 +226,25 @@ export class CatalogSessionRepository {
     return row;
   }
 
+  /** 任务改名后同步该任务所有 catalog 行的标题快照（含历史 dated 会话与 NULL 标题行）。 */
+  async updateTitlesByTaskId(taskId: string, title: string, actor?: string | null): Promise<number> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const result = await db
+      .updateTable('catalog_sessions')
+      .set({
+        title,
+        updated_at: timestamp,
+        updated_by: actor ?? null,
+        version: sql<number>`version + 1`,
+      })
+      .where('task_id', '=', taskId)
+      .where('session_type', 'in', ['cron', 'claude_task'])
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0n);
+  }
+
   async softDelete(workspaceId: string, sessionKey: string, actor?: string | null): Promise<boolean> {
     const db = getKyselyDatabase();
     const timestamp = nowIso();

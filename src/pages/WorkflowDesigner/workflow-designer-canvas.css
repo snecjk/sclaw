@@ -92,6 +92,7 @@
 .wf-canvas-node-icon.accent-approval { background: #fef2f2; }
 .wf-canvas-node-icon.accent-action { background: #ecfeff; }
 .wf-canvas-node-icon.accent-output { background: #f8fafc; }
+.wf-canvas-node-icon.accent-browser { background: #ecfdf5; }
 
 .wf-canvas-node-copy {
   min-width: 0;
@@ -281,6 +282,10 @@
 
 .workflow-node-library-item.tile-output .workflow-node-library-icon {
   background: #eef6ff;
+}
+
+.workflow-node-library-item.tile-browser .workflow-node-library-icon {
+  background: #ecfdf5;
 }
 
 .workflow-node-library-copy {

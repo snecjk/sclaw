@@ -28,6 +28,7 @@ import { HistoryVersionsDrawer } from '@/pages/WorkflowDesigner/components/histo
 import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
 import { DesignerNodeLibrary } from '@/pages/WorkflowDesigner/components/designer-node-library';
 import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
+import { shouldShowStartupRunDialog } from '@/pages/WorkflowDesigner/components/test-run-drawer-model';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
 import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 import type { WorkflowDefinition } from '@/pages/WorkflowDesigner/types';
@@ -55,7 +56,6 @@ export function WorkflowDesigner({
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
   const canvasWrapRef = useRef<HTMLDivElement>(null);
-  const tryRunButtonRef = useRef<HTMLButtonElement>(null);
   const isNew = !workflowId;
 
   const [loading, setLoading] = useState(!isNew);
@@ -198,14 +198,6 @@ export function WorkflowDesigner({
     beginTryRun();
   }, [beginTryRun, dirty, workflow?.id]);
 
-  const handleTryRunFromHistory = useCallback(() => {
-    setLocalRunHistoryOpen(false);
-    window.setTimeout(() => {
-      tryRunButtonRef.current?.focus();
-      handleTryRun();
-    }, 0);
-  }, [handleTryRun]);
-
   const handleHistoryRestored = useCallback((restoredWorkflow: WorkflowDefinition) => {
     setWorkflow(normalizeConditionBranches(restoredWorkflow));
     setSelectedNodeId(null);
@@ -298,7 +290,6 @@ export function WorkflowDesigner({
             本地运行记录
           </Button>
           <Button
-            ref={tryRunButtonRef}
             type="button"
             variant="outline"
             size="sm"
@@ -413,14 +404,16 @@ export function WorkflowDesigner({
           workflowId={workflow.id}
           workflowName={workflow.name}
           onClose={() => setLocalRunHistoryOpen(false)}
-          onTryRun={handleTryRunFromHistory}
           onSelectRun={tryRun.openExistingRun}
         />
       </div>
 
       <StartupRunDialog
-        open={tryRun.isStartupDialogOpen}
-        schema={tryRun.startupSchema}
+        open={shouldShowStartupRunDialog({
+          isStartupDialogOpen: tryRun.isStartupDialogOpen,
+          isDrawerOpen: tryRun.isDrawerOpen,
+        })}
+        schema={tryRun.runtimeUploadNodes.length > 0 ? null : tryRun.startupSchema}
         defaultValues={tryRun.startupDefaultValues}
         runtimeUploadNodes={tryRun.runtimeUploadNodes}
         isStarting={tryRun.isStarting}

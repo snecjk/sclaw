@@ -9,7 +9,7 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
-import { app, BrowserWindow, dialog, nativeImage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import type { Server } from 'node:http';
 import { basename, dirname, join, resolve } from 'path';
 import { existsSync } from 'node:fs';
@@ -22,10 +22,9 @@ import type { GatewayManager } from '../gateway/manager';
 import type { HostEventBus } from '../api/event-bus';
 
 // Lightweight modules needed before window creation
-import { createMenu } from './menu';
+import { syncApplicationMenuFromStore } from './menu';
 import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
-import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { warmupNetworkOptimization } from '../utils/uv-env';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { isQuitting, setQuitting } from './app-state';
@@ -64,10 +63,11 @@ import {
   stageExistingMacAppTarget,
   unregisterMacAppBundle,
 } from '../utils/cleanup-old-app-bundles';
+import { CLIENT_APP_NAME, CLIENT_APP_USER_MODEL_ID } from '../../shared/app-branding';
+import { getClientAppIcon } from './app-icon';
 
 _ts('static imports loaded');
 
-const WINDOWS_APP_USER_MODEL_ID = 'app.stoclaw.desktop';
 const LEGACY_USER_DATA_DIR_NAME = 'stoclaw';
 
 function pinLegacyUserDataPath(): void {
@@ -252,7 +252,7 @@ _ts('app flags set');
 
 // Dock / menu bar display name (Launchpad permanent name still comes from
 // electron-builder productName → CFBundleName after rebuild+reinstall).
-app.setName('SClaw');
+app.setName(CLIENT_APP_NAME);
 
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
 // On Wayland this maps the running window to stoclaw.desktop (icon + app grouping);
@@ -338,37 +338,6 @@ let hostApiServer: Server | null = null;
 const mainWindowFocusState = createMainWindowFocusState();
 const quitLifecycleState = createQuitLifecycleState();
 
-/**
- * Resolve the icons directory path (works in both dev and packaged mode)
- */
-function getIconsDir(): string {
-  if (app.isPackaged) {
-    // Packaged: icons are in extraResources -> process.resourcesPath/resources/icons
-    return join(process.resourcesPath, 'resources', 'icons');
-  }
-  // Development: relative to dist-electron/main/
-  return join(__dirname, '../../resources/icons');
-}
-
-/**
- * Get the app icon for the current platform
- */
-function getAppIcon(): Electron.NativeImage | undefined {
-  if (process.platform === 'darwin' && app.isPackaged) {
-    // Packaged macOS: use the app bundle icon (from Info.plist)
-    return undefined;
-  }
-
-  // Dev mode (all platforms) or packaged Windows/Linux: load icon from file
-  const iconsDir = getIconsDir();
-  const iconPath =
-    process.platform === 'win32'
-      ? join(iconsDir, 'icon.ico')
-      : join(iconsDir, 'icon.png');
-  const icon = nativeImage.createFromPath(iconPath);
-  return icon.isEmpty() ? undefined : icon;
-}
-
 function isLikelyPreviewDownloadUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -397,7 +366,7 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
     y: saved?.y,
     minWidth: 960,
     minHeight: 640,
-    icon: getAppIcon(),
+    icon: getClientAppIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -571,8 +540,8 @@ async function initialize(): Promise<void> {
   const window = await createMainWindow();
   _ts('mainWindow created');
 
-  // Set application menu (fast, no I/O — can happen after window show)
-  createMenu();
+  // Set application menu from persisted language (macOS menu bar is always visible)
+  void syncApplicationMenuFromStore();
 
   // Initialize logger AFTER window creation so its sync I/O runs in parallel
   // with the renderer loading HTML. Calls before init() safely go to console
@@ -733,17 +702,29 @@ async function initialize(): Promise<void> {
   registerFormHandlers();
 
   // 引擎无关通用定时任务：setGatewayManager 注入 dispatcher + eventSink →
-  // 一次性迁移遗留 claude definitions.json + openclaw jobs.json → schedule_tasks（jobs.json 迁后清空、definitions.json 保留）→
-  // startScheduler（discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
+  // 一次性迁移遗留 claude definitions.json + openclaw jobs.json → schedule_tasks →
+  // 列→segments。startScheduler 挪到已认证入口（认领后），未登录不跑 cron / 出队。
   const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
   const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
+  const { runComposerColumnsToSegmentsMigration } = await import(
+    '../scripts/migrate-composer-columns-to-segments'
+  );
   const scheduledTaskService = getScheduledTaskService();
   scheduledTaskService.setGatewayManager(gm);
   await runScheduledTasksMigration(gm, scheduledTaskService);
-  scheduledTaskService.startScheduler();
-  void scheduledTaskService.refreshSchedule().catch((error) => {
-    logger.warn('[scheduled-task] initial schedule refresh failed:', error);
+  await runComposerColumnsToSegmentsMigration(scheduledTaskService).catch((error) => {
+    logger.warn('[scheduled-task] columns→composerSegments migration failed:', error);
   });
+  try {
+    const { getAuthState } = await import('../utils/auth-store');
+    const authState = await getAuthState();
+    const userCode = authState.isAuthenticated ? authState.user?.code?.trim() : '';
+    if (userCode) {
+      scheduledTaskService.onUserAuthenticated(userCode);
+    }
+  } catch (error) {
+    logger.warn('[scheduled-task] cold-start auth check failed:', error);
+  }
   app.on('before-quit', () => {
     scheduledTaskService.stopScheduler();
   });
@@ -953,13 +934,17 @@ async function initialize(): Promise<void> {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
   try {
-    const { ensureStoBrowserBridgePluginInOpenClaw } = await import('../utils/openclaw-auth');
-    const modified = await ensureStoBrowserBridgePluginInOpenClaw();
-    if (modified) {
+    const { ensureStoBrowserBridgePluginInOpenClaw, ensureStoBrowserAutomationPluginInOpenClaw } = await import('../utils/openclaw-auth');
+    const bridgeModified = await ensureStoBrowserBridgePluginInOpenClaw();
+    if (bridgeModified) {
       logger.info('[plugin] Enabled sto-browser-bridge in openclaw.json');
     }
+    const automationModified = await ensureStoBrowserAutomationPluginInOpenClaw();
+    if (automationModified) {
+      logger.info('[plugin] Enabled sto-browser-automation in openclaw.json');
+    }
   } catch (error) {
-    logger.warn('Failed to enable sto-browser-bridge plugin in openclaw.json:', error);
+    logger.warn('Failed to enable browser plugins in openclaw.json:', error);
   }
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
@@ -1021,7 +1006,7 @@ if (gotTheLock) {
   });
 
   if (process.platform === 'win32') {
-    app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+    app.setAppUserModelId(CLIENT_APP_USER_MODEL_ID);
   }
 
   // Note: gatewayManager, clawHubService, hostEventBus are constructed lazily
@@ -1064,6 +1049,12 @@ if (gotTheLock) {
       await runPendingInstallReport(app.getVersion(), process.platform);
     } catch (error) {
       logger.warn('Post-update install report / re-auth hook failed:', error);
+    }
+    try {
+      const { ensureSsoCodeFieldReloginOnce } = await import('../utils/auth-store');
+      await ensureSsoCodeFieldReloginOnce();
+    } catch (error) {
+      logger.warn('[auth] SSO code-field relogin hook failed:', error);
     }
     void initialize().catch((error) => {
       logger.error('Application initialization failed:', error);

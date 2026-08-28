@@ -73,4 +73,18 @@ export function resolveUnusedEmbedChatEngineType(
   return normalizeAgentEngineType(agentEngineType);
 }
 
+/** Empty embed chat (App Plaza) — engine follows agent default until first send. */
+export function isUnusedEmbedChatSession(
+  sessionKey: string | undefined,
+  messageCount: number,
+  loading = false,
+): boolean {
+  return Boolean(
+    sessionKey
+    && isSclawBrowserEmbedChatSessionKey(sessionKey)
+    && !loading
+    && messageCount === 0,
+  );
+}
+
 export type { ChatEngineType };

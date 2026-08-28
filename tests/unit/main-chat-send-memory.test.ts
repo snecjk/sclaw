@@ -147,4 +147,22 @@ describe('runMainChatSend memory boundary', () => {
     expect(prepareMock).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
   });
+
+  it('skips memory read and write when memoryPolicy requests isolation', async () => {
+    const dispatch = vi.fn().mockResolvedValue({ success: true, result: { runId: 'run-bridge' } });
+    const prepareInjection = vi.fn((params) => params);
+    await runMainChatSend({} as never, {
+      sessionKey: 'agent:main:bridge-ai:demo:c1',
+      message: 'bridge prompt',
+      sourceText: 'bridge prompt',
+      idempotencyKey: 'bridge-id',
+      engineType: 'openclaw',
+      memoryPolicy: { skipRead: true, skipWrite: true },
+    }, prepareInjection, dispatch);
+
+    expect(prepareMock).not.toHaveBeenCalled();
+    expect(beginMock).not.toHaveBeenCalled();
+    expect(bindMock).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
 });

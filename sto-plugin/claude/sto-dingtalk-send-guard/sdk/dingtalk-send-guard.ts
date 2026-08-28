@@ -252,7 +252,7 @@ export function evaluateDingTalkSendGuard(input: {
     return {
       allowed: false,
       reason:
-        '[StoClaw 安全策略] 禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。',
+        '[SClaw 安全策略] 禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。',
     };
   }
 
@@ -279,7 +279,7 @@ export function evaluateDingTalkSendGuard(input: {
     const seconds = Math.max(1, Math.ceil(rate.retryAfterMs / 1000));
     return {
       allowed: false,
-      reason: `[StoClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。这是频控、不是权限拒绝——你被允许发送。请等待约 ${seconds} 秒后用原命令重试，不要放弃、不要让用户手动发送。`,
+      reason: `[SClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。这是频控、不是权限拒绝——你被允许发送。请等待约 ${seconds} 秒后用原命令重试，不要放弃、不要让用户手动发送。`,
     };
   }
 

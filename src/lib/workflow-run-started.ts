@@ -9,6 +9,7 @@ import {
   saveWorkflowExecution,
   updateWorkflowRunMetadata,
 } from '@/stores/workflow-memory';
+import { refreshWorkflowChatCards } from '@/stores/workflow-chat-cards';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 
 export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
@@ -26,6 +27,25 @@ export interface ApplyWorkflowRunStartedOptions {
   presentation?: WorkflowRunPresentation;
   /** 钉定版本，落 WorkflowExecutionRecord.versionId（仅 startWorkflowLocal 路径可得）。 */
   versionId?: string | number;
+}
+
+/**
+ * Main 已持久化 chat card 后，刷新 Renderer 的会话卡片投影。
+ * 刷新失败不能改变已经成功启动的工作流语义，后续会话边界仍会补偿重拉。
+ */
+export async function refreshStartedWorkflowChatCards(
+  sessionKey: string,
+  runId: string,
+): Promise<void> {
+  try {
+    await refreshWorkflowChatCards(sessionKey);
+  } catch (error) {
+    console.warn('[workflow-chat-card] failed to refresh started run', {
+      sessionKey,
+      runId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /** After POST /workflows/{id}/start — card, tracker, memory (no Gateway send). */
@@ -95,6 +115,7 @@ export async function applyWorkflowRunStarted(
   }
 
   useChatStore.getState().clearPendingWorkflow(sessionKey);
+  await refreshStartedWorkflowChatCards(sessionKey, runId);
 
   return true;
 }

@@ -1,4 +1,7 @@
-import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
+import {
+  isAgentBrandSessionLabel,
+  looksLikeTechnicalSessionDisplay,
+} from '@/stores/chat/helpers';
 
 const AGENT_TASK_KEY_PATTERN = /^agent:[^:]+:(cron|scheduled-task):/;
 
@@ -8,6 +11,7 @@ export function looksLikeTechnicalTaskGroupLabel(value: string, sessionKey?: str
   if (!v) return true;
   if (sessionKey && v === sessionKey) return true;
   if (looksLikeTechnicalSessionDisplay(v)) return true;
+  if (isAgentBrandSessionLabel(v)) return true;
   if (AGENT_TASK_KEY_PATTERN.test(v)) return true;
   if (/^(claude-task|claude-task-run|pi-task|scheduled-task):/.test(v)) return true;
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return true;

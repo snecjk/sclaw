@@ -5,12 +5,14 @@ import {
 } from '@/stores/chat/cron-session-utils';
 import type { ChatSession } from '@/stores/chat/types';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
+import { isBridgeAiChatSessionKey } from '../../shared/bridge-ai-session';
 
 export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
   return !isAnyCronSessionKey(sessionKey)
     && !parseClaudeScheduledTaskRunSessionKey(sessionKey)
     && !parseClaudeScheduledTaskSessionKey(sessionKey)
-    && !isSclawBrowserEmbedChatSessionKey(sessionKey);
+    && !isSclawBrowserEmbedChatSessionKey(sessionKey)
+    && !isBridgeAiChatSessionKey(sessionKey);
 }
 
 export function getSessionActivityForSort(

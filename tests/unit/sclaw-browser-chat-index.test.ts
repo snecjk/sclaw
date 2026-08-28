@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createEmbedChatIndexItem,
   ensureEmbedChatIndex,
@@ -6,12 +6,14 @@ import {
   listEmbedChatIndex,
   removeEmbedChatIndexItem,
   setActiveEmbedChatSessionKey,
+  touchEmbedChatActivity,
 } from '@/lib/sclaw-browser-chat-index';
 import { createSclawBrowserChatSessionKeyForApp } from '@/lib/sclaw-browser-chat-session';
 
 describe('sclaw-browser-chat-index', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.useRealTimers();
   });
 
   it('bootstraps legacy single-session key as first conversation', () => {
@@ -31,13 +33,32 @@ describe('sclaw-browser-chat-index', () => {
     expect(index.activeKey).toBe(item.key);
   });
 
-  it('switches active conversation', () => {
+  it('switches active conversation without bumping last-active time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
     const first = getActiveEmbedChatSessionKey('org-relation');
+    vi.setSystemTime(5_000);
     const { item: second } = createEmbedChatIndexItem('org-relation');
+    const firstAt = listEmbedChatIndex('org-relation').items.find((entry) => entry.key === first)?.updatedAt;
+    const secondAt = listEmbedChatIndex('org-relation').items.find((entry) => entry.key === second.key)?.updatedAt;
+
+    vi.setSystemTime(9_000);
     setActiveEmbedChatSessionKey('org-relation', first);
     const listed = listEmbedChatIndex('org-relation');
     expect(listed.activeKey).toBe(first);
-    expect(listed.items.some((entry) => entry.key === second.key)).toBe(true);
+    expect(listed.items.find((entry) => entry.key === first)?.updatedAt).toBe(firstAt);
+    expect(listed.items.find((entry) => entry.key === second.key)?.updatedAt).toBe(secondAt);
+    vi.useRealTimers();
+  });
+
+  it('bumps last-active time only when the user actually chats', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const first = getActiveEmbedChatSessionKey('org-relation');
+    vi.setSystemTime(8_000);
+    touchEmbedChatActivity(first);
+    expect(listEmbedChatIndex('org-relation').items.find((entry) => entry.key === first)?.updatedAt).toBe(8_000);
+    vi.useRealTimers();
   });
 
   it('removes a conversation and activates another', () => {

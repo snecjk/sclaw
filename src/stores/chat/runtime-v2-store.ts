@@ -4,7 +4,8 @@ import { subscribeHostEvent } from '@/lib/host-events';
 import { AppError } from '@/lib/error-model';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import type { RawMessage } from './types';
-import { isScheduledTaskUserEcho } from './scheduled-task-user-echo';
+import { findHistoryUserEcho } from './user-message-merge';
+import { materializeCompletedOverlay } from './display-model';
 import {
   applyRuntimeSnapshot,
   createClientSessionState,
@@ -124,25 +125,25 @@ function transcriptContainsCompletedTurn(
   let currentUserIndex = optimistic?.id
     ? transcript.findIndex((message) => message.role === 'user' && message.id === optimistic.id)
     : -1;
-  if (currentUserIndex < 0 && optimistic?._scheduledTaskOptimistic) {
-    const optimisticAt = messageTimestampMs(optimistic);
-    const referenceMs = optimisticAt > 0
-      ? optimisticAt
-      : current.runtime?.startedAt ?? 0;
-    currentUserIndex = findLastMessageIndex(transcript, (message) => (
-      isScheduledTaskUserEcho(message, optimistic, referenceMs)
-    ));
-    if (currentUserIndex < 0) return false;
-  } else if (currentUserIndex < 0 && optimistic) {
+  if (currentUserIndex < 0 && optimistic) {
     const expected = comparableContent(optimistic.content);
     currentUserIndex = findLastMessageIndex(transcript,
       (message) => message.role === 'user' && comparableContent(message.content) === expected,
     );
   }
   if (currentUserIndex < 0) {
+    // 兜底：按 startedAt 之后的首条 user 消息判定。定时任务无乐观消息，走此路径。
+    // 容差 2s（仅在无乐观消息时生效，即定时任务场景）：echo user 的 timestamp 可能
+    // 因数据库写入顺序/时钟偏移略早于 startedAt，严格 `>=` 会漏过导致误判「未完成」
+    // （见 §5.7 时钟边界）。有乐观消息的 chat 链路保持严格 `>=`，避免把上一轮 user
+    // 误当作当前 run 的回显而提前清掉 streaming overlay。
+    const startedAt = current.runtime?.startedAt ?? Number.MAX_SAFE_INTEGER;
+    const lowerBound = !optimistic && startedAt !== Number.MAX_SAFE_INTEGER
+      ? startedAt - 2_000
+      : startedAt;
     currentUserIndex = findLastMessageIndex(transcript, (message) => (
       message.role === 'user'
-      && messageTimestampMs(message) >= (current.runtime?.startedAt ?? Number.MAX_SAFE_INTEGER)
+      && messageTimestampMs(message) >= lowerBound
     ));
   }
   if (currentUserIndex < 0) return false;
@@ -156,13 +157,23 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
   initialized: false,
   setTranscript: (sessionKey, transcript) => set((state) => {
     const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
-    const echoedId = current.overlay.optimisticUserMessage?.id;
-    const optimisticEchoed = Boolean(echoedId && transcript.some((message) => message.id === echoedId));
+    const optimistic = current.overlay.optimisticUserMessage;
+    const echoedId = optimistic?.id;
+    const optimisticEchoedById = Boolean(echoedId && transcript.some((message) => message.id === echoedId));
+    const optimisticRefAt = optimistic
+      ? (current.runtime?.startedAt
+        ?? (typeof optimistic.timestamp === 'number' ? messageTimestampMs(optimistic) : 0))
+      : 0;
+    const optimisticEchoedByPairing = Boolean(
+      optimistic
+      && !optimisticEchoedById
+      && findHistoryUserEcho(transcript, optimistic, optimisticRefAt),
+    );
     const transcriptSettled = current.runtime?.phase === 'completed'
       && transcriptContainsCompletedTurn(transcript, current);
-    const nextOptimistic = optimisticEchoed || transcriptSettled
+    const nextOptimistic = optimisticEchoedById || optimisticEchoedByPairing || transcriptSettled
       ? null
-      : current.overlay.optimisticUserMessage;
+      : optimistic;
     const transcriptUnchanged = messagesEqual(current.transcript, transcript);
     const overlayUnchanged = nextOptimistic === current.overlay.optimisticUserMessage
       && (!transcriptSettled || (
@@ -213,12 +224,46 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
   setOptimisticUserMessage: (sessionKey, message) => set((state) => {
     const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
     if (current.overlay.optimisticUserMessage === message) return state;
+    const shouldMaterializeCompletedOverlay = Boolean(
+      message
+      && current.runtime?.phase === 'completed'
+      && current.overlay.awaitingTranscript
+      && (
+        current.overlay.streamingMessage
+        || current.overlay.streamingMessages.length > 0
+        || current.overlay.streamingToolResults.length > 0
+      )
+    );
+    const projectedMessages = shouldMaterializeCompletedOverlay
+      ? materializeCompletedOverlay(current.transcript, current.overlay, current.decorations)
+      : current.decorations.projectedMessages;
     return {
       sessionsByKey: {
         ...state.sessionsByKey,
         [sessionKey]: {
           ...current,
-          overlay: { ...current.overlay, optimisticUserMessage: message },
+          decorations: shouldMaterializeCompletedOverlay
+            ? { ...current.decorations, projectedMessages }
+            : current.decorations,
+          overlay: {
+            ...current.overlay,
+            optimisticUserMessage: message,
+            streamingMessage: shouldMaterializeCompletedOverlay
+              ? null
+              : current.overlay.streamingMessage,
+            streamingMessages: shouldMaterializeCompletedOverlay
+              ? []
+              : current.overlay.streamingMessages,
+            streamingToolResults: shouldMaterializeCompletedOverlay
+              ? []
+              : current.overlay.streamingToolResults,
+            streamingTools: shouldMaterializeCompletedOverlay
+              ? []
+              : current.overlay.streamingTools,
+            awaitingTranscript: shouldMaterializeCompletedOverlay
+              ? false
+              : current.overlay.awaitingTranscript,
+          },
           updatedAt: Date.now(),
         },
       },

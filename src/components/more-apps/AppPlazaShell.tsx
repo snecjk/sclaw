@@ -12,8 +12,11 @@ import {
 } from '@/stores/app-plaza-shell';
 import { bindAppNavigate, unbindAppNavigate } from '@/lib/app-navigate';
 import { closeSclawBrowser } from '@/lib/open-sclaw-browser';
+import { useAppPlazaSidebarCollapse } from '@/hooks/use-app-plaza-sidebar-collapse';
 import { useSclawBrowserChatShortcut } from '@/components/sclaw-browser/use-sclaw-browser-chat-shortcut';
+import { useSclawBrowserDevToolsShortcut } from '@/components/sclaw-browser/use-sclaw-browser-devtools-shortcut';
 import { useSclawBrowserOpenUrl } from '@/components/sclaw-browser/use-sclaw-browser-open-url';
+import { installJsBridgeHostListeners } from '@/lib/jsbridge/host-router';
 import './app-plaza-shell.css';
 
 export function AppPlazaShell() {
@@ -24,6 +27,11 @@ export function AppPlazaShell() {
   const activeTabId = useAppPlazaShellStore((s) => s.activeTabId);
   const browserTabs = useAppPlazaShellStore((s) => s.browserTabs);
   const toggleChatPanel = useAppPlazaShellStore((s) => s.toggleChatPanel);
+  const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
+  const viewingSpecificApp = Boolean(
+    routeActive && activeBrowser && activeBrowser.status !== 'blank',
+  );
+  useAppPlazaSidebarCollapse(viewingSpecificApp);
 
   useEffect(() => {
     setRouteActive(routeActive);
@@ -43,11 +51,16 @@ export function AppPlazaShell() {
   // guest window.open still opens plaza tabs when the shell is not visible.
   useSclawBrowserOpenUrl(true);
 
-  const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
+  useEffect(() => installJsBridgeHostListeners(), []);
+
   const chatShortcutEnabled = routeActive && activeBrowser?.status === 'live';
   useSclawBrowserChatShortcut(Boolean(chatShortcutEnabled), () => {
     if (activeBrowser) toggleChatPanel(activeBrowser.id);
   });
+  useSclawBrowserDevToolsShortcut(
+    Boolean(chatShortcutEnabled),
+    activeBrowser?.embedRuntimeId,
+  );
   // Blur focus when hiding so keys don't hit hidden webviews
   useEffect(() => {
     if (!routeActive && document.activeElement instanceof HTMLElement) {

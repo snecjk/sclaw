@@ -6,6 +6,8 @@
  * session key.
  */
 
+import { BRIDGE_AI_SESSION_CATEGORY } from './bridge-ai-session';
+
 export type CatalogSessionType =
   | 'chat'
   | 'cron'
@@ -13,7 +15,8 @@ export type CatalogSessionType =
   | 'claude_task'
   | 'app'
   | 'channel'
-  | 'workflow';
+  | 'workflow'
+  | 'bridge_ai';
 
 export interface InferredSessionCatalogMeta {
   sessionType: CatalogSessionType;
@@ -22,7 +25,14 @@ export interface InferredSessionCatalogMeta {
 }
 
 const APP_SESSION_PREFIX = 'session-embed-app-';
+const LEGACY_EMBED_RUNTIME_SESSION_PREFIX = 'session-embed-br-';
 const APP_CONV_SEPARATOR = '--';
+
+/** App Plaza / embed-browser chat sessions (not workflow or channel). */
+export function isEmbedAppChatSessionKey(sessionKey: string): boolean {
+  const trimmed = sessionKey.trim();
+  return trimmed.includes(APP_SESSION_PREFIX) || trimmed.includes(LEGACY_EMBED_RUNTIME_SESSION_PREFIX);
+}
 
 /**
  * Infer catalog metadata from the session key.
@@ -32,6 +42,7 @@ const APP_CONV_SEPARATOR = '--';
  *   - agent:{agentId}:scheduled-task:{taskId}:{date}          -> scheduled_task
  *   - scheduled-task:{taskId}                                 -> scheduled_task
  *   - claude-task:{taskId}... / claude-task-run:{taskId}...   -> claude_task
+ *   - agent:{agentId}:bridge-ai:{appId}:{conversationId}      -> bridge_ai
  *   - agent:{agentId}:session-embed-app-{appId}[--{conv}]     -> app
  *   - everything else                                         -> chat
  *
@@ -58,6 +69,14 @@ export function inferSessionCatalogMeta(sessionKey: string): InferredSessionMeta
           sessionType: 'scheduled_task',
           taskId: parts[3] || null,
           appId: null,
+        };
+      }
+      // Bridge AI: agent:{agentId}:bridge-ai:{appId}:{conversationId}
+      if (parts[2] === BRIDGE_AI_SESSION_CATEGORY && parts.length >= 5) {
+        return {
+          sessionType: 'bridge_ai',
+          taskId: null,
+          appId: parts[3] || null,
         };
       }
     }

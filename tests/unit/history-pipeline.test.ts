@@ -75,4 +75,24 @@ describe('history-pipeline', () => {
 
     expect(merged[1].content).toBe('请确认参数');
   });
+
+  it('does not synthesize a session-label user when optimistic overlay already covers the send', () => {
+    const merged = mergeHistoryDisplayMessages({
+      messages: [],
+      currentMessages: [],
+      sessionKey: 'agent:main:session-1',
+      sessionLabels: { 'agent:main:session-1': '帮我做报价测算：覆盖新客测算与老客调价' },
+      userMessageAt: 1_000,
+      sending: false,
+      optimisticUser: {
+        id: 'optimistic-1',
+        role: 'user',
+        content: '帮我做报价测算：覆盖新客测算与老客调价，并给出调价建议。',
+        _skillMeta: { slug: 'customer-monitor', title: '客户异常监控' },
+      },
+      getMessageText: (content) => String(content ?? ''),
+    });
+
+    expect(merged).toEqual([]);
+  });
 });

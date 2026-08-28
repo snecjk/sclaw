@@ -34,6 +34,20 @@ export function createSsoCallbackClaimGuard(): () => boolean {
   };
 }
 
+/**
+ * True when a loadURL rejection is a superseded navigation rather than a real
+ * load failure：回调拦截（webRequest cancel / preventDefault）或已登录 SSO 直接
+ * 回跳会把进行中的导航打成 ERR_ABORTED（errno -3），此时 handleCallbackUrl 已在
+ * 交换 code，不能把登录 Promise 判负。
+ */
+export function isAbortedNavigationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ((error as { code?: unknown }).code === 'ERR_ABORTED') return true;
+  if ((error as { errno?: unknown }).errno === -3) return true;
+  const message = (error as { message?: unknown }).message;
+  return typeof message === 'string' && message.includes('ERR_ABORTED');
+}
+
 export class SsoLoginManager {
   private loginWindow: BrowserWindow | null = null;
 
@@ -259,6 +273,11 @@ export class SsoLoginManager {
       });
 
       win.loadURL(loginUrl).catch((err) => {
+        if (isAbortedNavigationError(err)) {
+          // 回调拦截取消了本次导航（正常流程），code 交换由 handleCallbackUrl 完成
+          logger.info('SSO login page load superseded by callback interception; continuing');
+          return;
+        }
         logger.error('Failed to load SSO login URL:', err);
         settle(() => {
           if (!win.isDestroyed()) win.close();

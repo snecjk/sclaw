@@ -1,4 +1,8 @@
 import { AppError } from '@/lib/error-model';
+import {
+  formatChatRuntimeErrorMessage,
+  resolveChatRuntimeErrorCode,
+} from './runtime-error-message';
 import type {
   CanonicalChatEvent,
   ChatRunPhase,
@@ -200,26 +204,23 @@ export function reduceSessionEvent(
     && payload?.reason === 'superseded';
   const errorMessage = (event.type === 'run.failed' || event.type === 'run.interrupted')
     && !isSupersededInterruption
-    ? String(payload?.error ?? payload?.reason ?? 'Chat run failed')
+    ? formatChatRuntimeErrorMessage(payload, 'Chat run failed')
+    : null;
+  const errorCode = (event.type === 'run.failed' || event.type === 'run.interrupted')
+    && !isSupersededInterruption
+    ? resolveChatRuntimeErrorCode(payload, 'Chat run failed')
     : null;
   const awaitingTranscript = event.type === 'message.final'
     || event.type === 'run.awaiting_transcript'
     || (phase === 'awaiting_transcript' && event.type !== 'message.delta');
   const startsNewRun = event.type === 'run.dispatching';
   const dispatchPayload = startsNewRun ? payload as ChatDispatchPayload | null : null;
-  const dispatchUserMessage = dispatchPayload?.optimisticUserMessage
-    ? {
-        ...dispatchPayload.optimisticUserMessage,
-        ...(event.runtimePolicy?.origin === 'scheduled_task'
-          ? { _scheduledTaskOptimistic: true }
-          : {}),
-      }
-    : null;
+  const dispatchUserMessage = dispatchPayload?.optimisticUserMessage ?? null;
   const currentOptimisticBelongsToRun = startsNewRun
     && Boolean(event.idempotencyKey)
     && state.overlay.optimisticUserMessage?.id === event.idempotencyKey;
   const preserveExistingOptimistic = currentOptimisticBelongsToRun
-    || (event.runtimePolicy?.origin !== 'scheduled_task' && Boolean(state.overlay.optimisticUserMessage));
+    || Boolean(state.overlay.optimisticUserMessage);
   const isToolResult = Boolean(message && isToolResultRole(message.role));
   const toolUpdates = message
     ? collectToolUpdates(message, event.type === 'message.delta' ? 'delta' : 'final')
@@ -280,14 +281,18 @@ export function reduceSessionEvent(
           : toolUpdates.length > 0
             ? upsertToolStatuses(state.overlay.streamingTools, toolUpdates)
             : state.overlay.streamingTools,
-        awaitingTranscript: event.type === 'transcript.updated'
-          ? false
-          : preserveCompletedOverlay || (!terminal && awaitingTranscript),
+        // transcript.updated only announces that authoritative history changed.
+        // Keep the final overlay mounted until setTranscript verifies that the
+        // current user turn and assistant reply are both present; clearing here
+        // creates a blank frame while the async history refresh is still pending.
+        awaitingTranscript: preserveCompletedOverlay || (!terminal && awaitingTranscript),
       },
       error: startsNewRun
         ? null
         : errorMessage
-          ? new AppError('GATEWAY', errorMessage)
+          ? new AppError(errorCode ?? 'GATEWAY', errorMessage, undefined, {
+            reason: typeof payload?.reason === 'string' ? payload.reason : undefined,
+          })
           : terminal
             ? null
             : state.error,

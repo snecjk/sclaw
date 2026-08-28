@@ -53,9 +53,11 @@ import { handleWorkflowRoutes } from './routes/workflows';
 import { handleAiMemoryAgentV1Routes } from './routes/ai-memory-agent-v1';
 import { handleSclawBrowserRoutes } from './routes/sclaw-browser';
 import { handleBrowserBridgeRoutes } from './routes/browser-bridge';
+import { handleBrowserAutomationRoutes } from './routes/browser-automation';
 import { handleDataCenterRoutes } from './routes/data-center';
 import { handleArtifactSaveRecordRoutes } from './routes/artifact-save-records';
 import { handleLocalAuthorizedFileRoutes } from './routes/local-authorized-files';
+import { handleLearningCenterRoutes } from './routes/learning-center';
 
 import { sendJson } from './route-utils';
 
@@ -86,6 +88,7 @@ const routeHandlers: RouteHandler[] = [
   handleSkillRoutes,
   handleSkillPlazaRoutes,
   handleAppPlazaRoutes,
+  handleLearningCenterRoutes,
   handleConnectorRoutes,
   handleFileRoutes,
   handleSessionRoutes,
@@ -98,6 +101,7 @@ const routeHandlers: RouteHandler[] = [
   handleLocalAuthorizedFileRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
+  handleBrowserAutomationRoutes,
   handleScheduledTaskRoutes,
   handleDingTalkRoutes,
   handleMyTasksRoutes,

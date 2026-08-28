@@ -65,7 +65,7 @@ export function resolvePostAuthGatewayRefresh(params: {
   stoResult: StoSyncResult;
   bizResult: StoBizAgentSyncResult;
 }): PostAuthGatewayRefreshMode {
-  const { source, skipGatewayRefresh, needsGatewayRefresh, gatewayManager, stoResult, bizResult } =
+  const { source, skipGatewayRefresh, needsGatewayRefresh, stoResult, bizResult } =
     params;
 
   if (!needsGatewayRefresh || skipGatewayRefresh) {
@@ -73,23 +73,7 @@ export function resolvePostAuthGatewayRefresh(params: {
   }
 
   const forceRefresh = stoResult.needsForcedGatewayRefresh === true;
-  const status = gatewayManager.getStatus();
-  const connectedForMs = status.connectedAt
-    ? Date.now() - status.connectedAt
-    : Number.POSITIVE_INFINITY;
-
   if (source === 'login' || source === 'account-switch') {
-    if (
-      gatewayManager.isGatewayLifecycleSettling()
-      || status.state === 'starting'
-      || status.state === 'reconnecting'
-      || status.state === 'stopped'
-    ) {
-      return 'none';
-    }
-    if (!forceRefresh && status.state === 'running' && connectedForMs < MIN_CONNECTED_BEFORE_RESTART_MS) {
-      return 'none';
-    }
     const modelsChanged = stoSyncChangedConfig(stoResult);
     const bizCreated = bizResult.created.length > 0;
     if (!forceRefresh && !modelsChanged && !bizCreated) {
@@ -142,6 +126,7 @@ function schedulePostAuthGatewayRefresh(
   logPrefix: string,
   mode: PostAuthGatewayRefreshMode,
   options?: { forceRefresh?: boolean },
+  deadline = Date.now() + GATEWAY_SETTLE_TIMEOUT_MS,
 ): void {
   clearRefreshTimers();
 
@@ -151,6 +136,16 @@ function schedulePostAuthGatewayRefresh(
   }
 
   const forceRefresh = options?.forceRefresh === true;
+  const deferUntilReady = (reason: string, delayMs: number): void => {
+    if (Date.now() + delayMs >= deadline) {
+      logger.warn(`${logPrefix} Gateway did not become ready for ${mode} before timeout (${reason})`);
+      return;
+    }
+    logger.info(`${logPrefix} Delay Gateway ${mode} (${reason})`);
+    refreshDelayTimer = setTimeout(() => {
+      schedulePostAuthGatewayRefresh(gatewayManager, generation, logPrefix, mode, options, deadline);
+    }, delayMs);
+  };
 
   const fireRefresh = () => {
     if (generation !== setupGeneration) {
@@ -174,14 +169,13 @@ function schedulePostAuthGatewayRefresh(
     }
 
     if (gatewayManager.isGatewayLifecycleSettling()) {
-      gatewayManager.cancelPendingGatewayRefresh();
-      logger.info(`${logPrefix} Skip Gateway ${mode} (lifecycle still settling)`);
+      deferUntilReady('lifecycle still settling', 500);
       return;
     }
 
     const state = gatewayManager.getStatus();
     if (state.state === 'stopped') {
-      logger.info(`${logPrefix} Gateway stopped; skip ${mode} after batched setup`);
+      deferUntilReady('gateway stopped', 500);
       return;
     }
 
@@ -191,15 +185,29 @@ function schedulePostAuthGatewayRefresh(
 
     if (!forceRefresh && connectedForMs < MIN_CONNECTED_BEFORE_RESTART_MS) {
       const waitMs = MIN_CONNECTED_BEFORE_RESTART_MS - connectedForMs + 200;
-      logger.info(
-        `${logPrefix} Delay Gateway ${mode} ${waitMs}ms (connected ${Math.round(connectedForMs)}ms ago)`,
-      );
-      refreshDelayTimer = setTimeout(fireRefresh, waitMs);
+      deferUntilReady(`connected ${Math.round(connectedForMs)}ms ago`, waitMs);
       return;
     }
 
     fireRefresh();
   }, REFRESH_BATCH_DELAY_MS);
+}
+
+async function waitForGatewayRefreshWindow(gatewayManager: GatewayManager): Promise<boolean> {
+  const deadline = Date.now() + GATEWAY_SETTLE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const status = gatewayManager.getStatus();
+    const connectedForMs = status.connectedAt ? Date.now() - status.connectedAt : 0;
+    if (
+      status.state === 'running'
+      && !gatewayManager.isGatewayLifecycleSettling()
+      && connectedForMs >= MIN_CONNECTED_BEFORE_RESTART_MS
+    ) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
 }
 
 async function waitForGatewaySettled(gatewayManager: GatewayManager): Promise<boolean> {
@@ -237,6 +245,10 @@ async function runPostAuthGatewayRefreshInline(
   const startedAt = Date.now();
   logger.info(`${logPrefix} Running Gateway ${mode} inline (login waits for settle)`);
   try {
+    if (!await waitForGatewayRefreshWindow(gatewayManager)) {
+      logger.warn(`${logPrefix} Gateway did not become ready for inline ${mode}; refresh remains deferred`);
+      return;
+    }
     if (mode === 'reload') {
       await gatewayManager.reload({ force: options?.forceRefresh === true });
     } else {

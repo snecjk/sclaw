@@ -27,6 +27,8 @@ import { Sprite } from './pages/Sprite';
 import { FloatIcon } from './pages/FloatIcon';
 import { WorkflowTestPage } from './pages/Workflow';
 import { DataCenter } from './pages/DataCenter';
+import { TutorialDetailPage } from './pages/LearningCenter/TutorialDetailPage';
+import { LearningCenterPage } from './pages/LearningCenter/LearningCenterPage';
 import { useSettingsStore } from './stores/settings';
 import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
@@ -34,9 +36,9 @@ import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
-import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
+import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -337,6 +339,8 @@ function App() {
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/my-tasks" element={<MyTask />} />
               <Route path="/data-center" element={<DataCenter />} />
+              <Route path="/learning-center" element={<LearningCenterPage />} />
+              <Route path="/learning-center/tutorial/:tutorialId" element={<TutorialDetailPage />} />
               <Route path="/workflow/*" element={<WorkflowTestPage />} />
               <Route path="/settings/*" element={<Settings />} />
             </Route>
@@ -344,11 +348,9 @@ function App() {
 
           {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
           {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
+          <JsBridgeHostPortal />
           {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-            <>
-              <UserWatermark />
-              <AccountSwitchFab />
-            </>
+            <UserWatermark />
           ) : null}
         </AppShellLayoutProvider>
       </TooltipProvider>
@@ -375,6 +377,10 @@ function AppShellToaster() {
         right: 'auto',
         transform: 'translateX(-50%)',
         zIndex: 99999,
+        // Radix modal drawers disable pointer events on `body`. The global
+        // toaster sits outside their dismissable layer, so it must opt back
+        // in or the first click only dismisses the drawer beneath it.
+        pointerEvents: 'auto',
       }}
     />
   );

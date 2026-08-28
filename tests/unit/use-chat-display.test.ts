@@ -20,12 +20,13 @@ describe('useChatDisplay', () => {
       messages: assistantTurnMessages,
       sending: true,
       pendingFinal: true,
+      transcriptPending: true,
       showThinking: true,
       lastChatEventAt: Date.now(),
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-2', name: 'search', status: 'running' }],
-      lastUserMessageAt: 900,
+      turnAnchorAt: 900,
     }));
 
     expect(result.current.staticItems.length).toBe(1);
@@ -41,12 +42,13 @@ describe('useChatDisplay', () => {
       ],
       sending: true,
       pendingFinal: true,
+      transcriptPending: true,
       showThinking: true,
       lastChatEventAt: Date.now(),
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-2', name: 'search', status: 'running' }],
-      lastUserMessageAt: null,
+      turnAnchorAt: null,
     }));
 
     expect(result.current.staticItems.some(
@@ -68,12 +70,13 @@ describe('useChatDisplay', () => {
       messages: [...assistantTurnMessages, followUp],
       sending: true,
       pendingFinal: false,
+      transcriptPending: false,
       showThinking: true,
       lastChatEventAt: Date.now(),
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-follow-up', name: 'search', status: 'running' }],
-      lastUserMessageAt: 4_000,
+      turnAnchorAt: 4_000,
     }));
 
     expect(result.current.activeTurn?.turnStableKey).toBe('turn-user-u2');
@@ -91,14 +94,43 @@ describe('useChatDisplay', () => {
       messages: assistantTurnMessages,
       sending: true,
       pendingFinal: true,
+      transcriptPending: true,
       showThinking: true,
       lastChatEventAt: Date.now(),
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-1', name: 'exec', status: 'completed' }],
-      lastUserMessageAt: 900,
+      turnAnchorAt: 900,
     }));
 
     expect(result.current.activeTurn?.activeStream.isProcessing).toBe(true);
+  });
+
+  it('keeps a completed final overlay visible until transcript takeover', () => {
+    const userMessage: RawMessage = {
+      id: 'u-final', role: 'user', content: 'who are you', timestamp: 1_000,
+    };
+    const { result } = renderHook(() => useChatDisplay({
+      messages: [userMessage],
+      sending: false,
+      pendingFinal: false,
+      transcriptPending: true,
+      showThinking: true,
+      lastChatEventAt: Date.now(),
+      streamMsg: {
+        id: 'a-final', role: 'assistant', content: 'final answer', timestamp: 2_000,
+      },
+      streamText: 'final answer',
+      streamingMessages: [],
+      streamingToolResults: [],
+      streamingTools: [],
+      turnAnchorAt: 1_000,
+    }));
+
+    expect(result.current.shouldRenderStreaming).toBe(true);
+    expect(result.current.activeTurn?.turnStableKey).toBe('turn-user-u-final');
+    expect(result.current.activeTurn?.precedingUserMessage).toBe(userMessage);
+    expect(result.current.activeTurn?.activeStream.streamText).toBe('final answer');
+    expect(result.current.activeTurn?.activeStream.isRunActive).toBe(false);
   });
 });

@@ -2,7 +2,8 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'node:events';
 import { logger } from '../utils/logger';
 import { resolveSclawHubWsUrl } from './hub-config';
-import { touchDingTalkOnline } from './binding-service';
+import { touchSharedHubOnline } from './binding-service';
+import type { StreamContentKind } from './stream-content-kind';
 
 /** Hub → Desktop 多模态分片（url 可直接下载） */
 export interface SclawInboundMediaPart {
@@ -32,6 +33,10 @@ export interface SclawInboundEnvelope {
     msgtype?: string;
     /** 多模态 parts；优先于仅 text */
     parts?: SclawInboundMediaPart[];
+    /** dingtalk | mobile；缺省按 dingtalk 兼容 */
+    channelType?: 'dingtalk' | 'mobile' | string;
+    /** App 续聊；空则新建 */
+    sessionKey?: string | null;
   };
 }
 
@@ -50,6 +55,8 @@ export class SclawHubClient extends EventEmitter {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempt = 0;
   private manualClose = false;
+  private connectPromise: Promise<void> | null = null;
+  private connectingToken: string | null = null;
 
   getStatus(): { state: HubClientState; connected: boolean } {
     return {
@@ -60,20 +67,41 @@ export class SclawHubClient extends EventEmitter {
 
   async connect(refreshToken: string): Promise<void> {
     this.manualClose = false;
+    if (this.refreshToken === refreshToken
+      && this.ws?.readyState === WebSocket.OPEN
+      && this.state === 'connected') {
+      return;
+    }
+    if (this.connectPromise && this.connectingToken === refreshToken) {
+      await this.connectPromise;
+      return;
+    }
     this.refreshToken = refreshToken;
-    await this.openSocket();
+    const attempt = this.openSocket();
+    this.connectPromise = attempt;
+    this.connectingToken = refreshToken;
+    try {
+      await attempt;
+    } finally {
+      if (this.connectPromise === attempt) {
+        this.connectPromise = null;
+        this.connectingToken = null;
+      }
+    }
   }
 
   disconnect(): void {
     this.manualClose = true;
     this.clearTimers();
     if (this.ws) {
+      const current = this.ws;
+      this.ws = null;
       try {
-        this.ws.close();
+        // 保留 error/close 监听器：CONNECTING 阶段 close 会异步发出 error。
+        current.close();
       } catch {
         // ignore
       }
-      this.ws = null;
     }
     this.state = 'closed';
   }
@@ -92,12 +120,23 @@ export class SclawHubClient extends EventEmitter {
     return true;
   }
 
-  sendDelta(chatUid: string, content: string, finalize = false): boolean {
+  sendDelta(
+    chatUid: string,
+    content: string,
+    finalize = false,
+    extras?: {
+      sessionKey?: string;
+      /** App 区分过程态 vs 正文；缺省由接收方当 answer */
+      contentKind?: StreamContentKind;
+    },
+  ): boolean {
     return this.send({
       type: finalize ? 'done' : 'delta',
       chatUid,
       content,
       finalize,
+      ...(extras?.sessionKey ? { sessionKey: extras.sessionKey } : {}),
+      ...(extras?.contentKind ? { contentKind: extras.contentKind } : {}),
     });
   }
 
@@ -110,8 +149,8 @@ export class SclawHubClient extends EventEmitter {
     if (this.ws) {
       const prev = this.ws;
       this.ws = null;
-      prev.removeAllListeners();
       try {
+        // 不移除监听器；ws 在 CONNECTING 阶段关闭时会异步 emit('error')。
         prev.close();
       } catch {
         // ignore
@@ -138,31 +177,46 @@ export class SclawHubClient extends EventEmitter {
       };
 
       ws.on('open', () => {
+        if (this.ws !== ws) {
+          try {
+            ws.close();
+          } catch {
+            // ignore stale socket close errors
+          }
+          settleErr(new Error('SclawHub connection superseded'));
+          return;
+        }
         this.state = 'connected';
         this.reconnectAttempt = 0;
         this.startPing();
-        void touchDingTalkOnline();
+        void touchSharedHubOnline();
         logger.info('[SclawHub] connected');
         this.emit('connected');
         settleOk();
       });
 
       ws.on('message', (data) => {
+        if (this.ws !== ws) return;
         this.handleMessage(data.toString());
       });
 
       ws.on('close', () => {
-        this.state = 'closed';
-        this.clearPing();
-        this.ws = null;
-        this.emit('disconnected');
-        if (!this.manualClose) {
-          this.scheduleReconnect();
+        if (this.ws === ws) {
+          this.state = 'closed';
+          this.clearPing();
+          this.ws = null;
+          this.emit('disconnected');
+          if (!this.manualClose) {
+            this.scheduleReconnect();
+          }
         }
+        settleErr(new Error('SclawHub connection closed before established'));
       });
 
       ws.on('error', (err) => {
-        logger.warn('[SclawHub] socket error', err);
+        if (this.ws === ws) {
+          logger.warn('[SclawHub] socket error', err);
+        }
         settleErr(err instanceof Error ? err : new Error(String(err)));
       });
     });
@@ -182,6 +236,10 @@ export class SclawHubClient extends EventEmitter {
         this.emit('inbound', msg);
         return;
       }
+      if (msg.type === 'history.list' || msg.type === 'history.get') {
+        this.emit('historyRpc', msg);
+        return;
+      }
       if (msg.type === 'bind.replaced') {
         const reason = (msg.reason || 'bound_on_another_device') as SclawBindReplacedReason;
         logger.info(`[SclawHub] bind.replaced reason=${reason}`);
@@ -199,6 +257,8 @@ export class SclawHubClient extends EventEmitter {
     this.clearPing();
     this.pingTimer = setInterval(() => {
       this.send({ type: 'ping' });
+      // 与钉钉/App 共用一条心跳：续期本地 last_online
+      void touchSharedHubOnline();
     }, 30_000);
   }
 
@@ -228,7 +288,9 @@ export class SclawHubClient extends EventEmitter {
     this.reconnectAttempt += 1;
     logger.info(`[SclawHub] reconnect in ${delay}ms (attempt ${this.reconnectAttempt})`);
     this.reconnectTimer = setTimeout(() => {
-      void this.openSocket().catch((err) => {
+      const token = this.refreshToken;
+      if (!token) return;
+      void this.connect(token).catch((err) => {
         logger.warn('[SclawHub] reconnect failed', err);
         this.scheduleReconnect();
       });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isSclawEmbedHttpUrl,
   isSclawEmbedLikelyDownloadUrl,
+  isSclawEmbedSameFrameWindowOpen,
   resolveSclawEmbedWindowOpenAction,
 } from '../../shared/sclaw-embed-browser-window-open';
 
@@ -42,5 +43,14 @@ describe('sclaw-embed-browser-window-open', () => {
     expect(isSclawEmbedHttpUrl('about:blank')).toBe(false);
     expect(isSclawEmbedLikelyDownloadUrl('https://a.com/report.xlsx')).toBe(true);
     expect(isSclawEmbedLikelyDownloadUrl('https://a.com/page')).toBe(false);
+  });
+
+  it('detects same-frame window.open targets', () => {
+    expect(isSclawEmbedSameFrameWindowOpen('_self')).toBe(true);
+    expect(isSclawEmbedSameFrameWindowOpen('_TOP')).toBe(true);
+    expect(isSclawEmbedSameFrameWindowOpen('_parent')).toBe(true);
+    expect(isSclawEmbedSameFrameWindowOpen('_blank')).toBe(false);
+    expect(isSclawEmbedSameFrameWindowOpen('')).toBe(false);
+    expect(isSclawEmbedSameFrameWindowOpen(undefined)).toBe(false);
   });
 });

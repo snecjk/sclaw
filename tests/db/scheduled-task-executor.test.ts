@@ -66,10 +66,17 @@ describe('EngineScheduledTaskDispatcher', () => {
 
   /** 造任务 + 占位 run（queued，无 sessionKey），返回 { task, run }。 */
   async function seedRun(
-    overrides: Partial<ScheduleTask> & { attemptIdem?: string } = {},
+    overrides: Partial<ScheduleTask> & { attemptIdem?: string; actor?: string | null } = {},
   ): Promise<{ task: ScheduleTask; run: ScheduleTaskRun }> {
-    const { attemptIdem, ...taskOverrides } = overrides;
-    const task = await taskRepo.create({ id: 't1', name: 'T1', enabled: true, ...baseTaskInput, ...taskOverrides });
+    const { attemptIdem, actor, ...taskOverrides } = overrides;
+    const task = await taskRepo.create({
+      id: 't1',
+      name: 'T1',
+      enabled: true,
+      ...baseTaskInput,
+      ...taskOverrides,
+      actor,
+    });
     const run = await runRepo.createRun({
       taskId: task.id,
       triggerSource: 'schedule',
@@ -155,6 +162,65 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(after?.runtimeResult).toBeNull();
   });
 
+  it('cancels dispatch without send when the task was disabled after claim', async () => {
+    const { task, run } = await seedRun();
+    await taskRepo.setEnabled(task.id, false);
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).not.toHaveBeenCalled();
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.error).toMatch(/disabled/);
+  });
+
+  it('cancels dispatch without send when the task was deleted after claim', async () => {
+    const { task, run } = await seedRun();
+    await taskRepo.softDelete(task.id);
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).not.toHaveBeenCalled();
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.error).toMatch(/deleted/);
+  });
+
+  it('still dispatches a manual trigger even if the task is disabled', async () => {
+    const task = await taskRepo.create({ id: 't1', name: 'T1', enabled: false, ...baseTaskInput });
+    const run = await runRepo.createRun({
+      taskId: task.id,
+      triggerSource: 'manual',
+      idempotencyKey: 'manual-1',
+      scheduledFor: '2024-01-01T09:00:00.000Z',
+    });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
+    expect((await runRepo.getRun(run.runId))?.status).toBe('running');
+  });
+
+  it('does not retry after the task is disabled during send', async () => {
+    const { task, run } = await seedRun({ retryPolicy: { maxAttempts: 2, backoffSec: 0 } });
+    runMainChatSendMock.mockImplementation(async () => {
+      await taskRepo.setEnabled(task.id, false);
+      return { success: false, error: 'fail' };
+    });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+    await nextTick();
+    await nextTick();
+
+    expect((await runRepo.getRun(run.runId))?.status).toBe('failed');
+    expect((await runRepo.listRuns(task.id)).filter((item) => item.triggerSource === 'recovery')).toHaveLength(0);
+  });
+
   it('send success leaves run running; canonical terminal → succeeded + runtimeResult', async () => {
     const { task, run } = await seedRun();
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
@@ -172,7 +238,6 @@ describe('EngineScheduledTaskDispatcher', () => {
       permissionProfile: 'workspace-write',
       systemPromptAppend: '[dingtalk recipients]',
       sourceText: 'run report',
-      displayText: 'run report',
     });
     expect(passedInput.message).toBe('run report');
 
@@ -290,7 +355,10 @@ describe('EngineScheduledTaskDispatcher', () => {
     // retryPolicy {maxAttempts:2, backoffSec:0}：run1 send 失败 → attempt1<2 → scheduleRetry
     // 建 recovery/attempt2/queued run + 发 retrying 事件；setTimeout(0) 后重试 dispatch。
     // run2 send 成功 → run running → watcher 终态闭环 succeeded。
-    const { task, run } = await seedRun({ retryPolicy: { maxAttempts: 2, backoffSec: 0 } });
+    const { task, run } = await seedRun({
+      retryPolicy: { maxAttempts: 2, backoffSec: 0 },
+      actor: '2155991233',
+    });
     runMainChatSendMock.mockResolvedValueOnce({ success: false, error: 'transient' });
     runMainChatSendMock.mockResolvedValueOnce({ success: true, result: { runId: 'engine-retry' } });
     const { dispatcher } = makeDispatcher();
@@ -311,6 +379,8 @@ describe('EngineScheduledTaskDispatcher', () => {
     const retryRun = (await runRepo.listRuns(task.id)).find((r) => r.triggerSource === 'recovery');
     expect(retryRun?.attempt).toBe(2);
     expect(retryRun?.status).toBe('running');
+    expect(retryRun?.createdBy).toBe('2155991233');
+    expect(retryRun?.updatedBy).toBe('2155991233');
 
     await dispatcher.handleCanonicalEvent(canonicalTerminal(task, retryRun!, 'run.completed'));
     expect((await runRepo.getRun(retryRun!.runId))?.status).toBe('succeeded');

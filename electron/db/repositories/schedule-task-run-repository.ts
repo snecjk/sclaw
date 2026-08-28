@@ -33,6 +33,13 @@ function stringifyJson(value: unknown): string | null {
   }
 }
 
+/** actor 省略或空：保留原 updated_by，空则回落 created_by。不要写成 null。 */
+function runUpdatedByExpr(actor?: string | null) {
+  const code = typeof actor === 'string' ? actor.trim() : '';
+  if (code) return code;
+  return sql<string | null>`coalesce(updated_by, created_by)`;
+}
+
 function mapRow(row: Record<string, unknown>): ScheduleTaskRun {
   return {
     runId: String(row.run_id),
@@ -238,7 +245,7 @@ export class ScheduleTaskRunRepository {
         status: 'cancelled',
         completed_at: timestamp,
         updated_at: timestamp,
-        updated_by: actor ?? null,
+        updated_by: runUpdatedByExpr(actor),
         version: sql<number>`version + 1`,
       })
       .where('status', 'in', ['queued', 'running'])
@@ -248,6 +255,48 @@ export class ScheduleTaskRunRepository {
   }
 
   async cancelAllQueuedRuns(actor?: string | null): Promise<number> {
+    return this.cancelQueuedRunsForTaskIds(null, actor);
+  }
+
+  /**
+   * 取消 queued run。
+   * - `taskIds === null`：全局（迁移/无 owner 启动清扫）
+   * - `taskIds` 为空数组：不取消（切号后避免误伤他人）
+   * - 非空：只清这些 task 的 queued
+   */
+  async cancelQueuedRunsForTaskIds(
+    taskIds: string[] | null,
+    actor?: string | null,
+  ): Promise<number> {
+    if (Array.isArray(taskIds) && taskIds.length === 0) return 0;
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    let query = db
+      .updateTable('schedule_task_runs')
+      .set({
+        status: 'cancelled',
+        completed_at: timestamp,
+        updated_at: timestamp,
+        updated_by: runUpdatedByExpr(actor),
+        version: sql<number>`version + 1`,
+      })
+      .where('status', '=', 'queued')
+      .where('deleted_at', 'is', null);
+    if (taskIds != null) {
+      query = query.where('task_id', 'in', taskIds);
+    }
+    const result = await query.executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0n);
+  }
+
+  /**
+   * 关闭 / 删除任务时释放该任务的单飞租约：把仍为 queued/running 的 run 标 cancelled。
+   * running 的引擎中断由 service 尽力 abort；这里保证下一拍 tick 不再被旧 lease 挡住。
+   */
+  async cancelActiveRunsForTask(
+    taskId: string,
+    input: { error?: string; actor?: string | null } = {},
+  ): Promise<number> {
     const db = getKyselyDatabase();
     const timestamp = nowIso();
     const result = await db
@@ -255,14 +304,83 @@ export class ScheduleTaskRunRepository {
       .set({
         status: 'cancelled',
         completed_at: timestamp,
+        error: input.error ?? null,
         updated_at: timestamp,
-        updated_by: actor ?? null,
+        updated_by: runUpdatedByExpr(input.actor),
         version: sql<number>`version + 1`,
       })
-      .where('status', '=', 'queued')
+      .where('task_id', '=', taskId)
+      .where('status', 'in', ['queued', 'running'])
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
     return Number(result.numUpdatedRows ?? 0n);
+  }
+
+  /**
+   * 条件取消：仅当 run 仍为 queued/running 时落 cancelled。
+   * dispatch 重读库发现任务已关/已删时走这条，避免把已终态 run 覆盖掉。
+   */
+  async cancelIfActive(
+    runId: string,
+    input: UpdateScheduleTaskRunInput,
+  ): Promise<ScheduleTaskRun | null> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const set: Record<string, unknown> = {
+      status: 'cancelled',
+      completed_at: input.completedAt ?? timestamp,
+      updated_at: timestamp,
+      updated_by: runUpdatedByExpr(input.actor),
+      version: sql<number>`version + 1`,
+    };
+    if (input.error !== undefined) set.error = input.error;
+    if (input.sessionKey !== undefined) {
+      set.session_key = input.sessionKey == null ? null : String(input.sessionKey);
+    }
+    if (input.runtimeResult !== undefined) {
+      set.runtime_result_json = stringifyJson(input.runtimeResult);
+    }
+
+    const result = await db
+      .updateTable('schedule_task_runs')
+      .set(set)
+      .where('run_id', '=', runId)
+      .where('status', 'in', ['queued', 'running'])
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (Number(result.numUpdatedRows ?? 0n) === 0) return null;
+    return this.getRun(runId, { includeDeleted: true });
+  }
+
+  /**
+   * queued → running 的条件更新。关闭/删除若已把 run 标 cancelled，这里返回 null，
+   * dispatch 不得再 send。
+   */
+  async markRunningIfQueued(
+    runId: string,
+    input: { startedAt: string; sessionKey?: string | null; actor?: string | null },
+  ): Promise<ScheduleTaskRun | null> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const set: Record<string, unknown> = {
+      status: 'running',
+      started_at: input.startedAt,
+      updated_at: timestamp,
+      updated_by: runUpdatedByExpr(input.actor),
+      version: sql<number>`version + 1`,
+    };
+    if (input.sessionKey !== undefined) {
+      set.session_key = input.sessionKey == null ? null : String(input.sessionKey);
+    }
+    const result = await db
+      .updateTable('schedule_task_runs')
+      .set(set)
+      .where('run_id', '=', runId)
+      .where('status', '=', 'queued')
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (Number(result.numUpdatedRows ?? 0n) === 0) return null;
+    return this.getRun(runId, { includeDeleted: true });
   }
 
   async createRun(input: CreateScheduleTaskRunInput): Promise<ScheduleTaskRun> {
@@ -329,7 +447,7 @@ export class ScheduleTaskRunRepository {
             ? stringifyJson(input.runtimeResult)
             : stringifyJson(existing.runtimeResult),
         updated_at: timestamp,
-        updated_by: input.actor ?? existing.createdBy,
+        updated_by: runUpdatedByExpr(input.actor),
         version: sql<number>`version + 1`,
       })
       .where('run_id', '=', runId)
@@ -356,7 +474,7 @@ export class ScheduleTaskRunRepository {
     const timestamp = nowIso();
     const set: Record<string, unknown> = {
       updated_at: timestamp,
-      updated_by: input.actor ?? null,
+      updated_by: runUpdatedByExpr(input.actor),
       version: sql<number>`version + 1`,
     };
     if (input.status !== undefined) set.status = input.status;

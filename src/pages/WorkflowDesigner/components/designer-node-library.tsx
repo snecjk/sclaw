@@ -1,11 +1,13 @@
-import { NODE_TEMPLATES } from '@/pages/WorkflowDesigner/constants';
+import { BROWSER_NODE_TEMPLATES, NODE_TEMPLATES } from '@/pages/WorkflowDesigner/constants';
 import { cn } from '@/lib/utils';
+import { isBrowserAutomationEnabled } from '../../../../shared/browser-automation/feature-flag';
 
 const WEB_CANVAS_LIBRARY_TYPES = [
   'agent_data_fetch',
   'agent_task',
   'agent_condition',
   'agent_output',
+  ...(isBrowserAutomationEnabled() ? BROWSER_NODE_TEMPLATES.map((template) => template.type) : []),
   'output',
 ];
 

@@ -99,6 +99,46 @@ function hasLivePendingWorkflowForTemplate(
   );
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Learning-center / homepage template chip turns: displayText is often only the
+ * suffix (chip name lives in `_composerSegments`), so isWorkflowFormUserTurn fails.
+ * Also recognize unified workflow exec bake on the user turn.
+ */
+export function lastUserTurnHasTemplateWorkflowEvidence(
+  templateId: string,
+  uiMessages: RawMessage[],
+  rawMessages: RawMessage[],
+  getMessageText: (content: unknown) => string,
+): boolean {
+  const lastUserIdx = findLastUserMessageIndex(uiMessages);
+  if (lastUserIdx < 0) return false;
+  const lastUser = uiMessages[lastUserIdx];
+  if (
+    lastUser._composerSegments?.some((seg) => (
+      seg.type === 'workflow'
+      && seg.id === templateId
+      && seg.source !== 'mine'
+    ))
+  ) {
+    return true;
+  }
+
+  const bakeRe = new RegExp(
+    `帮我执行\\s*id\\s*为：\\s*${escapeRegExp(templateId)}\\s*的工作流`,
+  );
+  if (bakeRe.test(rawMessageText(lastUser, getMessageText))) return true;
+
+  const lastRawUser = findLastRawUserMessage(rawMessages);
+  if (lastRawUser && bakeRe.test(rawMessageText(lastRawUser, getMessageText))) {
+    return true;
+  }
+  return false;
+}
+
 /** `/` picker or sendWithWorkflow hidden workflow_context on the latest user turn. */
 export function lastUserTurnIsWorkflowPicker(
   templateId: string,
@@ -113,6 +153,15 @@ export function lastUserTurnIsWorkflowPicker(
     rawMessageText(uiMessages[lastUserIdx], getMessageText),
   );
   if (visible.startsWith('/') && visible.length > 1) return true;
+
+  if (lastUserTurnHasTemplateWorkflowEvidence(
+    templateId,
+    uiMessages,
+    rawMessages,
+    getMessageText,
+  )) {
+    return true;
+  }
 
   const lastRawUser = findLastRawUserMessage(rawMessages);
   if (lastRawUser) {
@@ -203,6 +252,19 @@ export function isWorkflowFormInjectionAllowed(
     ) {
       return true;
     }
+    // Chip / bake 轮次：无 hidden context 时仍可用 schema_ready 工具回包挂表单。
+    if (
+      lastUserTurnHasTemplateWorkflowEvidence(
+        templateId,
+        uiMessages,
+        rawMessages,
+        getMessageText,
+      )
+      && rawMessages.length > 0
+      && sessionHistoryHasSchemaReady(rawMessages, templateId)
+    ) {
+      return true;
+    }
     return false;
   }
 
@@ -216,7 +278,15 @@ export function isWorkflowFormInjectionAllowed(
       pending?.templateId === templateId
       && pending.schema
       && isCurrentSessionSending()
-      && isWorkflowFormUserTurn(userVisible, pending.templateName)
+      && (
+        isWorkflowFormUserTurn(userVisible, pending.templateName)
+        || lastUserTurnHasTemplateWorkflowEvidence(
+          templateId,
+          uiMessages,
+          rawMessages,
+          getMessageText,
+        )
+      )
     ) {
       return true;
     }
@@ -350,6 +420,8 @@ function registerWorkflowSubmitHandler(
         collectedInputs: values,
       });
       chatState.clearPendingWorkflow(chatState.currentSessionKey);
+      const { refreshStartedWorkflowChatCards } = await import('@/lib/workflow-run-started');
+      await refreshStartedWorkflowChatCards(chatState.currentSessionKey, run.runId);
     } catch (err) {
       const messageErr = err instanceof Error ? err.message : String(err);
       console.error('[parameter-form-recovery] handler error', err);
@@ -708,6 +780,18 @@ export function ensureWorkflowParameterFormHandler(
   get: ChatGet,
 ): void {
   if (hasParameterFormHandler(formId)) return;
+  const state = get();
+  const pending = state.workflowChatUiBySessionKey[state.currentSessionKey]?.pendingWorkflow ?? null;
+  if (pending?.templateId === templateId && pending.schema) {
+    registerWorkflowSubmitHandler(formId, {
+      templateId,
+      templateName: pending.templateName,
+      schemaHash: pending.schemaHash || schemaHash,
+      schema: pending.schema,
+      get,
+    });
+    return;
+  }
   void (async () => {
     try {
       const { getStartupSchema } = await import('@/lib/workflow-api');

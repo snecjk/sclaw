@@ -11,7 +11,9 @@ import {
   useContext,
   useEffect,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
@@ -34,6 +36,8 @@ export interface AppShellLayoutContextValue {
   setUserCollapsed: (collapsed: boolean) => void;
   /** Writes preferred width only (persisted sidebarPreferredWidth) */
   setPreferredWidth: (width: number) => void;
+  /** Writes preview context reason only (ephemeral, never persisted) */
+  setPreviewContextCollapsed: Dispatch<SetStateAction<boolean>>;
 }
 
 const AppShellLayoutContext = createContext<AppShellLayoutContextValue | null>(null);
@@ -49,10 +53,12 @@ export function AppShellLayoutProvider({ children }: { children: ReactNode }) {
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const preferredWidth = useSettingsStore((s) => s.sidebarPreferredWidth);
   const setSidebarPreferredWidth = useSettingsStore((s) => s.setSidebarPreferredWidth);
-  const contextCollapsed = useWorkflowUiStore((s) => s.editorActive);
+  const workflowEditorCollapsed = useWorkflowUiStore((s) => s.editorActive);
   const layoutVariant = getSidebarLayoutVariant();
 
   const [viewportWidth, setViewportWidth] = useState(readViewportWidth);
+  const [previewContextCollapsed, setPreviewContextCollapsed] = useState(false);
+  const contextCollapsed = workflowEditorCollapsed || previewContextCollapsed;
 
   useEffect(() => {
     const onResize = () => {
@@ -87,6 +93,7 @@ export function AppShellLayoutProvider({ children }: { children: ReactNode }) {
     setPreferredWidth: (width: number) => {
       setSidebarPreferredWidth(clampSidebarPreferredWidth(width));
     },
+    setPreviewContextCollapsed,
   };
 
   return (

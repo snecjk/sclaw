@@ -115,6 +115,7 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-connectors-bash-gate', pluginId: 'sto-connectors-bash-gate' },
   { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
   { type: 'local', localDir: 'sto-browser-bridge', pluginId: 'sto-browser-bridge' },
+  { type: 'local', localDir: 'sto-browser-automation', pluginId: 'sto-browser-automation' },
 ];
 
 // Filter for excluding test files and unnecessary dirs when copying local plugins.

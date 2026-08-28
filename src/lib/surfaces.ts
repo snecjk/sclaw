@@ -41,9 +41,12 @@ export const stoSettingsContentPanelBodyClass = cn(
   'min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
 );
 
-/** 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px） */
+/**
+ * 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px）
+ * SettingsShell 已占用顶部 `--sto-chrome-h` 作为 drag-region，此处扣减以保持标题距卡片顶仍约 72px。
+ */
 export const stoSettingsContentInnerClass = cn(
-  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[72px] pb-10',
+  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[calc(72px-var(--sto-chrome-h))] pb-10',
   'px-6 min-[974px]:px-0',
 );
 
@@ -246,9 +249,9 @@ export const myTaskCardRunButtonClass = cn(
 /** 我的任务卡片下次执行文案（保留 token，当前图示底栏不再展示） */
 export const myTaskCardNextRunClass = 'shrink-0 text-xs leading-[14px] text-muted-foreground';
 
-/** 我的任务卡片更多菜单（图2） */
+/** 我的任务卡片更多菜单 — Radix portal，避免被列表 overflow 裁切 */
 export const myTaskCardMenuClass = cn(
-  'absolute right-0 top-full z-10 mt-1.5 min-w-[120px] rounded-[18px] border border-border bg-card p-1.5',
+  'z-[10041] min-w-[120px] rounded-[18px] border border-border bg-card p-1.5',
   'shadow-modal',
 );
 
@@ -256,7 +259,9 @@ export const myTaskCardMenuClass = cn(
 export function myTaskCardMenuItemClass(isDestructive = false): string {
   return cn(
     'flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm transition-colors duration-fast',
-    isDestructive ? 'text-destructive hover:bg-muted' : 'text-foreground hover:bg-muted',
+    isDestructive
+      ? 'text-destructive hover:bg-muted focus:bg-muted focus:text-destructive data-[highlighted]:bg-muted data-[highlighted]:text-destructive'
+      : 'text-foreground hover:bg-muted',
   );
 }
 
@@ -265,6 +270,13 @@ export const formFieldFocusClass = cn(
   'focus:outline-none focus:ring-0',
   'focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
   'dark:focus:border-primary/50 dark:focus:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+);
+
+/** 表单字段 focus-within（焦点在内部编辑器时画在外壳上） */
+export const formFieldFocusWithinClass = cn(
+  'focus-within:outline-none focus-within:ring-0',
+  'focus-within:border-[#c5cad3] focus-within:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
+  'dark:focus-within:border-primary/50 dark:focus-within:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
 );
 
 /** 表单触发器 focus-visible（button 类下拉） */
@@ -283,6 +295,18 @@ export const formFieldOpenClass = cn(
   'dark:border-primary/50 dark:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
 );
 
+/** 定时任务弹窗：表单 label */
+export const taskCreateFormLabelClass = cn(
+  'block text-[12px] font-medium leading-[18px] tracking-normal text-[#1D2129]',
+);
+
+/** 定时任务弹窗：单行输入框 / 选择框 */
+export const taskCreateFormControlClass = cn(
+  'box-border flex h-[42px] w-full items-center',
+  'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] px-3 py-2',
+  'text-[12px] text-foreground',
+);
+
 /** 反色主钮底色/字色：亮色深底白字；暗色浅底深字（背景 80% 不透明，避免暗色下过亮） */
 export const invertedPrimarySurfaceClass = cn(
   'bg-foreground text-primary-foreground hover:bg-foreground/90',
@@ -297,8 +321,9 @@ export const modalPrimarySubmitButtonClass = cn(
 
 /** SchedulePicker 触发器（与 formField 系列一致） */
 export const schedulePickerTriggerClass = cn(
-  'flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5',
-  'rounded-[10px] border bg-background px-3.5 pr-2.5 text-sm font-medium text-foreground',
+  'box-border flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5',
+  'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] px-3 py-2',
+  'text-[12px] font-medium text-foreground',
   'outline-none transition-colors',
   formFieldHoverBorderClass,
 );
@@ -818,6 +843,7 @@ export const stoMainCardShellClass = cn(
 export const stoMainCardBodyClass = cn(
   'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
   'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+  'has-[.sto-workflow-mc-editor]:pb-0',
 );
 
 /**
@@ -1282,7 +1308,8 @@ export const workflowDetailModalSkillTagClass = cn(
 /** 技能广场「使用」：输入框 token / 用户气泡标签（Brand-1 + Brand-6） */
 export const skillComposerTagClass = cn(
   'skill-token',
-  'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium align-middle',
+  'inline-flex box-border h-6 max-w-[280px] ml-1 mt-1 items-center gap-0.5 overflow-hidden rounded-md px-1',
+  'text-xs font-medium leading-none align-top',
   'bg-[rgba(249,115,22,0.12)] text-[#ff6700]',
 );
 
@@ -1290,7 +1317,7 @@ export const skillMessageTagClass = skillComposerTagClass;
 
 /** Composer 技能 Picker 浮层容器 */
 export const skillPickerShellClass = cn(
-  'absolute left-0 bottom-full z-50 mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2',
+  'absolute left-0 bottom-full z-[100001] mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2',
   'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
 );
 
@@ -1500,10 +1527,11 @@ export const workflowBuilderShell = cn(
 
 /**
  * MC iframe 工作流编辑：顶栏由 useWorkflowEditorContentHeader 注入 ContentHeader；
- * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度。
+ * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度；
+ * marker 仅取消该页面继承的主内容区 20px 底部 padding，保留 AppShell 的 8px Frame。
  */
 export const workflowMcEditorShell = cn(
-  '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
+  'sto-workflow-mc-editor -mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
 );
 
 /**
@@ -1633,11 +1661,10 @@ export const sidebarMetaLinkClass = cn(
 
 /** 侧栏底部账号名 — MCP 8:46481 / 13px Regular（视觉与列表项一致） */
 export const sidebarFooterNameClass =
-  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
-
+  'min-w-0 w-full truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
 /** 侧栏底部账号元信息 — MCP 8:46481 #8B9099 Grey-6 / 13px Regular */
 export const sidebarFooterMetaClass =
-  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
+  'min-w-0 w-full truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
 
 /**
  * 展开态底部账号热区 trigger — MasterGo 39:35844「底部热区」
@@ -1647,7 +1674,7 @@ export const sidebarAccountHotzoneTriggerClass = cn(
   'flex h-[46px] min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-[4px] px-2.5 py-1 text-left transition-colors',
   'hover:bg-black/10 data-[state=open]:bg-black/10',
   'dark:hover:bg-white/10 dark:data-[state=open]:bg-white/10',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-sidebar-bg)]',
+  'outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
 );
 
 /** 展开态底部问号按钮 — 点击热区 32×32，图标仍 20×20（p-1.5 居中），与账号热区 gap 12px */

@@ -18,18 +18,19 @@ export function useWorkflowCronTaskModal() {
   const agents = useAgentsStore((s) => s.agents);
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const [open, setOpen] = useState(false);
-  const [initialValues, setInitialValues] = useState<{ workflowCode?: string }>();
+  const [initialValues, setInitialValues] = useState<{ workflowCode?: string; workflowName?: string }>();
 
   const openForWorkflow = useCallback(async (workflowId: string) => {
-    // 确保 modal 内 select 有数据，使组件侧能解析 label 生成 instructions 模板
+    // 预拉工作流列表，便于 Modal seed workflow token 时解析展示名
     if (useMyTaskStore.getState().workflowOptions.length === 0) {
       try {
         await useMyTaskStore.getState().fetchWorkflows();
       } catch {
-        // 忽略，modal 内 select 兜底空列表
+        // 忽略，Modal 内 composer 仍可用 id
       }
     }
-    setInitialValues({ workflowCode: workflowId });
+    const label = useMyTaskStore.getState().workflowOptions.find((o) => o.value === workflowId)?.label;
+    setInitialValues({ workflowCode: workflowId, workflowName: label });
     setOpen(true);
   }, []);
 
@@ -42,13 +43,15 @@ export function useWorkflowCronTaskModal() {
     async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgent(agents, defaultAgentId);
       try {
-        // 与 MyTask 对齐：prompt 干净；dingtalkRecipients 走列；执行期由 executor 烘焙。
+        // 与 MyTask 对齐：三列 null；技能/工作流/收件人只在 extra
         const base = {
           name: input.name,
           cronExpr: input.schedule,
           prompt: input.message,
-          dingtalkRecipients: input.dingTalkMentions ?? null,
-          workflowCode: input.workflowCode,
+          dingtalkRecipients: null,
+          skillCode: null,
+          workflowCode: null,
+          extra: input.extra ?? null,
           myArtifactFolderPath: input.myArtifactFolderPath ?? null,
           sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };

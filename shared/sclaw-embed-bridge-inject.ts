@@ -92,13 +92,80 @@ export const SCLAW_EMBED_BRIDGE_INJECT_SCRIPT = `(function() {
   function findByName(text) {
     var target = (text || '').trim();
     if (!target) return null;
-    buildSnapshot();
-    for (var pair of refToElement.entries()) {
-      var el = pair[1];
-      var name = computeAccessibleName(el);
-      if (name === target || name.indexOf(target) >= 0) return pair[0];
+    var bestEl = null;
+    var bestScore = -1;
+
+    function scoreElement(el, name) {
+      var exact = name === target;
+      var partial = name.indexOf(target) >= 0;
+      if (!exact && !partial) return -1;
+      var score = exact ? 100 : 50;
+      if (el.matches('a, button, input[type="submit"], input[type="button"], [role="button"], [role="link"], [role="tab"]')) {
+        score += 40;
+      } else {
+        var style = window.getComputedStyle(el);
+        if (style.cursor === 'pointer') score += 28;
+        else if (el.getAttribute('onclick')) score += 20;
+      }
+      var rect = el.getBoundingClientRect();
+      var area = Math.max(1, rect.width * rect.height);
+      score += Math.max(0, 24 - Math.log10(area));
+      return score;
     }
-    return null;
+
+    function walkFind(node) {
+      if (!node || node.nodeType !== 1) return;
+      var name = computeAccessibleName(node);
+      if (name) {
+        var score = scoreElement(node, name);
+        if (score > bestScore) {
+          bestScore = score;
+          bestEl = node;
+        }
+      }
+      for (var i = 0; i < node.children.length; i++) walkFind(node.children[i]);
+      if (node.shadowRoot) {
+        for (var s = 0; s < node.shadowRoot.children.length; s++) walkFind(node.shadowRoot.children[s]);
+      }
+    }
+
+    walkFind(document.body || document.documentElement);
+    if (!bestEl) return null;
+    var ref = '@e' + (refCounter++);
+    refToElement.set(ref, bestEl);
+    return ref;
+  }
+
+  function resolveClickTarget(el) {
+    if (!el) return null;
+    if (el.matches('a, button, input[type="submit"], input[type="button"], [role="button"], [role="link"], [role="tab"]')) {
+      return el;
+    }
+    var closestInteractive = el.closest('a, button, [role="button"], [role="link"], [role="tab"]');
+    if (closestInteractive) return closestInteractive;
+    var parent = el.parentElement;
+    for (var depth = 0; depth < 6 && parent; depth += 1) {
+      var style = window.getComputedStyle(parent);
+      if (style.cursor === 'pointer' || parent.getAttribute('onclick')) return parent;
+      parent = parent.parentElement;
+    }
+    return el;
+  }
+
+  function synthesizeClick(el) {
+    var target = resolveClickTarget(el);
+    target.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+    var opts = { bubbles: true, cancelable: true, view: window };
+    try {
+      target.dispatchEvent(new PointerEvent('pointerdown', opts));
+      target.dispatchEvent(new MouseEvent('mousedown', opts));
+      target.dispatchEvent(new PointerEvent('pointerup', opts));
+      target.dispatchEvent(new MouseEvent('mouseup', opts));
+      target.dispatchEvent(new MouseEvent('click', opts));
+    } catch (err) {
+      // PointerEvent may be unavailable in older webviews; MouseEvent-only is enough for most SPAs.
+    }
+    if (typeof target.click === 'function') target.click();
   }
 
   function executeCommand(action, payload) {
@@ -110,8 +177,7 @@ export const SCLAW_EMBED_BRIDGE_INJECT_SCRIPT = `(function() {
         var clickRef = payload.ref || findByName(payload.name || payload.text);
         var clickEl = clickRef ? refToElement.get(clickRef) : null;
         if (!clickEl) return { success: false, error: 'Element not found: ' + (payload.ref || payload.name || '') };
-        clickEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        clickEl.click();
+        synthesizeClick(clickEl);
         return { success: true, ref: clickRef };
       }
       case 'fill': {

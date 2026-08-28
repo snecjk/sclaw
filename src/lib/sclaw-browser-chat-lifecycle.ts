@@ -9,7 +9,6 @@ import {
   listEmbedChatIndex,
   removeEmbedChatIndexItem,
   setActiveEmbedChatSessionKey,
-  touchEmbedChatIndexItem,
   type EmbedChatIndexItem,
 } from '@/lib/sclaw-browser-chat-index';
 import {
@@ -140,7 +139,6 @@ function activateSessionKey(
   );
 
   setActiveEmbedChatSessionKey(appId, chatSessionKey);
-  touchEmbedChatIndexItem(appId, chatSessionKey);
 
   chat.switchSession(chatSessionKey);
   void linkSclawBrowserChatSession({ runtimeId: embedRuntimeId, chatSessionKey });

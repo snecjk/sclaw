@@ -15,18 +15,34 @@ import {
 } from '../../shared/chat-runtime-protocol';
 import { logger } from '../utils/logger';
 import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
+import { isEmbedAppChatSessionKey } from '../../shared/session-type';
 import { patchTerminalRuntimeMetadata, transitionChatRuntime, transitionChatRuntimePhase } from './chat-runtime-transition';
 import { inspectTranscript } from '../engines/chat-runtime-inspection';
 
 const RECOVERY_DEADLINE_MS = 135_000;
+const EMBED_BROWSER_RECOVERY_IDLE_MS = 5 * 60_000;
 const RECOVERY_RETRY_MS = 5_000;
 const DELTA_PERSIST_THROTTLE_MS = 1_000;
 const ERROR_RECOVERY_GRACE_MS = 15_000;
+const EMBED_RATE_LIMIT_RECOVERY_GRACE_MS = 90_000;
 const RUN_HARD_DEADLINE_MS = 6 * 60 * 60_000;
 const HISTORY_POLL_START_DELAY_MS = 1_000;
 const HISTORY_POLL_BACKOFF_MS = [2_000, 4_000, 8_000] as const;
 const TRANSCRIPT_COMPENSATION_DELAYS_MS = [1_000, 3_000, 7_000] as const;
 const IDEMPOTENCY_REPLAY_WINDOW_MS = 10 * 60_000;
+
+function resolveRecoveryIdleMs(sessionKey: string): number {
+  return isEmbedAppChatSessionKey(sessionKey) ? EMBED_BROWSER_RECOVERY_IDLE_MS : RECOVERY_DEADLINE_MS;
+}
+
+function isRecoveryWatchPhase(phase: ChatRuntimeSnapshot['phase']): boolean {
+  return phase === 'reconciling' || phase === 'uncertain' || phase === 'awaiting_transcript';
+}
+
+function isRateLimitErrorMessage(error: string): boolean {
+  const lower = error.toLowerCase();
+  return lower.includes('rate limit') || lower.includes('429') || error.includes('请求过于频繁');
+}
 
 interface ChatDispatchPayload {
   idempotencyKey: string;
@@ -166,6 +182,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private readonly lastPersistedAt = new Map<string, number>();
   private readonly seenEvents = new Set<string>();
   private readonly recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly runActivityAt = new Map<string, number>();
   private readonly errorTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly hardDeadlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly historyPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -241,7 +258,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         };
         this.snapshots.set(recovered.sessionKey, recovered);
         await this.persist(recovered, true);
-        this.scheduleRecovery(recovered.sessionKey, Date.now());
+        this.touchRunActivity(recovered.sessionKey, recovered.lastEventAt);
+        this.scheduleRecovery(recovered.sessionKey);
         this.scheduleHardDeadline(recovered.sessionKey, recovered.epoch);
         this.scheduleHistoryPoll(recovered.sessionKey);
       }
@@ -378,7 +396,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       databaseWrites: 0,
     });
     this.snapshots.set(input.sessionKey, snapshot);
-    const displayText = input.displayText?.trim();
+    // 定时任务不注入乐观 user 消息（X2）：任务会话的 user 气泡完全由 server echo 渲染，
+    // 避免乐观消息携带 gateway 原文（[文件:] 占位符 / 字面 \n）直接上屏。
+    // chat 链路行为不变：渲染侧已有同 id 乐观消息，dispatch 携带的本来就会被
+    // currentOptimisticBelongsToRun 忽略。
+    const displayText = snapshot.runtimePolicy.origin === 'scheduled_task'
+      ? ''
+      : input.displayText?.trim();
+    this.touchRunActivity(input.sessionKey, now);
     const dispatchPayload: ChatDispatchPayload = {
       idempotencyKey: input.idempotencyKey,
       ...(displayText ? {
@@ -443,6 +468,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       // before the engine has even accepted its prompt.
       this.scheduleHistoryPoll(input.sessionKey);
     }
+    this.touchRunActivity(input.sessionKey);
   }
 
   async rejected(input: {
@@ -473,7 +499,12 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       const uncertain = transition.snapshot;
       this.snapshots.set(input.sessionKey, uncertain);
       await this.persist(uncertain, true);
-      this.scheduleRecovery(input.sessionKey, Date.now());
+      this.scheduleRecovery(input.sessionKey);
+      // An uncertain transport may mean the engine accepted the prompt even
+      // though no acceptance response reached us. Start projection here so
+      // transcript progress can keep recovery alive without polling during
+      // the normal pre-dispatch window.
+      this.scheduleHistoryPoll(input.sessionKey);
       return;
     }
     await this.publish({ ...current, error: input.error }, 'run.failed', { error: input.error }, true);
@@ -572,6 +603,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.clearErrorFinalization(sessionKey);
     }
     this.clearErrorFinalization(sessionKey);
+    this.touchRunActivity(sessionKey);
     const payload = 'message' in event ? event.message : getRecord(event)?.runtimeResult;
     const liveMessage = getRecord(payload);
     if (liveMessage && (event.type === 'message.delta' || event.type === 'message.final' || event.type === 'tool.result')) {
@@ -643,13 +675,19 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (diagnostics) diagnostics.canonicalEvents += 1;
     this.emit('event', event);
     await this.persist(snapshot, forcePersist || isTerminalChatRunPhase(phase));
-    if (isTerminalChatRunPhase(phase)) this.clearRecovery(snapshot.sessionKey);
+    if (type === 'message.delta' || type === 'tool.updated') {
+      this.touchRunActivity(snapshot.sessionKey, now);
+    }
     if (isTerminalChatRunPhase(phase)) {
+      this.clearRecovery(snapshot.sessionKey);
+      this.clearRunActivity(snapshot.sessionKey);
       this.clearErrorFinalization(snapshot.sessionKey);
       this.clearHardDeadline(snapshot.sessionKey);
       this.clearHistoryPoll(snapshot.sessionKey);
     } else if (phase === 'awaiting_transcript') {
-      this.scheduleRecovery(snapshot.sessionKey, Date.now());
+      this.scheduleRecovery(snapshot.sessionKey);
+    } else if (phase === 'running') {
+      this.clearRecovery(snapshot.sessionKey);
     }
     const log = type === 'message.delta' || type === 'tool.updated' ? logger.debug : logger.info;
     log('[chat-runtime]', {
@@ -763,12 +801,23 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     });
   }
 
-  private scheduleRecovery(sessionKey: string, startedAt: number): void {
+  private touchRunActivity(sessionKey: string, at = Date.now()): void {
+    this.runActivityAt.set(sessionKey, at);
+  }
+
+  private resolveRunActivityAt(sessionKey: string, snapshot?: ChatRuntimeSnapshot | null): number {
+    return this.runActivityAt.get(sessionKey) ?? snapshot?.lastEventAt ?? snapshot?.startedAt ?? Date.now();
+  }
+
+  private scheduleRecovery(sessionKey: string): void {
     this.clearRecovery(sessionKey);
+    this.touchRunActivity(sessionKey);
     const run = async () => {
       const current = this.snapshots.get(sessionKey);
-      if (!current || isTerminalChatRunPhase(current.phase)) return;
-      if (Date.now() - startedAt >= RECOVERY_DEADLINE_MS) {
+      if (!current || isTerminalChatRunPhase(current.phase) || !isRecoveryWatchPhase(current.phase)) return;
+      const idleMs = resolveRecoveryIdleMs(sessionKey);
+      const lastActivityAt = this.resolveRunActivityAt(sessionKey, current);
+      if (Date.now() - lastActivityAt >= idleMs) {
         await this.publish({ ...current, error: 'Unable to confirm whether the run is still active.' }, 'run.interrupted', {
           reason: 'recovery-timeout',
         }, true);
@@ -776,11 +825,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       }
       await this.reconcileSession(sessionKey);
       const latest = this.snapshots.get(sessionKey);
-      if (
-        latest
-        && !isTerminalChatRunPhase(latest.phase)
-        && ['reconciling', 'uncertain', 'awaiting_transcript'].includes(latest.phase)
-      ) {
+      if (latest && !isTerminalChatRunPhase(latest.phase) && isRecoveryWatchPhase(latest.phase)) {
         this.recoveryTimers.set(sessionKey, setTimeout(run, RECOVERY_RETRY_MS));
       }
     };
@@ -820,6 +865,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           runId: latest.runId,
         });
       if (inspection?.status === 'active' || (!inspection && historyResult.isRunning === true)) {
+        this.touchRunActivity(sessionKey);
         const transition = transitionChatRuntimePhase({
           snapshot: latest,
           phase: 'running',
@@ -900,8 +946,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     this.recoveryTimers.delete(sessionKey);
   }
 
+  private clearRunActivity(sessionKey: string): void {
+    this.runActivityAt.delete(sessionKey);
+  }
+
   private scheduleErrorFinalization(sessionKey: string, runId: string | null, error: string): void {
     this.clearErrorFinalization(sessionKey);
+    const graceMs = isEmbedAppChatSessionKey(sessionKey) && isRateLimitErrorMessage(error)
+      ? EMBED_RATE_LIMIT_RECOVERY_GRACE_MS
+      : ERROR_RECOVERY_GRACE_MS;
     const timer = setTimeout(() => {
       this.errorTimers.delete(sessionKey);
       const current = this.snapshots.get(sessionKey);
@@ -913,7 +966,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         if (runId && latest.runId && runId !== latest.runId) return;
         await this.publish({ ...latest, error }, 'run.failed', { error }, true);
       });
-    }, ERROR_RECOVERY_GRACE_MS);
+    }, graceMs);
     this.errorTimers.set(sessionKey, timer);
   }
 
@@ -1024,6 +1077,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           { gatewayManager: this.gatewayManager },
           { sessionKey, runId: current.runId, startedAt: current.startedAt, limit: 50 },
         );
+        logger.debug('[chat-runtime] transcript settle inspection', {
+          sessionKey,
+          runId: current.runId,
+          delay,
+          status: inspection.status,
+          messageCount: inspection.currentTurnMessages?.length ?? 0,
+          hasRevision: Boolean(inspection.transcriptRevision),
+        });
         if (inspection.currentTurnMessages?.length) {
           // Transcript settling runs independently from live Gateway delivery.
           // Commit projected messages through the same per-session queue as
@@ -1086,6 +1147,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           { gatewayManager: this.gatewayManager },
           { sessionKey, runId: current.runId, startedAt: current.startedAt, limit: 50 },
         );
+        logger.debug('[chat-runtime] transcript compensation inspection', {
+          sessionKey,
+          runId: current.runId,
+          delay,
+          status: inspection.status,
+          messageCount: inspection.currentTurnMessages?.length ?? 0,
+          hasRevision: Boolean(inspection.transcriptRevision),
+        });
         if (inspection.status !== 'completed' || !inspection.transcriptRevision) continue;
         latestRevision = inspection.transcriptRevision;
         if (previousRevision === latestRevision) {

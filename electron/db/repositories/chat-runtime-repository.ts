@@ -39,7 +39,9 @@ function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
     runId: row.run_id == null ? null : String(row.run_id),
     idempotencyKey: row.idempotency_key == null ? null : String(row.idempotency_key),
     runtimePolicy: {
-      origin: row.origin === 'scheduled_task' || row.origin === 'channel' ? row.origin : 'interactive',
+      origin: row.origin === 'scheduled_task' || row.origin === 'channel' || row.origin === 'bridge'
+        ? row.origin
+        : 'interactive',
       ownerId: row.owner_id == null ? undefined : String(row.owner_id),
       deadlineAt: row.deadline_at == null ? null : Number(row.deadline_at),
     },

@@ -82,6 +82,7 @@ const electronAPI = {
         'window:close',
         'window:isMaximized',
         'window:isFullScreen',
+        'window:setMinimumSize',
         // Settings
         'settings:get',
         'settings:set',
@@ -89,6 +90,7 @@ const electronAPI = {
         'settings:getAll',
         'settings:reset',
         'usage:recentTokenHistory',
+        'turn-token:get',
         // Update
         'update:status',
         'update:version',
@@ -211,6 +213,15 @@ const electronAPI = {
         'sclaw-browser:getNetworkLog',
         'sclaw-browser:ensureBridge',
         'sclaw-browser:setPointerPassthrough',
+        'sclaw-browser:openDevTools',
+        // JSBridge (Guest webview ↔ Main)
+        'bridge:getGuestPreloadPath',
+        'bridge:invoke',
+        'bridge:grantCapability',
+        'bridge:listConsents',
+        'bridge:revokeApp',
+        'bridge:revokeCapability',
+        'bridge:emitEvent',
       ];
 
       if (validChannels.includes(channel)) {
@@ -259,6 +270,7 @@ const electronAPI = {
         'startup-progress',
         'auth:token-expired',
         'sto:models-synced',
+        'turn-token:updated',
         'workflow:status-update',
         'workflow:completion-open',
         'workflow:event',
@@ -267,6 +279,9 @@ const electronAPI = {
         'workflow:stream:error',
         'sclaw-browser:toggle-chat',
         'sclaw-browser:open-url',
+        'jsbridge:open-tab',
+        'jsbridge:close-tab',
+        'jsbridge:toast',
       ];
 
       if (validChannels.includes(channel)) {

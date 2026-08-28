@@ -5,7 +5,7 @@ import type { AgentEngineType } from './agent-engine';
 export type ChatEngineType = AgentEngineType;
 
 export interface ChatRuntimePolicy {
-  origin: 'interactive' | 'scheduled_task' | 'channel';
+  origin: 'interactive' | 'scheduled_task' | 'channel' | 'bridge';
   ownerId?: string;
   deadlineAt?: number | null;
 }

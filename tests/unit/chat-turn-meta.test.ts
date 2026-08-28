@@ -3,6 +3,7 @@ import {
   assistantMessageHasVisibleReplyBody,
   findLastUserMessageIndex,
   findTurnDisplayAssistantMessage,
+  getTurnIndexForAssistantMessage,
   isChatResponsePending,
   isCurrentUserTurnIncomplete,
   isLastAssistantInUserTurn,
@@ -132,6 +133,15 @@ describe('chat-turn-meta', () => {
 
     expect(isTurnDisplayAssistantMessage(reply, messages)).toBe(true);
     expect(findTurnDisplayAssistantMessage(messages, 0)).toBe(reply);
+  });
+
+  it('maps assistant message to turn index by visible user turns', () => {
+    const user2: RawMessage = { id: 'u2', role: 'user', content: 'again' };
+    const assistant2: RawMessage = { id: 'a2', role: 'assistant', content: 'ok' };
+    const messages = [userMsg, assistantMsg, user2, assistant2];
+
+    expect(getTurnIndexForAssistantMessage(assistantMsg, messages)).toBe(0);
+    expect(getTurnIndexForAssistantMessage(assistant2, messages)).toBe(1);
   });
 
   it('does not block meta when runId appears only in prose without workflow card', () => {
