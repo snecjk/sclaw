@@ -106,4 +106,14 @@ describe('app shell surface tokens (Stage 4)', () => {
     expect(myTaskSortTriggerClass).toContain('dark:bg-[var(--sto-control-bg)]');
     expect(myTaskSortTriggerClass).toContain('h-[34px]');
   });
+
+  it('preserves My Task compatibility light interactions while using semantic dark controls', () => {
+    expect(myTaskCreateButtonClass).toContain('text-foreground');
+    expect(myTaskCreateButtonClass).toContain('hover:bg-black/[0.04]');
+    expect(myTaskCreateButtonClass).toContain('active:scale-[0.98]');
+    expect(myTaskCreateButtonClass).toContain('focus-visible:ring-2');
+    expect(myTaskSortTriggerClass).toContain('font-medium');
+    expect(myTaskCreateButtonClass).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(myTaskSortTriggerClass).toContain('dark:bg-[var(--sto-control-bg)]');
+  });
 });

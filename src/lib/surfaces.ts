@@ -216,6 +216,8 @@ export const stoNeutralCardClass = cn(
 export const myTaskCreateButtonClass = cn(
   stoOutlineButtonBaseClass,
   'h-[34px] shrink-0 gap-1.5 px-3.5 text-sm',
+  'text-foreground hover:bg-black/[0.04] active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
 /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
@@ -432,7 +434,7 @@ export const myTaskEmptyTemplateAddButtonClass = cn(
 /** 我的任务排序触发器 */
 export const myTaskSortTriggerClass = cn(
   stoSortTriggerClass,
-  'h-[34px] px-[10px] text-[13px]',
+  'h-[34px] px-[10px] text-[13px] font-medium',
   formFieldHoverBorderClass,
   formFieldFocusVisibleClass,
 );
