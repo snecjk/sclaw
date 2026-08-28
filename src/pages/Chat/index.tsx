@@ -4,7 +4,7 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -14,11 +14,11 @@ import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
-import { collectSearchableChatMessages, findChatMessageSearchTarget, resolveChatMessageSearchKey } from './chat-message-search';
+import { collectSearchableChatMessages, findChatMessageSearchTarget } from './chat-message-search';
+import { ChatStaticItemsList, type ChatStaticItemsListHandle } from '@/components/chat/ChatStaticItemsList';
 import { useChatDisplay } from './use-chat-display';
-import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
+import { resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from './ChatSearchBar';
@@ -56,7 +56,6 @@ import { myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { useVoiceLoopStore } from '@/stores/voice-loop';
-import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import {
   EMPTY_WORKFLOW_CHAT_CARD_REFS,
   useWorkflowChatCardsStore,
@@ -139,6 +138,7 @@ export function Chat() {
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
+  const staticItemsListRef = useRef<ChatStaticItemsListHandle>(null);
   useNativeScrollbarActivity(scrollRef);
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -325,6 +325,9 @@ export function Chat() {
   );
 
   const scrollToMessageMatch = useCallback((searchKey: string, behavior: ScrollBehavior = 'smooth') => {
+    stopScroll();
+    if (staticItemsListRef.current?.scrollToSearchKey(searchKey, behavior)) return;
+
     const container = scrollRef.current;
     const contentElement = contentRef.current;
     if (!container || !contentElement) return;
@@ -332,7 +335,6 @@ export function Chat() {
     const target = findChatMessageSearchTarget(contentElement, searchKey);
     if (!target) return;
 
-    stopScroll();
     const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
     container.scrollBy({ top: delta, behavior });
   }, [contentRef, scrollRef, stopScroll]);
@@ -672,58 +674,21 @@ export function Chat() {
             <WelcomeScreen />
           ) : (
             <>
-              {staticItems.map((item) => {
-                if (item.type === 'workflow-run') {
-                  return (
-                    <WorkflowCard
-                      key={item.key}
-                      runId={item.card.runId}
-                      templateName={item.card.title}
-                      paramsSummary={item.card.paramsSummary}
-                      onPreviewArtifact={openArtifactPreview}
-                      onCreateScheduledTask={openWorkflowCronTaskModal}
-                      onOpenWorkflow={openWorkflowList}
-                    />
-                  );
-                }
-                if (item.type === 'assistant-turn') {
-                  return (
-                    <AssistantTurnMessage
-                      key={item.key}
-                      sessionMessages={messages}
-                      turnMessages={item.messages}
-                      turnToolResults={item.toolResults}
-                      precedingUserMessage={item.precedingUserMessage}
-                      turnStableKey={item.key}
-                      showThinking={showThinking}
-                      matchedMessageKeys={matchedMessageKeys}
-                      activeMessageKey={activeSearchMatch?.key ?? null}
-                      onPreviewFile={openArtifactPreview}
-                      onCreateScheduledTask={openWorkflowCronTaskModal}
-                      onEditMessage={handleEditMessage}
-                    />
-                  );
-                }
-                const searchMessageKey = resolveChatMessageSearchKey(
-                  item.message.id,
-                  `single:${item.key}`,
-                );
-                return (
-                  <ChatMessage
-                    key={item.key}
-                    message={item.message}
-                    sessionMessages={messages}
-                    showThinking={showThinking}
-                    searchMessageKey={searchMessageKey}
-                    isSearchMatch={matchedMessageKeys.has(searchMessageKey)}
-                    isSearchActive={searchMessageKey === activeSearchMatch?.key}
-                    onPreviewFile={openArtifactPreview}
-                    onCreateScheduledTask={openWorkflowCronTaskModal}
-                    onEditMessage={handleEditMessage}
-                    isTurnDisplayReply={isAssistantRole(item.message.role)}
-                  />
-                );
-              })}
+              <ChatStaticItemsList
+                ref={staticItemsListRef}
+                items={staticItems}
+                messages={messages}
+                showThinking={showThinking}
+                scrollRef={scrollRef}
+                variant="page"
+                forceFullRender={isSearchOpen}
+                matchedMessageKeys={matchedMessageKeys}
+                activeSearchMessageKey={activeSearchMatch?.key ?? null}
+                onPreviewFile={openArtifactPreview}
+                onCreateScheduledTask={openWorkflowCronTaskModal}
+                onEditMessage={handleEditMessage}
+                onOpenWorkflow={openWorkflowList}
+              />
 
               {activeTurn ? (
                 <AssistantTurnMessage

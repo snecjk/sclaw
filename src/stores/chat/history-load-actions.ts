@@ -5,6 +5,14 @@ import {
   prepareHistoryToolEffects,
 } from './history-apply-loaded';
 import { logChatFlow } from './chat-flow-log';
+import {
+  cancelHistoryLoadPerf,
+  estimateJsonBytes,
+  finishHistoryLoadPerf,
+  formatPayloadSize,
+  markHistoryLoadPerf,
+  startHistoryLoadPerf,
+} from './history-load-perf';
 import type { ChatGet, ChatSet, HistoryActions } from './store-api';
 import type { ChatSession, RawMessage } from './types';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
@@ -54,16 +62,34 @@ export function createHistoryLoadActions(
 
       const lastLoadAt = _lastHistoryLoadAtBySession.get(targetSessionKey) || 0;
       if (quiet && !force && Date.now() - lastLoadAt < HISTORY_LOAD_MIN_INTERVAL_MS) {
+        markHistoryLoadPerf(targetSessionKey, 'load.skipped', { reason: 'rate-limited', quiet, force });
         return;
       }
+
+      const engineType = resolveEngineTypeForSession(
+        get().sessions,
+        targetSessionKey,
+        get().currentAgentId,
+      );
+      const cachedTranscriptCount = useChatRuntimeV2Store.getState()
+        .sessionsByKey[targetSessionKey]?.transcript.length ?? 0;
 
       if (!quiet) set({ loading: true });
       const generation = (_historyGenerationBySession.get(targetSessionKey) ?? 0) + 1;
       _historyGenerationBySession.set(targetSessionKey, generation);
+      startHistoryLoadPerf({
+        sessionKey: targetSessionKey,
+        quiet,
+        force,
+        engineType,
+        cachedTranscriptCount,
+      });
       logChatFlow('history.load.start', {
         sessionKey: targetSessionKey,
         quiet,
         force,
+        engineType,
+        cachedTranscriptCount,
       });
 
       // 安全保护：如果历史记录加载花费太多时间，则强制将 loading 设置为 false
@@ -95,6 +121,7 @@ export function createHistoryLoadActions(
           // Gateway chat.history does not support offset; load up to the hard max in one call.
           // 任务会话与普通聊天同一路径：仅 chat.history（旧 /api/*/session-history 已 404，不再 fallback）。
           let thinkingLevel: string | null = null;
+          const rpcStartedAt = performance.now();
           const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
             'chat.history',
             {
@@ -103,13 +130,26 @@ export function createHistoryLoadActions(
               engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
             },
           );
+          const rpcMs = Math.round(performance.now() - rpcStartedAt);
 
           const allMessages: RawMessage[] = Array.isArray(data.messages)
             ? data.messages as RawMessage[]
             : [];
-          if (_historyGenerationBySession.get(targetSessionKey) !== generation) return;
+          const payloadBytes = estimateJsonBytes(allMessages);
+          markHistoryLoadPerf(targetSessionKey, 'load.rpc.done', {
+            rpcMs,
+            messageCount: allMessages.length,
+            payloadBytes,
+            payloadSize: formatPayloadSize(payloadBytes),
+            engineType,
+          });
+          if (_historyGenerationBySession.get(targetSessionKey) !== generation) {
+            cancelHistoryLoadPerf(targetSessionKey, 'stale-generation');
+            return;
+          }
           if (get().currentSessionKey !== targetSessionKey) {
             useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, allMessages);
+            finishHistoryLoadPerf(targetSessionKey, { path: 'background-transcript-only' });
             return;
           }
           if (data.thinkingLevel) {
@@ -121,22 +161,45 @@ export function createHistoryLoadActions(
             gatewayCount: allMessages.length,
             thinkingLevel,
             isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : null,
+            rpcMs,
+            payloadBytes,
+            payloadSize: formatPayloadSize(payloadBytes),
+            engineType,
           });
 
-          if (get().currentSessionKey !== targetSessionKey) return;
+          if (get().currentSessionKey !== targetSessionKey) {
+            cancelHistoryLoadPerf(targetSessionKey, 'session-switched-before-apply');
+            return;
+          }
+          const toolEffectsStartedAt = performance.now();
           const canApply = await prepareHistoryToolEffects({
             rawMessages: allMessages,
             sessionKey: targetSessionKey,
             agentId: get().currentAgentId,
             getCurrentSessionKey: () => get().currentSessionKey,
           });
-          if (!canApply) return;
+          markHistoryLoadPerf(targetSessionKey, 'load.tool-effects.done', {
+            toolEffectsMs: Math.round(performance.now() - toolEffectsStartedAt),
+            canApply,
+          });
+          if (!canApply) {
+            cancelHistoryLoadPerf(targetSessionKey, 'tool-effects-blocked');
+            return;
+          }
           applyHistorySnapshot(allMessages, thinkingLevel, {
             isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : undefined,
             runtimeResult: data.runtimeResult,
           });
+          finishHistoryLoadPerf(targetSessionKey, {
+            messageCount: allMessages.length,
+            payloadBytes,
+            payloadSize: formatPayloadSize(payloadBytes),
+          });
         } catch (err) {
           console.warn('Failed to load chat history:', err);
+          cancelHistoryLoadPerf(targetSessionKey, 'error', {
+            error: err instanceof Error ? err.message : String(err),
+          });
           if (get().currentSessionKey === targetSessionKey) {
             set({ loading: false });
           }

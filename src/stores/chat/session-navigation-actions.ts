@@ -5,6 +5,7 @@ import { clearSessionEntryFromMap, getAgentIdFromSessionKey, isTemporaryAgentSes
 import { clearSessionSendReadiness } from '@/lib/session-send-readiness';
 import { getSessionDisplayMessages } from './display-selectors';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
+import { markHistoryLoadPerf } from './history-load-perf';
 
 export interface SessionNavigationDependencies {
   markSessionRead: (sessionKey: string) => void;
@@ -52,7 +53,17 @@ export function createSessionNavigationActions(
       if (key !== DEFAULT_SESSION_KEY && !targetSession?.engineType) {
         void get().loadSessions();
       }
-      void get().loadHistory();
+      // 本地已有 transcript 时静默刷新：立即展示缓存，避免 loading 遮罩与 minLoading 人为延迟。
+      const cachedTranscript = useChatRuntimeV2Store.getState().sessionsByKey[key]?.transcript;
+      const hasCachedHistory = (cachedTranscript?.length ?? 0) > 0;
+      markHistoryLoadPerf(key, 'session.switch', {
+        hasCachedHistory,
+        cachedTranscriptCount: cachedTranscript?.length ?? 0,
+        displayMessageCount: getSessionDisplayMessages(key).length,
+        engineType: dependencies.resolveEngineType(key),
+        quietReload: hasCachedHistory,
+      });
+      void get().loadHistory(hasCachedHistory);
     },
     switchToAgentMainSession: (agentId) => {
       const key = dependencies.resolveMainSessionKey(agentId);

@@ -990,20 +990,52 @@ function registerGatewayHandlers(
       }
 
       if (method === 'chat.history') {
+        const perfStart = Date.now();
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           limit?: number;
           engineType?: AgentEngineType;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
+        const getStart = Date.now();
         const result = await adapter.getHistory(
           { gatewayManager },
           { sessionKey: body.sessionKey ?? '', limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000 },
         );
+        const getMs = Date.now() - getStart;
         if (!result.success) {
+          logger.info('[chat-history-perf]', {
+            stage: 'ipc.rpc.failed',
+            sessionKey: body.sessionKey ?? '',
+            engineType: body.engineType ?? null,
+            getMs,
+            totalMs: Date.now() - perfStart,
+            error: result.error || 'chat.history failed',
+          });
           return { success: false, error: result.error || 'chat.history failed' };
         }
-        return { success: true, result: sanitizeMemoryFromChatPayload(result.result) };
+        const sanitizeStart = Date.now();
+        const payload = sanitizeMemoryFromChatPayload(result.result);
+        const sanitizeMs = Date.now() - sanitizeStart;
+        const messages = (payload as { messages?: unknown[] } | null)?.messages;
+        const messageCount = Array.isArray(messages) ? messages.length : 0;
+        let payloadBytes = 0;
+        try {
+          payloadBytes = JSON.stringify(payload).length;
+        } catch {
+          payloadBytes = 0;
+        }
+        logger.info('[chat-history-perf]', {
+          stage: 'ipc.rpc.done',
+          sessionKey: body.sessionKey ?? '',
+          engineType: body.engineType ?? null,
+          getMs,
+          sanitizeMs,
+          totalMs: Date.now() - perfStart,
+          messageCount,
+          payloadBytes,
+        });
+        return { success: true, result: payload };
       }
 
       if (method === 'chat.send') {

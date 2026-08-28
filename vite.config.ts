@@ -105,6 +105,8 @@ export default defineConfig(({ mode }) => {
         '@': resolve(__dirname, 'src'),
         '@electron': resolve(__dirname, 'electron'),
       },
+      // @tanstack/react-virtual 等包若解析到嵌套 react，会触发 useReducer null 崩溃。
+      dedupe: ['react', 'react-dom'],
     },
     server: {
       port: 5173,
