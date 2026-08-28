@@ -35,7 +35,7 @@ export function getSsoAuth(): StoSsoAuth {
   return currentAuth;
 }
 
-export { readStoSsoAuthConfig } from './config';
+export { readStoSsoAuthConfig, resolveStoSsoDeployEnv } from './config';
 export { StoSsoAuthError, STO_SSO_AUTH_ERROR_CODES } from './errors';
 export type { SsoBrowserPlatform } from './browser-platform';
 export type * from './types';
