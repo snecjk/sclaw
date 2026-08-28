@@ -3,7 +3,11 @@ import { applyProxySettings } from '../../main/proxy';
 import { syncLaunchAtStartupSettingFromStore } from '../../main/launch-at-startup';
 import { syncApplicationMenuFromStore } from '../../main/menu';
 import { syncPreventSystemSleepSettingFromStore } from '../../main/prevent-sleep';
-import { applyNativeAppearancePreference, syncNativeAppearanceFromStore } from '../../main/appearance';
+import {
+  applyNativeAppearancePreference,
+  isThemePreference,
+  syncNativeAppearanceFromStore,
+} from '../../main/appearance';
 import { syncProxyConfigToOpenClaw } from '../../utils/openclaw-proxy';
 import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../../utils/store';
 import { appUpdater } from '../../main/updater';
@@ -40,10 +44,6 @@ function patchTouchesPreventSystemSleep(patch: Partial<AppSettings>): boolean {
 
 function patchTouchesLanguage(patch: Partial<AppSettings>): boolean {
   return Object.prototype.hasOwnProperty.call(patch, 'language');
-}
-
-function isThemePreference(value: unknown): value is AppSettings['theme'] {
-  return value === 'light' || value === 'dark' || value === 'system';
 }
 
 export async function handleSettingsRoutes(

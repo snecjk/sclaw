@@ -1,12 +1,20 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const appearanceState = vi.hoisted(() => {
+  let themeSource: 'light' | 'dark' | 'system' = 'light';
+  const themeSourceWrites = vi.fn((value: 'light' | 'dark' | 'system') => {
+    themeSource = value;
+  });
   const nativeTheme = {
-    themeSource: 'light' as 'light' | 'dark' | 'system',
     shouldUseDarkColors: false,
     on: vi.fn(),
     removeListener: vi.fn(),
   };
+  Object.defineProperty(nativeTheme, 'themeSource', {
+    get: () => themeSource,
+    set: themeSourceWrites,
+  });
   const mainWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
@@ -26,6 +34,22 @@ const appearanceState = vi.hoisted(() => {
     spriteWindow,
     floatIconWindow,
     getSetting: vi.fn(),
+    getAllSettings: vi.fn(),
+    resetSettings: vi.fn(),
+    setSetting: vi.fn(),
+    parseJsonBody: vi.fn(),
+    sendJson: vi.fn(),
+    syncNativeAppearanceFromStore: vi.fn(),
+    syncPeriodicCheckFromSettings: vi.fn(),
+    applyProxySettings: vi.fn(),
+    syncProxyConfigToOpenClaw: vi.fn(),
+    syncLaunchAtStartupSettingFromStore: vi.fn(),
+    syncPreventSystemSleepSettingFromStore: vi.fn(),
+    syncApplicationMenuFromStore: vi.fn(),
+    themeSourceWrites,
+    setThemeSource: (value: 'light' | 'dark' | 'system') => {
+      themeSource = value;
+    },
     getSpriteWindow: vi.fn(() => spriteWindow),
     getFloatIconWindow: vi.fn(() => floatIconWindow),
   };
@@ -40,6 +64,9 @@ vi.mock('electron', () => ({
 
 vi.mock('../../electron/utils/store', () => ({
   getSetting: appearanceState.getSetting,
+  getAllSettings: appearanceState.getAllSettings,
+  resetSettings: appearanceState.resetSettings,
+  setSetting: appearanceState.setSetting,
 }));
 
 vi.mock('../../electron/main/sprite-window', () => ({
@@ -50,20 +77,80 @@ vi.mock('../../electron/main/float-icon-window', () => ({
   getFloatIconWindow: appearanceState.getFloatIconWindow,
 }));
 
+vi.mock('../../electron/main/proxy', () => ({
+  applyProxySettings: appearanceState.applyProxySettings,
+}));
+
+vi.mock('../../electron/main/launch-at-startup', () => ({
+  syncLaunchAtStartupSettingFromStore: appearanceState.syncLaunchAtStartupSettingFromStore,
+}));
+
+vi.mock('../../electron/main/menu', () => ({
+  syncApplicationMenuFromStore: appearanceState.syncApplicationMenuFromStore,
+}));
+
+vi.mock('../../electron/main/prevent-sleep', () => ({
+  syncPreventSystemSleepSettingFromStore: appearanceState.syncPreventSystemSleepSettingFromStore,
+}));
+
+vi.mock('../../electron/utils/openclaw-proxy', () => ({
+  syncProxyConfigToOpenClaw: appearanceState.syncProxyConfigToOpenClaw,
+}));
+
+vi.mock('../../electron/main/updater', () => ({
+  appUpdater: {
+    syncPeriodicCheckFromSettings: appearanceState.syncPeriodicCheckFromSettings,
+  },
+}));
+
+vi.mock('../../electron/api/route-utils', () => ({
+  parseJsonBody: appearanceState.parseJsonBody,
+  sendJson: appearanceState.sendJson,
+}));
+
 import {
   applyNativeAppearancePreference,
   observeNativeAppearanceUpdates,
   resolveWindowBackgroundColor,
   syncNativeAppearanceFromStore,
 } from '../../electron/main/appearance';
+import { handleSettingsRoutes } from '../../electron/api/routes/settings';
+
+const routeContext = {
+  gatewayManager: {
+    getStatus: () => ({ state: 'stopped' }),
+    restart: vi.fn(),
+  },
+};
+
+function handleSettingsRoute(method: string, path: string): Promise<boolean> {
+  return handleSettingsRoutes(
+    { method } as IncomingMessage,
+    {} as ServerResponse,
+    new URL(path, 'http://localhost'),
+    routeContext as never,
+  );
+}
 
 describe('native appearance', () => {
   beforeEach(() => {
-    appearanceState.nativeTheme.themeSource = 'light';
+    appearanceState.setThemeSource('light');
+    appearanceState.themeSourceWrites.mockReset();
     appearanceState.nativeTheme.shouldUseDarkColors = false;
     appearanceState.nativeTheme.on.mockReset();
     appearanceState.nativeTheme.removeListener.mockReset();
     appearanceState.getSetting.mockReset();
+    appearanceState.getAllSettings.mockReset();
+    appearanceState.resetSettings.mockReset();
+    appearanceState.setSetting.mockReset();
+    appearanceState.parseJsonBody.mockReset();
+    appearanceState.sendJson.mockReset();
+    appearanceState.syncPeriodicCheckFromSettings.mockReset();
+    appearanceState.applyProxySettings.mockReset();
+    appearanceState.syncProxyConfigToOpenClaw.mockReset();
+    appearanceState.syncLaunchAtStartupSettingFromStore.mockReset();
+    appearanceState.syncPreventSystemSleepSettingFromStore.mockReset();
+    appearanceState.syncApplicationMenuFromStore.mockReset();
     appearanceState.getSpriteWindow.mockClear();
     appearanceState.getFloatIconWindow.mockClear();
     for (const window of appearanceState.windows) {
@@ -102,6 +189,16 @@ describe('native appearance', () => {
     expect(appearanceState.nativeTheme.themeSource).toBe('system');
   });
 
+  it('falls back to the project default when persisted appearance is invalid', async () => {
+    appearanceState.getSetting.mockResolvedValue('sepia');
+
+    await syncNativeAppearanceFromStore();
+
+    expect(appearanceState.nativeTheme.themeSource).toBe('light');
+    expect(appearanceState.themeSourceWrites).toHaveBeenCalledWith('light');
+    expect(appearanceState.themeSourceWrites).not.toHaveBeenCalledWith('sepia');
+  });
+
   it('observes native changes once and updates opaque window backgrounds', () => {
     const firstCleanup = observeNativeAppearanceUpdates();
     const secondCleanup = observeNativeAppearanceUpdates();
@@ -120,5 +217,81 @@ describe('native appearance', () => {
 
     firstCleanup();
     expect(appearanceState.nativeTheme.removeListener).toHaveBeenCalledWith('updated', listener);
+  });
+});
+
+describe('settings appearance routes', () => {
+  beforeEach(() => {
+    appearanceState.setThemeSource('light');
+    appearanceState.themeSourceWrites.mockReset();
+    appearanceState.getSetting.mockReset();
+    appearanceState.getAllSettings.mockReset();
+    appearanceState.resetSettings.mockReset();
+    appearanceState.setSetting.mockReset();
+    appearanceState.parseJsonBody.mockReset();
+    appearanceState.sendJson.mockReset();
+    appearanceState.syncPeriodicCheckFromSettings.mockReset();
+    appearanceState.applyProxySettings.mockReset();
+    appearanceState.syncProxyConfigToOpenClaw.mockReset();
+    appearanceState.syncLaunchAtStartupSettingFromStore.mockReset();
+    appearanceState.syncPreventSystemSleepSettingFromStore.mockReset();
+    appearanceState.syncApplicationMenuFromStore.mockReset();
+  });
+
+  it('rejects an invalid single-setting appearance write before persistence or native updates', async () => {
+    appearanceState.parseJsonBody.mockResolvedValue({ value: 'sepia' });
+
+    await handleSettingsRoute('PUT', '/api/settings/theme');
+
+    expect(appearanceState.sendJson).toHaveBeenCalledWith(
+      expect.anything(),
+      400,
+      { success: false, error: 'Invalid theme preference' },
+    );
+    expect(appearanceState.setSetting).not.toHaveBeenCalled();
+    expect(appearanceState.themeSourceWrites).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid patch appearance write before persistence or native updates', async () => {
+    appearanceState.parseJsonBody.mockResolvedValue({ theme: 'sepia' });
+
+    await handleSettingsRoute('PUT', '/api/settings');
+
+    expect(appearanceState.sendJson).toHaveBeenCalledWith(
+      expect.anything(),
+      400,
+      { success: false, error: 'Invalid theme preference' },
+    );
+    expect(appearanceState.setSetting).not.toHaveBeenCalled();
+    expect(appearanceState.themeSourceWrites).not.toHaveBeenCalled();
+  });
+
+  it('persists a valid single-setting appearance write before syncing native appearance', async () => {
+    appearanceState.parseJsonBody.mockResolvedValue({ value: 'dark' });
+
+    await handleSettingsRoute('PUT', '/api/settings/theme');
+
+    expect(appearanceState.setSetting).toHaveBeenCalledWith('theme', 'dark');
+    expect(appearanceState.nativeTheme.themeSource).toBe('dark');
+    expect(appearanceState.setSetting.mock.invocationCallOrder[0]).toBeLessThan(
+      appearanceState.themeSourceWrites.mock.invocationCallOrder[0],
+    );
+    expect(appearanceState.sendJson).toHaveBeenCalledWith(expect.anything(), 200, { success: true });
+  });
+
+  it('synchronizes native appearance after resetting settings', async () => {
+    appearanceState.getSetting.mockResolvedValue('dark');
+    appearanceState.getAllSettings.mockResolvedValue({ autoCheckUpdate: false });
+
+    await handleSettingsRoute('POST', '/api/settings/reset');
+
+    expect(appearanceState.resetSettings).toHaveBeenCalledTimes(1);
+    expect(appearanceState.getSetting).toHaveBeenCalledWith('theme');
+    expect(appearanceState.nativeTheme.themeSource).toBe('dark');
+    expect(appearanceState.sendJson).toHaveBeenCalledWith(
+      expect.anything(),
+      200,
+      { success: true, settings: { autoCheckUpdate: false } },
+    );
   });
 });
