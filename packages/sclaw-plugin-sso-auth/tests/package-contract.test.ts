@@ -13,7 +13,7 @@ describe('SSO Auth package contract', () => {
 
     expect(pkg).toMatchObject({
       name: '@sto/sclaw-plugin-sso-auth',
-      version: '0.1.0',
+      version: '0.1.1',
       sclaw: { manifest: './sclaw/plugin.json' },
     });
     expect(manifest).toMatchObject({

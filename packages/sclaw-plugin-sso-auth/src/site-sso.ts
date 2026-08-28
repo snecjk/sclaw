@@ -198,12 +198,19 @@ export function createPublishedSiteSsoAuth(
         throw new StoSsoAuthError('SSO_EXCHANGE_FAILED', 'SSO 回调凭证已被消费');
       }
       writeSessionValue(CALLBACK_CODE_CLAIM_KEY, callbackCodeDigest);
-      const response = await fetcher(buildSsoCallbackExchangeUrl(config, callbackCode), {
-        method: 'GET',
-        credentials: 'omit',
-        headers: { Accept: 'application/json' },
-      });
-      const session = await parseExchangeResponse(response);
+      let session: { token: string; user: StoSsoUser };
+      try {
+        const response = await fetcher(buildSsoCallbackExchangeUrl(config, callbackCode), {
+          method: 'GET',
+          credentials: 'omit',
+          headers: { Accept: 'application/json' },
+        });
+        session = await parseExchangeResponse(response);
+      } catch (error) {
+        // A failed exchange must be retryable after a transient network/SSO error.
+        removeSessionValueBestEffort(CALLBACK_CODE_CLAIM_KEY);
+        throw error;
+      }
       persistSession(platform, session);
       token = session.token;
       user = session.user;
