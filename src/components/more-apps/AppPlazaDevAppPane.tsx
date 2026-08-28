@@ -63,8 +63,6 @@ import {
 } from '@/stores/app-plaza-shell';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
-import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
-import { logChatFlow } from '@/stores/chat/chat-flow-log';
 import {
   isSclawBrowserEmbedChatShortcut,
   sclawBrowserEmbedChatShortcutLabel,
@@ -213,7 +211,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [sourceRevision, setSourceRevision] = useState(0);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
-  const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
   if (statusWorkspaceId !== workspaceId) {
     setStatusWorkspaceId(workspaceId);
     setSourceRevision(0);
@@ -266,10 +263,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     },
   });
 
-  useEffect(() => {
-    autoRepairRef.current = { fingerprint: '', attempts: 0 };
-  }, [workspaceId]);
-
   const platform = window.electron?.platform
     ?? (navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'win32');
   const chatShortcutLabel = sclawBrowserEmbedChatShortcutLabel(platform);
@@ -307,7 +300,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         await createAppCheckpoint(workspaceId, '对话修改').catch(() => undefined);
         const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
         if (errors.length > 0) setPendingErrors(errors);
-        else autoRepairRef.current = { fingerprint: '', attempts: 0 };
         setSourceRevision((n) => n + 1);
       })();
     }
@@ -341,52 +333,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
     setChatOpen(true);
   }, []);
-
-  const sendAutoRepair = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || !appDevSessionKey) return;
-    const fingerprint = trimmed.slice(-4000);
-    const state = autoRepairRef.current;
-    if (state.fingerprint === fingerprint) {
-      if (state.attempts >= 3) {
-        logChatFlow('appdev.auto-repair.skipped.max-attempts', {
-          sessionKey: appDevSessionKey,
-          fingerprint,
-          attempts: state.attempts,
-        });
-        return;
-      }
-      autoRepairRef.current = { fingerprint, attempts: state.attempts + 1 };
-    } else {
-      autoRepairRef.current = { fingerprint, attempts: 1 };
-    }
-    setChatOpen(true);
-    logChatFlow('appdev.auto-repair.dispatch', {
-      sessionKey: appDevSessionKey,
-      fingerprint,
-      attempts: autoRepairRef.current.attempts,
-      textLength: trimmed.length,
-    });
-    void useChatStore.getState().sendMessage({
-      text: trimmed,
-      sessionKey: appDevSessionKey,
-      targetAgentId: getAgentIdFromSessionKey(appDevSessionKey),
-    });
-  }, [appDevSessionKey]);
-
-  useEffect(() => {
-    if (!appDevSessionKey || sending || pendingErrors.length === 0) return;
-    const text = [
-      '下面是预览里「页面上看不到、只在后台/控制台出现」的失败信息，请据此修复：',
-      '',
-      ...pendingErrors.slice(-10),
-    ].join('\n');
-    const timer = window.setTimeout(() => {
-      setPendingErrors([]);
-      sendAutoRepair(text);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [appDevSessionKey, pendingErrors, sendAutoRepair, sending]);
 
   const handleRestore = async () => {
     const result = await restoreAppCheckpoint(workspaceId);
