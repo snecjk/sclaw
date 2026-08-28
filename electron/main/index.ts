@@ -9,7 +9,7 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
-import { app, BrowserWindow, dialog, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, session, shell } from 'electron';
 import type { Server } from 'node:http';
 import { basename, dirname, join, resolve } from 'path';
 import { existsSync } from 'node:fs';
@@ -65,6 +65,11 @@ import {
 } from '../utils/cleanup-old-app-bundles';
 import { CLIENT_APP_NAME, CLIENT_APP_USER_MODEL_ID } from '../../shared/app-branding';
 import { getClientAppIcon } from './app-icon';
+import {
+  observeNativeAppearanceUpdates,
+  resolveWindowBackgroundColor,
+  syncNativeAppearanceFromStore,
+} from './appearance';
 
 _ts('static imports loaded');
 
@@ -385,7 +390,7 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
       : undefined,
     frame: isMac || !useCustomTitleBar,
     show: false,  // We call show() manually below — before loading content
-    backgroundColor: '#0f1525',  // Match splash screen background
+    backgroundColor: resolveWindowBackgroundColor(nativeTheme.shouldUseDarkColors),
   });
 
   // Show the window IMMEDIATELY — before loading content.
@@ -518,6 +523,9 @@ async function createMainWindow(): Promise<BrowserWindow> {
  */
 async function initialize(): Promise<void> {
   _ts('initialize() start');
+
+  await syncNativeAppearanceFromStore();
+  observeNativeAppearanceUpdates();
 
   initializeSqliteDatabase();
   const sqliteInfo = getSqliteDatabaseInfo();
