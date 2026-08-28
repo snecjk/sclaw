@@ -308,7 +308,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
           className={cn(
             'no-drag fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-full max-w-[420px] max-h-[calc(100vh-2rem)]',
-            'bg-background rounded-2xl shadow-2xl',
+            'bg-background rounded-2xl shadow-2xl dark:bg-[var(--sto-surface-elevated)]',
             'flex flex-col overflow-hidden',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -319,7 +319,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
           <Dialog.Close asChild>
             <button
               onClick={onClose}
-              className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
+              className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground transition-colors focus:outline-none dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -329,7 +329,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
             <h2 className="text-base font-semibold text-foreground pr-8">
               {t('plaza.upload.title', { defaultValue: '上传技能' })}
             </h2>
-            <p className="text-xs leading-5 text-[#98A2B3] mt-2">
+            <p className="text-xs leading-5 text-[#98A2B3] mt-2 dark:text-[var(--sto-text-tertiary)]">
               {t('plaza.upload.subtitle', { defaultValue: '· 文件夹或.zip需要包含SKILL.MD文件' })}
               <br />
               {t('plaza.upload.subtitle', { defaultValue: '· .MD文件需要包含YAML格式的技能名和描述'})}
@@ -355,7 +355,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border-2 border-dashed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]',
                     dragOver
                       ? 'border-[#00B54B] bg-[#00B54B]/10'
-                      : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5 dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A] dark:hover:bg-[#1f2325]',
+                      : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5 dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:hover:border-[var(--sto-border-heavy)] dark:hover:bg-[var(--sto-control-hover-bg)]',
                   )}
                 >
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
@@ -390,10 +390,10 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <button
                       type="button"
                       onClick={pickFile}
-                      className="group flex w-full items-center gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/60 active:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      className="group flex w-full items-center gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/60 active:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:active:bg-[var(--sto-control-active-bg)]"
                       aria-label={t('plaza.upload.selectFile', { defaultValue: '选择技能文件' })}
                     >
-                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:text-foreground dark:bg-[var(--sto-control-hover-bg)] dark:text-[var(--sto-text-secondary)] dark:group-hover:text-[var(--sto-text-primary)]">
                         <FileText className="h-5 w-5" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -415,10 +415,10 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <button
                       type="button"
                       onClick={pickFolder}
-                      className="group flex w-full items-center gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/60 active:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      className="group flex w-full items-center gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/60 active:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:active:bg-[var(--sto-control-active-bg)]"
                       aria-label={t('plaza.upload.selectFolder', { defaultValue: '选择技能文件夹' })}
                     >
-                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:text-foreground dark:bg-[var(--sto-control-hover-bg)] dark:text-[var(--sto-text-secondary)] dark:group-hover:text-[var(--sto-text-primary)]">
                         <FolderOpen className="h-5 w-5" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -442,11 +442,11 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     onClick={selectedPaths.length > 1 ? resetToIdle : pickFile}
                     className="w-full text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] rounded-xl"
                   >
-                    <div className="min-h-[176px] rounded-2xl border-2 border-dashed border-[#22C55E] bg-[#E9FFEC] px-5 py-6 flex flex-col items-center justify-center transition-colors dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A]">
+                    <div className="min-h-[176px] rounded-2xl border-2 border-dashed border-[#22C55E] bg-[#E9FFEC] px-5 py-6 flex flex-col items-center justify-center transition-colors dark:border-[#22C55E] dark:bg-[#22C55E]/10 dark:hover:border-[#22C55E]">
                       {selectedPaths.length > 1 && selectionKind === 'folder' ? (
-                        <FolderOpen className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
+                        <FolderOpen className="h-10 w-10 text-[#8B96A3] dark:text-[var(--sto-text-secondary)]" strokeWidth={1.8} />
                       ) : (
-                        <FileText className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
+                        <FileText className="h-10 w-10 text-[#8B96A3] dark:text-[var(--sto-text-secondary)]" strokeWidth={1.8} />
                       )}
                       <p className="mt-6 max-w-full text-xl leading-7 font-normal text-foreground break-all line-clamp-2 tracking-normal">
                         {fileName}
@@ -459,7 +459,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                           {selectedItemSummary}
                         </p>
                       ) : (
-                        <p className="mt-3 text-2xl leading-8 font-normal text-[#8B96A3] tracking-normal">
+                        <p className="mt-3 text-2xl leading-8 font-normal text-[#8B96A3] tracking-normal dark:text-[var(--sto-text-secondary)]">
                           {formatFileSize(fileSize)}
                         </p>
                       )}
@@ -469,7 +469,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <button
                       type="button"
                       onClick={confirmUpload}
-                      className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#E4E7EC] bg-white px-6 text-base leading-6 font-semibold text-foreground shadow-sm transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A] dark:hover:bg-[#252A2E]"
+                      className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#E4E7EC] bg-white px-6 text-base leading-6 font-semibold text-foreground shadow-sm transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:border-[var(--sto-border-heavy)] dark:hover:bg-[var(--sto-control-hover-bg)]"
                     >
                       {t('plaza.upload.confirmUpload', { defaultValue: '安装' })}
                     </button>
@@ -507,7 +507,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <button
                       type="button"
                       onClick={resetToIdle}
-                      className="inline-flex items-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                      className="inline-flex items-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]"
                     >
                       {t('plaza.upload.retry', { defaultValue: '重新选择' })}
                     </button>

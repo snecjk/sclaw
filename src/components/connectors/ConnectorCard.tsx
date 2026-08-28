@@ -140,13 +140,12 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
           }
         }}
         className={cn(
-          'group relative flex h-[80px] min-w-0 cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border bg-white px-4',
+          'group relative flex h-[80px] min-w-0 cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border bg-white px-4 dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]',
           'border-border shadow-sm',
           'transition-[border-color,box-shadow] duration-200 ease-out',
           listCardHoverBorderShadowClass,
           'active:shadow-sm',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-          'dark:bg-background',
         )}
         title={item.lastError || undefined}
       >
@@ -164,7 +163,7 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
 
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
           <div className="flex min-w-0 items-center gap-1.5">
-            <h3 className="m-0 truncate text-[15px] font-bold leading-[22px] text-[#1D2129] dark:text-foreground">
+            <h3 className="m-0 truncate text-[15px] font-bold leading-[22px] text-[#1D2129] dark:text-[var(--sto-text-primary)]">
               {item.name}
             </h3>
             {connected ? (
@@ -176,7 +175,7 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
               'm-0 h-[36px] line-clamp-2 text-[13px] leading-[18px]',
               item.lastError
                 ? 'text-destructive'
-                : 'text-[#86909C] dark:text-muted-foreground',
+                : 'text-[#86909C] dark:text-[var(--sto-text-tertiary)]',
             )}
           >
             {item.lastError || item.description || '\u00A0'}
@@ -186,7 +185,7 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
         {connected ? (
           <button
             type="button"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-white transition-colors hover:bg-[#F2F3F5] dark:bg-background"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-white transition-colors hover:bg-[#F2F3F5] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:hover:bg-[var(--sto-control-hover-bg)]"
             onClick={(e) => {
               e.stopPropagation();
               openBoundDetail();
@@ -199,7 +198,7 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
           <button
             type="button"
             className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-white transition-colors hover:bg-[#F2F3F5] dark:bg-background',
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-white transition-colors hover:bg-[#F2F3F5] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:hover:bg-[var(--sto-control-hover-bg)]',
               inFlight && 'opacity-70',
             )}
             disabled={inFlight}
@@ -225,12 +224,12 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
           onClick={() => setIntroOpen(false)}
         >
           <div
-            className="relative w-[360px] rounded-2xl bg-white p-6 shadow-xl dark:bg-background"
+            className="relative w-[360px] rounded-2xl bg-white p-6 shadow-xl dark:bg-[var(--sto-surface-elevated)]"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
-              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[#F2F3F5]"
+              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[#F2F3F5] dark:hover:bg-[var(--sto-control-hover-bg)]"
               onClick={() => setIntroOpen(false)}
             >
               <X className="h-4 w-4 text-muted-foreground" />
@@ -244,11 +243,11 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
                   {item.name.slice(0, 1)}
                 </div>
               )}
-              <h2 className="m-0 text-base font-bold text-[#1D2129] dark:text-foreground">
+              <h2 className="m-0 text-base font-bold text-[#1D2129] dark:text-[var(--sto-text-primary)]">
                 {item.name}
               </h2>
               {item.description ? (
-                <p className="m-0 text-center text-[13px] leading-[20px] text-[#86909C] dark:text-muted-foreground">
+                <p className="m-0 text-center text-[13px] leading-[20px] text-[#86909C] dark:text-[var(--sto-text-secondary)]">
                   {item.description}
                 </p>
               ) : null}
@@ -276,12 +275,12 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
           onClick={() => setDetailOpen(false)}
         >
           <div
-            className="relative w-[360px] rounded-2xl bg-white p-6 shadow-xl dark:bg-background"
+            className="relative w-[360px] rounded-2xl bg-white p-6 shadow-xl dark:bg-[var(--sto-surface-elevated)]"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
-              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[#F2F3F5]"
+              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[#F2F3F5] dark:hover:bg-[var(--sto-control-hover-bg)]"
               onClick={() => setDetailOpen(false)}
             >
               <X className="h-4 w-4 text-muted-foreground" />
@@ -295,11 +294,11 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
                   {item.name.slice(0, 1)}
                 </div>
               )}
-              <h2 className="m-0 text-base font-bold text-[#1D2129] dark:text-foreground">
+              <h2 className="m-0 text-base font-bold text-[#1D2129] dark:text-[var(--sto-text-primary)]">
                 {item.name}
               </h2>
               {item.description ? (
-                <p className="m-0 text-center text-[13px] leading-[20px] text-[#86909C] dark:text-muted-foreground">
+                <p className="m-0 text-center text-[13px] leading-[20px] text-[#86909C] dark:text-[var(--sto-text-secondary)]">
                   {item.description}
                 </p>
               ) : null}
@@ -315,7 +314,7 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
               </button>
               <button
                 type="button"
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-border px-5 text-[13px] font-medium text-[#1D2129] transition-colors hover:bg-[#F2F3F5] disabled:cursor-not-allowed disabled:opacity-50 dark:text-foreground"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-border px-5 text-[13px] font-medium text-[#1D2129] transition-colors hover:bg-[#F2F3F5] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[var(--sto-border-default)] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]"
                 disabled={!tryPrompt}
                 title={tryPrompt ? '到主聊天试用该连接器' : '暂无试用提示词'}
                 onClick={handleTryPrompt}
