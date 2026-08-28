@@ -189,7 +189,9 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
         ...state.sessionsByKey,
         [sessionKey]: {
           ...current,
-          transcript: [...transcript],
+          // 内容等价时保留原引用：下游展示模型以该数组为缓存键，
+          // 无谓的新引用会让整条消息列表的 memo 失效。
+          transcript: transcriptUnchanged ? current.transcript : [...transcript],
           overlay: {
             ...current.overlay,
             optimisticUserMessage: nextOptimistic,
