@@ -170,28 +170,52 @@ export const myTaskPageHeaderRowClass = 'flex min-w-0 items-start justify-betwee
 export const myTaskPageSubtitleClass =
   'm-0 mt-1.5 text-sm font-normal leading-5 text-muted-foreground';
 
-/** 我的任务 / 技能·连接器一级 Tab 轨道（图二：#EDEDED 胶囊轨） */
-export const myTaskSectionTabsTrackClass =
-  'inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-muted';
+export const stoSegmentTabsTrackClass =
+  'inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-[var(--sto-surface-secondary)]';
 
-/** 我的任务 / 技能·连接器一级 Tab 按钮（图二：选中白底深字） */
-export function myTaskSectionTabClass(active: boolean): string {
+export function stoSegmentTabClass(active: boolean): string {
   return cn(
     "inline-flex items-center gap-1.5 rounded-[10px] px-3.5 py-[7px] font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
     active
-      ? 'bg-white text-[#1A1A1A] dark:bg-background dark:text-foreground'
-      : 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground',
+      ? 'bg-white text-[#1A1A1A] dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)]'
+      : 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]',
   );
 }
 
-/**
- * 我的任务页「新建定时任务」：白底 + #E8EAEF 描边 + 12px 圆角。
- */
+export const myTaskSectionTabsTrackClass = stoSegmentTabsTrackClass;
+export function myTaskSectionTabClass(active: boolean): string {
+  return stoSegmentTabClass(active);
+}
+
+export const stoOutlineButtonBaseClass = cn(
+  "inline-flex items-center justify-center rounded-[12px] border border-[#E8EAEF] bg-white font-['PingFang_SC'] text-[13px] font-medium leading-none text-[#1D2129]",
+  'transition-colors duration-150 hover:bg-[#F2F3F5]',
+  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]',
+);
+
+export const stoSearchFieldShellClass = cn(
+  'flex items-center gap-2 rounded-[12px] border border-border bg-white px-3',
+  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)]',
+);
+
+export const stoSortTriggerClass = cn(
+  'flex items-center gap-[6px] rounded-[10px] border border-border bg-white text-[#1D2129]',
+  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]',
+);
+
+export const stoIconSurfaceClass = cn(
+  'flex shrink-0 items-center justify-center rounded-lg border border-border bg-white text-[#1D2129]',
+  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)]',
+);
+
+export const stoNeutralCardClass = cn(
+  'border border-border bg-white',
+  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]',
+);
+
 export const myTaskCreateButtonClass = cn(
-  'inline-flex shrink-0 items-center gap-1.5 h-[34px] px-3.5 text-sm font-medium',
-  'rounded-[12px] border border-[#E8EAEF] bg-white text-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.04] dark:border-border dark:bg-card dark:hover:bg-white/[0.06] active:scale-[0.98]',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  stoOutlineButtonBaseClass,
+  'h-[34px] shrink-0 gap-1.5 px-3.5 text-sm',
 );
 
 /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
@@ -407,8 +431,8 @@ export const myTaskEmptyTemplateAddButtonClass = cn(
 
 /** 我的任务排序触发器 */
 export const myTaskSortTriggerClass = cn(
-  'flex h-[34px] items-center gap-[6px] rounded-[10px] border border-border bg-card',
-  'px-[10px] text-[13px] font-medium text-foreground transition-[border-color,box-shadow]',
+  stoSortTriggerClass,
+  'h-[34px] px-[10px] text-[13px]',
   formFieldHoverBorderClass,
   formFieldFocusVisibleClass,
 );

@@ -4,6 +4,12 @@ import { describe, expect, it } from 'vitest';
 import {
   chatComposerHomeShellClass,
   chatComposerHomeStackShellClass,
+  myTaskCreateButtonClass,
+  myTaskSectionTabClass,
+  myTaskSectionTabsTrackClass,
+  myTaskSortTriggerClass,
+  stoSegmentTabClass,
+  stoSegmentTabsTrackClass,
   stoMainCardShellClass,
   stoPreviewContentShellClass,
   stoTaskSubitemChatCanvasBg,
@@ -89,5 +95,15 @@ describe('app shell surface tokens (Stage 4)', () => {
     );
     expect(src).toContain('bg-[var(--sto-shell-bg)]');
     expect(src).toContain('stoAppShellGridProvincialClass');
+  });
+
+  it('keeps My Task surface exports as aliases of neutral shared classes', () => {
+    expect(myTaskSectionTabsTrackClass).toBe(stoSegmentTabsTrackClass);
+    expect(myTaskSectionTabClass(true)).toBe(stoSegmentTabClass(true));
+    expect(myTaskSectionTabClass(false)).toBe(stoSegmentTabClass(false));
+    expect(myTaskCreateButtonClass).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(myTaskCreateButtonClass).toContain('h-[34px]');
+    expect(myTaskSortTriggerClass).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(myTaskSortTriggerClass).toContain('h-[34px]');
   });
 });

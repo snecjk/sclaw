@@ -74,6 +74,19 @@
     --sto-workspace-bg: #fafafa;
     /* L2 Preview / Composer / 内容卡片 */
     --sto-panel-bg: #ffffff;
+    --sto-surface-under: var(--sto-shell-bg);
+    --sto-surface-primary: var(--sto-workspace-bg);
+    --sto-surface-secondary: var(--sto-panel-bg);
+    --sto-surface-elevated: #ffffff;
+    --sto-control-bg: var(--sto-panel-bg);
+    --sto-control-hover-bg: #f2f3f5;
+    --sto-control-active-bg: #e5e6eb;
+    --sto-text-primary: #1d2129;
+    --sto-text-secondary: #4e5969;
+    --sto-text-tertiary: #86909c;
+    --sto-border-light: rgba(29, 33, 41, 0.04);
+    --sto-border-default: #e5e6eb;
+    --sto-border-heavy: #c9cdd4;
     /* 共享边缘（弱描边，不用重色相） */
     --sto-surface-edge: #e8eaef;
     /* L1 抬升阴影（轻；禁止重黑浮岛） */
@@ -198,18 +211,19 @@
   }
 
   .dark {
-    --background: 220 24% 9%;
-    --foreground: 220 14% 96%;
-    --card: 220 22% 11%;
-    --card-foreground: 220 14% 96%;
-    --popover: 220 18% 15%;
-    --popover-foreground: 220 14% 96%;
+    color-scheme: dark;
+    --background: 0 0% 9.4%;
+    --foreground: 0 0% 87.5%;
+    --card: 0 0% 12.9%;
+    --card-foreground: 0 0% 87.5%;
+    --popover: 0 0% 15.7%;
+    --popover-foreground: 0 0% 87.5%;
     --primary: 26 100% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 18% 16%;
-    --secondary-foreground: 220 14% 96%;
-    --muted: 220 16% 15%;
-    --muted-foreground: 215 14% 68%;
+    --secondary: 0 0% 12.9%;
+    --secondary-foreground: 0 0% 87.5%;
+    --muted: 0 0% 15.7%;
+    --muted-foreground: 0 0% 70%;
     --accent: 32 45% 16%;
     --accent-foreground: 32 100% 88%;
     --destructive: 0 72% 56%;
@@ -218,8 +232,8 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 90% 52%;
     --warning-foreground: 220 26% 14%;
-    --border: 220 14% 22%;
-    --input: 220 14% 20%;
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.08;
     --ring: 26 100% 55%;
 
     --glass-bg: 220 18% 12%;
@@ -252,14 +266,23 @@
     --sto-chat-error-border: hsl(43 50% 24%);
     --sto-chat-error-icon: hsl(38 90% 52%);
 
-    /*
-     * Stage 4 dark Surface：由 L0/L1/L2 全局契约推导（MCP 无 dark Frame）。
-     * 同色相冷中性（220）；以有限明度差分层；Sidebar ≡ Shell（L0），禁止分叉色相。
-     */
-    --sto-shell-bg: hsl(220 24% 9%);
-    --sto-workspace-bg: hsl(220 22% 11%);
-    --sto-panel-bg: hsl(220 20% 13%);
-    --sto-surface-edge: hsl(220 14% 20%);
+    --sto-surface-under: #0d0d0d;
+    --sto-surface-primary: #181818;
+    --sto-surface-secondary: #212121;
+    --sto-surface-elevated: #282828;
+    --sto-control-bg: #212121;
+    --sto-control-hover-bg: #282828;
+    --sto-control-active-bg: #282828;
+    --sto-text-primary: #dfdfdf;
+    --sto-text-secondary: rgba(255, 255, 255, 0.70);
+    --sto-text-tertiary: rgba(255, 255, 255, 0.50);
+    --sto-border-light: rgba(255, 255, 255, 0.04);
+    --sto-border-default: rgba(255, 255, 255, 0.08);
+    --sto-border-heavy: rgba(255, 255, 255, 0.16);
+    --sto-shell-bg: var(--sto-surface-under);
+    --sto-workspace-bg: var(--sto-surface-primary);
+    --sto-panel-bg: var(--sto-surface-secondary);
+    --sto-surface-edge: var(--sto-border-default);
     --sto-workspace-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
     --sto-page-bg: var(--sto-shell-bg);
     --sto-sidebar-bg: var(--sto-shell-bg);
