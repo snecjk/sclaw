@@ -789,27 +789,34 @@ function MarkdownPreviewPane({ content, className }: { content: string; classNam
   );
 }
 
-function RemoteSrcDocPreview({
-  html,
-  sourceUrl,
-  fileName,
-  className,
-}: {
+type RemoteSrcDocPreviewProps = {
   html: string;
   sourceUrl: string;
   fileName: string;
   className?: string;
-}) {
+};
+
+export function RemoteSrcDocPreview(props: RemoteSrcDocPreviewProps) {
+  return <RemoteSrcDocSource key={props.sourceUrl} {...props} />;
+}
+
+function RemoteSrcDocSource(props: RemoteSrcDocPreviewProps) {
+  return <RemoteSrcDocFrame key={props.html} {...props} />;
+}
+
+function RemoteSrcDocFrame({
+  html,
+  sourceUrl,
+  fileName,
+  className,
+}: RemoteSrcDocPreviewProps) {
   const appearance = useThemeAppearance();
-  const appearanceRef = useRef(appearance);
-  appearanceRef.current = appearance;
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const srcDoc = useMemo(
+  const [srcDoc] = useState(
     () => preparePreviewSrcDoc(html, sourceUrl, {
-      appearance: appearanceRef.current,
+      appearance,
       mode: 'adaptive',
     }),
-    [html, sourceUrl],
   );
 
   useEffect(() => {
