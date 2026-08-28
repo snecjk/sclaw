@@ -598,6 +598,8 @@ export default function AppDevWorkbench() {
       <StoAppDeployDialog
         open={deployOpen}
         appName={appName}
+        workspaceId={workspaceId}
+        pageType={pageType ?? 'site'}
         applicationId={stoStatus?.applicationId}
         onCancel={() => setDeployOpen(false)}
         onConfirm={handleDeploy}

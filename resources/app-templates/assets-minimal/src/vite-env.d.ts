@@ -10,3 +10,14 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  __STO_SSO_AUTH_CONFIG__?: {
+    runtimeMode?: 'local' | 'published';
+    deployEnv?: 'daily' | 'stage' | 'online';
+    pageType?: 'site' | 'assets';
+  };
+  __SCLAW_APP_CONFIG__?: {
+    deployEnv?: 'daily' | 'stage' | 'online';
+  };
+}

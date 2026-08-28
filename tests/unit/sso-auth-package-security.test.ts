@@ -57,11 +57,14 @@ describe('SSO Auth npm package security contract', () => {
     });
   });
 
-  it('keeps the Assets template independent from Site SSO', () => {
+  it('limits Assets authentication to the local SClaw identity bridge', () => {
     const assetsRoot = join(root, 'resources', 'app-templates', 'assets-minimal');
     const pkg = JSON.parse(readFileSync(join(assetsRoot, 'package.json'), 'utf8'));
     const main = readFileSync(join(assetsRoot, 'src', 'main.tsx'), 'utf8');
-    expect(pkg.dependencies).not.toHaveProperty('@sto/sclaw-plugin-sso-auth');
-    expect(main).not.toContain('@sto/sclaw-plugin-sso-auth');
+    expect(pkg.dependencies).toMatchObject({ '@sto/sclaw-plugin-sso-auth': '0.1.0' });
+    expect(main).toContain('bootstrapSsoAuth');
+    expect(main).toContain("runtimeMode === 'local'");
+    expect(main).not.toContain('buildSsoLoginUrl');
+    expect(main).not.toContain('captureStoTokenFromUrl');
   });
 });

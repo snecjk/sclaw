@@ -6,7 +6,7 @@ interface LocalViteEnvironment {
   secret: string;
   workspaceId: string;
   applicationId: string;
-  pageType: 'site';
+  pageType: 'site' | 'assets';
   deployEnv: 'daily';
   hostApi: string;
 }
@@ -21,10 +21,10 @@ function required(name: string): string {
 
 function readEnvironment(): LocalViteEnvironment {
   const pageType = required('STO_SSO_AUTH_PAGE_TYPE');
-  if (pageType !== 'site') {
+  if (pageType !== 'site' && pageType !== 'assets') {
     throw new StoSsoAuthError(
       'SSO_AUTH_PAGE_TYPE_UNSUPPORTED',
-      'SSO Auth Vite 插件只支持 Site 应用',
+      'SSO Auth Vite 插件不支持当前应用类型',
     );
   }
   const deployEnv = required('STO_SSO_AUTH_DEPLOY_ENV');
@@ -43,7 +43,7 @@ function readEnvironment(): LocalViteEnvironment {
     secret: required('STO_SSO_AUTH_SESSION'),
     workspaceId: required('STO_SSO_AUTH_WORKSPACE_ID'),
     applicationId: required('STO_SSO_AUTH_APPLICATION_ID'),
-    pageType: 'site',
+    pageType,
     deployEnv: 'daily',
     hostApi,
   };

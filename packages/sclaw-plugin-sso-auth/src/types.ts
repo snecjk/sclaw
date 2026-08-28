@@ -1,12 +1,15 @@
 export type StoSsoDeployEnv = 'daily' | 'stage' | 'online';
 export type StoSsoEnvironment = 'daily' | 'pre' | 'prod';
 
-export interface StoSsoAuthConfig {
+interface StoSsoAuthConfigBase {
   protocolVersion: 'sto-sso-auth/v1';
   applicationId: string;
+  deployEnv: StoSsoDeployEnv;
+}
+
+export interface StoSsoSiteAuthConfig extends StoSsoAuthConfigBase {
   pageType: 'site';
   runtimeMode: 'local' | 'published';
-  deployEnv: StoSsoDeployEnv;
   sso?: {
     environment: StoSsoEnvironment;
     systemCode: string;
@@ -14,6 +17,14 @@ export interface StoSsoAuthConfig {
     apiOrigin: string;
   };
 }
+
+export interface StoSsoAssetsLocalAuthConfig extends StoSsoAuthConfigBase {
+  pageType: 'assets';
+  runtimeMode: 'local';
+  deployEnv: 'daily';
+}
+
+export type StoSsoAuthConfig = StoSsoSiteAuthConfig | StoSsoAssetsLocalAuthConfig;
 
 export interface StoSsoUser {
   userId?: string;

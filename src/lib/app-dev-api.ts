@@ -4,6 +4,10 @@
  */
 import { hostApiFetch, type HostApiFetchInit } from '@/lib/host-api';
 import type { CodeApplicationPageType } from '../../shared/code-application-catalog';
+import type {
+  ExternalServiceBindingSnapshot,
+  ExternalServicePageResult,
+} from '../../shared/external-service-contract';
 export type { CodeApplicationPageType } from '../../shared/code-application-catalog';
 
 /** sai-cli / 建站长耗时接口：不走 Host API 默认 15s 超时 */
@@ -63,6 +67,68 @@ export interface AppCheckpoint {
   hash: string;
   subject: string;
   timestamp: number;
+}
+
+export interface AppExternalServiceChangeResult {
+  changedFiles: string[];
+  installedPackage?: string | null;
+  usageGuide?: string | null;
+  binding?: ExternalServiceBindingSnapshot;
+}
+
+export async function searchAppExternalServices(
+  workspaceId: string,
+  keyword = '',
+): Promise<ExternalServicePageResult> {
+  const query = new URLSearchParams({ workspaceId, keyword });
+  return hostApiFetch(`/api/app-external-services/search?${query.toString()}`);
+}
+
+export async function listAppExternalServiceBindings(
+  workspaceId: string,
+): Promise<ExternalServiceBindingSnapshot[]> {
+  const response = await hostApiFetch<{ bindings: ExternalServiceBindingSnapshot[] }>(
+    `/api/app-external-services/bindings?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return response.bindings ?? [];
+}
+
+export async function bindAppExternalService(input: {
+  workspaceId: string;
+  serviceId: string;
+  version: string;
+  alias: string;
+}): Promise<AppExternalServiceChangeResult> {
+  return hostApiFetch('/api/app-external-services/bind', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function upgradeAppExternalService(input: {
+  workspaceId: string;
+  alias: string;
+  version: string;
+}): Promise<AppExternalServiceChangeResult> {
+  return hostApiFetch('/api/app-external-services/upgrade', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function removeAppExternalService(input: {
+  workspaceId: string;
+  alias: string;
+}): Promise<AppExternalServiceChangeResult> {
+  return hostApiFetch('/api/app-external-services/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 }
 
 export interface DevAppSummary {

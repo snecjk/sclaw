@@ -1,4 +1,4 @@
-import { captureStoTokenFromUrl, getStoToken } from './auth-token';
+import { getSsoAuth, StoSsoAuthError } from '@sto/sclaw-plugin-sso-auth';
 import { proxiesFromContract, resolveApiUrl } from './resolve-api-url';
 import devProxyContract from '../../contracts/dev-proxy.v1.json';
 
@@ -51,7 +51,14 @@ function resolveStoToken(explicit?: string | null): string | null {
     const trimmed = explicit.trim();
     return trimmed || null;
   }
-  return getStoToken();
+  try {
+    return getSsoAuth().getToken();
+  } catch {
+    throw new StoSsoAuthError(
+      'AUTH_RUNTIME_UNAVAILABLE',
+      '托管应用发布后需要由 iframe 宿主提供身份 Token Bridge',
+    );
+  }
 }
 
 /**
@@ -64,8 +71,6 @@ export async function request<T = unknown>(
   url: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  captureStoTokenFromUrl();
-
   const {
     method = 'GET',
     data,

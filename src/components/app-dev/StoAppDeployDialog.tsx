@@ -4,6 +4,8 @@ import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { CodeDeployEnv } from '@/lib/app-dev-api';
+import { listAppExternalServiceBindings } from '@/lib/app-dev-api';
+import type { CodeApplicationPageType } from '../../../shared/code-application-catalog';
 
 const ENV_OPTIONS: Array<{ value: CodeDeployEnv; label: string; hint: string }> = [
   { value: 'daily', label: '日常 (daily)', hint: '开发/联调环境' },
@@ -15,6 +17,8 @@ interface StoAppDeployDialogProps {
   open: boolean;
   appName: string;
   applicationId?: string;
+  workspaceId?: string;
+  pageType?: CodeApplicationPageType;
   onCancel: () => void;
   onConfirm: (input: {
     env: CodeDeployEnv;
@@ -26,19 +30,33 @@ export function StoAppDeployDialog({
   open,
   appName,
   applicationId,
+  workspaceId,
+  pageType = 'site',
   onCancel,
   onConfirm,
 }: StoAppDeployDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [env, setEnv] = useState<CodeDeployEnv>('daily');
   const [deploymentVersion, setDeploymentVersion] = useState('');
+  const [showAssetsIdentityWarning, setShowAssetsIdentityWarning] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setEnv('daily');
-    setDeploymentVersion('');
-    window.setTimeout(() => cancelRef.current?.focus(), 0);
-  }, [open]);
+    const timer = window.setTimeout(() => {
+      setEnv('daily');
+      setDeploymentVersion('');
+      setShowAssetsIdentityWarning(false);
+      cancelRef.current?.focus();
+      if (pageType === 'assets' && workspaceId) {
+        void listAppExternalServiceBindings(workspaceId)
+          .then((items) => setShowAssetsIdentityWarning(
+            items.some((item) => item.auth.type === 'stoToken'),
+          ))
+          .catch(() => setShowAssetsIdentityWarning(false));
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open, pageType, workspaceId]);
 
   if (!open) return null;
 
@@ -137,6 +155,12 @@ export function StoAppDeployDialog({
         {env === 'online' ? (
           <p className="mt-3 text-[12px] text-[var(--sto-functional-warning)] dark:text-amber-300">
             即将发布到生产环境，请确认代码已在预发验证通过。
+          </p>
+        ) : null}
+
+        {showAssetsIdentityWarning ? (
+          <p className="mt-3 rounded-lg bg-[var(--sto-functional-warning)]/10 px-3 py-2 text-[12px] text-[var(--sto-functional-warning)] dark:text-amber-300">
+            托管应用发布后由 iframe 宿主提供身份；请确认宿主已接入 Token Bridge。
           </p>
         ) : null}
 

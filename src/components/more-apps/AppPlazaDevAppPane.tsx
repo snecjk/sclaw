@@ -711,6 +711,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       <StoAppDeployDialog
         open={deployOpen}
         appName={appName}
+        workspaceId={workspaceId}
+        pageType={pageType ?? 'site'}
         applicationId={stoStatus?.applicationId}
         onCancel={() => setDeployOpen(false)}
         onConfirm={(input) => {

@@ -50,6 +50,16 @@ describe('ssoAuthVite', () => {
     expect(serialized).not.toContain('127.0.0.1:3210');
   });
 
+  it('supports Assets local preview without enabling published SSO redirects', () => {
+    setValidEnvironment();
+    vi.stubEnv('STO_SSO_AUTH_PAGE_TYPE', 'assets');
+    const plugin = ssoAuthVite();
+    (plugin.configResolved as (config: unknown) => void)({});
+    const serialized = JSON.stringify((plugin.transformIndexHtml as () => unknown)());
+    expect(serialized).toContain('\\"pageType\\":\\"assets\\"');
+    expect(serialized).toContain('\\"runtimeMode\\":\\"local\\"');
+  });
+
   it('forwards only the server-owned Workspace and Secret', async () => {
     setValidEnvironment();
     const hostFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({

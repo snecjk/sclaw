@@ -1,10 +1,10 @@
 import { StoSsoAuthError } from './errors';
-import type { StoSsoAuthConfig } from './types';
+import type { StoSsoAuthConfig, StoSsoSiteAuthConfig } from './types';
 
 const AUTH_QUERY_KEYS = ['code', 'authorizationCode', 'stoToken', 'stotoken', 'StoToken', 'token'];
 
-function requireSso(config: StoSsoAuthConfig): NonNullable<StoSsoAuthConfig['sso']> {
-  if (!config.sso) {
+function requireSso(config: StoSsoAuthConfig): NonNullable<StoSsoSiteAuthConfig['sso']> {
+  if (!('sso' in config) || !config.sso) {
     throw new StoSsoAuthError('SSO_AUTH_CONFIG_INVALID', '发布态缺少 SSO 配置');
   }
   return config.sso;

@@ -20,7 +20,15 @@ describe('readStoSsoAuthConfig', () => {
     expect(readStoSsoAuthConfig(publishedSite)).toEqual(publishedSite);
   });
 
-  it('rejects Assets applications', () => {
+  it('accepts Assets applications only for local preview', () => {
+    expect(readStoSsoAuthConfig({
+      protocolVersion: 'sto-sso-auth/v1',
+      applicationId: 'app-1001',
+      pageType: 'assets',
+      runtimeMode: 'local',
+      deployEnv: 'daily',
+    })).toMatchObject({ pageType: 'assets', runtimeMode: 'local', deployEnv: 'daily' });
+
     expect(() => readStoSsoAuthConfig({ ...publishedSite, pageType: 'assets' }))
       .toThrowError(expect.objectContaining({
         code: 'SSO_AUTH_PAGE_TYPE_UNSUPPORTED',

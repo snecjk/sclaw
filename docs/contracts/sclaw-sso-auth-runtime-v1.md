@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-该契约仅用于 `pageType: "site"` 的独立站点。Assets 托管应用不注入、不安装也不启动 `@sto/sclaw-plugin-sso-auth`。
+该契约的发布态 SSO 仅用于 `pageType: "site"` 的独立站点。Assets 托管应用不会在发布后跳转 SSO；但本地预览会使用同一插件的 `assets + local` 模式读取当前 SClaw 用户身份。
 
 ## 发布配置
 
@@ -39,5 +39,7 @@ window.__STO_SSO_AUTH_CONFIG__ = {
 - 配置只能包含公开信息，禁止包含 Token、Cookie、回跳 Code、npm 凭证或本地 Session Secret。
 - Origin、Callback Path、Method、System Code 和认证 Header 不允许由浏览器 Query 或业务页面覆盖。
 - 发布配置是环境的唯一权威来源；Hostname 和 `VITE_SSO_ENV` 只能作为旧应用兼容策略，不能覆盖有效配置。
+- `deployEnv` 同时是 Site 外部服务 Runtime 选择 daily、stage、online 地址的唯一权威来源。
+- Assets 本地配置只允许 `runtimeMode: "local"` 与 `deployEnv: "daily"`，不得包含 SSO Origin，也不得用于发布态跳转。
 - 配置缺失、字段未知、环境不匹配或 Origin 非 HTTPS 时，Site 必须在挂载业务页面前失败。
 - code-deploy 仓库的实际注入改造应使用独立实施计划完成。

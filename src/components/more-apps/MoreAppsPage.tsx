@@ -7,7 +7,7 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Heart, FolderInput, ChevronDown, FileCode2 } from 'lucide-react';
+import { Search, Plus, Heart, FolderInput, ChevronDown, FileCode2, PlugZap } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -28,6 +28,7 @@ import { DevAppCard } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { CreateAppDialog } from './CreateAppDialog';
 import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
+import { ExternalServiceManagerDialog } from './ExternalServiceManagerDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
@@ -98,6 +99,7 @@ export function MoreAppsPage() {
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
   const [createAppOpen, setCreateAppOpen] = useState(false);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [externalServiceManagerOpen, setExternalServiceManagerOpen] = useState(false);
   const [importingApp, setImportingApp] = useState(false);
   const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
@@ -830,6 +832,10 @@ export function MoreAppsPage() {
                     管理应用模板
                   </DropdownMenuItem>
                 ) : null}
+                <DropdownMenuItem onSelect={() => setExternalServiceManagerOpen(true)}>
+                  <PlugZap className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  管理外部服务
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   id="more-apps-import-app-btn"
                   disabled={importingApp}
@@ -911,6 +917,12 @@ export function MoreAppsPage() {
         <AppTemplateManagerDialog
           open={templateManagerOpen}
           onClose={() => setTemplateManagerOpen(false)}
+        />
+      ) : null}
+      {canUseAppDev ? (
+        <ExternalServiceManagerDialog
+          open={externalServiceManagerOpen}
+          onClose={() => setExternalServiceManagerOpen(false)}
         />
       ) : null}
       <ConfirmDialog

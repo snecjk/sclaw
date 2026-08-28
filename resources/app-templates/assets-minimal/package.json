@@ -7,11 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sclaw:services": "node scripts/external-services.mjs"
   },
   "dependencies": {
     "@a2ui/react": "^0.10.2",
     "@a2ui/web_core": "^0.10.5",
+    "@sto/sclaw-plugin-sso-auth": "0.1.0",
     "antd": "^5.24.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

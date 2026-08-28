@@ -62,6 +62,7 @@ import {
 import { appTemplateApiClient, type AppTemplatePageType } from './app-template-api-client';
 import { buildAppTemplateArchive } from './app-template-archive';
 import { createUlid } from '../utils/ulid';
+import { writeAppDevWorkspaceId } from './app-dev-marker';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -86,6 +87,7 @@ export const APP_DEV_MARKER_RELATIVE = join('.sclaw', 'app-dev.json');
 export type AppDevSource = 'created' | 'imported';
 
 export interface AppDevMarker {
+  workspaceId?: string;
   kind: 'app-dev' | 'app-template';
   name: string;
   projectType: string;
@@ -642,6 +644,7 @@ export async function openAppTemplateWorkspace(input: {
   const existing = workspaces.find((workspace) => resolve(workspace.rootPath) === resolve(appPath));
   const workspace = existing ?? await createWorkspace({ name: `模板：${name}`, rootPath: appPath });
   const workspaceId = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
   setStatus(workspaceId, { appPath, phase: 'created', progress: 0 });
   void runSetupPipeline(workspaceId, appPath).catch((error) => {
     logger.error('[app-template] setup pipeline failed:', error);
@@ -790,6 +793,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
 
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId: string = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
 
   await upsertStoAppBinding({
     applicationId: createdApplicationId,
@@ -867,6 +871,7 @@ export async function importUserApp(input: {
     rootPath: appPath,
   });
   const workspaceId: string = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
 
   logger.info(
     `[app-dev] importUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath} ` +
@@ -1160,6 +1165,7 @@ export async function cloneDevApp(input: {
 
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
 
   await upsertStoAppBinding({
     applicationId,

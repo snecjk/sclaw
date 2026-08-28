@@ -3,6 +3,7 @@ import type {
   StoSsoAuthConfig,
   StoSsoDeployEnv,
   StoSsoEnvironment,
+  StoSsoSiteAuthConfig,
 } from './types';
 
 declare global {
@@ -87,10 +88,10 @@ export function readStoSsoAuthConfig(explicit?: unknown): StoSsoAuthConfig {
   if (!isRecord(input)) invalid('SSO Auth 配置必须是对象');
   assertKnownFields(input, ROOT_FIELDS);
 
-  if (input.pageType !== 'site') {
+  if (input.pageType !== 'site' && input.pageType !== 'assets') {
     throw new StoSsoAuthError(
       'SSO_AUTH_PAGE_TYPE_UNSUPPORTED',
-      'SSO Auth 插件只支持 Site 应用',
+      'SSO Auth 插件不支持当前应用类型',
     );
   }
   if (input.protocolVersion !== 'sto-sso-auth/v1') invalid('不支持的 SSO Auth 协议版本');
@@ -104,7 +105,23 @@ export function readStoSsoAuthConfig(explicit?: unknown): StoSsoAuthConfig {
   }
 
   const deployEnv = input.deployEnv as StoSsoDeployEnv;
-  let sso: StoSsoAuthConfig['sso'];
+  if (input.pageType === 'assets') {
+    if (input.runtimeMode !== 'local' || deployEnv !== 'daily' || input.sso !== undefined) {
+      throw new StoSsoAuthError(
+        'SSO_AUTH_PAGE_TYPE_UNSUPPORTED',
+        'Assets 仅支持使用 SClaw 当前身份进行本地预览',
+      );
+    }
+    return {
+      protocolVersion: 'sto-sso-auth/v1',
+      applicationId,
+      pageType: 'assets',
+      runtimeMode: 'local',
+      deployEnv: 'daily',
+    };
+  }
+
+  let sso: StoSsoSiteAuthConfig['sso'];
   if (input.sso !== undefined) {
     if (!isRecord(input.sso)) invalid('sso 必须是对象');
     assertKnownFields(input.sso, SSO_FIELDS);

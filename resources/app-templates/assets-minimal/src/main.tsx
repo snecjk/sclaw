@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { bootstrapSsoAuth } from '@sto/sclaw-plugin-sso-auth';
 import App from './App';
-import { captureStoTokenFromUrl } from './lib/auth-token';
 import './index.css';
 
 const container = document.getElementById('root');
@@ -12,10 +12,18 @@ if (!container) {
 
 const root = createRoot(container);
 
-// 托管应用由外层宿主完成身份认证，只接收宿主注入的 stoToken，不自行跳转 SSO。
-captureStoTokenFromUrl();
-root.render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+async function start() {
+  const config = window.__STO_SSO_AUTH_CONFIG__;
+  if (config?.runtimeMode === 'local') {
+    await bootstrapSsoAuth({ config });
+  }
+  root.render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
+
+void start().catch((error) => {
+  root.render(<div role="alert">{error instanceof Error ? error.message : '应用身份初始化失败'}</div>);
+});
