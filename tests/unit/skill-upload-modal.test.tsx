@@ -1,11 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SkillUploadModal } from '@/components/skill-plaza/SkillUploadModal';
+import { SkillPlazaHeader } from '@/components/skill-plaza/SkillPlazaHeader';
 
 const mocks = vi.hoisted(() => ({
   invokeIpc: vi.fn(),
   uploadSkill: vi.fn(),
   setActiveTab: vi.fn(),
+  setSearchQuery: vi.fn(),
+  fetchConnectors: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', () => ({
@@ -16,13 +19,26 @@ vi.mock('@/stores/skill-plaza', () => {
   const state = {
     uploadSkill: mocks.uploadSkill,
     mySkills: [],
+    activeTab: 'all' as const,
+    searchQuery: '',
     setActiveTab: mocks.setActiveTab,
+    setSearchQuery: mocks.setSearchQuery,
   };
   const useSkillPlazaStore = Object.assign(
     (selector: (value: typeof state) => unknown) => selector(state),
     { getState: () => state },
   );
   return { useSkillPlazaStore };
+});
+
+vi.mock('@/stores/connectors', () => {
+  const state = {
+    loading: false,
+    fetchList: mocks.fetchConnectors,
+  };
+  return {
+    useConnectorsStore: (selector: (value: typeof state) => unknown) => selector(state),
+  };
 });
 
 vi.mock('react-i18next', () => ({
@@ -44,6 +60,10 @@ function createDataTransfer(file: File, useItems = true) {
     files: useItems ? [] : [file],
   };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('SkillUploadModal source selection', () => {
   beforeEach(() => {
@@ -366,5 +386,53 @@ describe('SkillUploadModal source selection', () => {
     });
     expect(screen.getByRole('button', { name: '选择技能文件' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '选择技能文件夹' })).toBeInTheDocument();
+  });
+});
+
+describe('Skill Plaza header composition', () => {
+  beforeEach(() => {
+    mocks.invokeIpc.mockReset();
+    mocks.setActiveTab.mockReset();
+    mocks.setSearchQuery.mockReset();
+    mocks.fetchConnectors.mockReset();
+  });
+
+  it('keeps search debounce and folder IPC in the header owner', () => {
+    vi.useFakeTimers();
+    render(
+      <SkillPlazaHeader
+        section="skills"
+        onSectionChange={vi.fn()}
+      />,
+    );
+
+    const searchbox = screen.getByRole('searchbox');
+    fireEvent.change(searchbox, { target: { value: 'pdf' } });
+    vi.advanceTimersByTime(299);
+    expect(mocks.setSearchQuery).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(mocks.setSearchQuery).toHaveBeenCalledWith('pdf');
+
+    fireEvent.click(screen.getByRole('button', { name: '文件夹' }));
+    expect(mocks.invokeIpc).toHaveBeenCalledWith('open-skill-folder');
+    expect(searchbox.parentElement?.className).toContain(
+      'dark:bg-[var(--sto-control-bg)]',
+    );
+  });
+
+  it('keeps section changes and the upload modal in the header owner', () => {
+    const onSectionChange = vi.fn();
+    render(
+      <SkillPlazaHeader
+        section="skills"
+        onSectionChange={onSectionChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: '连接器' }));
+    expect(onSectionChange).toHaveBeenCalledWith('connectors');
+
+    fireEvent.click(screen.getByRole('button', { name: '上传技能' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

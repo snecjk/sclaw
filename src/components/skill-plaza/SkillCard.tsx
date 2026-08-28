@@ -14,7 +14,7 @@ import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/compone
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { listCardHoverBorderShadowClass } from '@/lib/surfaces';
+import { listCardHoverBorderShadowClass, stoNeutralCardClass } from '@/lib/surfaces';
 import messageIcon from '@/assets/icons/message.svg';
 import loadingIcon from '@/assets/icons/loading.svg';
 import moreIcon from '@/assets/icons/more.svg';
@@ -28,7 +28,7 @@ interface SkillCardProps {
 }
 
 const actionIconBtnClass =
-  'inline-flex items-center justify-center w-7 h-7 p-0 border-none rounded-lg bg-transparent text-[#1D2129] cursor-pointer transition-colors hover:bg-[#F2F3F5] disabled:opacity-50 disabled:cursor-not-allowed dark:text-foreground dark:hover:bg-muted';
+  'inline-flex items-center justify-center w-7 h-7 p-0 border-none rounded-lg bg-transparent text-[#1D2129] cursor-pointer transition-colors hover:bg-[#F2F3F5] disabled:opacity-50 disabled:cursor-not-allowed dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]';
 
 const actionTooltipClass =
   'overflow-visible border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white shadow-none';
@@ -129,7 +129,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
               {isInstalling ? (
                 <img src={loadingIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain animate-spin" />
               ) : (
-                <RefreshCw className="h-3.5 w-3.5 dark:text-[#F2F3F5]" />
+                <RefreshCw className="h-3.5 w-3.5 dark:text-[var(--sto-text-primary)]" />
               )}
             </button>
           </TooltipTrigger>
@@ -269,8 +269,9 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
   return (
     <article
       className={cn(
-        'relative flex min-w-0 cursor-pointer flex-col overflow-visible rounded-2xl border border-border bg-white p-4',
-        'transition-[border-color,box-shadow] duration-150 dark:bg-background',
+        stoNeutralCardClass,
+        'relative flex min-w-0 cursor-pointer flex-col overflow-visible rounded-2xl p-4',
+        'transition-[border-color,box-shadow] duration-150',
         listCardHoverBorderShadowClass,
       )}
       onClick={() => onOpenDetail?.(skill)}

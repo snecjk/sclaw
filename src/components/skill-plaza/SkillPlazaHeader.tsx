@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Wrench, Unplug, Plus, RefreshCw } from 'lucide-react';
+import { Wrench, Unplug, Plus, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
-import { myTaskSectionTabClass, myTaskSectionTabsTrackClass } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useConnectorsStore } from '@/stores/connectors';
 import folderIcon from '@/assets/icons/folder.svg';
 import { SkillUploadModal } from './SkillUploadModal';
+import {
+  StoOutlineButton,
+  StoSearchField,
+  StoSegmentTabs,
+} from '@/components/ui/sto-neutral-controls';
 
 export type SkillPlazaSection = 'skills' | 'connectors';
 
@@ -18,7 +22,7 @@ interface SkillPlazaHeaderProps {
 }
 
 /**
- * WorkBuddy 式顶栏 + 保留「技能广场 | 我的技能」页签。
+ * 技能广场顶栏 + 保留「技能广场 | 我的技能」页签。
  */
 export function SkillPlazaHeader({
   section,
@@ -87,73 +91,55 @@ export function SkillPlazaHeader({
   return (
     <div className="mb-2">
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div
-          className={myTaskSectionTabsTrackClass}
-          role="tablist"
-          aria-label={t('plaza.sectionAria', { defaultValue: '技能广场分区' })}
-        >
-          {sections.map((item) => {
-            const Icon = item.icon;
-            const active = section === item.key;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => onSectionChange(item.key)}
-                className={myTaskSectionTabClass(active)}
-              >
-                <Icon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
+        <StoSegmentTabs
+          value={section}
+          items={sections.map((item) => ({
+            value: item.key,
+            label: item.label,
+            icon: item.icon,
+          }))}
+          onValueChange={onSectionChange}
+          ariaLabel={t('plaza.sectionAria', { defaultValue: '技能广场分区' })}
+        />
 
         {isSkills ? (
           <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
-            <label className="flex h-9 min-w-[200px] max-w-[320px] flex-1 items-center gap-2 rounded-[12px] border border-border bg-white px-3">
-              <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder={t('plaza.searchPlaceholderShort', { defaultValue: '搜索技能' })}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-[13px] font-medium leading-none text-foreground placeholder:text-muted-foreground focus:outline-none"
-              />
-            </label>
+            <StoSearchField
+              value={inputValue}
+              onValueChange={setInputValue}
+              placeholder={t('plaza.searchPlaceholderShort', { defaultValue: '搜索技能' })}
+              aria-label={t('plaza.searchPlaceholderShort', { defaultValue: '搜索技能' })}
+              className="h-9 min-w-[200px] max-w-[320px] flex-1"
+              inputClassName="font-medium leading-none"
+            />
 
-            <button
-              type="button"
+            <StoOutlineButton
               onClick={handleOpenFolder}
-              className="inline-flex h-9 items-center gap-1.5 rounded-[12px] border border-border bg-white px-3 font-['PingFang_SC'] text-[13px] font-medium leading-none text-[#1D2129] transition-colors duration-150 hover:bg-[#F2F3F5]"
+              className="h-9 gap-1.5 border-border"
               title={t('openFolder', { defaultValue: '打开技能文件夹' })}
             >
-              <img src={folderIcon} alt="" aria-hidden className="h-3.5 w-3.5 flex-shrink-0 object-contain" />
+              <img src={folderIcon} alt="" aria-hidden className="h-3.5 w-3.5 flex-shrink-0 object-contain dark:invert" />
               <span className="hidden sm:inline">{t('openFolderShort', { defaultValue: '文件夹' })}</span>
-            </button>
+            </StoOutlineButton>
 
-            <button
-              type="button"
+            <StoOutlineButton
               onClick={() => setUploadOpen(true)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-[12px] border border-border bg-white px-3 font-['PingFang_SC'] text-[13px] font-medium leading-none text-[#1D2129] transition-colors duration-150 hover:bg-[#F2F3F5]"
+              className="h-9 gap-1.5 border-border"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
               {t('plaza.upload.button', { defaultValue: '上传技能' })}
-            </button>
+            </StoOutlineButton>
           </div>
         ) : (
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
+            <StoOutlineButton
               onClick={() => void connectorsFetchList(true)}
               disabled={connectorsLoading}
-              className="inline-flex h-9 items-center gap-1.5 rounded-[12px] border border-border bg-white px-3 font-['PingFang_SC'] text-[13px] font-medium leading-none text-[#1D2129] transition-colors duration-150 hover:bg-[#F2F3F5]"
+              className="h-9 gap-1.5 border-border"
             >
               <RefreshCw className={cn('h-3.5 w-3.5', connectorsLoading && 'animate-spin')} />
               {t('plaza.connectors.refresh', { defaultValue: '刷新' })}
-            </button>
+            </StoOutlineButton>
           </div>
         )}
       </div>
@@ -176,7 +162,7 @@ export function SkillPlazaHeader({
                 className={cn(
                   "m-0 border-none bg-transparent pb-2 font-['PingFang_SC'] text-[16px] font-medium cursor-pointer transition-colors",
                   active
-                    ? 'border-b-2 border-[#1D2129] font-bold text-foreground'
+                    ? 'border-b-2 border-[#1D2129] font-bold text-foreground dark:border-[var(--sto-text-primary)]'
                     : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >
