@@ -59,6 +59,8 @@ import { handleArtifactSaveRecordRoutes } from './routes/artifact-save-records';
 import { handleLocalAuthorizedFileRoutes } from './routes/local-authorized-files';
 import { handleAppDevRoutes } from './routes/app-dev';
 import { handleLearningCenterRoutes } from './routes/learning-center';
+import { handleAppExternalServiceRoutes } from './routes/app-external-services';
+import { handleAppTemplateRoutes } from './routes/app-templates';
 
 import { sendJson } from './route-utils';
 
@@ -102,6 +104,8 @@ const routeHandlers: RouteHandler[] = [
   handleLocalAuthorizedFileRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
+  handleAppTemplateRoutes,
+  handleAppExternalServiceRoutes,
   handleAppDevRoutes,
   handleBrowserAutomationRoutes,
   handleScheduledTaskRoutes,

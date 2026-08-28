@@ -48,6 +48,8 @@ import {
 } from '../../services/sto-app-service';
 import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
 import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
+import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
+import { assertExternalServicesReadyForDeploy } from '../../services/app-dev-deploy-preflight';
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
   const rootPath = await getWorkspaceRootPath(workspaceId);
@@ -64,6 +66,8 @@ export async function handleAppDevRoutes(
   if (!url.pathname.startsWith('/api/app-dev/')) return false;
 
   try {
+    if (await handleAppDevSsoAuthRoute(req, res, url)) return true;
+
     // --- Managed Node runtime (capability: service-node-runtime) ---
     if (url.pathname === '/api/app-dev/environment' && req.method === 'GET') {
       sendJson(res, 200, {
@@ -399,6 +403,8 @@ export async function handleAppDevRoutes(
         throw new Error('请选择部署环境：daily / stage / online');
       }
 
+      await assertExternalServicesReadyForDeploy(appPath);
+
       // Always push local changes before kicking off DevOps deploy.
       const pushMessage = (body.pushMessage ?? `发布前同步 (${env})`).trim() || `发布前同步 (${env})`;
       logger.info(`[app-dev] deploy: push before create workspaceId=${workspaceId} env=${env}`);
@@ -455,7 +461,13 @@ export async function handleAppDevRoutes(
     return false;
   } catch (error) {
     logger.error('[app-dev] route error:', error);
-    sendJson(res, 500, { success: false, error: error instanceof Error ? error.message : String(error) });
+    const requestedStatus = typeof error === 'object' && error !== null && 'statusCode' in error
+      ? Number((error as { statusCode?: unknown }).statusCode)
+      : 500;
+    const statusCode = Number.isInteger(requestedStatus) && requestedStatus >= 400 && requestedStatus < 600
+      ? requestedStatus
+      : 500;
+    sendJson(res, statusCode, { success: false, error: error instanceof Error ? error.message : String(error) });
     return true;
   }
 }

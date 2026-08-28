@@ -74,6 +74,8 @@ describe('code-deploy-status', () => {
             env: 'daily',
             status: 'BUILDING',
             pipelineInstanceId: 7946,
+            deploymentVersion: '1.4.0',
+            revisionId: 'rev-14',
             failureMessage: null,
           },
         },
@@ -85,6 +87,8 @@ describe('code-deploy-status', () => {
       env: 'daily',
       status: 'BUILDING',
       pipelineInstanceId: '7946',
+      deploymentVersion: '1.4.0',
+      revisionId: 'rev-14',
     });
   });
 

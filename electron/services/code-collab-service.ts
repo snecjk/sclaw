@@ -1,12 +1,13 @@
 /**
- * STO code-application collaboration via sai-cli (upload / download / status).
- * List, create, and offline remain HTTP in code-application-api.ts.
+ * STO code-application collaboration via sai-cli (create / upload / download / status).
+ * List and offline remain HTTP in code-application-api.ts.
  */
 
 import { readFile, realpath } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { resolve } from 'node:path';
 import {
+  applicationCodeFromName,
   type CodeApplicationRecord,
 } from '../../shared/code-application-catalog';
 import {
@@ -28,7 +29,6 @@ import {
   extractSourceArchive,
 } from '../utils/code-source-archive';
 import {
-  createCodeApplication as createCodeApplicationHttp,
   listCodeApplications,
   resolveCodeApplicationPolicyOrigin,
 } from './code-application-api';
@@ -40,6 +40,10 @@ import {
   readStoWorkspaceFile,
   writeStoWorkspaceBinding,
 } from './sto-workspace-store';
+import {
+  buildCodeApplicationCreateArgs,
+  type CodeApplicationPageType,
+} from './code-application-create-command';
 
 export interface CodeCollabCommandResult {
   ok: boolean;
@@ -93,8 +97,26 @@ async function saiDetail(applicationId: string): Promise<CodeApplicationRecord> 
 export async function createCodeApplication(input: {
   applicationName: string;
   description?: string | null;
+  pageType?: CodeApplicationPageType;
 }): Promise<CodeApplicationRecord> {
-  return createCodeApplicationHttp(input);
+  const applicationName = input.applicationName.trim();
+  if (!applicationName) throw new Error('应用名称不能为空');
+
+  const applicationUid = createUlid();
+  const applicationCode = applicationCodeFromName(applicationName)
+    || `app-${applicationUid.slice(-8).toLowerCase()}`;
+  const args = buildCodeApplicationCreateArgs({
+    applicationUid,
+    applicationCode,
+    applicationName,
+    description: input.description,
+    pageType: input.pageType,
+  });
+  const result = await runSaiPolicy(args);
+  if (!result.ok) throw new Error(saiCliErrorMessage(result));
+  const created = parseSaiCodeApplicationDetail(result.data);
+  if (!created?.applicationId) throw new Error('创建云端应用失败：响应缺少 applicationId');
+  return created;
 }
 
 export async function waitForActiveCodeApplication(

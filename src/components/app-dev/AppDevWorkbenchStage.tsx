@@ -12,6 +12,7 @@ import {
   FolderTree,
   GitBranch,
   Loader2,
+  PlugZap,
   RotateCw,
   Save,
   Search,
@@ -25,6 +26,7 @@ import { AppDevCloudPanel } from '@/components/app-dev/AppDevCloudPanel';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
+import { AppExternalServicesPanel } from '@/components/app-dev/AppExternalServicesPanel';
 import { AppDevMonacoEditor, formatAppDevDiagnosticsPrompt } from '@/components/app-dev/AppDevMonacoEditor';
 import {
   SclawBrowserFrame,
@@ -43,8 +45,7 @@ import {
   type AppSourceSearchHit,
 } from '@/lib/app-dev-api';
 import {
-  injectAppDevPreviewStoToken,
-  stripAppDevPreviewStoToken,
+  stripLegacyAppDevPreviewAuth,
 } from '@/lib/app-dev-preview-url';
 import {
   formatHiddenPreviewFailureForAgent,
@@ -52,11 +53,10 @@ import {
 } from '@/lib/app-dev-preview-console';
 import { openExternalUrl } from '@/lib/preview-url';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth';
 import '@/components/more-apps/app-plaza-shell.css';
 import '@/components/sclaw-browser/sclaw-browser-overlay.css';
 
-export type AppDevStageMode = 'preview' | 'code' | 'git' | 'cloud' | 'community';
+export type AppDevStageMode = 'preview' | 'code' | 'git' | 'external-services' | 'cloud' | 'community';
 type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
@@ -152,18 +152,15 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
    */
   const [previewMountUrl, setPreviewMountUrl] = useState('');
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
-  const stoToken = useAuthStore((s) => s.user?.stoToken?.trim() ?? '');
-
-  const withPreviewAuth = (url: string) => injectAppDevPreviewStoToken(url, stoToken);
 
   useEffect(() => {
     const next = status?.previewUrl ?? '';
-    // Address bar shows a clean URL; mount URL carries stoToken for the app template.
-    setPreviewAddress(stripAppDevPreviewStoToken(next) || next);
-    setPreviewMountUrl(withPreviewAuth(next));
+    const clean = stripLegacyAppDevPreviewAuth(next) || next;
+    setPreviewAddress(clean);
+    setPreviewMountUrl(clean);
     setPreviewCanGoBack(false);
     setPreviewReloadNonce(0);
-  }, [status?.previewUrl, stoToken]);
+  }, [status?.previewUrl]);
 
   useEffect(() => {
     openPathsRef.current = new Set(tabs.map((t) => t.path));
@@ -256,10 +253,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       || status?.previewUrl?.trim()
       || '';
     if (!current) return;
-    const base = stripAppDevPreviewStoToken(current) || current;
-    const authed = withPreviewAuth(base);
-    setPreviewMountUrl(authed);
-    setPreviewAddress(base);
+    const clean = stripLegacyAppDevPreviewAuth(current) || current;
+    setPreviewMountUrl(clean);
+    setPreviewAddress(clean);
     setPreviewCanGoBack(false);
     setPreviewReloadNonce((value) => value + 1);
   };
@@ -268,18 +264,17 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     const next = previewAddress.trim();
     if (!next) {
       setPreviewAddress(
-        stripAppDevPreviewStoToken(previewMountUrl || status?.previewUrl || '')
+        stripLegacyAppDevPreviewAuth(previewMountUrl || status?.previewUrl || '')
           || previewMountUrl
           || status?.previewUrl
           || '',
       );
       return;
     }
-    const base = stripAppDevPreviewStoToken(next) || next;
-    const authed = withPreviewAuth(base);
-    setPreviewAddress(base);
-    setPreviewMountUrl(authed);
-    previewFrameRef.current?.loadURL(authed);
+    const clean = stripLegacyAppDevPreviewAuth(next) || next;
+    setPreviewAddress(clean);
+    setPreviewMountUrl(clean);
+    previewFrameRef.current?.loadURL(clean);
   };
 
   const openPreviewInSystemBrowser = () => {
@@ -292,8 +287,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       toast.message('预览还没准备好，稍后再试');
       return;
     }
-    const base = stripAppDevPreviewStoToken(current) || current;
-    openExternalUrl(withPreviewAuth(base));
+    const clean = stripLegacyAppDevPreviewAuth(current) || current;
+    openExternalUrl(clean);
   };
 
   const refreshOpenCodeFromDisk = async (opts?: { force?: boolean }) => {
@@ -425,6 +420,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             { id: 'preview', label: '预览', icon: Eye },
             { id: 'code', label: '代码', icon: FileCode2 },
             { id: 'git', label: 'Git 代码管理', icon: GitBranch },
+            { id: 'external-services', label: '外部服务', icon: PlugZap },
             { id: 'cloud', label: '云服务', icon: Cloud },
             { id: 'community', label: '社区', icon: Users },
           ] as const
@@ -536,7 +532,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                       || previewMountUrl
                       || status.previewUrl
                       || '';
-                    const display = stripAppDevPreviewStoToken(current) || current;
+                    const display = stripLegacyAppDevPreviewAuth(current) || current;
                     if (previewAddress.trim() && previewAddress.trim() !== display) {
                       commitPreviewAddress();
                     } else {
@@ -550,7 +546,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                         || previewMountUrl
                         || status.previewUrl
                         || '';
-                      setPreviewAddress(stripAppDevPreviewStoToken(current) || current);
+                      setPreviewAddress(stripLegacyAppDevPreviewAuth(current) || current);
                       (event.target as HTMLInputElement).blur();
                     }
                   }}
@@ -571,15 +567,15 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             </header>
             <div className="relative min-h-0 flex-1">
               <SclawBrowserFrame
-                key={`${previewMountUrl || status.previewUrl}:${previewRevision}:${previewReloadNonce}`}
+                key={`${previewMountUrl || stripLegacyAppDevPreviewAuth(status.previewUrl)}:${previewRevision}:${previewReloadNonce}`}
                 ref={previewFrameRef}
-                url={previewMountUrl || withPreviewAuth(status.previewUrl)}
+                url={previewMountUrl || stripLegacyAppDevPreviewAuth(status.previewUrl)}
                 title={appName}
                 embedRuntimeId={null}
                 captureGuestNetworkFailures
                 onNavStateChange={({ canGoBack }) => setPreviewCanGoBack(canGoBack)}
                 onPageUrl={(pageUrl) =>
-                  setPreviewAddress(stripAppDevPreviewStoToken(pageUrl) || pageUrl)
+                  setPreviewAddress(stripLegacyAppDevPreviewAuth(pageUrl) || pageUrl)
                 }
                 onConsoleMessage={({ message }) => {
                   if (!onPreviewRuntimeError) return;
@@ -589,7 +585,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     || previewAddress
                     || status.previewUrl
                     || '';
-                  onPreviewRuntimeError(formatHiddenPreviewFailureForAgent(message, pageUrl));
+                  const cleanPageUrl = stripLegacyAppDevPreviewAuth(pageUrl) || pageUrl;
+                  onPreviewRuntimeError(formatHiddenPreviewFailureForAgent(message, cleanPageUrl));
                 }}
               />
             </div>
@@ -637,6 +634,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       ) : null}
 
       {mode === 'git' ? <AppDevGitPanel workspaceId={workspaceId} /> : null}
+
+      {mode === 'external-services' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
 
       {mode === 'cloud' ? (
         <AppDevCloudPanel workspaceId={workspaceId} appName={appName} />

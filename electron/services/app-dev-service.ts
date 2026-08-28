@@ -7,12 +7,10 @@
 
 import { app } from 'electron';
 import { spawn } from 'child_process';
-import { createWriteStream, existsSync, statSync } from 'fs';
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
-import { homedir, tmpdir } from 'os';
+import { existsSync, statSync } from 'fs';
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
+import { homedir } from 'os';
 import { extname, dirname, join, relative, resolve, sep } from 'path';
-import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
 import {
   creepRatio,
   isTemplateTextFile,
@@ -25,10 +23,9 @@ import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManaged
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
 import { needsWinShell, quoteForCmd } from '../utils/paths';
-import { proxyAwareFetch } from '../utils/proxy-fetch';
-import { extractZip } from '../utils/zip-extract';
-import { createWorkspace, deleteWorkspace, listUserWorkspaces } from './session-catalog-service';
+import { createWorkspace, deleteWorkspace, getWorkspaceRootPath, listUserWorkspaces } from './session-catalog-service';
 import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
+import { KeyedGenerationTracker, OperationCanceledError } from './keyed-single-flight';
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
 import { cloneStoApp } from './sto-app-service';
@@ -49,15 +46,23 @@ import {
   upsertStoAppBinding,
 } from './sto-app-binding-store';
 import { writeStoWorkspaceBinding } from './sto-workspace-store';
-import type { CodeApplicationRecord } from '../../shared/code-application-catalog';
+import {
+  normalizeCodeApplicationPageType,
+  type CodeApplicationPageType,
+  type CodeApplicationRecord,
+} from '../../shared/code-application-catalog';
 import {
   STO_WORKSPACE_RELATIVE,
   codeApplicationToWorkspaceFields,
 } from '../../shared/sto-workspace';
-
-/** Remote React A2UI template (OSS). Dev prefers repo checkout; packaged uses OSS cache. */
-const REACT_TEMPLATE_ZIP_URL =
-  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/3EC02BDE-19C8-46-react-a2ui-template.zip';
+import {
+  appTemplatePackageManager,
+  resolveLocalBuiltinTemplateDir,
+} from './app-template-package-manager';
+import { appTemplateApiClient, type AppTemplatePageType } from './app-template-api-client';
+import { buildAppTemplateArchive } from './app-template-archive';
+import { createUlid } from '../utils/ulid';
+import { writeAppDevWorkspaceId } from './app-dev-marker';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -71,8 +76,10 @@ export interface AppDevStatus {
 }
 
 const statuses = new Map<string, AppDevStatus>();
+const setupPipelineGenerations = new KeyedGenerationTracker();
 
 export const DEFAULT_APPS_PARENT_DIR = join(homedir(), 'SClawApps');
+export const DEFAULT_TEMPLATES_PARENT_DIR = join(homedir(), 'SClawTemplates');
 
 /** Marker under the project agent workspace — used to hide from sidebar and list in 开发应用. */
 export const APP_DEV_MARKER_RELATIVE = join('.sclaw', 'app-dev.json');
@@ -80,12 +87,18 @@ export const APP_DEV_MARKER_RELATIVE = join('.sclaw', 'app-dev.json');
 export type AppDevSource = 'created' | 'imported';
 
 export interface AppDevMarker {
-  kind: 'app-dev';
+  workspaceId?: string;
+  kind: 'app-dev' | 'app-template';
   name: string;
   projectType: string;
   createdAt: string;
   /** `imported` = local folder import; `created` = 新建站 / clone from cloud. */
   source?: AppDevSource;
+  pageType?: CodeApplicationPageType;
+  templateId?: string;
+  templateVersion?: string;
+  packageOssKey?: string;
+  packageEtag?: string | null;
 }
 
 export interface DevAppSummary {
@@ -107,6 +120,7 @@ export interface DevAppSummary {
   listError?: string;
   source?: AppDevSource;
   gitRepo?: boolean;
+  pageType: CodeApplicationPageType;
 }
 
 export function appDevMarkerPath(appPath: string): string {
@@ -130,21 +144,27 @@ async function readAppDevMarkerFields(appPath: string): Promise<{
   createdAt: string;
   name?: string;
   source?: AppDevSource;
+  pageType: CodeApplicationPageType;
+  kind: AppDevMarker['kind'];
 }> {
   let projectType = 'frontend';
   let createdAt = '';
   let name: string | undefined;
   let source: AppDevSource | undefined;
+  let pageType: CodeApplicationPageType = 'site';
+  let kind: AppDevMarker['kind'] = 'app-dev';
   try {
     const raw = JSON.parse(await readFile(appDevMarkerPath(appPath), 'utf8')) as Partial<AppDevMarker>;
     if (typeof raw.projectType === 'string' && raw.projectType.trim()) projectType = raw.projectType.trim();
     if (typeof raw.createdAt === 'string' && raw.createdAt.trim()) createdAt = raw.createdAt;
     if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
     if (raw.source === 'created' || raw.source === 'imported') source = raw.source;
+    pageType = normalizeCodeApplicationPageType(raw.pageType);
+    if (raw.kind === 'app-template') kind = raw.kind;
   } catch {
     // ignore
   }
-  return { projectType, createdAt, name, source };
+  return { projectType, createdAt, name, source, pageType, kind };
 }
 
 /** Local marker workspaces that are not already represented by a cloud list row. */
@@ -165,6 +185,7 @@ export async function listLocalOnlyDevApps(input: {
     if (claimedIds.has(workspace.id) || claimedRoots.has(resolvedRoot)) continue;
     if (!existsSync(resolvedRoot) || !isAppDevWorkspaceRoot(resolvedRoot)) continue;
     const fields = await readAppDevMarkerFields(resolvedRoot);
+    if (fields.kind === 'app-template') continue;
     apps.push({
       workspaceId: workspace.id,
       name: fields.name || workspace.name || resolvedRoot.split(/[/\\]/).filter(Boolean).pop() || '导入应用',
@@ -175,6 +196,7 @@ export async function listLocalOnlyDevApps(input: {
       availability: 'local',
       source: fields.source ?? 'imported',
       gitRepo: hasGitRepo(resolvedRoot),
+      pageType: fields.pageType,
     });
   }
   return apps;
@@ -243,27 +265,72 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 <!-- /sclaw-app-dev-context -->`;
 }
 
+function buildAppTemplateAgentsContextBlock(vars: { name: string; pageType: CodeApplicationPageType }): string {
+  return `<!-- sclaw-app-dev-context -->
+你正在维护一个名为「${vars.name}」的 SClaw ${vars.pageType === 'site' ? '独立站点' : '托管应用'}模板。
+
+## 模板维护边界
+- 这是模板工程，不是普通业务应用；修改会影响模板后续发布后创建的新应用，不影响既有应用。
+- 可以同时维护 A2UI JSON 和 React/antd JSX，不强制只使用其中一种方式。
+- 保留根目录 \`manifest.json\`、\`package.json\` 和可运行的工程入口。
+- 不得修改 \`manifest.json\` 中的 \`templateId\`、\`pageType\` 或 \`schemaVersion\`。
+- 不要写入密钥、\`.env\`、构建产物、\`node_modules\` 或符号链接。
+- 发布前应运行 typecheck/build 并说明验证结果；真正发布必须由模板作者在页面中确认。
+<!-- /sclaw-app-dev-context -->`;
+}
+
 async function writeAppDevBootstrap(
   appPath: string,
-  vars: { name: string; projectType: string; source?: AppDevSource },
+  vars: {
+    name: string;
+    projectType: string;
+    source?: AppDevSource;
+    pageType?: CodeApplicationPageType;
+    templateId?: string;
+    templateVersion?: string;
+    packageOssKey?: string;
+    packageEtag?: string | null;
+    kind?: AppDevMarker['kind'];
+  },
 ): Promise<void> {
   const sclawDir = join(appPath, '.sclaw');
   await mkdir(sclawDir, { recursive: true });
 
   const marker: AppDevMarker = {
-    kind: 'app-dev',
+    kind: vars.kind ?? 'app-dev',
     name: vars.name,
     projectType: vars.projectType,
     createdAt: new Date().toISOString(),
     source: vars.source,
+    pageType: vars.pageType,
+    templateId: vars.templateId,
+    templateVersion: vars.templateVersion,
+    packageOssKey: vars.packageOssKey,
+    packageEtag: vars.packageEtag,
   };
   // Preserve original createdAt / source when re-ensuring.
   if (existsSync(appDevMarkerPath(appPath))) {
     try {
       const existing = JSON.parse(await readFile(appDevMarkerPath(appPath), 'utf8')) as Partial<AppDevMarker>;
       if (typeof existing.createdAt === 'string') marker.createdAt = existing.createdAt;
+      if (vars.kind === undefined && existing.kind === 'app-template') marker.kind = existing.kind;
       if (!marker.source && (existing.source === 'created' || existing.source === 'imported')) {
         marker.source = existing.source;
+      }
+      if (!marker.pageType && existing.pageType) {
+        marker.pageType = normalizeCodeApplicationPageType(existing.pageType);
+      }
+      if (!marker.templateId && typeof existing.templateId === 'string') {
+        marker.templateId = existing.templateId;
+      }
+      if (!marker.templateVersion && typeof existing.templateVersion === 'string') {
+        marker.templateVersion = existing.templateVersion;
+      }
+      if (!marker.packageOssKey && typeof existing.packageOssKey === 'string') {
+        marker.packageOssKey = existing.packageOssKey;
+      }
+      if (marker.packageEtag === undefined && existing.packageEtag !== undefined) {
+        marker.packageEtag = existing.packageEtag;
       }
     } catch {
       // ignore
@@ -272,7 +339,9 @@ async function writeAppDevBootstrap(
   await writeFile(appDevMarkerPath(appPath), `${JSON.stringify(marker, null, 2)}\n`, 'utf8');
 
   const agentsPath = join(sclawDir, 'AGENTS.md');
-  const contextBlock = buildAppDevAgentsContextBlock({ name: vars.name });
+  const contextBlock = marker.kind === 'app-template'
+    ? buildAppTemplateAgentsContextBlock({ name: vars.name, pageType: normalizeCodeApplicationPageType(vars.pageType) })
+    : buildAppDevAgentsContextBlock({ name: vars.name });
   if (existsSync(agentsPath)) {
     let content = await readFile(agentsPath, 'utf8');
     const start = content.indexOf('<!-- sclaw-app-dev-context -->');
@@ -349,18 +418,19 @@ function isValidReactTemplate(dir: string): boolean {
 
 function resolveLocalReactTemplateDir(): string | null {
   const candidates = [
+    join(process.cwd(), 'resources', 'app-templates', 'site-minimal'),
+    join(app.getAppPath(), 'resources', 'app-templates', 'site-minimal'),
+    join(process.resourcesPath, 'resources', 'app-templates', 'site-minimal'),
+    join(process.resourcesPath, 'app-templates', 'site-minimal'),
     join(process.cwd(), 'resources', 'app-templates', 'react-a2ui-template'),
     join(app.getAppPath(), 'resources', 'app-templates', 'react-a2ui-template'),
+    join(process.resourcesPath, 'resources', 'app-templates', 'react-a2ui-template'),
     join(process.resourcesPath, 'app-templates', 'react-a2ui-template'),
   ];
   for (const dir of candidates) {
     if (isValidReactTemplate(dir)) return dir;
   }
   return null;
-}
-
-function cachedTemplateDir(): string {
-  return join(app.getPath('userData'), 'app-templates', 'react-a2ui-template');
 }
 
 /** npm / vite cwd for a user app (root package or legacy frontend/). */
@@ -377,122 +447,9 @@ function templateMetaPath(dir: string): string {
 
 /** Sync path for OpenSpec helpers: dev prefers local checkout, else OSS cache. */
 function templateDir(): string {
-  if (!app.isPackaged) {
-    const local = resolveLocalReactTemplateDir();
-    if (local) return local;
-  }
-  return cachedTemplateDir();
-}
-
-let ensureTemplatePromise: Promise<string> | null = null;
-
-async function downloadReactTemplateZip(zipPath: string): Promise<void> {
-  logger.info(`[app-dev] downloading react template zip url=${REACT_TEMPLATE_ZIP_URL}`);
-  const response = await proxyAwareFetch(REACT_TEMPLATE_ZIP_URL, {
-    method: 'GET',
-    timeoutMs: 180_000,
-  });
-  if (!response.ok) {
-    throw new Error(`下载应用模板失败: HTTP ${response.status}`);
-  }
-  const body = response.body;
-  if (!body) throw new Error('下载应用模板失败: 响应为空');
-  await pipeline(
-    Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0]),
-    createWriteStream(zipPath),
-  );
-}
-
-/**
- * Ensure the React engineering template is available locally.
- * Dev (unpackaged): prefer repo `resources/app-templates/react-a2ui-template`, else OSS.
- * Packaged: download/cache OSS zip (refreshed when URL changes).
- */
-async function ensureReactTemplateDir(): Promise<string> {
-  if (ensureTemplatePromise) return ensureTemplatePromise;
-
-  ensureTemplatePromise = (async () => {
-    if (!app.isPackaged) {
-      const local = resolveLocalReactTemplateDir();
-      if (local) {
-        logger.info(`[app-dev] using local A2UI template dir=${local}`);
-        return local;
-      }
-      logger.info('[app-dev] local A2UI template missing, falling back to OSS');
-    }
-
-    const cacheDir = cachedTemplateDir();
-    const metaPath = templateMetaPath(cacheDir);
-
-    if (isValidReactTemplate(cacheDir)) {
-      try {
-        const meta = JSON.parse(await readFile(metaPath, 'utf8')) as { sourceUrl?: string };
-        if (meta.sourceUrl === REACT_TEMPLATE_ZIP_URL) {
-          logger.info(`[app-dev] using cached react template dir=${cacheDir}`);
-          return cacheDir;
-        }
-        logger.info('[app-dev] cached react template URL changed, refreshing');
-      } catch {
-        logger.info(`[app-dev] using cached react template dir=${cacheDir}`);
-        return cacheDir;
-      }
-    }
-
-    const stagingRoot = await mkdtemp(join(tmpdir(), 'sclaw-react-a2ui-template-'));
-    const zipPath = join(stagingRoot, 'react-a2ui-template.zip');
-    const extractDir = join(stagingRoot, 'extract');
-
-    try {
-      await mkdir(extractDir, { recursive: true });
-      await downloadReactTemplateZip(zipPath);
-      await extractZip(zipPath, extractDir);
-
-      const top = await readdir(extractDir, { withFileTypes: true });
-      const resolvedExtract =
-        top.length === 1 && top[0].isDirectory() ? join(extractDir, top[0].name) : extractDir;
-
-      if (!isValidReactTemplate(resolvedExtract)) {
-        throw new Error('应用模板解压后缺少 package.json+src 或 frontend/package.json');
-      }
-
-      await rm(cacheDir, { recursive: true, force: true }).catch(() => undefined);
-      await mkdir(dirname(cacheDir), { recursive: true });
-      await cp(resolvedExtract, cacheDir, { recursive: true });
-      await writeFile(
-        metaPath,
-        `${JSON.stringify({
-          sourceUrl: REACT_TEMPLATE_ZIP_URL,
-          fetchedAt: new Date().toISOString(),
-        }, null, 2)}\n`,
-        'utf8',
-      );
-
-      logger.info(`[app-dev] react template ready from OSS cacheDir=${cacheDir}`);
-      return cacheDir;
-    } catch (error) {
-      if (!app.isPackaged) {
-        const local = resolveLocalReactTemplateDir();
-        if (local) {
-          logger.warn(
-            `[app-dev] OSS template download failed, falling back to local checkout: ${local}`,
-            error,
-          );
-          return local;
-        }
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`应用模板准备失败（OSS 下载）: ${message}`);
-    } finally {
-      await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
-    }
-  })();
-
-  try {
-    return await ensureTemplatePromise;
-  } catch (error) {
-    ensureTemplatePromise = null;
-    throw error;
-  }
+  const local = resolveLocalReactTemplateDir();
+  if (!local) throw new Error('应用模板资源缺失');
+  return local;
 }
 
 function setStatus(workspaceId: string, patch: Partial<AppDevStatus>): AppDevStatus {
@@ -528,6 +485,7 @@ async function copyTemplate(
   await mkdir(destDir, { recursive: true });
   const entries = await readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
+    if (entry.name === '.sclaw-template-meta.json') continue;
     const src = join(srcDir, entry.name);
     const dest = join(destDir, entry.name);
     if (entry.isDirectory()) {
@@ -581,6 +539,12 @@ export interface CreateUserAppInput {
   parentDir?: string;
   /** 'frontend' | 'fullstack' — same template in MVP (backend placeholder). */
   projectType?: string;
+  /** Cloud application publishing mode. Defaults to site for older clients. */
+  pageType?: CodeApplicationPageType;
+  /** Selected ACTIVE template and its immutable version. */
+  templateId: string;
+  templateVersion: string;
+  templateSource?: 'local-resource' | 'memory-center';
 }
 
 export interface CreateUserAppResult {
@@ -589,9 +553,150 @@ export interface CreateUserAppResult {
   workspaceName: string;
 }
 
+export interface AppTemplateWorkspaceMarker {
+  kind: 'app-template';
+  templateId: string;
+  pageType: AppTemplatePageType;
+  name: string;
+  description: string;
+  latestVersion?: string;
+  packageOssKey?: string;
+  packageEtag?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function appTemplateWorkspaceMarkerPath(templateRoot: string): string {
+  return join(templateRoot, '.sclaw', 'app-template.json');
+}
+
+export async function openAppTemplateWorkspace(input: {
+  templateId?: string;
+  pageType: AppTemplatePageType;
+  name: string;
+  description?: string;
+  latestVersion?: string;
+}): Promise<CreateUserAppResult & { templateId: string }> {
+  const name = input.name.trim();
+  if (!name) throw new Error('模板名称不能为空');
+  const templateId = input.templateId?.trim() || createUlid();
+  const appPath = join(DEFAULT_TEMPLATES_PARENT_DIR, templateId);
+  const markerPath = appTemplateWorkspaceMarkerPath(appPath);
+
+  if (!existsSync(markerPath)) {
+    let sourceDir: string;
+    if (input.templateId) {
+      if (!input.latestVersion?.trim()) throw new Error('模板最新版本不能为空');
+      sourceDir = await appTemplatePackageManager.ensureTemplate(
+        templateId,
+        input.latestVersion,
+        input.pageType,
+      );
+    } else {
+      sourceDir = resolveLocalBuiltinTemplateDir(`${input.pageType}-minimal`);
+    }
+    await mkdir(DEFAULT_TEMPLATES_PARENT_DIR, { recursive: true });
+    await cp(sourceDir, appPath, { recursive: true });
+
+    const manifestPath = join(appPath, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+    manifest.schemaVersion = 1;
+    manifest.templateId = templateId;
+    manifest.pageType = input.pageType;
+    manifest.name = name;
+    manifest.description = input.description?.trim() || '';
+    delete manifest.version;
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    const now = new Date().toISOString();
+    const marker: AppTemplateWorkspaceMarker = {
+      kind: 'app-template',
+      templateId,
+      pageType: input.pageType,
+      name,
+      description: input.description?.trim() || '',
+      latestVersion: input.latestVersion,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await mkdir(dirname(markerPath), { recursive: true });
+    await writeFile(markerPath, `${JSON.stringify(marker, null, 2)}\n`, 'utf8');
+    await writeAppDevBootstrap(appPath, {
+      kind: 'app-template',
+      name,
+      projectType: 'frontend',
+      source: 'created',
+      pageType: input.pageType,
+      templateId,
+      templateVersion: input.latestVersion,
+    });
+
+    if (await isGitAvailable()) {
+      const init = await runGit(appPath, ['init']);
+      if (init.ok) {
+        await runGit(appPath, ['add', '-A']);
+        await runGit(appPath, ['commit', '-m', '创建模板工作区']);
+      }
+    }
+  }
+
+  const workspaces = await listUserWorkspaces();
+  const existing = workspaces.find((workspace) => resolve(workspace.rootPath) === resolve(appPath));
+  const workspace = existing ?? await createWorkspace({ name: `模板：${name}`, rootPath: appPath });
+  const workspaceId = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
+  setStatus(workspaceId, { appPath, phase: 'created', progress: 0 });
+  void runSetupPipeline(workspaceId, appPath).catch((error) => {
+    logger.error('[app-template] setup pipeline failed:', error);
+  });
+  return { workspaceId, appPath, workspaceName: workspace.name ?? name, templateId };
+}
+
+export async function publishAppTemplateWorkspace(input: {
+  workspaceId: string;
+}): Promise<Awaited<ReturnType<typeof appTemplateApiClient.publish>>> {
+  const appPath = await getWorkspaceRootPath(input.workspaceId);
+  if (!appPath) throw new Error('模板工作区不存在');
+  const markerPath = appTemplateWorkspaceMarkerPath(appPath);
+  if (!existsSync(markerPath)) throw new Error('当前工作区不是应用模板');
+  const marker = JSON.parse(await readFile(markerPath, 'utf8')) as AppTemplateWorkspaceMarker;
+  const manifest = JSON.parse(
+    await readFile(join(appPath, 'manifest.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  const manifestName = String(manifest.name ?? '').trim();
+  const manifestDescription = String(manifest.description ?? '').trim();
+  if (manifest.templateId !== marker.templateId || manifest.pageType !== marker.pageType) {
+    throw new Error('manifest.json 的 templateId 或 pageType 与模板工作区不一致');
+  }
+  if (!manifestName) throw new Error('manifest.json 的 name 不能为空');
+  const packageBytes = await buildAppTemplateArchive(appPath);
+  const result = await appTemplateApiClient.publish({
+    metadata: {
+      templateId: marker.templateId,
+      pageType: marker.pageType,
+      name: manifestName,
+      description: manifestDescription,
+    },
+    packageBytes,
+  });
+  marker.latestVersion = result.version;
+  marker.packageOssKey = result.packageOssKey;
+  marker.packageEtag = result.packageEtag;
+  marker.name = manifestName;
+  marker.description = manifestDescription;
+  marker.updatedAt = new Date().toISOString();
+  await writeFile(markerPath, `${JSON.stringify(marker, null, 2)}\n`, 'utf8');
+  return result;
+}
+
 export async function createUserApp(input: CreateUserAppInput): Promise<CreateUserAppResult> {
   const name = input.name.trim();
   if (!name) throw new Error('应用名称不能为空');
+  const pageType = normalizeCodeApplicationPageType(input.pageType);
+  const templateId = input.templateId?.trim();
+  const templateVersion = input.templateVersion?.trim();
+  if (!templateId || !templateVersion) throw new Error('请选择应用模板');
+  const templateSource = input.templateSource ?? 'memory-center';
 
   const parentDir = (input.parentDir?.trim() || DEFAULT_APPS_PARENT_DIR);
   const appPath = join(parentDir, name);
@@ -602,10 +707,25 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     }
   }
 
-  const template = await ensureReactTemplateDir();
+  if (templateSource === 'local-resource' && app.isPackaged) {
+    throw new Error('本地资源模板仅用于开发调试');
+  }
+  const expectedBuiltinId = `${pageType}-minimal` as 'site-minimal' | 'assets-minimal';
+  if (templateSource === 'local-resource' && templateId !== expectedBuiltinId) {
+    throw new Error(`本地资源模板与应用类型不一致: ${templateId}`);
+  }
+  const template = templateSource === 'local-resource'
+    ? resolveLocalBuiltinTemplateDir(expectedBuiltinId)
+    : await appTemplatePackageManager.ensureTemplate(templateId, templateVersion, pageType);
   if (!isValidReactTemplate(template)) {
     throw new Error(`应用模板缺失: ${template}`);
   }
+  const templateMeta = templateSource === 'local-resource' ? {} : JSON.parse(
+    await readFile(templateMetaPath(template), 'utf8'),
+  ) as {
+    packageOssKey?: string;
+    packageEtag?: string | null;
+  };
 
   logger.info(
     `[app-dev] createUserApp start name=${name} appPath=${appPath} ` +
@@ -623,12 +743,18 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     name,
     projectType: input.projectType ?? 'frontend',
     source: 'created',
+    pageType,
+    templateId,
+    templateVersion,
+    packageOssKey: templateMeta.packageOssKey,
+    packageEtag: templateMeta.packageEtag,
   });
 
   let createdApplicationId: string | undefined;
   const created = await createCodeApplication({
     applicationName: name,
     description: `${name} 应用`,
+    pageType,
   });
   const active = created.status?.trim().toUpperCase() === 'ACTIVE'
     ? created
@@ -667,6 +793,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
 
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId: string = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
 
   await upsertStoAppBinding({
     applicationId: createdApplicationId,
@@ -744,6 +871,7 @@ export async function importUserApp(input: {
     rootPath: appPath,
   });
   const workspaceId: string = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
 
   logger.info(
     `[app-dev] importUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath} ` +
@@ -815,6 +943,15 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
     }
     if (pathOk && markerOk && workspaceId) {
       const fields = await readAppDevMarkerFields(localPath);
+      if (fields.pageType !== cloud.pageType) {
+        try {
+          const raw = JSON.parse(await readFile(appDevMarkerPath(localPath), 'utf8')) as Partial<AppDevMarker>;
+          raw.pageType = cloud.pageType;
+          await writeFile(appDevMarkerPath(localPath), `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+        } catch {
+          // ignore
+        }
+      }
       const ws = workspaceById.get(workspaceId);
       apps.push({
         workspaceId,
@@ -830,6 +967,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         devopsApplicationId: cloud.devopsApplicationId,
         source: fields.source ?? 'created',
         gitRepo: hasGitRepo(localPath),
+        pageType: cloud.pageType ?? fields.pageType,
       });
       continue;
     }
@@ -846,6 +984,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         previewUrl: cloud.previewUrl,
         gitlabProjectId: cloud.gitlabProjectId,
         devopsApplicationId: cloud.devopsApplicationId,
+        pageType: cloud.pageType,
       });
     }
 
@@ -1014,6 +1153,7 @@ export async function cloneDevApp(input: {
     name,
     projectType: 'frontend',
     source: 'created',
+    pageType: cloud?.pageType,
   });
 
   try {
@@ -1025,6 +1165,7 @@ export async function cloneDevApp(input: {
 
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId = workspace.id;
+  await writeAppDevWorkspaceId(appPath, workspaceId);
 
   await upsertStoAppBinding({
     applicationId,
@@ -1146,7 +1287,11 @@ export async function deleteDevApp(
   return { offline, ...removed };
 }
 
-async function runNpmInstall(workspaceId: string, appPath: string): Promise<void> {
+async function runNpmInstall(
+  workspaceId: string,
+  appPath: string,
+  shouldReportProgress: () => boolean,
+): Promise<void> {
   const { npmBin } = getManagedNodePaths();
   const npmCwd = resolveAppNpmCwd(appPath);
   let ratio = 0;
@@ -1162,7 +1307,12 @@ async function runNpmInstall(workspaceId: string, appPath: string): Promise<void
       tail.push(String(chunk));
       if (tail.length > 40) tail.shift();
       ratio = creepRatio(ratio);
-      setStatus(workspaceId, { phase: 'installing', progress: pipelineProgress('installing', ratio) });
+      if (shouldReportProgress()) {
+        setStatus(workspaceId, {
+          phase: 'installing',
+          progress: pipelineProgress('installing', ratio),
+        });
+      }
     };
     child.stdout?.on('data', onActivity);
     child.stderr?.on('data', onActivity);
@@ -1179,31 +1329,43 @@ async function runNpmInstall(workspaceId: string, appPath: string): Promise<void
  * one continuous 0-100 progress. Also used to resume/start an existing app.
  */
 export async function runSetupPipeline(workspaceId: string, appPath: string): Promise<void> {
+  const pipeline = setupPipelineGenerations.begin(workspaceId);
+  const isCurrent = pipeline.isCurrent;
   try {
+    pipeline.throwIfCanceled();
     if (!isNodeRuntimeReady()) {
       setStatus(workspaceId, { appPath, phase: 'preparing-env', progress: pipelineProgress('preparing-env', 0) });
       const poll = setInterval(() => {
         const runtime = getNodeRuntimeStatus();
         const ratio = runtime.totalBytes > 0 ? runtime.receivedBytes / runtime.totalBytes : 0;
-        setStatus(workspaceId, { phase: 'preparing-env', progress: pipelineProgress('preparing-env', ratio) });
+        if (isCurrent()) {
+          setStatus(workspaceId, {
+            phase: 'preparing-env',
+            progress: pipelineProgress('preparing-env', ratio),
+          });
+        }
       }, 500);
       try {
         await setupManagedNode();
       } finally {
         clearInterval(poll);
       }
+      pipeline.throwIfCanceled();
     }
 
     const nodeModules = join(resolveAppNpmCwd(appPath), 'node_modules');
     if (!existsSync(nodeModules)) {
       setStatus(workspaceId, { phase: 'installing', progress: pipelineProgress('installing', 0) });
-      await runNpmInstall(workspaceId, appPath);
+      await runNpmInstall(workspaceId, appPath, isCurrent);
+      pipeline.throwIfCanceled();
     }
 
     setStatus(workspaceId, { phase: 'starting', progress: pipelineProgress('starting', 0.3) });
     const entry = await startDevServer(workspaceId, appPath);
+    pipeline.throwIfCanceled();
     setStatus(workspaceId, { phase: 'ready', progress: 100, previewUrl: entry.previewUrl, error: undefined });
   } catch (err) {
+    if (err instanceof OperationCanceledError || !isCurrent()) return;
     const message = err instanceof Error ? err.message : String(err);
     setStatus(workspaceId, { phase: 'error', progress: 0, error: message, previewUrl: undefined });
     throw err;
@@ -1211,6 +1373,7 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
 }
 
 export function stopApp(workspaceId: string): void {
+  setupPipelineGenerations.cancel(workspaceId);
   stopDevServer(workspaceId);
   setStatus(workspaceId, { phase: 'stopped', progress: 0, previewUrl: undefined });
 }
@@ -1792,25 +1955,8 @@ async function ensureAppOpenspecScaffold(appPath: string): Promise<void> {
     await cp(catalogSrc, catalogDest, { recursive: true });
   }
 
-  // Keep package AI catalog in sync with engineering template (overwrite guidance assets).
-  if (existsSync(catalogSrc)) {
-    await mkdir(catalogDest, { recursive: true });
-    const packagesManifest = 'packages.manifest.json';
-    const srcManifest = join(catalogSrc, packagesManifest);
-    const destManifest = join(catalogDest, packagesManifest);
-    if (existsSync(srcManifest)) {
-      await cp(srcManifest, destManifest);
-    }
-    try {
-      const entries = await readdir(catalogSrc, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory() || !entry.name.startsWith('pkg-')) continue;
-        await cp(join(catalogSrc, entry.name), join(catalogDest, entry.name), { recursive: true });
-      }
-    } catch {
-      // ignore catalog sync errors
-    }
-  }
+  // Existing catalogs belong to their selected template. Plugin upgrades are explicit and must not
+  // be overwritten by the client's fallback engineering template.
 }
 
 async function syncOpenspecSkillsIntoAgents(appPath: string): Promise<void> {
@@ -1912,5 +2058,3 @@ export async function installAppDevAssistSkill(
 
   return { skillId, targetPath: join('openspec', 'skills', skillId) };
 }
-
-

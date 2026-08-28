@@ -9,12 +9,24 @@
 import { app } from 'electron';
 import { spawn, type ChildProcess } from 'child_process';
 import { createServer } from 'net';
-import { get as httpGet } from 'http';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { isDevServerRepairWorthyLine } from '../../shared/app-dev-preview-noise';
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
 import { logger } from '../utils/logger';
+import { getPort } from '../utils/config';
+import {
+  buildSsoAuthLocalServerEnvironment,
+  createSsoAuthLocalSession,
+  destroyAllSsoAuthLocalSessions,
+  destroySsoAuthLocalSession,
+} from './sso-auth-local-session';
+import {
+  KeyedSingleFlight,
+  OperationCanceledError,
+  type KeyedOperationLease,
+} from './keyed-single-flight';
+import { probeDevServerReady } from './dev-server-readiness';
 
 /** Prefer app-root package.json (A2UI single package); fall back to legacy frontend/. */
 function resolveDevServerCwd(appPath: string): string {
@@ -25,8 +37,6 @@ function resolveDevServerCwd(appPath: string): string {
 }
 
 const LOG_BUFFER_LINES = 500;
-const READY_PROBE_TIMEOUT_MS = 60_000;
-const READY_PROBE_INTERVAL_MS = 400;
 const MAX_CRASH_RESTARTS = 3;
 const CRASH_BACKOFF_BASE_MS = 1_000;
 
@@ -45,17 +55,37 @@ export interface DevServerEntry {
 }
 
 const registry = new Map<string, DevServerEntry>();
+const entrySsoSessionSecrets = new WeakMap<DevServerEntry, string>();
+const startSingleFlight = new KeyedSingleFlight();
+const crashRestartTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let cleanupRegistered = false;
+let quitting = false;
+
+function destroyEntrySsoSession(entry: DevServerEntry): void {
+  destroySsoAuthLocalSession(entry.workspaceId, entrySsoSessionSecrets.get(entry));
+}
+
+function cancelCrashRestart(workspaceId: string): void {
+  const timer = crashRestartTimers.get(workspaceId);
+  if (timer) clearTimeout(timer);
+  crashRestartTimers.delete(workspaceId);
+}
 
 function ensureCleanupHook(): void {
   if (cleanupRegistered) return;
   cleanupRegistered = true;
   app.on('before-quit', () => {
+    quitting = true;
+    startSingleFlight.cancelAll();
+    for (const timer of crashRestartTimers.values()) clearTimeout(timer);
+    crashRestartTimers.clear();
     for (const entry of registry.values()) {
       entry.stopping = true;
       killProcessTree(entry.child);
+      destroyEntrySsoSession(entry);
     }
     registry.clear();
+    destroyAllSsoAuthLocalSessions();
   });
 }
 
@@ -85,35 +115,6 @@ function allocateFreePort(): Promise<number> {
   });
 }
 
-function probeReady(url: string): Promise<void> {
-  const deadline = Date.now() + READY_PROBE_TIMEOUT_MS;
-  return new Promise((resolve, reject) => {
-    const attempt = () => {
-      const req = httpGet(url, (res) => {
-        res.on('data', () => undefined);
-        if ((res.statusCode ?? 0) < 500) {
-          resolve();
-        } else {
-          retry();
-        }
-      });
-      req.on('error', retry);
-      req.setTimeout(2000, () => {
-        req.destroy();
-        retry();
-      });
-    };
-    const retry = () => {
-      if (Date.now() > deadline) {
-        reject(new Error('dev server did not become ready in time'));
-        return;
-      }
-      setTimeout(attempt, READY_PROBE_INTERVAL_MS);
-    };
-    attempt();
-  });
-}
-
 function pushLog(entry: DevServerEntry, chunk: string): void {
   for (const line of chunk.split('\n')) {
     const trimmed = line.trimEnd();
@@ -128,6 +129,7 @@ function pushLog(entry: DevServerEntry, chunk: string): void {
 }
 
 function scheduleCrashRestart(prev: DevServerEntry): void {
+  if (quitting) return;
   const nextCount = prev.crashCount + 1;
   if (nextCount > MAX_CRASH_RESTARTS) {
     logger.error(
@@ -140,11 +142,15 @@ function scheduleCrashRestart(prev: DevServerEntry): void {
   logger.warn(
     `[app-dev] restarting ${prev.workspaceId} after crash #${nextCount} in ${delay}ms`,
   );
-  setTimeout(() => {
+  cancelCrashRestart(prev.workspaceId);
+  const timer = setTimeout(() => {
+    if (crashRestartTimers.get(prev.workspaceId) !== timer || quitting) return;
+    crashRestartTimers.delete(prev.workspaceId);
     void startDevServer(prev.workspaceId, prev.appPath, nextCount).catch((err) => {
       logger.error(`[app-dev] crash restart failed for ${prev.workspaceId}:`, err);
     });
   }, delay);
+  crashRestartTimers.set(prev.workspaceId, timer);
 }
 
 export function getDevServer(workspaceId: string): DevServerEntry | null {
@@ -164,12 +170,14 @@ export function drainDevServerErrors(workspaceId: string): string[] {
   return errors;
 }
 
-export async function startDevServer(
+async function startDevServerImpl(
   workspaceId: string,
   appPath: string,
   crashCount = 0,
+  lease: KeyedOperationLease,
 ): Promise<DevServerEntry> {
   ensureCleanupHook();
+  lease.throwIfCanceled();
 
   const existing = registry.get(workspaceId);
   if (existing && existing.child.exitCode === null && !existing.stopping) {
@@ -179,6 +187,7 @@ export async function startDevServer(
     existing.stopping = true;
     killProcessTree(existing.child);
     registry.delete(workspaceId);
+    destroyEntrySsoSession(existing);
   }
 
   const { npmBin } = getManagedNodePaths();
@@ -186,25 +195,49 @@ export async function startDevServer(
     throw new Error(`未找到可用的 npm 可执行文件: ${npmBin || '(empty)'}`);
   }
   const port = await allocateFreePort();
+  lease.throwIfCanceled();
   const cwd = resolveDevServerCwd(appPath);
   const previewUrl = `http://127.0.0.1:${port}/`;
+  const ssoAuthSession = await createSsoAuthLocalSession({
+    workspaceId,
+    appPath,
+    isCurrent: lease.isCurrent,
+  }).catch((error) => {
+    if (!lease.isCurrent()) throw new OperationCanceledError();
+    throw error;
+  });
+  try {
+    lease.throwIfCanceled();
+  } catch (error) {
+    destroySsoAuthLocalSession(workspaceId, ssoAuthSession.secret);
+    throw error;
+  }
+  const childEnvironment = {
+    ...(getNodeSpawnEnv() as NodeJS.ProcessEnv),
+    ...buildSsoAuthLocalServerEnvironment(
+      ssoAuthSession,
+      getPort('CLAWX_HOST_API'),
+    ),
+  };
 
   logger.info(`[app-dev] starting dev server for ${workspaceId} on port ${port} cwd=${cwd}`);
-  const child = spawn(
-    npmBin,
-    ['run', 'dev', '--', '--port', String(port), '--strictPort', '--host', '127.0.0.1'],
-    {
-      cwd,
-      env: getNodeSpawnEnv() as NodeJS.ProcessEnv,
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-
-  child.on('error', (err) => {
-    logger.error(`[app-dev] dev server spawn error for ${workspaceId}:`, err);
-  });
+  let child: ChildProcess;
+  try {
+    child = spawn(
+      npmBin,
+      ['run', 'dev', '--', '--port', String(port), '--strictPort', '--host', '127.0.0.1'],
+      {
+        cwd,
+        env: childEnvironment,
+        windowsHide: true,
+        detached: process.platform !== 'win32',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+  } catch (error) {
+    destroySsoAuthLocalSession(workspaceId, ssoAuthSession.secret);
+    throw error;
+  }
 
   const entry: DevServerEntry = {
     workspaceId,
@@ -217,31 +250,47 @@ export async function startDevServer(
     crashCount,
     stopping: false,
   };
+  entrySsoSessionSecrets.set(entry, ssoAuthSession.secret);
   registry.set(workspaceId, entry);
 
   child.stdout?.on('data', (d) => pushLog(entry, String(d)));
   child.stderr?.on('data', (d) => pushLog(entry, String(d)));
+  const spawnFailure = new Promise<never>((_resolve, reject) => {
+    child.once('error', reject);
+  });
   child.on('error', (err) => {
+    logger.error(`[app-dev] dev server spawn error for ${workspaceId}:`, err);
     const message = `spawn error: ${err instanceof Error ? err.message : String(err)}`;
     pushLog(entry, message);
     entry.recentErrors.push(message);
+    if (registry.get(workspaceId) === entry) {
+      registry.delete(workspaceId);
+      destroyEntrySsoSession(entry);
+      if (!entry.stopping) scheduleCrashRestart(entry);
+    }
   });
   child.on('exit', (code) => {
     logger.info(`[app-dev] dev server for ${workspaceId} exited with code ${code}`);
     if (registry.get(workspaceId) !== entry) return;
     registry.delete(workspaceId);
+    destroyEntrySsoSession(entry);
     if (!entry.stopping && code !== 0) {
       scheduleCrashRestart(entry);
     }
   });
 
   try {
-    await probeReady(previewUrl);
+    await Promise.race([probeDevServerReady(previewUrl, lease.signal), spawnFailure]);
+    lease.throwIfCanceled();
   } catch (err) {
     entry.stopping = true;
     killProcessTree(child);
-    registry.delete(workspaceId);
+    if (registry.get(workspaceId) === entry) {
+      registry.delete(workspaceId);
+      destroyEntrySsoSession(entry);
+    }
     const tail = entry.logs.slice(-20).join('\n');
+    if (err instanceof OperationCanceledError) throw err;
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(`${reason}\n${tail}`, { cause: err });
   }
@@ -249,11 +298,29 @@ export async function startDevServer(
   return entry;
 }
 
+export function startDevServer(
+  workspaceId: string,
+  appPath: string,
+  crashCount = 0,
+): Promise<DevServerEntry> {
+  if (quitting) return Promise.reject(new Error('应用正在退出，无法启动预览服务'));
+  cancelCrashRestart(workspaceId);
+  return startSingleFlight.run(workspaceId, (lease) => (
+    startDevServerImpl(workspaceId, appPath, crashCount, lease)
+  ));
+}
+
 export function stopDevServer(workspaceId: string): boolean {
+  startSingleFlight.cancel(workspaceId);
+  cancelCrashRestart(workspaceId);
   const entry = registry.get(workspaceId);
-  if (!entry) return false;
+  if (!entry) {
+    destroySsoAuthLocalSession(workspaceId);
+    return false;
+  }
   entry.stopping = true;
   killProcessTree(entry.child);
   registry.delete(workspaceId);
+  destroyEntrySsoSession(entry);
   return true;
 }

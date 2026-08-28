@@ -3,6 +3,12 @@
  * All calls go through host-api — never direct IPC / Gateway.
  */
 import { hostApiFetch, type HostApiFetchInit } from '@/lib/host-api';
+import type { CodeApplicationPageType } from '../../shared/code-application-catalog';
+import type {
+  ExternalServiceBindingSnapshot,
+  ExternalServicePageResult,
+} from '../../shared/external-service-contract';
+export type { CodeApplicationPageType } from '../../shared/code-application-catalog';
 
 /** sai-cli / 建站长耗时接口：不走 Host API 默认 15s 超时 */
 const APP_DEV_LONG_RUNNING: Pick<HostApiFetchInit, 'disableTimeout'> = {
@@ -37,10 +43,92 @@ export interface AppDevEnvironment {
   defaultParentDir: string;
 }
 
+export interface AppTemplateSummary {
+  templateId: string;
+  pageType: CodeApplicationPageType;
+  name: string;
+  description: string;
+  status: 'ACTIVE' | 'DISABLED';
+  isBuiltin: boolean;
+  latestVersion: string;
+  createdAt: string;
+  updatedAt: string;
+  source?: 'local-resource' | 'memory-center';
+}
+
+export interface AppTemplatePageResult {
+  items: AppTemplateSummary[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+}
+
 export interface AppCheckpoint {
   hash: string;
   subject: string;
   timestamp: number;
+}
+
+export interface AppExternalServiceChangeResult {
+  changedFiles: string[];
+  installedPackage?: string | null;
+  usageGuide?: string | null;
+  binding?: ExternalServiceBindingSnapshot;
+}
+
+export async function searchAppExternalServices(
+  workspaceId: string,
+  keyword = '',
+): Promise<ExternalServicePageResult> {
+  const query = new URLSearchParams({ workspaceId, keyword });
+  return hostApiFetch(`/api/app-external-services/search?${query.toString()}`);
+}
+
+export async function listAppExternalServiceBindings(
+  workspaceId: string,
+): Promise<ExternalServiceBindingSnapshot[]> {
+  const response = await hostApiFetch<{ bindings: ExternalServiceBindingSnapshot[] }>(
+    `/api/app-external-services/bindings?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return response.bindings ?? [];
+}
+
+export async function bindAppExternalService(input: {
+  workspaceId: string;
+  serviceId: string;
+  version: string;
+  alias: string;
+}): Promise<AppExternalServiceChangeResult> {
+  return hostApiFetch('/api/app-external-services/bind', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function upgradeAppExternalService(input: {
+  workspaceId: string;
+  alias: string;
+  version: string;
+}): Promise<AppExternalServiceChangeResult> {
+  return hostApiFetch('/api/app-external-services/upgrade', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function removeAppExternalService(input: {
+  workspaceId: string;
+  alias: string;
+}): Promise<AppExternalServiceChangeResult> {
+  return hostApiFetch('/api/app-external-services/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 }
 
 export interface DevAppSummary {
@@ -59,6 +147,7 @@ export interface DevAppSummary {
   source?: 'created' | 'imported';
   /** Whether the app folder already has a `.git` directory. */
   gitRepo?: boolean;
+  pageType: CodeApplicationPageType;
 }
 
 export async function getAppDevEnvironment(): Promise<AppDevEnvironment> {
@@ -68,6 +157,48 @@ export async function getAppDevEnvironment(): Promise<AppDevEnvironment> {
 /** Background warmup — call when the creation entry becomes visible. */
 export async function prepareAppDevEnvironment(): Promise<void> {
   await hostApiFetch('/api/app-dev/environment/prepare', { method: 'POST' });
+}
+
+export async function listAppTemplates(
+  pageType?: CodeApplicationPageType,
+): Promise<AppTemplatePageResult> {
+  const query = pageType ? `?pageType=${encodeURIComponent(pageType)}` : '';
+  return hostApiFetch(`/api/app-templates${query}`);
+}
+
+export async function openAppTemplateWorkspace(input: {
+  templateId?: string;
+  pageType: CodeApplicationPageType;
+  name: string;
+  description?: string;
+  latestVersion?: string;
+}): Promise<{ workspaceId: string; appPath: string; workspaceName: string; templateId: string }> {
+  return hostApiFetch('/api/app-templates/workspaces', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function publishAppTemplateWorkspace(
+  workspaceId: string,
+): Promise<{
+  templateId: string;
+  pageType: CodeApplicationPageType;
+  version: string;
+  status: 'ACTIVE';
+  packageOssKey: string;
+  packageEtag: string | null;
+  packageSize: number;
+  created: boolean;
+}> {
+  return hostApiFetch('/api/app-templates/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, confirmed: true }),
+    ...APP_DEV_LONG_RUNNING,
+  });
 }
 
 export async function listDevApps(): Promise<DevAppSummary[]> {
@@ -123,6 +254,10 @@ export async function createUserApp(input: {
   name: string;
   parentDir?: string;
   projectType?: string;
+  pageType?: CodeApplicationPageType;
+  templateId: string;
+  templateVersion: string;
+  templateSource?: 'local-resource' | 'memory-center';
 }): Promise<{ workspaceId: string; appPath: string; workspaceName: string }> {
   return hostApiFetch('/api/app-dev/apps', {
     method: 'POST',

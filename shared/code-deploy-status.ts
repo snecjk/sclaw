@@ -73,6 +73,8 @@ export interface CodeDeployRecordFields {
   failureMessage?: string;
   resourcePages?: unknown;
   pipelineInstanceId?: string;
+  deploymentVersion?: string;
+  revisionId?: string;
 }
 
 /**
@@ -130,6 +132,8 @@ export function pickCodeDeployFields(data: unknown): CodeDeployRecordFields {
     failureMessage: asTrimmedString(row.failureMessage),
     resourcePages: row.resourcePages,
     pipelineInstanceId: asTrimmedString(row.pipelineInstanceId),
+    deploymentVersion: asTrimmedString(row.deploymentVersion) ?? asTrimmedString(row.version),
+    revisionId: asTrimmedString(row.revisionId),
   };
 }
 

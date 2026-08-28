@@ -19,6 +19,15 @@ export interface CodeApplicationRecord {
   developmentBranch?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
+  pageType: CodeApplicationPageType;
+}
+
+export type CodeApplicationPageType = 'site' | 'assets';
+
+export function normalizeCodeApplicationPageType(value: unknown): CodeApplicationPageType {
+  return typeof value === 'string' && value.trim().toLowerCase() === 'assets'
+    ? 'assets'
+    : 'site';
 }
 
 function pickString(...values: unknown[]): string | undefined {
@@ -57,6 +66,7 @@ export function normalizeCodeApplication(item: unknown): CodeApplicationRecord |
     developmentBranch: pickString(row.developmentBranch),
     gitlabProjectId: pickId(row.gitlabProjectId),
     devopsApplicationId: pickId(row.devopsApplicationId),
+    pageType: normalizeCodeApplicationPageType(row.pageType),
   };
 }
 

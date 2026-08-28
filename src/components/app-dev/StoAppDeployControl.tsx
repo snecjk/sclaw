@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { AssetsPublishSuccess } from '@/components/app-dev/AssetsPublishSuccess';
+import { SitePublishSuccess } from '@/components/app-dev/SitePublishSuccess';
 import { cn } from '@/lib/utils';
+import { openExternalUrl } from '@/lib/preview-url';
 import {
   isStoAppDeployRunning,
   type StoAppDeployJob,
@@ -10,8 +14,11 @@ import {
   codeDeployStatusLabel,
   formatCodeDeployFailurePrompt,
 } from '../../../shared/code-deploy-status';
+import type { CodeApplicationPageType } from '../../../shared/code-application-catalog';
+import { resolvePublishSuccessPresentation } from '../../../shared/code-publish-result';
 
 interface StoAppDeployControlProps {
+  pageType: CodeApplicationPageType;
   canDeploy: boolean;
   job: StoAppDeployJob | null;
   onOpenDialog: () => void;
@@ -29,6 +36,7 @@ export function resolveStoAppDeployAskAiPrompt(job: StoAppDeployJob): string {
 }
 
 export function StoAppDeployControl({
+  pageType,
   canDeploy,
   job,
   onOpenDialog,
@@ -38,6 +46,31 @@ export function StoAppDeployControl({
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const running = isStoAppDeployRunning(job);
+  const successPresentation = job?.phase === 'success'
+    ? resolvePublishSuccessPresentation({
+        pageType,
+        deploymentVersion: job.fields.deploymentVersion,
+        revisionId: job.fields.revisionId,
+        resourcePages: job.fields.resourcePages,
+      })
+    : null;
+
+  const copyValue = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('已复制');
+    } catch {
+      toast.error('复制失败');
+    }
+  };
+
+  const openValue = (value: string) => {
+    try {
+      openExternalUrl(value);
+    } catch {
+      toast.error('打开站点失败');
+    }
+  };
 
   useEffect(() => {
     if (!panelOpen) return;
@@ -153,6 +186,25 @@ export function StoAppDeployControl({
               </StatusRow>
             ) : null}
           </dl>
+
+          {successPresentation ? (
+            <div className="mt-3 border-t border-border pt-3">
+              {successPresentation.pageType === 'site' ? (
+                <SitePublishSuccess
+                  fixedUrl={successPresentation.fixedUrl}
+                  onCopy={(value) => void copyValue(value)}
+                  onOpen={openValue}
+                />
+              ) : (
+                <AssetsPublishSuccess
+                  version={successPresentation.version}
+                  artifactUrl={successPresentation.artifactUrl}
+                  customDomain={successPresentation.customDomain}
+                  onCopy={(value) => void copyValue(value)}
+                />
+              )}
+            </div>
+          ) : null}
 
           {!running ? (
             <div className="mt-3 flex flex-wrap justify-end gap-2">

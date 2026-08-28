@@ -5,7 +5,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Code2,
+  Globe2,
+  Package,
   FolderOpen,
   MoreHorizontal,
   Pencil,
@@ -37,6 +38,8 @@ interface DevAppCardProps {
 }
 
 export function DevAppCard({ app }: DevAppCardProps) {
+  const pageTypeLabel = app.pageType === 'assets' ? '托管应用' : '独立站点';
+  const PageTypeIcon = app.pageType === 'assets' ? Package : Globe2;
   const openOrFocusDevAppTab = useAppPlazaShellStore((s) => s.openOrFocusDevAppTab);
   const closeDevAppTabsByWorkspaceId = useAppPlazaShellStore((s) => s.closeDevAppTabsByWorkspaceId);
   const unregisterWorkspaceId = useAppDevCatalogStore((s) => s.unregisterWorkspaceId);
@@ -173,8 +176,12 @@ export function DevAppCard({ app }: DevAppCardProps) {
       }}
     >
       <div className="more-apps-card__top">
-        <div className="more-apps-card__icon--dev" aria-hidden>
-          <Code2 className="h-6 w-6" />
+        <div
+          className="more-apps-card__icon--dev"
+          aria-label={`应用类型：${pageTypeLabel}`}
+          title={`应用类型：${pageTypeLabel}`}
+        >
+          <PageTypeIcon className="h-6 w-6" aria-hidden />
         </div>
         <div className="more-apps-card__head">
           <h3 className="more-apps-card__title">{app.name}</h3>
@@ -244,10 +251,12 @@ export function DevAppCard({ app }: DevAppCardProps) {
               <FolderOpen className="mr-2 h-3.5 w-3.5" aria-hidden />
               在访达中打开
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canOpenPreview} onClick={() => handleOpenPreview()}>
-              <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden />
-              系统浏览器打开
-            </DropdownMenuItem>
+            {app.pageType === 'site' ? (
+              <DropdownMenuItem disabled={!canOpenPreview} onClick={() => handleOpenPreview()}>
+                <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden />
+                系统浏览器打开
+              </DropdownMenuItem>
+            ) : null}
             {canDelete ? (
               <>
                 <DropdownMenuSeparator />

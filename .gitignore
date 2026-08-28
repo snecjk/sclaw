@@ -63,6 +63,7 @@ resources/bin
 
 build/
 sto-plugin/*/shared/
+.superpowers/
 electron/gateway/gateway-fetch-preload.cjs
 artifacts/
 docs/pr-session-notes-

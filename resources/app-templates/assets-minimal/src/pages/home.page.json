@@ -1,0 +1,86 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "home",
+      "catalogId": "basic"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "home",
+      "components": [
+        {
+          "id": "root",
+          "component": "Column",
+          "children": ["title", "body", "hint", "actions"]
+        },
+        {
+          "id": "title",
+          "component": "Text",
+          "text": { "path": "/title" }
+        },
+        {
+          "id": "body",
+          "component": "Text",
+          "text": { "path": "/body" }
+        },
+        {
+          "id": "hint",
+          "component": "Text",
+          "text": { "path": "/hint" }
+        },
+        {
+          "id": "actions",
+          "component": "Row",
+          "children": ["go-list", "run-list"]
+        },
+        {
+          "id": "go-list",
+          "component": "Button",
+          "child": "go-list-label",
+          "action": {
+            "event": {
+              "name": "app.navigate",
+              "context": { "pageId": "customer-list" }
+            }
+          }
+        },
+        {
+          "id": "go-list-label",
+          "component": "Text",
+          "text": "打开客户列表"
+        },
+        {
+          "id": "run-list",
+          "component": "Button",
+          "child": "run-list-label",
+          "action": {
+            "event": {
+              "name": "customer.list",
+              "context": {}
+            }
+          }
+        },
+        {
+          "id": "run-list-label",
+          "component": "Text",
+          "text": "加载示例数据"
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "home",
+      "path": "/",
+      "value": {
+        "title": "欢迎使用",
+        "body": "在右侧与助手对话，用自然语言描述你想做的页面和功能即可。",
+        "hint": "也可以先打开下方「客户列表」示例，看看查询页的效果。"
+      }
+    }
+  }
+]

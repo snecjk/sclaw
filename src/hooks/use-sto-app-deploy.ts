@@ -28,6 +28,7 @@ export interface StoAppDeployJob {
   startedAt: number;
   error?: string;
   prompt?: string;
+  data?: unknown;
 }
 
 const TERMINAL_PHASES: ReadonlySet<StoAppDeployPhase> = new Set([
@@ -106,6 +107,7 @@ export function useStoAppDeploy(input: {
             label: describeStoAppDeployOutcome(outcome),
             fields: outcome.fields,
             startedAt: Date.now(),
+            data: outcome.data,
           });
           toast.success(describeStoAppDeployOutcome(outcome));
           return;
@@ -118,6 +120,7 @@ export function useStoAppDeploy(input: {
             fields: outcome.fields,
             startedAt: Date.now(),
             prompt: outcome.prompt,
+            data: outcome.data,
           });
           toast.error(describeStoAppDeployOutcome(outcome));
           input.onFailedPrompt?.(outcome.prompt);
@@ -129,6 +132,7 @@ export function useStoAppDeploy(input: {
           label: describeStoAppDeployOutcome(outcome),
           fields: outcome.fields,
           startedAt: Date.now(),
+          data: outcome.data,
         });
         toast.message(describeStoAppDeployOutcome(outcome));
       } catch (error) {

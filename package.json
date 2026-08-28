@@ -83,7 +83,8 @@
         "version:patch": "pnpm version patch",
         "version:minor": "pnpm version minor",
         "version:major": "pnpm version major",
-        "postversion": "git push && git push --tags"
+        "postversion": "git push && git push --tags",
+        "templates:init": "node scripts/publish-builtin-app-templates.mjs"
     },
     "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.168",
@@ -113,6 +114,7 @@
         "fast-json-stable-stringify": "^2.1.0",
         "groq-sdk": "0.3.0",
         "json-schema-traverse": "^0.4.1",
+        "jszip": "^3.10.1",
         "kysely": "^0.29.3",
         "mammoth": "^1.12.0",
         "mem0ai": "^3.0.13",

@@ -60,6 +60,7 @@ let mockDevApps: Array<{
   path: string;
   createdAt: number;
   updatedAt: number;
+  pageType?: 'site' | 'assets';
 }> = [];
 
 vi.mock('@/stores/app-dev-catalog', () => ({
@@ -708,6 +709,45 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.queryByText('客户关系')).not.toBeInTheDocument();
   });
 
+  it('filters development apps locally by page type', async () => {
+    mockDevApps = [
+      {
+        workspaceId: 'ws-site',
+        name: 'Site Alpha',
+        projectType: 'frontend',
+        path: '/tmp/site-alpha',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pageType: 'site',
+      },
+      {
+        workspaceId: 'ws-assets',
+        name: 'Assets Beta',
+        projectType: 'frontend',
+        path: '/tmp/assets-beta',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pageType: 'assets',
+      },
+    ];
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('tab', { name: '开发应用' }));
+
+    expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Site Alpha')).toBeInTheDocument();
+    expect(screen.getByText('Assets Beta')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '独立站点' }));
+    expect(screen.getByText('Site Alpha')).toBeInTheDocument();
+    expect(screen.queryByText('Assets Beta')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '托管应用' }));
+    expect(screen.queryByText('Site Alpha')).not.toBeInTheDocument();
+    expect(screen.getByText('Assets Beta')).toBeInTheDocument();
+    expect(refreshDevAppsMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the APP list available when banners fail', async () => {
     fetchBannersMock.mockRejectedValueOnce(new Error('banner unavailable'));
     render(<MoreAppsPage />);
@@ -741,6 +781,18 @@ describe('MoreAppsPage server catalog', () => {
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     expect(trigger.querySelector('.lucide-chevron-down')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
+  });
+
+  it('shows template management to app-dev whitelist users', async () => {
+    render(<MoreAppsPage />);
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: '创建应用' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(await screen.findByRole('menuitem', { name: '创建应用' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '管理应用模板' })).toBeInTheDocument();
   });
 
   it('shows a fallback when a banner image fails', async () => {

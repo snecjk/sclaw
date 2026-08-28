@@ -7,7 +7,7 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Heart, FolderInput, ChevronDown } from 'lucide-react';
+import { Search, Plus, Heart, FolderInput, ChevronDown, FileCode2, PlugZap } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -27,6 +27,8 @@ import { AppCard } from './AppCard';
 import { DevAppCard } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { CreateAppDialog } from './CreateAppDialog';
+import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
+import { ExternalServiceManagerDialog } from './ExternalServiceManagerDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
@@ -51,6 +53,7 @@ import { useAppDevPermission } from '@/hooks/use-app-dev-permission';
 const HERO_CAROUSEL_INTERVAL = 5000;
 /** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
 const STO_POLICY_SYSTEM_CODE = 'sto-policy';
+type DevAppTypeFilter = 'all' | 'site' | 'assets';
 
 export function MoreAppsPage() {
   const { t } = useTranslation('common');
@@ -95,9 +98,12 @@ export function MoreAppsPage() {
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
   const [createAppOpen, setCreateAppOpen] = useState(false);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [externalServiceManagerOpen, setExternalServiceManagerOpen] = useState(false);
   const [importingApp, setImportingApp] = useState(false);
   const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
+  const [devAppTypeFilter, setDevAppTypeFilter] = useState<DevAppTypeFilter>('all');
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
   // already fetches the first APP page, so we don't double-fire on initial render.
@@ -134,6 +140,11 @@ export function MoreAppsPage() {
         || app.projectType.toLowerCase().includes(q),
     );
   }, [devApps, searchQuery]);
+
+  const visibleDevApps = useMemo(() => {
+    if (devAppTypeFilter === 'all') return filteredDevApps;
+    return filteredDevApps.filter((app) => (app.pageType ?? 'site') === devAppTypeFilter);
+  }, [devAppTypeFilter, filteredDevApps]);
 
   const handleImportApp = useCallback(async () => {
     if (!canUseAppDev || importingApp) return;
@@ -179,22 +190,22 @@ export function MoreAppsPage() {
       categoriesLoading || categoriesError
         ? []
         : categories
-            // 历史误建的「链接器/连接器」APP 分类不再展示；链接器入口已迁至技能广场页签
-            .filter((c) => {
-              const name = c.name.trim();
-              const id = c.id.trim().toLowerCase();
-              return !(
-                name === '链接器' ||
-                name === '连接器' ||
-                id === 'connectors' ||
-                id === 'connector'
-              );
-            })
-            .map((c) => ({
-              id: c.id as MarketCategory,
-              label: c.name,
-              count: categoryCounts[c.id] ?? 0,
-            }));
+          // 历史误建的「链接器/连接器」APP 分类不再展示；链接器入口已迁至技能广场页签
+          .filter((c) => {
+            const name = c.name.trim();
+            const id = c.id.trim().toLowerCase();
+            return !(
+              name === '链接器' ||
+              name === '连接器' ||
+              id === 'connectors' ||
+              id === 'connector'
+            );
+          })
+          .map((c) => ({
+            id: c.id as MarketCategory,
+            label: c.name,
+            count: categoryCounts[c.id] ?? 0,
+          }));
     return [featured, ...serverItems];
   }, [categories, categoryCounts, categoriesLoading, categoriesError, marketTotal, t]);
 
@@ -732,28 +743,46 @@ export function MoreAppsPage() {
 
   // ── Dev Apps Tab View ────────────────────────────────────────
   const renderDevAppsView = () => {
-    if (filteredDevApps.length === 0) {
-      return (
-        <div className="more-apps-main">
-          <div className="more-apps-empty">
-            {searchQuery
-              ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
-              : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' })}
-          </div>
-        </div>
-      );
-    }
+    const emptyMessage = searchQuery
+      ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
+      : devAppTypeFilter === 'site'
+        ? '暂无独立站点'
+        : devAppTypeFilter === 'assets'
+          ? '暂无托管应用'
+          : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' });
 
     return (
       <div className="more-apps-main">
-        <div className="more-apps-grid">
-          {filteredDevApps.map((app) => (
-            <DevAppCard
-              key={app.workspaceId || app.applicationId || `${app.name}:${app.appPath}`}
-              app={app}
-            />
+        <div className="mb-4 flex items-center gap-1" aria-label="开发应用类型筛选">
+          {([['all', '全部'], ['site', '独立站点'], ['assets', '托管应用']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={devAppTypeFilter === value}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs transition-colors',
+                devAppTypeFilter === value
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+              onClick={() => setDevAppTypeFilter(value)}
+            >
+              {label}
+            </button>
           ))}
         </div>
+        {visibleDevApps.length === 0 ? (
+          <div className="more-apps-empty">{emptyMessage}</div>
+        ) : (
+          <div className="more-apps-grid">
+            {visibleDevApps.map((app) => (
+              <DevAppCard
+                key={app.workspaceId || app.applicationId || `${app.name}:${app.appPath}`}
+                app={app}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -796,6 +825,16 @@ export function MoreAppsPage() {
                 >
                   <Plus className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
                   {t('moreApps.createApp', { defaultValue: '创建应用' })}
+                </DropdownMenuItem>
+                {canUseAppDev ? (
+                  <DropdownMenuItem onSelect={() => setTemplateManagerOpen(true)}>
+                    <FileCode2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                    管理应用模板
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onSelect={() => setExternalServiceManagerOpen(true)}>
+                  <PlugZap className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  管理外部服务
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   id="more-apps-import-app-btn"
@@ -873,6 +912,18 @@ export function MoreAppsPage() {
       <AddExternalAppModal />
       {canUseAppDev ? (
         <CreateAppDialog open={createAppOpen} onClose={() => setCreateAppOpen(false)} />
+      ) : null}
+      {canUseAppDev ? (
+        <AppTemplateManagerDialog
+          open={templateManagerOpen}
+          onClose={() => setTemplateManagerOpen(false)}
+        />
+      ) : null}
+      {canUseAppDev ? (
+        <ExternalServiceManagerDialog
+          open={externalServiceManagerOpen}
+          onClose={() => setExternalServiceManagerOpen(false)}
+        />
       ) : null}
       <ConfirmDialog
         open={!!pendingStoPolicyApp}
