@@ -31,7 +31,7 @@ describe('built-in app template resources', () => {
     );
 
     expect(sitePackage.dependencies).toMatchObject({
-      '@sto/sclaw-plugin-sso-auth': '0.1.0',
+      '@sto/sclaw-plugin-sso-auth': '0.1.2',
     });
     expect(siteMain).toContain('bootstrapInstalledPlugins');
     expect(assetsPackage.dependencies).toMatchObject({
