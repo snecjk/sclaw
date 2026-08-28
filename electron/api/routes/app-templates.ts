@@ -9,6 +9,12 @@ import {
   openAppTemplateWorkspace,
   publishAppTemplateWorkspace,
 } from '../../services/app-dev-service';
+import {
+  applyAppTemplateSourceImport,
+  cancelAppTemplateSourceImport,
+  getAppTemplateImportStatus,
+  prepareAppTemplateSourceImport,
+} from '../../services/app-template-source-import-service';
 
 export async function handleAppTemplateRoutes(
   req: IncomingMessage,
@@ -75,6 +81,56 @@ export async function handleAppTemplateRoutes(
         name: body.name ?? '',
         description: body.description,
         latestVersion: body.latestVersion,
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/status'
+      && req.method === 'GET'
+    ) {
+      const result = await getAppTemplateImportStatus({
+        workspaceId: url.searchParams.get('workspaceId') ?? '',
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/prepare'
+      && req.method === 'POST'
+    ) {
+      const body = await parseJsonBody<{ workspaceId?: unknown; sourcePath?: unknown }>(req);
+      const result = await prepareAppTemplateSourceImport({
+        workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : '',
+        sourcePath: typeof body.sourcePath === 'string' ? body.sourcePath : undefined,
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/apply'
+      && req.method === 'POST'
+    ) {
+      const body = await parseJsonBody<{ workspaceId?: unknown; importToken?: unknown }>(req);
+      const result = await applyAppTemplateSourceImport({
+        workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : '',
+        importToken: typeof body.importToken === 'string' ? body.importToken : '',
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/cancel'
+      && req.method === 'POST'
+    ) {
+      const body = await parseJsonBody<{ workspaceId?: unknown; importToken?: unknown }>(req);
+      const result = await cancelAppTemplateSourceImport({
+        workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : '',
+        importToken: typeof body.importToken === 'string' ? body.importToken : '',
       });
       sendJson(res, 200, { success: true, ...result });
       return true;

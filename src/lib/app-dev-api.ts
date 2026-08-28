@@ -8,6 +8,11 @@ import type {
   ExternalServiceBindingSnapshot,
   ExternalServicePageResult,
 } from '../../shared/external-service-contract';
+import type {
+  TemplateImportApplyResult,
+  TemplateImportPreview,
+  TemplateImportStatus,
+} from '../../shared/app-template-source-import';
 export type { CodeApplicationPageType } from '../../shared/code-application-catalog';
 
 /** sai-cli / 建站长耗时接口：不走 Host API 默认 15s 超时 */
@@ -198,6 +203,49 @@ export async function publishAppTemplateWorkspace(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, confirmed: true }),
     ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function getAppTemplateImportStatus(
+  workspaceId: string,
+): Promise<TemplateImportStatus> {
+  return hostApiFetch(
+    `/api/app-templates/workspaces/import-source/status?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+}
+
+export async function prepareAppTemplateImport(input: {
+  workspaceId: string;
+  sourcePath?: string;
+}): Promise<TemplateImportPreview> {
+  return hostApiFetch('/api/app-templates/workspaces/import-source/prepare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function applyAppTemplateImport(input: {
+  workspaceId: string;
+  importToken: string;
+}): Promise<TemplateImportApplyResult> {
+  return hostApiFetch('/api/app-templates/workspaces/import-source/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function cancelAppTemplateImport(input: {
+  workspaceId: string;
+  importToken: string;
+}): Promise<{ cancelled: boolean }> {
+  return hostApiFetch('/api/app-templates/workspaces/import-source/cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
   });
 }
 
