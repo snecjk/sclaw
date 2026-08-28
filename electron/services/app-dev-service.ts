@@ -566,8 +566,25 @@ export interface AppTemplateWorkspaceMarker {
   updatedAt: string;
 }
 
-function appTemplateWorkspaceMarkerPath(templateRoot: string): string {
+export function appTemplateWorkspaceMarkerPath(templateRoot: string): string {
   return join(templateRoot, '.sclaw', 'app-template.json');
+}
+
+export async function readAppTemplateWorkspaceMarker(
+  templateRoot: string,
+): Promise<AppTemplateWorkspaceMarker> {
+  const marker = JSON.parse(
+    await readFile(appTemplateWorkspaceMarkerPath(templateRoot), 'utf8'),
+  ) as Partial<AppTemplateWorkspaceMarker>;
+  if (
+    marker.kind !== 'app-template'
+    || typeof marker.templateId !== 'string'
+    || !marker.templateId.trim()
+    || (marker.pageType !== 'site' && marker.pageType !== 'assets')
+  ) {
+    throw new Error('当前工作区不是有效的应用模板');
+  }
+  return marker as AppTemplateWorkspaceMarker;
 }
 
 export async function openAppTemplateWorkspace(input: {
@@ -659,7 +676,7 @@ export async function publishAppTemplateWorkspace(input: {
   if (!appPath) throw new Error('模板工作区不存在');
   const markerPath = appTemplateWorkspaceMarkerPath(appPath);
   if (!existsSync(markerPath)) throw new Error('当前工作区不是应用模板');
-  const marker = JSON.parse(await readFile(markerPath, 'utf8')) as AppTemplateWorkspaceMarker;
+  const marker = await readAppTemplateWorkspaceMarker(appPath);
   const manifest = JSON.parse(
     await readFile(join(appPath, 'manifest.json'), 'utf8'),
   ) as Record<string, unknown>;
