@@ -39,6 +39,7 @@ describe('built-in app template resources', () => {
     });
     expect(assetsMain).toContain('bootstrapSsoAuth');
     expect(assetsMain).toContain("runtimeMode === 'local'");
+    expect(assetsMain).toContain('fetch: window.fetch.bind(window)');
     expect(assetsMain).not.toContain('captureStoTokenFromUrl');
   });
 

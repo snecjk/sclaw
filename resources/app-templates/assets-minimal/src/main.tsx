@@ -15,7 +15,10 @@ const root = createRoot(container);
 async function start() {
   const config = window.__STO_SSO_AUTH_CONFIG__;
   if (config?.runtimeMode === 'local') {
-    await bootstrapSsoAuth({ config });
+    await bootstrapSsoAuth({
+      config,
+      fetch: window.fetch.bind(window),
+    });
   }
   root.render(
     <StrictMode>
