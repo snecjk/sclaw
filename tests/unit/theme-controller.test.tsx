@@ -1,9 +1,12 @@
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   applyResolvedAppearance,
   postResolvedAppearance,
   STO_APPEARANCE_MESSAGE_TYPE,
+  ThemeController,
 } from '@/components/theme/ThemeController';
+import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 
 describe('theme controller appearance helpers', () => {
   it('applies class, data attribute, and color scheme together', () => {
@@ -28,5 +31,24 @@ describe('theme controller appearance helpers', () => {
       { type: 'sto:appearance-change', appearance: 'light' },
       '*',
     );
+  });
+
+  it('shares the resolved appearance with the sidebar without another media subscription', () => {
+    const matchMedia = vi.mocked(window.matchMedia);
+    matchMedia.mockClear();
+
+    render(
+      <ThemeController>
+        <SidebarBrandHeader
+          layoutVariant="full"
+          onCollapse={vi.fn()}
+          collapseLabel="Collapse sidebar"
+          expandLabel="Expand sidebar"
+        />
+      </ThemeController>,
+    );
+
+    expect(screen.getByRole('img', { name: 'SClaw' })).toBeInTheDocument();
+    expect(matchMedia).toHaveBeenCalledTimes(2);
   });
 });

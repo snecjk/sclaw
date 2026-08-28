@@ -1,7 +1,13 @@
-import { useEffect } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { useResolvedAppearance, type ResolvedAppearance } from '@/hooks/use-resolved-appearance';
 
 export const STO_APPEARANCE_MESSAGE_TYPE = 'sto:appearance-change' as const;
+
+const ResolvedAppearanceContext = createContext<ResolvedAppearance>('light');
+
+export function useThemeAppearance(): ResolvedAppearance {
+  return useContext(ResolvedAppearanceContext);
+}
 
 export function applyResolvedAppearance(root: HTMLElement, appearance: ResolvedAppearance): void {
   root.classList.remove('light', 'dark');
@@ -14,7 +20,7 @@ export function postResolvedAppearance(target: Window, appearance: ResolvedAppea
   target.postMessage({ type: STO_APPEARANCE_MESSAGE_TYPE, appearance }, '*');
 }
 
-export function ThemeController() {
+export function ThemeController({ children }: { children?: ReactNode }) {
   const appearance = useResolvedAppearance();
 
   useEffect(() => {
@@ -26,5 +32,9 @@ export function ThemeController() {
       });
   }, [appearance]);
 
-  return null;
+  return (
+    <ResolvedAppearanceContext.Provider value={appearance}>
+      {children}
+    </ResolvedAppearanceContext.Provider>
+  );
 }

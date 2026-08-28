@@ -8,7 +8,7 @@ import sidebarLogoSvg from '@/assets/sidebar-logo.svg';
 import sidebarLogoDarkSvg from '@/assets/sidebar-logo-dark.svg';
 import { cn } from '@/lib/utils';
 import { sidebarBrandLogoClass, sidebarBrandVersionClass } from '@/lib/surfaces';
-import { useResolvedAppearance } from '@/hooks/use-resolved-appearance';
+import { useThemeAppearance } from '@/components/theme/ThemeController';
 import { formatAppDisplayVersion } from '@/lib/format-app-display-version';
 import { ChromeEnvBadge } from '@/components/layout/chrome-env-badge';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
@@ -37,7 +37,7 @@ function SidebarBrandTitle({
   displayVersion: string;
   showEnvBadgeAfterVersion: boolean;
 }) {
-  const appearance = useResolvedAppearance();
+  const appearance = useThemeAppearance();
 
   return (
     <div className="flex min-w-0 items-center gap-2">

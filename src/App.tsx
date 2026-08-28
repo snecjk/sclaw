@@ -294,11 +294,11 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ThemeController />
-      <TooltipProvider delayDuration={300}>
-      <AppShellLayoutProvider>
-        <WorkflowCompletionNotifier />
-          <Routes>
+      <ThemeController>
+        <TooltipProvider delayDuration={300}>
+          <AppShellLayoutProvider>
+            <WorkflowCompletionNotifier />
+            <Routes>
             {/* SSO Login page */}
             <Route path="/login" element={<Login />} />
 
@@ -330,16 +330,17 @@ function App() {
               <Route path="/workflow/*" element={<WorkflowTestPage />} />
               <Route path="/settings/*" element={<Settings />} />
             </Route>
-          </Routes>
+            </Routes>
 
-          {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
-          {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
-          <JsBridgeHostPortal />
-          {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-            <UserWatermark />
-          ) : null}
-        </AppShellLayoutProvider>
-      </TooltipProvider>
+            {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
+            {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
+            <JsBridgeHostPortal />
+            {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
+              <UserWatermark />
+            ) : null}
+          </AppShellLayoutProvider>
+        </TooltipProvider>
+      </ThemeController>
     </ErrorBoundary>
   );
 }
