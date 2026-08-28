@@ -115,10 +115,10 @@ export function resolveDwsChatMessageSendTextFormatProblem(commandText: string):
   if (!usesBashAnsiQuote && !usesShellTextVariable && !missingTextValue) return null;
 
   return [
-    '[StoClaw 安全策略] OpenClaw/Windows 发送钉钉消息时，`--text` 不能使用 shell 变量或 Bash ANSI-C 引号 `$\\\'...\\\'`，',
+    '[SClaw 安全策略] OpenClaw/Windows 发送钉钉消息时，`--text` 不能使用 shell 变量或 Bash ANSI-C 引号 `$\\\'...\\\'`，',
     '否则正文可能丢失并把 `--format` 当成消息内容。',
     '请重试：直接调用 `dws chat message send ... --text "正文\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json`；',
-    'StoClaw 会在执行前把 `\\n` 转为真实换行（Windows OpenClaw exec 走 PowerShell，并优先改写为直接 dws 调用）。',
+    'SClaw 会在执行前把 `\\n` 转为真实换行（Windows OpenClaw exec 走 PowerShell，并优先改写为直接 dws 调用）。',
   ].join('');
 }
 
@@ -280,7 +280,7 @@ export function evaluateDingTalkSendGuard(input: {
     return {
       allowed: false,
       reason:
-        '[StoClaw 安全策略] 禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。',
+        '[SClaw 安全策略] 禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。',
     };
   }
 
@@ -315,7 +315,7 @@ export function evaluateDingTalkSendGuard(input: {
     const seconds = Math.max(1, Math.ceil(rate.retryAfterMs / 1000));
     return {
       allowed: false,
-      reason: `[StoClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。这是频控、不是权限拒绝——你被允许发送。请等待约 ${seconds} 秒后用原命令重试，不要放弃、不要让用户手动发送。`,
+      reason: `[SClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。这是频控、不是权限拒绝——你被允许发送。请等待约 ${seconds} 秒后用原命令重试，不要放弃、不要让用户手动发送。`,
     };
   }
 

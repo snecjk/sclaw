@@ -55,6 +55,7 @@ import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
 import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
+import { getTurnTokenService } from '../services/turn-token-service';
 import { getProviderService } from '../services/providers/provider-service';
 import {
   getOpenClawProviderKey,
@@ -2206,6 +2207,13 @@ function registerUsageHandlers(): void {
       : undefined;
     return await getRecentTokenUsageHistory(safeLimit);
   });
+
+  ipcMain.handle('turn-token:get', async (_, sessionKey: unknown, turnIndex: unknown) => {
+    if (typeof sessionKey !== 'string' || typeof turnIndex !== 'number' || !Number.isFinite(turnIndex)) {
+      return null;
+    }
+    return getTurnTokenService().get(sessionKey, Math.max(0, Math.floor(turnIndex)));
+  });
 }
 /**
  * Window control handlers (for custom title bar on Windows)
@@ -2236,6 +2244,18 @@ function registerWindowHandlers(): void {
 
   ipcMain.handle('window:isFullScreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false;
+  });
+
+  ipcMain.handle('window:setMinimumSize', (event, size?: { width?: number; height?: number }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const minWidth = Math.max(960, Math.round(Number(size?.width) || 960));
+    const minHeight = Math.max(640, Math.round(Number(size?.height) || 640));
+    win.setMinimumSize(minWidth, minHeight);
+    const [width, height] = win.getSize();
+    if (width < minWidth || height < minHeight) {
+      win.setSize(Math.max(width, minWidth), Math.max(height, minHeight));
+    }
   });
 }
 

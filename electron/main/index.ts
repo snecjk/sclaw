@@ -22,10 +22,9 @@ import type { GatewayManager } from '../gateway/manager';
 import type { HostEventBus } from '../api/event-bus';
 
 // Lightweight modules needed before window creation
-import { createMenu } from './menu';
+import { syncApplicationMenuFromStore } from './menu';
 import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
-// import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { warmupNetworkOptimization } from '../utils/uv-env';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { isQuitting, setQuitting } from './app-state';
@@ -541,8 +540,8 @@ async function initialize(): Promise<void> {
   const window = await createMainWindow();
   _ts('mainWindow created');
 
-  // Set application menu (fast, no I/O — can happen after window show)
-  createMenu();
+  // Set application menu from persisted language (macOS menu bar is always visible)
+  void syncApplicationMenuFromStore();
 
   // Initialize logger AFTER window creation so its sync I/O runs in parallel
   // with the renderer loading HTML. Calls before init() safely go to console
@@ -703,17 +702,29 @@ async function initialize(): Promise<void> {
   registerFormHandlers();
 
   // 引擎无关通用定时任务：setGatewayManager 注入 dispatcher + eventSink →
-  // 一次性迁移遗留 claude definitions.json + openclaw jobs.json → schedule_tasks（jobs.json 迁后清空、definitions.json 保留）→
-  // startScheduler（discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
+  // 一次性迁移遗留 claude definitions.json + openclaw jobs.json → schedule_tasks →
+  // 列→segments。startScheduler 挪到已认证入口（认领后），未登录不跑 cron / 出队。
   const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
   const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
+  const { runComposerColumnsToSegmentsMigration } = await import(
+    '../scripts/migrate-composer-columns-to-segments'
+  );
   const scheduledTaskService = getScheduledTaskService();
   scheduledTaskService.setGatewayManager(gm);
   await runScheduledTasksMigration(gm, scheduledTaskService);
-  scheduledTaskService.startScheduler();
-  void scheduledTaskService.refreshSchedule().catch((error) => {
-    logger.warn('[scheduled-task] initial schedule refresh failed:', error);
+  await runComposerColumnsToSegmentsMigration(scheduledTaskService).catch((error) => {
+    logger.warn('[scheduled-task] columns→composerSegments migration failed:', error);
   });
+  try {
+    const { getAuthState } = await import('../utils/auth-store');
+    const authState = await getAuthState();
+    const userCode = authState.isAuthenticated ? authState.user?.code?.trim() : '';
+    if (userCode) {
+      scheduledTaskService.onUserAuthenticated(userCode);
+    }
+  } catch (error) {
+    logger.warn('[scheduled-task] cold-start auth check failed:', error);
+  }
   app.on('before-quit', () => {
     scheduledTaskService.stopScheduler();
   });

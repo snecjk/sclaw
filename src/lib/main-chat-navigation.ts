@@ -2,7 +2,13 @@ import { flushSync } from 'react-dom';
 import type { NavigateFunction, To } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat';
 import { findSessionKeyByTitle } from '@/lib/session-label';
+import {
+  mergeMainChatDraft,
+  readMainChatComposerDraft,
+  type MainChatDraftMode,
+} from '@/lib/main-chat-composer-draft';
 import type { WorkflowExecutionEngine } from '@/lib/workflow-session';
+import type { ChatEditDraftEventDetail } from '@/pages/Chat/ChatInput';
 
 export function isMainChatHomePath(pathname: string): boolean {
   return pathname === '/';
@@ -202,6 +208,24 @@ export interface MainChatDraftState {
   mainChatDraft: string;
   /** Unique token for this draft navigation; guarantees one-time consumption. */
   mainChatDraftToken: string;
+  /** Homepage-recommend-style chip payload; Home replays `stoclaw:chat-edit-draft`. */
+  composerHandoff?: ChatEditDraftEventDetail;
+}
+
+function parseComposerHandoff(value: unknown): ChatEditDraftEventDetail | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as ChatEditDraftEventDetail;
+  const skill = record.skill;
+  const workflow = record.workflow;
+  const hasSkill = Boolean(skill && typeof skill.slug === 'string' && skill.slug.trim());
+  const hasWorkflow = Boolean(workflow && typeof workflow.id === 'string' && workflow.id.trim());
+  const hasText = Boolean(record.text?.trim() || record.prefixText?.trim() || record.suffixText?.trim());
+  if (!hasSkill && !hasWorkflow && !hasText) return undefined;
+  return record;
+}
+
+function hasComposerHandoffPayload(handoff: ChatEditDraftEventDetail): boolean {
+  return Boolean(parseComposerHandoff(handoff));
 }
 
 /** Parse and validate router `location.state` as a one-shot composer draft. */
@@ -209,10 +233,13 @@ export function readMainChatDraftState(state: unknown): MainChatDraftState | nul
   if (!state || typeof state !== 'object') return null;
   const record = state as Record<string, unknown>;
   const draft = typeof record.mainChatDraft === 'string' ? record.mainChatDraft.trim() : '';
-  if (!draft) return null;
+  const composerHandoff = parseComposerHandoff(record.composerHandoff);
+  if (!draft && !composerHandoff) return null;
   const token =
     typeof record.mainChatDraftToken === 'string' ? record.mainChatDraftToken.trim() : '';
-  return { mainChatDraft: draft, mainChatDraftToken: token };
+  return composerHandoff
+    ? { mainChatDraft: draft, mainChatDraftToken: token, composerHandoff }
+    : { mainChatDraft: draft, mainChatDraftToken: token };
 }
 
 /**
@@ -237,6 +264,65 @@ export function navigateToNewSessionWithDraft(
   // draft travels in location.state and must produce a fresh location.
   flushSync(() => {
     useChatStore.getState().newSession();
+    navigate('/', { state });
+  });
+  return true;
+}
+
+export interface NavigateToMainChatWithDraftOptions {
+  /** REPLACE overwrites the composer, APPEND keeps existing text. Default REPLACE. */
+  mode?: MainChatDraftMode;
+  /** Extra query string forwarded to Home, e.g. `?skill=slug`. */
+  search?: string;
+}
+
+/**
+ * Seed the main chat composer with `draft` and open home, never auto-sending.
+ *
+ * A non-empty existing draft is kept in place (no `newSession`), otherwise the
+ * merged text would land in a session that just discarded what it merged with.
+ */
+export function navigateToMainChatWithDraft(
+  navigate: NavigateFunction,
+  draft: string,
+  options: NavigateToMainChatWithDraftOptions = {},
+): boolean {
+  const trimmed = draft.trim();
+  if (!trimmed) return false;
+
+  const existing = readMainChatComposerDraft();
+  const merged = mergeMainChatDraft(existing, trimmed, options.mode ?? 'REPLACE');
+  const state: MainChatDraftState = {
+    mainChatDraft: merged,
+    mainChatDraftToken: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  };
+  const target: To = options.search ? { pathname: '/', search: options.search } : '/';
+
+  flushSync(() => {
+    if (!existing.trim()) useChatStore.getState().newSession();
+    navigate(target, { state });
+  });
+  return true;
+}
+
+/**
+ * Open home and replay a homepage-recommend composer event (skill/workflow chips).
+ * Never uses `?q=`, so the draft is not auto-sent.
+ */
+export function navigateToMainChatWithComposerHandoff(
+  navigate: NavigateFunction,
+  handoff: ChatEditDraftEventDetail,
+): boolean {
+  if (!hasComposerHandoffPayload(handoff)) return false;
+
+  const state: MainChatDraftState = {
+    mainChatDraft: '',
+    mainChatDraftToken: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    composerHandoff: handoff,
+  };
+
+  flushSync(() => {
+    if (!readMainChatComposerDraft().trim()) useChatStore.getState().newSession();
     navigate('/', { state });
   });
   return true;

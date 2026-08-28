@@ -7,6 +7,7 @@ import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
+import { captureClaudeTurnTokenUsage } from '../services/turn-token-capture';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, patchEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -25,6 +26,7 @@ import {
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
+import { logUserSend } from '../../shared/user-send-log';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -832,6 +834,13 @@ export async function consumeClaudeQuery(
       }
 
       if (message.type === 'result') {
+        captureClaudeTurnTokenUsage({
+          sessionKey,
+          resultMessage: message,
+          model: typeof (message as { model?: unknown }).model === 'string'
+            ? (message as { model: string }).model
+            : undefined,
+        });
         flushPendingToolInputDelta();
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
@@ -1070,6 +1079,17 @@ async function startClaudeQuery(
       sessionKey,
       userPromptChars: typeof prompt === 'string' ? prompt.length : null,
       userPrompt: userPromptPreview,
+    });
+    const userMessageForLog = typeof prompt === 'string'
+      ? prompt
+      : (options?.userPrompt ?? '(stream/non-string prompt)');
+    logUserSend({
+      engine: 'claude',
+      sessionKey,
+      message: userMessageForLog,
+      messageLength: userMessageForLog.length,
+      systemPromptAppend: systemPromptAppend || null,
+      systemPromptAppendLength: systemPromptAppend.length,
     });
     // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
     // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。

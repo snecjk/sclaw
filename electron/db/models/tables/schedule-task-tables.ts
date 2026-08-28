@@ -38,7 +38,10 @@ export interface ScheduleTasksTable {
   created_at: TimestampColumn;
   updated_at: TimestampColumn;
   deleted_at: NullableTimestampColumn;
-  version: Generated<number>;
+  /** 出队状态：pending / done。默认 pending。 */
+  sync_status: Generated<string>;
+  /** 云端 version 镜像；仅 push/pull 成功回写。 */
+  remote_version: number | null;
   created_by: string | null;
   updated_by: string | null;
 }

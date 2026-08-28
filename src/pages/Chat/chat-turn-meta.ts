@@ -1,4 +1,5 @@
 import type { RawMessage } from '@/stores/chat';
+import { hasVisibleUserMessageContent } from '@/stores/chat/user-message-merge';
 import { RUN_ID_IN_TEXT } from '@/lib/workflow-card-injection';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
@@ -190,9 +191,30 @@ export function findTurnUserIndexForMessage(
   const msgIdx = messageIndex(message, messages);
   if (msgIdx < 0) return -1;
   for (let i = msgIdx - 1; i >= 0; i -= 1) {
-    if (messages[i].role === 'user') return i;
+    if (isCountableUserTurn(messages[i])) return i;
   }
   return -1;
+}
+
+/** 消息所属轮次 index（0-based，按可见 user 消息计数，与 Claude allocateTurnIndex 对齐）。 */
+export function getTurnIndexForAssistantMessage(
+  message: RawMessage,
+  messages: RawMessage[],
+): number {
+  const turnUserIdx = findTurnUserIndexForMessage(message, messages);
+  if (turnUserIdx < 0) return -1;
+  let turnIndex = 0;
+  for (let i = 0; i < turnUserIdx; i += 1) {
+    if (!isCountableUserTurn(messages[i])) continue;
+    turnIndex += 1;
+  }
+  return turnIndex;
+}
+
+function isCountableUserTurn(message: RawMessage): boolean {
+  if (message.role !== 'user') return false;
+  if (message.id?.startsWith('session-label-user-')) return false;
+  return hasVisibleUserMessageContent(message);
 }
 
 /** 是否为该轮 UI 合并展示的最终助手回复（meta 挂载点）。 */

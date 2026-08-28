@@ -265,6 +265,100 @@ export class ScheduleTaskRunRepository {
     return Number(result.numUpdatedRows ?? 0n);
   }
 
+  /**
+   * 关闭 / 删除任务时释放该任务的单飞租约：把仍为 queued/running 的 run 标 cancelled。
+   * running 的引擎中断由 service 尽力 abort；这里保证下一拍 tick 不再被旧 lease 挡住。
+   */
+  async cancelActiveRunsForTask(
+    taskId: string,
+    input: { error?: string; actor?: string | null } = {},
+  ): Promise<number> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const result = await db
+      .updateTable('schedule_task_runs')
+      .set({
+        status: 'cancelled',
+        completed_at: timestamp,
+        error: input.error ?? null,
+        updated_at: timestamp,
+        updated_by: input.actor ?? null,
+        version: sql<number>`version + 1`,
+      })
+      .where('task_id', '=', taskId)
+      .where('status', 'in', ['queued', 'running'])
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0n);
+  }
+
+  /**
+   * 条件取消：仅当 run 仍为 queued/running 时落 cancelled。
+   * dispatch 重读库发现任务已关/已删时走这条，避免把已终态 run 覆盖掉。
+   */
+  async cancelIfActive(
+    runId: string,
+    input: UpdateScheduleTaskRunInput,
+  ): Promise<ScheduleTaskRun | null> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const set: Record<string, unknown> = {
+      status: 'cancelled',
+      completed_at: input.completedAt ?? timestamp,
+      updated_at: timestamp,
+      updated_by: input.actor ?? null,
+      version: sql<number>`version + 1`,
+    };
+    if (input.error !== undefined) set.error = input.error;
+    if (input.sessionKey !== undefined) {
+      set.session_key = input.sessionKey == null ? null : String(input.sessionKey);
+    }
+    if (input.runtimeResult !== undefined) {
+      set.runtime_result_json = stringifyJson(input.runtimeResult);
+    }
+
+    const result = await db
+      .updateTable('schedule_task_runs')
+      .set(set)
+      .where('run_id', '=', runId)
+      .where('status', 'in', ['queued', 'running'])
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (Number(result.numUpdatedRows ?? 0n) === 0) return null;
+    return this.getRun(runId, { includeDeleted: true });
+  }
+
+  /**
+   * queued → running 的条件更新。关闭/删除若已把 run 标 cancelled，这里返回 null，
+   * dispatch 不得再 send。
+   */
+  async markRunningIfQueued(
+    runId: string,
+    input: { startedAt: string; sessionKey?: string | null; actor?: string | null },
+  ): Promise<ScheduleTaskRun | null> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const set: Record<string, unknown> = {
+      status: 'running',
+      started_at: input.startedAt,
+      updated_at: timestamp,
+      updated_by: input.actor ?? null,
+      version: sql<number>`version + 1`,
+    };
+    if (input.sessionKey !== undefined) {
+      set.session_key = input.sessionKey == null ? null : String(input.sessionKey);
+    }
+    const result = await db
+      .updateTable('schedule_task_runs')
+      .set(set)
+      .where('run_id', '=', runId)
+      .where('status', '=', 'queued')
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (Number(result.numUpdatedRows ?? 0n) === 0) return null;
+    return this.getRun(runId, { includeDeleted: true });
+  }
+
   async createRun(input: CreateScheduleTaskRunInput): Promise<ScheduleTaskRun> {
     const db = getKyselyDatabase();
     const timestamp = nowIso();

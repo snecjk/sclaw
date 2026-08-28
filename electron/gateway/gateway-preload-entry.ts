@@ -188,7 +188,7 @@ function isBlockedUpgradeCommand(cmd: string, argsList: string[]): boolean {
 }
 
 function securityError(desc: string): Error {
-  const e = new Error(`[StoClaw 安全策略] ${desc}`);
+  const e = new Error(`[SClaw 安全策略] ${desc}`);
   (e as NodeJS.ErrnoException).code = 'EPERM';
   return e;
 }

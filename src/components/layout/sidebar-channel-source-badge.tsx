@@ -1,15 +1,27 @@
-/**
- * SidebarChannelSourceBadge — 历史会话行来源小标记（钉钉 / 微信 / App）。
- * PC 桌面会话（无 channelType）不展示。
- */
+/** SidebarChannelSourceBadge — 历史会话行来源图标；PC 桌面会话不展示。 */
 import { useTranslation } from 'react-i18next';
+import dingIcon from '@/assets/icons/ding.svg';
+import wechatIcon from '@/assets/icons/wechat.svg';
+import wecomIcon from '@/assets/icons/wecom.svg';
+import appIcon from '@/assets/icons/app.svg';
+import qqIcon from '@/assets/icons/qq.svg';
 import { cn } from '@/lib/utils';
 import type { SidebarChannelSource } from '@/lib/session-channel-source';
 
 const LABEL_KEY: Record<SidebarChannelSource, string> = {
   dingtalk: 'sidebar.channelSource.dingtalk',
   wechat: 'sidebar.channelSource.wechat',
+  wecom: 'sidebar.channelSource.wecom',
   app: 'sidebar.channelSource.app',
+  qq: 'sidebar.channelSource.qq',
+};
+
+const SOURCE_ICON: Record<SidebarChannelSource, string> = {
+  dingtalk: dingIcon,
+  wechat: wechatIcon,
+  wecom: wecomIcon,
+  app: appIcon,
+  qq: qqIcon,
 };
 
 export function SidebarChannelSourceBadge({
@@ -25,13 +37,12 @@ export function SidebarChannelSourceBadge({
   return (
     <span
       className={cn(
-        'ml-1.5 shrink-0 rounded px-1 py-px text-[10px] leading-3 font-medium tracking-wide',
-        'border border-[#93c5fd] bg-[#eff6ff] text-[#3b82f6]',
+        'ml-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center',
         className,
       )}
       aria-label={t(LABEL_KEY[source])}
     >
-      {t(LABEL_KEY[source])}
+      <img src={SOURCE_ICON[source]} alt="" className="h-4 w-4" aria-hidden />
     </span>
   );
 }

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { applyProxySettings } from '../../main/proxy';
 import { syncLaunchAtStartupSettingFromStore } from '../../main/launch-at-startup';
+import { syncApplicationMenuFromStore } from '../../main/menu';
 import { syncPreventSystemSleepSettingFromStore } from '../../main/prevent-sleep';
 import { syncProxyConfigToOpenClaw } from '../../utils/openclaw-proxy';
 import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../../utils/store';
@@ -36,6 +37,10 @@ function patchTouchesPreventSystemSleep(patch: Partial<AppSettings>): boolean {
   return Object.prototype.hasOwnProperty.call(patch, 'preventSystemSleep');
 }
 
+function patchTouchesLanguage(patch: Partial<AppSettings>): boolean {
+  return Object.prototype.hasOwnProperty.call(patch, 'language');
+}
+
 export async function handleSettingsRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -68,6 +73,9 @@ export async function handleSettingsRoutes(
       }
       if (patchTouchesPreventSystemSleep(patch)) {
         await syncPreventSystemSleepSettingFromStore();
+      }
+      if (patchTouchesLanguage(patch)) {
+        await syncApplicationMenuFromStore();
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
         await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
@@ -110,6 +118,9 @@ export async function handleSettingsRoutes(
       if (key === 'preventSystemSleep') {
         await syncPreventSystemSleepSettingFromStore();
       }
+      if (key === 'language') {
+        await syncApplicationMenuFromStore();
+      }
       if (key === 'autoCheckUpdate') {
         await appUpdater.syncPeriodicCheckFromSettings(body.value === true);
       }
@@ -126,6 +137,7 @@ export async function handleSettingsRoutes(
       await handleProxySettingsChange(ctx);
       await syncLaunchAtStartupSettingFromStore();
       await syncPreventSystemSleepSettingFromStore();
+      await syncApplicationMenuFromStore();
       const settings = await getAllSettings();
       await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
       sendJson(res, 200, { success: true, settings });

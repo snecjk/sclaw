@@ -467,6 +467,7 @@ export function SidebarProjectsSection({
                         }}
                         className={cn(
                           'flex h-8 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-1 pr-16 text-left transition-colors',
+                          'outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
                           sidebarSubitemTextIdleClass,
                         )}
                       >

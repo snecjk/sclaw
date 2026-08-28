@@ -130,7 +130,6 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           slug,
           title: item.title || slug,
         },
-        suffixText: '帮我执行这个技能',
       });
       return;
     }
@@ -149,19 +148,17 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           name: item.title,
           source: 'mine',
         },
-        suffixText: '帮我执行这个工作流',
       });
       return;
     }
 
     if (item.item_type === 'workflow_template') {
       applyRecommendToComposer({
-        prefixText: '安装',
         workflow: {
           id: item.item_ref_id,
           name: item.title,
+          source: 'template',
         },
-        suffixText: '帮我执行这个工作流',
       });
     }
   };

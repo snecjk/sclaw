@@ -57,6 +57,30 @@ export async function handleScheduledTaskRoutes(
     return true;
   }
 
+  // ---- cloud sync-status: GET /cloud/sync-status（仅 MyTask 挂载） ----
+  if (url.pathname === '/api/scheduled-tasks/cloud/sync-status' && req.method === 'GET') {
+    try {
+      const status = await getScheduledTaskService().getCloudSyncStatus();
+      sendJson(res, 200, status);
+    } catch (error) {
+      const statusCode = (error as { statusCode?: number }).statusCode === 401 ? 401 : 500;
+      sendJson(res, statusCode, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // ---- cloud pull: POST /cloud/pull（仅按钮） ----
+  if (url.pathname === '/api/scheduled-tasks/cloud/pull' && req.method === 'POST') {
+    try {
+      const result = await getScheduledTaskService().pullFromCloud();
+      sendJson(res, 200, result);
+    } catch (error) {
+      const statusCode = (error as { statusCode?: number }).statusCode === 401 ? 401 : 500;
+      sendJson(res, statusCode, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   // ---- beautify instruction: POST /beautify-instruction ----
   // 独立于 CRUD：复用 scheduled-task-instruction-beautifier 服务。
   // 输入：instruction / type?(task|prompt, 默认 task) / workflowId? / workflowName?

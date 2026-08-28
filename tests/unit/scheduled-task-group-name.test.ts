@@ -51,6 +51,26 @@ describe('scheduled-task-group-name', () => {
     expect(name).toBe('日报生成');
   });
 
+  it('prefers refreshed nameMaps over stale catalog/session title after rename', () => {
+    const sessions = [{
+      key: 'agent:main:cron:job-uuid:2026-06-25',
+      label: '旧任务名',
+      displayName: '旧任务名',
+    }];
+    const staleMaps = {
+      cron: new Map([['job-uuid', '旧任务名']]),
+      sto: new Map<number, string>(),
+      claude: new Map<string, string>(),
+    };
+    const refreshedMaps = {
+      cron: new Map([['job-uuid', '新任务名']]),
+      sto: new Map<number, string>(),
+      claude: new Map<string, string>(),
+    };
+    expect(buildScheduledTaskGroupDisplayName('cron', 'job-uuid', sessions, staleMaps)).toBe('旧任务名');
+    expect(buildScheduledTaskGroupDisplayName('cron', 'job-uuid', sessions, refreshedMaps)).toBe('新任务名');
+  });
+
   it('buildScheduledTaskGroupDisplayName keeps user names that start with 定时任务', () => {
     const name = buildScheduledTaskGroupDisplayName(
       'cron',

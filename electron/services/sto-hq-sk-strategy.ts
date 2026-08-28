@@ -27,7 +27,9 @@ import {
 } from './sto-apollo-config-service';
 
 export class HqSkStrategy implements StoSkStrategy {
-  private static readonly CACHE_KEY = 'sto-sk-v2';
+  private static readonly CACHE_KEY_PREFIX = 'sto-sk-v2:';
+  /** @deprecated pre-session global cache; never read to avoid cross-user reuse. */
+  private static readonly LEGACY_GLOBAL_CACHE_KEY = 'sto-sk-v2';
   /** @deprecated 旧版密文缓存键，仅用于迁移清理 */
   private static readonly LEGACY_CACHE_KEY = 'sto';
 
@@ -37,7 +39,7 @@ export class HqSkStrategy implements StoSkStrategy {
     logger.info(`[hq-sk] getUserSk called, userCode=${user.code}, forceRefresh=${forceRefresh}`);
 
     if (!forceRefresh) {
-      const cached = await getApiKey(HqSkStrategy.CACHE_KEY);
+      const cached = await getApiKey(this.cacheKey(user));
       if (cached) {
         logger.info(`[hq-sk] SK loaded from cache (len=${cached.length})`);
         return cached;
@@ -58,7 +60,7 @@ export class HqSkStrategy implements StoSkStrategy {
         return null;
       }
 
-      await storeApiKey(HqSkStrategy.CACHE_KEY, ensured.apiKey);
+      await storeApiKey(this.cacheKey(user), ensured.apiKey);
       logger.info(
         `[hq-sk] apiKey stored in cache (len=${ensured.apiKey.length}), created=${ensured.created}`,
       );
@@ -167,9 +169,14 @@ export class HqSkStrategy implements StoSkStrategy {
   }
 
   async clearCache(user: SsoUserInfo): Promise<void> {
-    await deleteApiKey(HqSkStrategy.CACHE_KEY);
+    await deleteApiKey(this.cacheKey(user));
+    await deleteApiKey(HqSkStrategy.LEGACY_GLOBAL_CACHE_KEY);
     await deleteApiKey(HqSkStrategy.LEGACY_CACHE_KEY);
     logger.info(`[hq-sk] Cache cleared for user=${user.code}`);
+  }
+
+  private cacheKey(user: SsoUserInfo): string {
+    return `${HqSkStrategy.CACHE_KEY_PREFIX}${user.id || user.code}`;
   }
 }
 
