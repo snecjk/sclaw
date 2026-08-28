@@ -140,7 +140,7 @@ export function ExcelGridViewer({ buffer, className }: ExcelGridViewerProps) {
   const remaining = sheet.rows.length - shownRows.length;
 
   return (
-    <div className={cn('flex h-full min-h-0 flex-col bg-white dark:bg-[#0d1117]', className)}>
+    <div className={cn('flex h-full min-h-0 flex-col bg-white dark:bg-[var(--sto-surface-under)]', className)}>
       {/* Sheet 标签栏 */}
       {sheets.length > 1 ? (
         <div className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/60 px-2">

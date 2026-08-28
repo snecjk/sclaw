@@ -3,11 +3,21 @@
  * Keeps fetch+srcDoc rendering (OSS attachment pages) while restoring API/download context.
  */
 
+import { STO_APPEARANCE_MESSAGE_TYPE } from '@/components/theme/ThemeController';
+import type { ResolvedAppearance } from '@/hooks/use-resolved-appearance';
+
 export const HTML_PREVIEW_IFRAME_SANDBOX =
   'allow-scripts allow-same-origin allow-popups allow-forms allow-downloads';
 
 /** Parent must respond within this window or the iframe fetch proxy rejects. */
 export const PREVIEW_HTTP_FETCH_TIMEOUT_MS = 30_000;
+
+export type PreviewAppearanceMode = 'adaptive' | 'fidelity';
+
+export type PreviewThemeOptions = {
+  appearance: ResolvedAppearance;
+  mode: PreviewAppearanceMode;
+};
 
 export function documentBaseUrl(sourceUrl: string): string {
   try {
@@ -15,11 +25,115 @@ export function documentBaseUrl(sourceUrl: string): string {
   } catch {
     return sourceUrl;
   }
-
 }
 
 function escapeHtmlAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+function buildPreviewThemeStyle(mode: PreviewAppearanceMode): string {
+  const adaptiveStyles = mode === 'adaptive' ? `
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] body {
+  color:var(--sto-preview-text) !important;
+  background:var(--sto-preview-surface) !important;
+}
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] :is(table, th, td) {
+  color:var(--sto-preview-text) !important;
+  border-color:var(--sto-preview-border) !important;
+}
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] table,
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] th {
+  background:var(--sto-preview-surface-elevated) !important;
+}
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] td {
+  background:var(--sto-preview-surface-secondary) !important;
+}
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] :is(input, button) {
+  color:var(--sto-preview-text) !important;
+  background:var(--sto-preview-surface-secondary) !important;
+  border-color:var(--sto-preview-border) !important;
+}
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] :is(code, pre) {
+  color:var(--sto-preview-text) !important;
+  background:var(--sto-preview-surface-secondary) !important;
+}
+html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] blockquote {
+  color:var(--sto-preview-text-secondary) !important;
+  border-color:var(--sto-preview-border) !important;
+}` : '';
+
+  return `<style data-sto-preview-theme>
+html[data-sto-theme="light"] {
+  color-scheme:light;
+  --sto-preview-surface:#ffffff;
+  --sto-preview-surface-secondary:#f8f8f8;
+  --sto-preview-surface-elevated:#f2f3f5;
+  --sto-preview-text:#1d2129;
+  --sto-preview-text-secondary:#4e5969;
+  --sto-preview-border:#e5e6eb;
+}
+html[data-sto-theme="dark"] {
+  color-scheme:dark;
+  --sto-preview-surface:#212121;
+  --sto-preview-surface-secondary:#212121;
+  --sto-preview-surface-elevated:#282828;
+  --sto-preview-text:#dfdfdf;
+  --sto-preview-text-secondary:rgba(255,255,255,.70);
+  --sto-preview-border:rgba(255,255,255,.08);
+}${adaptiveStyles}
+</style>`;
+}
+
+function buildPreviewThemeScript(): string {
+  const messageType = JSON.stringify(STO_APPEARANCE_MESSAGE_TYPE);
+  return `<script data-sto-preview-theme>
+(function () {
+  var PARENT = window.parent;
+  var MESSAGE_TYPE = ${messageType};
+  if (!PARENT || PARENT === window) return;
+
+  window.addEventListener('message', function (event) {
+    if (event.source !== PARENT) return;
+    var data = event.data;
+    if (!data || data.type !== MESSAGE_TYPE) return;
+    if (data.appearance !== 'light' && data.appearance !== 'dark') return;
+    document.documentElement.dataset.stoTheme = data.appearance;
+    document.documentElement.style.colorScheme = data.appearance;
+  });
+})();
+</script>`;
+}
+
+function injectPreviewRootAttributes(
+  html: string,
+  { appearance, mode }: PreviewThemeOptions,
+): string {
+  const attributes = ` data-sto-theme="${escapeHtmlAttr(appearance)}" data-sto-preview-mode="${escapeHtmlAttr(mode)}"`;
+  if (/<html[^>]*>/i.test(html)) {
+    return html.replace(/<html([^>]*)>/i, (_match, existingAttributes: string) => {
+      const cleanedAttributes = existingAttributes
+        .replace(/\sdata-sto-theme(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/gi, '')
+        .replace(/\sdata-sto-preview-mode(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/gi, '');
+      return `<html${cleanedAttributes}${attributes}>`;
+    });
+  }
+  return `<html${attributes}>${html}</html>`;
+}
+
+/** Add an initial appearance and a parent-window appearance bridge to inline HTML. */
+export function injectSrcDocTheme(html: string, options: PreviewThemeOptions): string {
+  const themedHtml = injectPreviewRootAttributes(html, options);
+  const injection = `${buildPreviewThemeStyle(options.mode)}${buildPreviewThemeScript()}`;
+
+  if (/<head[^>]*>/i.test(themedHtml)) {
+    return themedHtml.replace(/<head([^>]*)>/i, `<head$1>${injection}`);
+  }
+  return themedHtml.replace(/<html([^>]*)>/i, `<html$1><head>${injection}</head>`);
+}
+
+/** Prepare inline generated HTML without adding remote URL or fetch behavior. */
+export function prepareInlinePreviewSrcDoc(html: string, options: PreviewThemeOptions): string {
+  return injectSrcDocTheme(html, options);
 }
 
 export function injectSrcDocBaseHref(html: string, sourceUrl: string): string {
@@ -141,9 +255,14 @@ export function injectSrcDocFetchBridge(html: string, sourceUrl: string): string
   return `${script}${html}`;
 }
 
-/** Inject base URL + same-origin fetch bridge for interactive srcDoc previews. */
-export function preparePreviewSrcDoc(html: string, sourceUrl: string): string {
-  return injectSrcDocFetchBridge(injectSrcDocBaseHref(html, sourceUrl), sourceUrl);
+/** Inject appearance, base URL, and same-origin fetch behavior for interactive srcDoc previews. */
+export function preparePreviewSrcDoc(
+  html: string,
+  sourceUrl: string,
+  options: PreviewThemeOptions,
+): string {
+  const themedHtml = injectSrcDocTheme(html, options);
+  return injectSrcDocFetchBridge(injectSrcDocBaseHref(themedHtml, sourceUrl), sourceUrl);
 }
 
 export type PreviewHttpFetchMessage = {

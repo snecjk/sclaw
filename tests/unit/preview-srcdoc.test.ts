@@ -3,6 +3,7 @@ import {
   documentBaseUrl,
   injectSrcDocBaseHref,
   injectSrcDocFetchBridge,
+  prepareInlinePreviewSrcDoc,
   preparePreviewSrcDoc,
   PREVIEW_HTTP_FETCH_TIMEOUT_MS,
 } from '@/lib/preview-srcdoc';
@@ -29,10 +30,62 @@ describe('preview-srcdoc', () => {
 
   it('preparePreviewSrcDoc keeps body content', () => {
     const html = '<html><head></head><body><p>report</p></body></html>';
-    const out = preparePreviewSrcDoc(html, sourceUrl);
+    const out = preparePreviewSrcDoc(html, sourceUrl, { appearance: 'light', mode: 'adaptive' });
     expect(out).toContain('<p>report</p>');
     expect(out).toContain('<base href="https://cdn.example.com/reports/">');
     expect(out).toContain('window.fetch');
+  });
+
+  it('injects adaptive dark variables and table compatibility styles', () => {
+    const out = preparePreviewSrcDoc(
+      '<html><head></head><body><table><tr><td>28</td></tr></table></body></html>',
+      sourceUrl,
+      { appearance: 'dark', mode: 'adaptive' },
+    );
+    expect(out).toContain('data-sto-theme="dark"');
+    expect(out).toContain('data-sto-preview-mode="adaptive"');
+    expect(out).toContain('--sto-preview-surface:#212121');
+    expect(out).toMatch(/table[\s\S]*th[\s\S]*td/);
+    expect(out).toContain('sto:appearance-change');
+  });
+
+  it('does not add adaptive element overrides in fidelity mode', () => {
+    const out = prepareInlinePreviewSrcDoc('<html><head></head><body>paper</body></html>', {
+      appearance: 'dark',
+      mode: 'fidelity',
+    });
+    expect(out).toContain('data-sto-preview-mode="fidelity"');
+    expect(out).not.toContain('data-sto-preview-mode="adaptive"] table');
+  });
+
+  it('accepts appearance messages only from the parent with the expected payload', () => {
+    const out = prepareInlinePreviewSrcDoc('<html><head></head><body>paper</body></html>', {
+      appearance: 'light',
+      mode: 'adaptive',
+    });
+    const parsed = new DOMParser().parseFromString(out, 'text/html');
+    const script = parsed.querySelector('script[data-sto-preview-theme]')?.textContent;
+    expect(script).toBeTruthy();
+
+    const parentWindow = {};
+    let onMessage: ((event: MessageEvent) => void) | undefined;
+    const previewWindow = {
+      parent: parentWindow,
+      addEventListener: (type: string, listener: (event: MessageEvent) => void) => {
+        if (type === 'message') onMessage = listener;
+      },
+    };
+    const root = { dataset: { stoTheme: 'light' }, style: { colorScheme: 'light' } };
+    const previewDocument = { documentElement: root };
+    new Function('window', 'document', script ?? '')(previewWindow, previewDocument);
+
+    onMessage?.({ source: {}, data: { type: 'sto:appearance-change', appearance: 'dark' } } as MessageEvent);
+    onMessage?.({ source: parentWindow, data: { type: 'unexpected', appearance: 'dark' } } as MessageEvent);
+    onMessage?.({ source: parentWindow, data: { type: 'sto:appearance-change', appearance: 'system' } } as MessageEvent);
+    expect(root).toEqual({ dataset: { stoTheme: 'light' }, style: { colorScheme: 'light' } });
+
+    onMessage?.({ source: parentWindow, data: { type: 'sto:appearance-change', appearance: 'dark' } } as MessageEvent);
+    expect(root).toEqual({ dataset: { stoTheme: 'dark' }, style: { colorScheme: 'dark' } });
   });
 
   it('fetch bridge includes timeout guard', () => {

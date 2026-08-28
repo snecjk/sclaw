@@ -19,12 +19,12 @@ import {
   isPreviewHttpFetchMessage,
   preparePreviewSrcDoc,
 } from '@/lib/preview-srcdoc';
+import { postResolvedAppearance, useThemeAppearance } from '@/components/theme/ThemeController';
 import { UserWatermark } from '@/components/layout/UserWatermark';
 import { ExcelGridViewer } from './ExcelGridViewer';
 import { WordDocViewer } from './WordDocViewer';
 import { PptxDeckViewer } from './PptxDeckViewer';
 import { PreviewLoading } from './PreviewLoading';
-// @ts-expect-error — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
 
@@ -642,7 +642,7 @@ export function FilePreviewViewer({
         );
       }
       return (
-        <div className={cn('h-full overflow-auto bg-white dark:bg-[#0d1117] p-4', className)}>
+        <div className={cn('h-full overflow-auto bg-white p-4 dark:bg-[var(--sto-surface-under)]', className)}>
           <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
             <Table className="h-4 w-4" />
             <span>{tableData.length} 行 · {tableData[0]?.length ?? 0} 列</span>
@@ -744,7 +744,7 @@ export function FilePreviewViewer({
 
 function ImagePreview({ src, fileName, className }: { src: string; fileName: string; className?: string }) {
   return (
-    <div className={cn('flex h-full w-full items-center justify-center overflow-auto bg-white p-6 dark:bg-[#0d1117]', className)}>
+    <div className={cn('flex h-full w-full items-center justify-center overflow-auto bg-white p-6 dark:bg-[var(--sto-surface-under)]', className)}>
       <img
         src={src}
         alt={fileName}
@@ -757,7 +757,7 @@ function ImagePreview({ src, fileName, className }: { src: string; fileName: str
 
 function MarkdownPreviewPane({ content, className }: { content: string; className?: string }) {
   return (
-    <div className={cn('h-full overflow-auto bg-white px-6 py-5 dark:bg-[#0d1117]', className)}>
+    <div className={cn('h-full overflow-auto bg-white px-6 py-5 dark:bg-[var(--sto-surface-under)]', className)}>
       <article className="prose prose-sm max-w-none text-foreground dark:prose-invert">
         <ReactMarkdown
           remarkPlugins={chatRemarkPlugins}
@@ -800,8 +800,22 @@ function RemoteSrcDocPreview({
   fileName: string;
   className?: string;
 }) {
+  const appearance = useThemeAppearance();
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const srcDoc = useMemo(() => preparePreviewSrcDoc(html, sourceUrl), [html, sourceUrl]);
+  const srcDoc = useMemo(
+    () => preparePreviewSrcDoc(html, sourceUrl, {
+      appearance: appearanceRef.current,
+      mode: 'adaptive',
+    }),
+    [html, sourceUrl],
+  );
+
+  useEffect(() => {
+    const target = iframeRef.current?.contentWindow;
+    if (target) postResolvedAppearance(target, appearance);
+  }, [appearance]);
 
   useEffect(() => {
     let artifactOrigin = '';
@@ -883,6 +897,11 @@ function RemoteSrcDocPreview({
       title={fileName}
       className={cn('h-full min-h-0 w-full border-0', className)}
       sandbox={HTML_PREVIEW_IFRAME_SANDBOX}
+      data-sto-theme-sync="true"
+      onLoad={() => {
+        const target = iframeRef.current?.contentWindow;
+        if (target) postResolvedAppearance(target, appearance);
+      }}
     />
   );
 }
@@ -896,6 +915,7 @@ function HtmlIframeView({
   fileName: string;
   className?: string;
 }) {
+  const appearance = useThemeAppearance();
   return (
     <iframe
       key={src}
@@ -903,6 +923,7 @@ function HtmlIframeView({
       title={fileName}
       className={cn('h-full min-h-0 w-full border-0', className)}
       sandbox={HTML_PREVIEW_IFRAME_SANDBOX}
+      style={{ colorScheme: appearance }}
     />
   );
 }
