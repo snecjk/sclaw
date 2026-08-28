@@ -3,6 +3,7 @@ import { app } from 'electron';
 
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { assertInternalHostApiRequest } from '../internal-request-auth';
 import { appTemplateApiClient } from '../../services/app-template-api-client';
 import { listLocalBuiltinAppTemplates } from '../../services/app-template-package-manager';
 import {
@@ -15,6 +16,13 @@ import {
   getAppTemplateImportStatus,
   prepareAppTemplateSourceImport,
 } from '../../services/app-template-source-import-service';
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw Object.assign(new Error(`${field} 不能为空`), { statusCode: 400 });
+  }
+  return value.trim();
+}
 
 export async function handleAppTemplateRoutes(
   req: IncomingMessage,
@@ -90,8 +98,9 @@ export async function handleAppTemplateRoutes(
       url.pathname === '/api/app-templates/workspaces/import-source/status'
       && req.method === 'GET'
     ) {
+      assertInternalHostApiRequest(req);
       const result = await getAppTemplateImportStatus({
-        workspaceId: url.searchParams.get('workspaceId') ?? '',
+        workspaceId: requireString(url.searchParams.get('workspaceId'), 'workspaceId'),
       });
       sendJson(res, 200, { success: true, ...result });
       return true;
@@ -101,9 +110,10 @@ export async function handleAppTemplateRoutes(
       url.pathname === '/api/app-templates/workspaces/import-source/prepare'
       && req.method === 'POST'
     ) {
+      assertInternalHostApiRequest(req);
       const body = await parseJsonBody<{ workspaceId?: unknown; sourcePath?: unknown }>(req);
       const result = await prepareAppTemplateSourceImport({
-        workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : '',
+        workspaceId: requireString(body.workspaceId, 'workspaceId'),
         sourcePath: typeof body.sourcePath === 'string' ? body.sourcePath : undefined,
       });
       sendJson(res, 200, { success: true, ...result });
@@ -114,10 +124,11 @@ export async function handleAppTemplateRoutes(
       url.pathname === '/api/app-templates/workspaces/import-source/apply'
       && req.method === 'POST'
     ) {
+      assertInternalHostApiRequest(req);
       const body = await parseJsonBody<{ workspaceId?: unknown; importToken?: unknown }>(req);
       const result = await applyAppTemplateSourceImport({
-        workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : '',
-        importToken: typeof body.importToken === 'string' ? body.importToken : '',
+        workspaceId: requireString(body.workspaceId, 'workspaceId'),
+        importToken: requireString(body.importToken, 'importToken'),
       });
       sendJson(res, 200, { success: true, ...result });
       return true;
@@ -127,10 +138,11 @@ export async function handleAppTemplateRoutes(
       url.pathname === '/api/app-templates/workspaces/import-source/cancel'
       && req.method === 'POST'
     ) {
+      assertInternalHostApiRequest(req);
       const body = await parseJsonBody<{ workspaceId?: unknown; importToken?: unknown }>(req);
       const result = await cancelAppTemplateSourceImport({
-        workspaceId: typeof body.workspaceId === 'string' ? body.workspaceId : '',
-        importToken: typeof body.importToken === 'string' ? body.importToken : '',
+        workspaceId: requireString(body.workspaceId, 'workspaceId'),
+        importToken: requireString(body.importToken, 'importToken'),
       });
       sendJson(res, 200, { success: true, ...result });
       return true;

@@ -13,6 +13,9 @@ vi.mock('@electron/api/route-utils', () => ({
   sendJson: (...args: unknown[]) => sendJsonMock(...args),
   parseJsonBody: (...args: unknown[]) => parseJsonBodyMock(...args),
 }));
+vi.mock('@electron/api/internal-request-auth', () => ({
+  assertInternalHostApiRequest: vi.fn(),
+}));
 vi.mock('@electron/services/app-dev-service', () => ({
   openAppTemplateWorkspace: vi.fn(),
   publishAppTemplateWorkspace: vi.fn(),
@@ -96,5 +99,22 @@ describe('app template source import routes', () => {
 
     expect(statusMock).toHaveBeenCalledWith({ workspaceId: 'ws-1' });
     expect(cancelMock).toHaveBeenCalledWith({ workspaceId: 'ws-1', importToken: 'token-1' });
+  });
+
+  it('returns 400 before invoking services when identifiers are missing', async () => {
+    parseJsonBodyMock.mockResolvedValueOnce({ workspaceId: 'ws-1' });
+    const { handleAppTemplateRoutes } = await import('@electron/api/routes/app-templates');
+
+    await handleAppTemplateRoutes(
+      { method: 'POST' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1/api/app-templates/workspaces/import-source/apply'),
+      {} as never,
+    );
+
+    expect(applyMock).not.toHaveBeenCalled();
+    expect(sendJsonMock).toHaveBeenCalledWith(expect.anything(), 400, expect.objectContaining({
+      success: false,
+    }));
   });
 });

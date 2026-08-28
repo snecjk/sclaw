@@ -201,4 +201,23 @@ describe('scanTemplateSource', () => {
       level: 'blocker',
     }));
   });
+
+  it('将来源 HTML 的 main 入口改写到平台受管入口', async () => {
+    const target = await createTarget();
+    const source = await createImportFixtureTree('template-source-', {
+      'package.json': packageJson(),
+      'index.html': '<div id="root"></div><script type="module" src="./src/main.jsx"></script>',
+      'src/main.jsx': 'source entry',
+    });
+
+    const prepared = await scanTemplateSource({
+      templateRoot: target,
+      sourcePath: source,
+      pageType: 'site',
+    });
+    snapshots.push(prepared.snapshotRoot);
+
+    expect(await readFile(join(prepared.snapshotRoot, 'index.html'), 'utf8'))
+      .toContain('src="./src/main.tsx"');
+  });
 });

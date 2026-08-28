@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { PORTS, TIMEOUTS } from '../../utils/config';
+import { addInternalHostApiHeader } from '../../api/internal-request-auth';
 
 type HostApiFetchRequest = {
   path: string;
@@ -58,6 +59,7 @@ export function registerHostApiProxyHandlers(): void {
 
       const method = (request.method || 'GET').toUpperCase();
       const headers: Record<string, string> = { ...(request.headers || {}) };
+      addInternalHostApiHeader(headers);
       let body: string | undefined;
 
       if (request.body !== undefined && request.body !== null) {

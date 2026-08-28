@@ -33,6 +33,8 @@ export function TemplateProjectUploadControl({
   const [status, setStatus] = useState<TemplateImportStatus | null>(null);
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const activeSessionRef = useRef<{ workspaceId: string; importToken: string } | null>(null);
+  const mountedRef = useRef(false);
+  const requestGenerationRef = useRef(0);
 
   const refreshStatus = useCallback(async () => {
     const next = await getAppTemplateImportStatus(workspaceId);
@@ -41,12 +43,15 @@ export function TemplateProjectUploadControl({
   }, [workspaceId]);
 
   useEffect(() => {
+    mountedRef.current = true;
     let disposed = false;
     void getAppTemplateImportStatus(workspaceId)
       .then((next) => { if (!disposed) setStatus(next); })
       .catch(() => { if (!disposed) setStatus({ hasSource: false, sourceAvailable: false }); });
     return () => {
       disposed = true;
+      mountedRef.current = false;
+      requestGenerationRef.current += 1;
       const active = activeSessionRef.current;
       activeSessionRef.current = null;
       if (active) void cancelAppTemplateImport(active).catch(() => undefined);
@@ -54,23 +59,36 @@ export function TemplateProjectUploadControl({
   }, [workspaceId]);
 
   const prepare = useCallback(async (sourcePath?: string) => {
+    const generation = requestGenerationRef.current + 1;
+    requestGenerationRef.current = generation;
     setState({ kind: 'preparing' });
     try {
       const preview = await prepareAppTemplateImport({
         workspaceId,
         ...(sourcePath ? { sourcePath } : {}),
       });
+      if (!mountedRef.current || requestGenerationRef.current !== generation) {
+        await cancelAppTemplateImport({ workspaceId, importToken: preview.importToken }).catch(() => undefined);
+        return;
+      }
       activeSessionRef.current = { workspaceId, importToken: preview.importToken };
       setState({ kind: 'review', preview });
     } catch (error) {
+      if (!mountedRef.current || requestGenerationRef.current !== generation) return;
       setState({ kind: 'idle' });
       toast.error(error instanceof Error ? error.message : '项目扫描失败');
     }
   }, [workspaceId]);
 
   const pickAndPrepare = useCallback(async () => {
+    setState({ kind: 'preparing' });
     const sourcePath = await pickProjectFolder();
-    if (sourcePath) await prepare(sourcePath);
+    if (!mountedRef.current) return;
+    if (!sourcePath) {
+      setState({ kind: 'idle' });
+      return;
+    }
+    await prepare(sourcePath);
   }, [prepare]);
 
   const start = useCallback(async () => {
@@ -79,6 +97,7 @@ export function TemplateProjectUploadControl({
   }, [pickAndPrepare, prepare, status]);
 
   const cancelActive = useCallback(async () => {
+    requestGenerationRef.current += 1;
     const active = activeSessionRef.current;
     activeSessionRef.current = null;
     setState({ kind: 'idle' });

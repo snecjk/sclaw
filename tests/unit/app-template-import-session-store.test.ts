@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { PreparedTemplateImport } from '../../electron/services/app-template-import-scanner';
 import { AppTemplateImportSessionStore } from '../../electron/services/app-template-import-session-store';
@@ -27,6 +27,7 @@ describe('AppTemplateImportSessionStore', () => {
 
   afterEach(async () => {
     await Promise.all(stores.splice(0).map((store) => store.dispose()));
+    vi.useRealTimers();
   });
 
   it('binds a token to one workspace and only allows it to be taken once', () => {
@@ -67,5 +68,19 @@ describe('AppTemplateImportSessionStore', () => {
     await expect(store.cancel(created.importToken, 'ws-2')).rejects.toThrow('导入会话不属于当前模板');
     await expect(store.cancel(created.importToken, 'ws-1')).resolves.toBe(true);
     expect(removed).toEqual(['/tmp/cancelled']);
+  });
+
+  it('actively removes an expired snapshot without another store operation', async () => {
+    vi.useFakeTimers();
+    const removed: string[] = [];
+    const store = new AppTemplateImportSessionStore({
+      removeSnapshot: async (path) => { removed.push(path); },
+    });
+    stores.push(store);
+    store.create('ws-1', prepared('/tmp/automatic-expiry'));
+
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1_000 + 1);
+
+    expect(removed).toEqual(['/tmp/automatic-expiry']);
   });
 });

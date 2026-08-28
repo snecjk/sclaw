@@ -1415,13 +1415,27 @@ export interface AppCheckpoint {
   timestamp: number;
 }
 
-export async function createCheckpoint(appPath: string, message: string): Promise<boolean> {
-  if (!(await isGitAvailable())) return false;
+export type AppCheckpointCreationStatus = 'created' | 'clean-head' | 'failed';
+
+export async function createCheckpointWithStatus(
+  appPath: string,
+  message: string,
+): Promise<AppCheckpointCreationStatus> {
+  if (!(await isGitAvailable())) return 'failed';
   const status = await runGit(appPath, ['status', '--porcelain']);
-  if (!status.ok || !status.output) return false; // no changes => no checkpoint
-  await runGit(appPath, ['add', '-A']);
+  if (!status.ok) return 'failed';
+  if (!status.output) {
+    const head = await runGit(appPath, ['rev-parse', '--verify', 'HEAD']);
+    return head.ok ? 'clean-head' : 'failed';
+  }
+  const add = await runGit(appPath, ['add', '-A']);
+  if (!add.ok) return 'failed';
   const commit = await runGit(appPath, ['commit', '-m', message || '应用更新']);
-  return commit.ok;
+  return commit.ok ? 'created' : 'failed';
+}
+
+export async function createCheckpoint(appPath: string, message: string): Promise<boolean> {
+  return (await createCheckpointWithStatus(appPath, message)) === 'created';
 }
 
 export async function listCheckpoints(appPath: string, limit = 20): Promise<AppCheckpoint[]> {

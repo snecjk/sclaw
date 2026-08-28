@@ -63,4 +63,21 @@ describe('TemplateProjectUploadControl', () => {
     await waitFor(() => expect(prepareMock).toHaveBeenCalledWith({ workspaceId: 'ws-1' }));
     expect(pickFolderMock).not.toHaveBeenCalled();
   });
+
+  it('cancels a late prepare result after the control unmounts', async () => {
+    statusMock.mockResolvedValueOnce({ hasSource: true, sourceName: 'demo', sourceAvailable: true });
+    let resolvePrepare!: (value: ReturnType<typeof createTemplateImportPreview>) => void;
+    prepareMock.mockReturnValueOnce(new Promise((resolve) => { resolvePrepare = resolve; }));
+    const view = render(<TemplateProjectUploadControl workspaceId="ws-1" onApplied={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '重新上传' }));
+    await waitFor(() => expect(prepareMock).toHaveBeenCalled());
+
+    view.unmount();
+    resolvePrepare(createTemplateImportPreview({ importToken: 'late-token' }));
+
+    await waitFor(() => expect(cancelMock).toHaveBeenCalledWith({
+      workspaceId: 'ws-1',
+      importToken: 'late-token',
+    }));
+  });
 });

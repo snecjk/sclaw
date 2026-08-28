@@ -1,6 +1,8 @@
 # 应用模板编辑页上传项目设计
 
-**状态：已确认设计，实施计划已完成**
+**状态：已实施**
+
+> 实施说明：来源工程通过十分钟有效、单次消费的 Host 导入会话建立临时快照；Renderer 的 apply 请求只提交 `workspaceId` 和 `importToken`。来源入口与 Vite 配置分别保存为 `main.source.*` 和 `vite.config.source.*`，由平台受管入口与配置包装器加载。来源绝对路径只写入 `.sclaw/local/`，模板归档会排除该目录。
 
 ## 1. 背景
 

@@ -19,6 +19,10 @@ describe('app template import rules', () => {
     'vite.config.ts',
     'vite.config.sclaw.ts',
     'src/components/RuntimeBootstrapShell.tsx',
+    '.gitignore',
+    '.Git/config',
+    '.SCLAW/app-template.json',
+    'SRC/SCLAW/bootstrap.ts',
   ])('永久保护 %s', (path) => {
     expect(classifyTemplateImportPath(path)).toBe('protected');
   });
@@ -30,6 +34,19 @@ describe('app template import rules', () => {
     'dist/a.js',
     'coverage/a.json',
   ])('忽略 %s', (path) => {
+    expect(classifyTemplateImportPath(path)).toBe('ignored');
+  });
+
+  it.each([
+    '.npmrc',
+    '.netrc',
+    'certs/client.pem',
+    'certs/client.key',
+    'id_rsa',
+    'config/credentials.json',
+    'debug.log',
+    '.DS_Store',
+  ])('忽略凭据或本机文件 %s', (path) => {
     expect(classifyTemplateImportPath(path)).toBe('ignored');
   });
 

@@ -1,10 +1,10 @@
-import { cp, readFile, stat } from 'node:fs/promises';
+import { cp, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../electron/services/app-dev-service', () => ({
-  createCheckpoint: vi.fn(),
+  createCheckpointWithStatus: vi.fn(),
   isGitAvailable: vi.fn(),
   readAppTemplateWorkspaceMarker: vi.fn(),
   restartApp: vi.fn(),
@@ -59,6 +59,7 @@ describe('app template source import service', () => {
   const listBindings = vi.fn();
   const isGitAvailable = vi.fn();
   const pathExists = vi.fn();
+  const canonicalizePath = vi.fn();
   const createCheckpoint = vi.fn();
   const restartApp = vi.fn();
   let sessionStore: AppTemplateImportSessionStore;
@@ -75,6 +76,7 @@ describe('app template source import service', () => {
       listBindings,
       isGitAvailable,
       pathExists,
+      canonicalizePath,
       sessionStore,
       createCheckpoint,
       restartApp,
@@ -102,7 +104,8 @@ describe('app template source import service', () => {
     listBindings.mockResolvedValue([]);
     isGitAvailable.mockResolvedValue(true);
     pathExists.mockReturnValue(true);
-    createCheckpoint.mockResolvedValue(true);
+    canonicalizePath.mockImplementation(async (path: string) => path);
+    createCheckpoint.mockResolvedValue('created');
     restartApp.mockResolvedValue(undefined);
   });
 
@@ -172,6 +175,18 @@ describe('app template source import service', () => {
     }, deps)).rejects.toMatchObject({ statusCode: 400 });
   });
 
+  it('reports source scan failures as invalid input', async () => {
+    scan.mockRejectedValueOnce(new Error('来源项目缺少 package.json'));
+
+    await expect(prepareAppTemplateSourceImport({
+      workspaceId: 'ws-1',
+      sourcePath: '/source/demo',
+    }, deps)).rejects.toMatchObject({
+      message: '来源项目缺少 package.json',
+      statusCode: 400,
+    });
+  });
+
   it('cancels a prepared import for its workspace', async () => {
     const preview = await prepareAppTemplateSourceImport({ workspaceId: 'ws-1' }, deps);
 
@@ -181,7 +196,7 @@ describe('app template source import service', () => {
     }, deps)).resolves.toEqual({ cancelled: true });
   });
 
-  it('creates a checkpoint, mirrors business files, and preserves template identity', async () => {
+  it('uses the existing clean Git HEAD, mirrors business files, and preserves template identity', async () => {
     const target = await createImportFixtureTree('template-target-', {
       'manifest.json': JSON.stringify({ schemaVersion: 1, templateId: 'site-a', pageType: 'site', name: '模板 A' }),
       'package.json': JSON.stringify({
@@ -211,8 +226,9 @@ describe('app template source import service', () => {
       files: { 'src/App.tsx': 'old-hash', 'src/obsolete.ts': 'old-hash' },
     });
     const scanned = await scanTemplateSource({ templateRoot: target, sourcePath: source, pageType: 'site' });
-    const created = sessionStore.create('ws-1', scanned);
+    const created = sessionStore.create('ws-1', scanned, { templateRoot: target, templateId: 'site-a' });
     getWorkspaceRootPath.mockResolvedValue(target);
+    createCheckpoint.mockResolvedValueOnce('clean-head');
 
     const result = await applyAppTemplateSourceImport({
       workspaceId: 'ws-1',
@@ -220,6 +236,7 @@ describe('app template source import service', () => {
     }, deps);
 
     expect(createCheckpoint).toHaveBeenCalledWith(target, '上传项目前自动保存');
+    expect(result.checkpointCreated).toBe(false);
     expect(await readFile(join(target, 'src/App.tsx'), 'utf8')).toBe('new');
     await expect(stat(join(target, 'src/obsolete.ts'))).rejects.toThrow();
     expect(JSON.parse(await readFile(join(target, 'manifest.json'), 'utf8'))).toMatchObject({
@@ -266,7 +283,7 @@ describe('app template source import service', () => {
     };
     await writeTemplateImportState(target, oldState);
     const scanned = await scanTemplateSource({ templateRoot: target, sourcePath: source, pageType: 'site' });
-    const created = sessionStore.create('ws-1', scanned);
+    const created = sessionStore.create('ws-1', scanned, { templateRoot: target, templateId: 'site-a' });
     getWorkspaceRootPath.mockResolvedValue(target);
     let sourceCopies = 0;
     deps.copyFile = async (from, to) => {
@@ -289,5 +306,104 @@ describe('app template source import service', () => {
     expect(await readTemplateImportState(target)).toEqual(oldState);
     expect(() => sessionStore.take(created.importToken, 'ws-1')).toThrow('导入会话不存在或已使用');
     expect(restartApp).not.toHaveBeenCalled();
+  });
+
+  it('rejects a target path whose existing parent is a symbolic link', async () => {
+    const target = await createImportFixtureTree('template-symlink-target-', {
+      'manifest.json': JSON.stringify({ schemaVersion: 1, templateId: 'site-a', pageType: 'site' }),
+      'package.json': JSON.stringify({
+        scripts: { dev: 'vite' },
+        dependencies: { react: '^19.0.0' },
+        devDependencies: { vite: '^5.4.0' },
+      }),
+      'vite.config.ts': 'platform vite',
+      'src/main.tsx': 'platform main',
+      'src/App.tsx': 'old app',
+    });
+    const outside = await createImportFixtureTree('template-symlink-outside-', {
+      'main.tsx': 'outside main',
+      'App.tsx': 'outside app',
+    });
+    await rm(join(target, 'src'), { recursive: true });
+    await symlink(outside, join(target, 'src'));
+    const source = await createImportFixtureTree('template-symlink-source-', {
+      'package.json': JSON.stringify({
+        dependencies: { react: '^19.0.0' },
+        devDependencies: { vite: '^5.4.0' },
+      }),
+      'src/main.tsx': 'source main',
+      'src/App.tsx': 'new app',
+    });
+    const scanned = await scanTemplateSource({ templateRoot: target, sourcePath: source, pageType: 'site' });
+    const created = sessionStore.create('ws-1', scanned, { templateRoot: target, templateId: 'site-a' });
+    getWorkspaceRootPath.mockResolvedValue(target);
+
+    await expect(applyAppTemplateSourceImport({
+      workspaceId: 'ws-1',
+      importToken: created.importToken,
+    }, deps)).rejects.toThrow('符号链接');
+    expect(await readFile(join(outside, 'App.tsx'), 'utf8')).toBe('outside app');
+  });
+
+  it('rejects concurrent apply for the same template root without consuming the second token', async () => {
+    let releaseCheckpoint!: (value: 'created') => void;
+    createCheckpoint.mockReturnValueOnce(new Promise((resolve) => { releaseCheckpoint = resolve; }));
+    const identity = { templateRoot: '/templates/site-a', templateId: 'site-a' };
+    const first = sessionStore.create('ws-1', prepared('/tmp/first-snapshot'), identity);
+    const second = sessionStore.create('ws-2', prepared('/tmp/second-snapshot'), identity);
+
+    const firstApply = applyAppTemplateSourceImport({
+      workspaceId: 'ws-1',
+      importToken: first.importToken,
+    }, deps);
+    await vi.waitFor(() => expect(createCheckpoint).toHaveBeenCalled());
+
+    await expect(applyAppTemplateSourceImport({
+      workspaceId: 'ws-2',
+      importToken: second.importToken,
+    }, deps)).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(sessionStore.take(second.importToken, 'ws-2').prepared.snapshotRoot)
+      .toBe('/tmp/second-snapshot');
+    releaseCheckpoint('created');
+    await expect(firstApply).rejects.toThrow();
+  });
+
+  it('does not mutate when Git checkpoint creation actually fails', async () => {
+    createCheckpoint.mockResolvedValueOnce('failed');
+    const created = sessionStore.create('ws-1', prepared('/tmp/checkpoint-failure'), {
+      templateRoot: '/templates/site-a',
+      templateId: 'site-a',
+    });
+
+    await expect(applyAppTemplateSourceImport({
+      workspaceId: 'ws-1',
+      importToken: created.importToken,
+    }, deps)).rejects.toThrow('无法创建上传前 Git 恢复点');
+    expect(restartApp).not.toHaveBeenCalled();
+  });
+
+  it('rejects a token after the workspace is rebound to another template identity', async () => {
+    const created = sessionStore.create('ws-1', prepared('/tmp/rebound-template'), {
+      templateRoot: '/templates/site-a',
+      templateId: 'site-a',
+    });
+    getWorkspaceRootPath.mockResolvedValueOnce('/templates/site-b');
+    canonicalizePath.mockResolvedValueOnce('/templates/site-b');
+    readMarker.mockResolvedValueOnce({
+      kind: 'app-template',
+      templateId: 'site-b',
+      pageType: 'site',
+      name: 'Site B',
+      description: '',
+      createdAt: '2026-08-28T00:00:00.000Z',
+      updatedAt: '2026-08-28T00:00:00.000Z',
+    });
+
+    await expect(applyAppTemplateSourceImport({
+      workspaceId: 'ws-1',
+      importToken: created.importToken,
+    }, deps)).rejects.toThrow('模板身份不一致');
+    expect(createCheckpoint).not.toHaveBeenCalled();
   });
 });

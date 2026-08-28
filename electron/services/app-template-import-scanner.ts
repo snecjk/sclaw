@@ -114,14 +114,18 @@ export async function scanTemplateSource(input: {
   let fileCount = 0;
   let totalBytes = 0;
 
-  const stageFile = async (sourceAbsolute: string, stagedPath: string): Promise<void> => {
-    const info = await stat(sourceAbsolute);
+  const stageFile = async (
+    sourceAbsolute: string,
+    stagedPath: string,
+    content?: Uint8Array | string,
+  ): Promise<void> => {
+    const bytes = content ?? await readFile(sourceAbsolute);
+    const size = typeof bytes === 'string' ? Buffer.byteLength(bytes) : bytes.byteLength;
     fileCount += 1;
-    totalBytes += info.size;
-    if (fileCount > MAX_FILES || info.size > MAX_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
+    totalBytes += size;
+    if (fileCount > MAX_FILES || size > MAX_FILE_BYTES || totalBytes > MAX_TOTAL_BYTES) {
       throw new Error('来源项目超出导入规模限制');
     }
-    const bytes = await readFile(sourceAbsolute);
     const destination = join(snapshotRoot, stagedPath);
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, bytes);
@@ -172,6 +176,17 @@ export async function scanTemplateSource(input: {
             message: `${path} 属于敏感环境文件，已忽略`,
           });
         }
+        continue;
+      }
+      if (path === 'index.html') {
+        const html = await readFile(absolute, 'utf8');
+        const managedHtml = html.replace(
+          /(["'])((?:\.\/|\/)?src\/main)\.(tsx|ts|jsx|js)([^"']*)\1/g,
+          (_match, quote: string, prefix: string, _extension: string, suffix: string) => (
+            `${quote}${prefix}.tsx${suffix}${quote}`
+          ),
+        );
+        await stageFile(absolute, path, managedHtml);
         continue;
       }
       await stageFile(absolute, path);
