@@ -5,6 +5,8 @@ export type CapabilityRisk = 'public' | 'low' | 'medium' | 'high' | 'critical';
 export type Capability =
   | 'bridge.ping'
   | 'bridge.getCapabilities'
+  | 'bridge.subscribe'
+  | 'bridge.unsubscribe'
   | 'app.getInfo'
   | 'user.getInfo'
   | 'auth.getUser'
@@ -30,11 +32,18 @@ export type Capability =
   | 'chat.togglePanel'
   | 'chat.fillComposer'
   | 'chat.openSession'
-  | 'chat.sendMessage';
+  | 'chat.sendMessage'
+  | 'chat.complete'
+  | 'chat.cancel'
+  | 'chat.invokeAgent'
+  | 'composer.openFilePicker'
+  | 'nav.openPreviewTab';
 
 export const ALL_CAPABILITIES: readonly Capability[] = [
   'bridge.ping',
   'bridge.getCapabilities',
+  'bridge.subscribe',
+  'bridge.unsubscribe',
   'app.getInfo',
   'user.getInfo',
   'auth.getUser',
@@ -61,11 +70,18 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   'chat.fillComposer',
   'chat.openSession',
   'chat.sendMessage',
+  'chat.complete',
+  'chat.cancel',
+  'chat.invokeAgent',
+  'composer.openFilePicker',
+  'nav.openPreviewTab',
 ];
 
 export const CAPABILITY_RISK: Record<Capability, CapabilityRisk> = {
   'bridge.ping': 'public',
   'bridge.getCapabilities': 'public',
+  'bridge.subscribe': 'low',
+  'bridge.unsubscribe': 'low',
   'app.getInfo': 'public',
   'user.getInfo': 'low',
   'auth.getUser': 'low',
@@ -92,7 +108,25 @@ export const CAPABILITY_RISK: Record<Capability, CapabilityRisk> = {
   'chat.fillComposer': 'medium',
   'chat.openSession': 'medium',
   'chat.sendMessage': 'high',
+  'chat.complete': 'critical',
+  // Aborting a run the caller itself started is de-escalating, not privileged.
+  'chat.cancel': 'low',
+  'chat.invokeAgent': 'critical',
+  'composer.openFilePicker': 'low',
+  'nav.openPreviewTab': 'medium',
 };
+
+/** AI invocation capabilities. Granting these is not sufficient: the app's AI
+ * profile (`bridgePolicy.ai.enabled`) is the effective gate. */
+export const AI_CAPABILITIES: readonly Capability[] = [
+  'chat.complete',
+  'chat.cancel',
+  'chat.invokeAgent',
+];
+
+export function isAiCapability(value: Capability): boolean {
+  return (AI_CAPABILITIES as readonly string[]).includes(value);
+}
 
 /** Capabilities that require explicit user consent before first use. */
 export const CONSENT_CAPABILITIES: readonly Capability[] = [
@@ -100,6 +134,10 @@ export const CONSENT_CAPABILITIES: readonly Capability[] = [
   'nav.openExternal',
   'host.fetch',
   'chat.sendMessage',
+  // chat.cancel is intentionally absent: requiring consent to abort would leave
+  // an app unable to stop a run it already started.
+  'chat.complete',
+  'chat.invokeAgent',
 ];
 
 const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
@@ -107,6 +145,8 @@ const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
   catalog: [
     'bridge.ping',
     'bridge.getCapabilities',
+    'bridge.subscribe',
+    'bridge.unsubscribe',
     'app.getInfo',
     'user.getInfo',
     'auth.getUser',
@@ -127,10 +167,14 @@ const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
     'chat.fillComposer',
     'chat.openSession',
     'chat.sendMessage',
+    'composer.openFilePicker',
+    'nav.openPreviewTab',
   ],
   external: [
     'bridge.ping',
     'bridge.getCapabilities',
+    'bridge.subscribe',
+    'bridge.unsubscribe',
     'app.getInfo',
     'auth.getUser',
     'ui.toast',
@@ -138,6 +182,8 @@ const DEFAULT_BY_TIER: Record<BridgeTrustTier, readonly Capability[]> = {
   untrusted: [
     'bridge.ping',
     'bridge.getCapabilities',
+    'bridge.subscribe',
+    'bridge.unsubscribe',
     'app.getInfo',
   ],
 };

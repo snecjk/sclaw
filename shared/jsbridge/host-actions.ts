@@ -1,5 +1,7 @@
 /** Marker returned by Main handlers; Host renderer executes the action and responds to Guest. */
 
+import type { BridgeComposerFillSegment } from './composer-fill-segments';
+
 export const JSBRIDGE_HOST_ACTION_MARKER = '__stoclaw_host_action__' as const;
 
 export type JsBridgeChatTarget = 'embed' | 'main' | 'auto';
@@ -20,6 +22,7 @@ export type JsBridgeHostAction =
   | {
       type: 'chat.fillComposer';
       text: string;
+      segments?: BridgeComposerFillSegment[];
       target: JsBridgeChatTarget;
       send?: boolean;
       openPanel?: boolean;
@@ -29,6 +32,7 @@ export type JsBridgeHostAction =
       type: 'chat.openSession';
       target: 'embed' | 'main';
       text?: string;
+      segments?: BridgeComposerFillSegment[];
       send?: boolean;
       title?: string;
       runtimeId?: string | null;
@@ -41,6 +45,16 @@ export type JsBridgeHostAction =
       route?: string;
       title?: string;
       bound?: boolean;
+    }
+  | {
+      type: 'composer.openFilePicker';
+      accept?: string;
+      multiple?: boolean;
+    }
+  | {
+      type: 'nav.openPreviewTab';
+      url: string;
+      title?: string;
     };
 
 export interface JsBridgeHostActionEnvelope {

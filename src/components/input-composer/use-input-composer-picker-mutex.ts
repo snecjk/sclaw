@@ -33,6 +33,14 @@ export function useInputComposerPickerMutex() {
     });
   }, []);
 
+  const openSkillToolbar = useCallback(() => {
+    workflowPickerSlashOpenRef.current = false;
+    setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(false);
+    setSkillPickerMode('toolbar');
+    setSkillPickerOpen(true);
+  }, []);
+
   const toggleWorkflowToolbar = useCallback(() => {
     setSkillPickerOpen(false);
     setQuickInputPickerOpen(false);
@@ -40,11 +48,25 @@ export function useInputComposerPickerMutex() {
     setWorkflowPickerOpen((open) => !open);
   }, []);
 
+  const openWorkflowToolbar = useCallback(() => {
+    setSkillPickerOpen(false);
+    setQuickInputPickerOpen(false);
+    workflowPickerSlashOpenRef.current = false;
+    setWorkflowPickerOpen(true);
+  }, []);
+
   const toggleQuickInput = useCallback(() => {
     setSkillPickerOpen(false);
     workflowPickerSlashOpenRef.current = false;
     setWorkflowPickerOpen(false);
     setQuickInputPickerOpen((open) => !open);
+  }, []);
+
+  const openQuickInput = useCallback(() => {
+    setSkillPickerOpen(false);
+    workflowPickerSlashOpenRef.current = false;
+    setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(true);
   }, []);
 
   return {
@@ -58,8 +80,11 @@ export function useInputComposerPickerMutex() {
     quickInputPickerOpen,
     setQuickInputPickerOpen,
     toggleSkillToolbar,
+    openSkillToolbar,
     toggleWorkflowToolbar,
+    openWorkflowToolbar,
     toggleQuickInput,
+    openQuickInput,
     closeAll,
   };
 }

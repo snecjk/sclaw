@@ -76,15 +76,22 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
     setAttachments(next);
   }, []);
 
-  const pickFiles = useCallback(async () => {
+  const pickFiles = useCallback(async (options?: { multiple?: boolean }): Promise<FileAttachment[]> => {
     try {
+      const allowMultiple = options?.multiple ?? true;
+      const properties: Array<'openFile' | 'multiSelections'> = allowMultiple
+        ? ['openFile', 'multiSelections']
+        : ['openFile'];
       const result = await invokeIpc('dialog:open', {
-        properties: ['openFile', 'multiSelections'],
+        properties,
       }) as { canceled: boolean; filePaths?: string[] };
-      if (result.canceled || !result.filePaths?.length) return;
+      if (result.canceled || !result.filePaths?.length) return [];
 
+      const filePaths = allowMultiple
+        ? result.filePaths
+        : result.filePaths.slice(0, 1);
       const tempIds: string[] = [];
-      for (const filePath of result.filePaths) {
+      for (const filePath of filePaths) {
         const tempId = crypto.randomUUID();
         tempIds.push(tempId);
         const fileName = filePath.split(/[\\/]/).pop() || 'file';
@@ -109,20 +116,23 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
         preview: string | null;
       }>>('/api/files/stage-paths', {
         method: 'POST',
-        body: JSON.stringify({ filePaths: result.filePaths }),
+        body: JSON.stringify({ filePaths }),
       });
 
+      const ready: FileAttachment[] = [];
       for (let i = 0; i < tempIds.length; i += 1) {
         const tempId = tempIds[i];
         const data = staged[i];
         if (data) {
           // 保留客户端 tempId，使注册表与行内 token 保持 1:1（API 会返回新 id）。
-          upsertAttachment({
+          const att: FileAttachment = {
             ...data,
             id: tempId,
             status: 'ready',
             provenance: LOCAL_PROVENANCE,
-          });
+          };
+          upsertAttachment(att);
+          ready.push(att);
         } else {
           console.warn(`[pickFiles] No staged data for tempId=${tempId} at index ${i}`);
           setAttachments((prev) => {
@@ -138,6 +148,7 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
           });
         }
       }
+      return ready;
     } catch (err) {
       console.error('[pickFiles] Failed to stage files:', err);
       setAttachments((prev) => prev.map((item) => {
@@ -146,6 +157,7 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
         notifyUpsert(updated);
         return updated;
       }));
+      return [];
     } finally {
       (document.activeElement as HTMLElement | null)?.blur?.();
     }

@@ -255,7 +255,7 @@ export function useInputComposerEditDraft({
       const converted = persistedSegmentsToComposer(detail.segments, detail.attachments);
       onApplyAttachments?.(converted.attachments);
       mentionEditorRef.current?.setSegments(converted.segments, converted.attachmentsById);
-      mentionEditorRef.current?.focus();
+      mentionEditorRef.current?.focusAtEnd();
       onAfterApply?.();
       return;
     }
@@ -276,7 +276,7 @@ export function useInputComposerEditDraft({
     if (suffixText) {
       mentionEditorRef.current?.insertPlainText(suffixText);
     }
-    mentionEditorRef.current?.focus();
+    mentionEditorRef.current?.focusAtEnd();
     onAfterApply?.();
   }, [mentionEditorRef, onAfterApply, onApplyAttachments]);
 

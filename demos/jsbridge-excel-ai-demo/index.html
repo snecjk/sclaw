@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>报价 Excel · Claw Agent Demo</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="hero__brand">SClaw JSBridge Demo</div>
+      <h1 class="hero__title">报价 Excel 校验失败 → Agent 修复</h1>
+      <p class="hero__sub">
+        仅支持在 <strong>SClaw 应用广场</strong> 内打开（需注入 <code>window.stoClaw</code>，域名 <code>*.sto.cn</code>）。
+        推荐 <code>chat.complete</code>：页面调模型 → 结果回页面 → 应用修复 / 下载后重新上传。
+      </p>
+      <div class="env-bar" id="envBar">
+        <span class="pill pill--unknown" id="bridgePill">检测 Bridge…</span>
+        <span class="pill" id="userPill">用户：—</span>
+        <span class="pill" id="appPill">应用：—</span>
+        <span class="pill" id="capPill">能力：—</span>
+      </div>
+    </header>
+
+    <section class="banner" id="bootStatus">
+      <p id="bootStatusText">正在加载 @sto/claw-bridge-sdk 并检测 Bridge…</p>
+    </section>
+
+    <section class="banner banner--warn" id="loadError" hidden>
+      <h2>Demo 脚本加载失败</h2>
+      <p id="loadErrorMsg">无法加载 <code>@sto/claw-bridge-sdk</code>。</p>
+      <p class="banner__hint">请确认存在 <code>vendor/@sto/claw-bridge-sdk/dist/index.js</code>，或在本目录执行 <code>snpm install</code>。</p>
+    </section>
+
+    <section class="banner banner--warn" id="unsupported" hidden>
+      <h2>当前环境不支持</h2>
+      <p>未检测到 SClaw JSBridge（<code>window.stoClaw</code>）。</p>
+      <p>请在 <strong>SClaw 桌面客户端 → 应用广场</strong> 中打开本页面（页面域名必须是 <code>*.sto.cn</code>）。</p>
+      <p class="banner__hint">并确认客户端已包含 guest preload 注入修复；刷新或重开 Tab 后再试。</p>
+    </section>
+
+    <div id="demoMain" hidden>
+      <section class="panel">
+        <div class="panel__head">
+          <h2>1. 上传报价 Excel</h2>
+          <div class="actions">
+            <label class="btn btn--primary">
+              选择文件
+              <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" hidden />
+            </label>
+            <button type="button" class="btn" id="btnLoadSample">加载示例坏数据</button>
+            <a class="btn btn--ghost" href="./fixtures/sample-quote-invalid.csv" download>下载示例 CSV</a>
+          </div>
+        </div>
+        <p class="hint" id="fileHint">支持 .xlsx / .csv。示例故意包含：缺单价、负单价、日期格式错、折扣超范围、重复行、缺客户编码。</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
+          <h2>2. 校验结果</h2>
+          <div class="stat" id="validateStat">未校验</div>
+        </div>
+        <ul class="error-list" id="errorList"></ul>
+        <div class="table-wrap">
+          <table id="dataTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>客户编码</th>
+                <th>客户名称</th>
+                <th>SKU</th>
+                <th>产品名称</th>
+                <th>单价</th>
+                <th>折扣率</th>
+                <th>生效日期</th>
+                <th>备注</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr class="empty"><td colspan="10">请先上传文件或加载示例</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
+          <h2>3. 调用 Claw Agent（真实模型）</h2>
+        </div>
+        <div class="mode-grid">
+          <label class="mode-card">
+            <input type="radio" name="aiMode" value="headless" id="modeHeadless" checked />
+            <div>
+              <strong>推荐 · Headless complete</strong>
+              <span>页面调模型，结果以 Promise 回页面（需 AI Profile）。拿到 patches 后点「应用修复 / 下载重新上传」</span>
+            </div>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="aiMode" value="ui" id="modeUi" />
+            <div>
+              <strong>备选 · UI 联动</strong>
+              <span>打开右侧面板 <code>sendMessage</code>（无自动回传；需粘贴 JSON）</span>
+            </div>
+          </label>
+        </div>
+        <div class="actions actions--gap">
+          <button type="button" class="btn btn--primary" id="btnAskAi" disabled>AI 分析（真实调用）</button>
+          <button type="button" class="btn" id="btnApply" disabled>应用修复到表格</button>
+          <button type="button" class="btn btn--accent" id="btnReupload" disabled>下载修复文件（重新上传）</button>
+          <button type="button" class="btn" id="btnSubmit" disabled>确认提交报价</button>
+          <button type="button" class="btn btn--ghost" id="btnCancelAi" hidden>取消 complete</button>
+        </div>
+        <pre class="log" id="agentLog">等待 Bridge…</pre>
+      </section>
+
+      <section class="panel panel--result" id="resultPanel" hidden>
+        <div class="panel__head">
+          <h2>4. Agent 结果 / 回填</h2>
+        </div>
+        <div class="result-summary" id="resultSummary"></div>
+        <pre class="json-view" id="resultJson"></pre>
+        <p class="hint" id="resultHint">
+          Headless 成功后：先「应用修复到表格」，再「下载修复文件」用文件选择器重新上传验证。
+        </p>
+        <textarea id="pasteBox" class="paste" rows="6" placeholder='仅 UI 联动需要：粘贴右侧 Agent 回复中的 JSON，例如 {"summary":"...","patches":[...]}'></textarea>
+        <div class="actions actions--gap">
+          <button type="button" class="btn" id="btnParsePaste">解析粘贴 JSON 并应用</button>
+        </div>
+      </section>
+    </div>
+
+    <footer class="foot">
+      <code>demos/jsbridge-excel-ai-demo</code>
+      · 无 Bridge 不演示 · 必须在 SClaw 打开
+    </footer>
+  </div>
+  <script type="importmap">
+  {
+    "imports": {
+      "@sto/claw-bridge-sdk": "./vendor/@sto/claw-bridge-sdk/dist/index.js"
+    }
+  }
+  </script>
+  <script type="module">
+    import('./app.js').catch((err) => {
+      const boot = document.getElementById('bootStatus');
+      const box = document.getElementById('loadError');
+      const msg = document.getElementById('loadErrorMsg');
+      if (boot) boot.hidden = true;
+      if (box) box.hidden = false;
+      if (msg) msg.textContent = String(err?.message || err);
+      console.error('[demo] failed to load app.js / @sto/claw-bridge-sdk', err);
+    });
+  </script>
+  <script nomodule>
+    document.getElementById('bootStatusText').textContent =
+      '当前环境不支持 ES Module，无法加载 Demo。';
+  </script>
+</body>
+</html>

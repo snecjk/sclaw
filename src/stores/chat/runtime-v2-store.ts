@@ -5,6 +5,7 @@ import { AppError } from '@/lib/error-model';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import type { RawMessage } from './types';
 import { findHistoryUserEcho } from './user-message-merge';
+import { materializeCompletedOverlay } from './display-model';
 import {
   applyRuntimeSnapshot,
   createClientSessionState,
@@ -223,12 +224,46 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
   setOptimisticUserMessage: (sessionKey, message) => set((state) => {
     const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
     if (current.overlay.optimisticUserMessage === message) return state;
+    const shouldMaterializeCompletedOverlay = Boolean(
+      message
+      && current.runtime?.phase === 'completed'
+      && current.overlay.awaitingTranscript
+      && (
+        current.overlay.streamingMessage
+        || current.overlay.streamingMessages.length > 0
+        || current.overlay.streamingToolResults.length > 0
+      )
+    );
+    const projectedMessages = shouldMaterializeCompletedOverlay
+      ? materializeCompletedOverlay(current.transcript, current.overlay, current.decorations)
+      : current.decorations.projectedMessages;
     return {
       sessionsByKey: {
         ...state.sessionsByKey,
         [sessionKey]: {
           ...current,
-          overlay: { ...current.overlay, optimisticUserMessage: message },
+          decorations: shouldMaterializeCompletedOverlay
+            ? { ...current.decorations, projectedMessages }
+            : current.decorations,
+          overlay: {
+            ...current.overlay,
+            optimisticUserMessage: message,
+            streamingMessage: shouldMaterializeCompletedOverlay
+              ? null
+              : current.overlay.streamingMessage,
+            streamingMessages: shouldMaterializeCompletedOverlay
+              ? []
+              : current.overlay.streamingMessages,
+            streamingToolResults: shouldMaterializeCompletedOverlay
+              ? []
+              : current.overlay.streamingToolResults,
+            streamingTools: shouldMaterializeCompletedOverlay
+              ? []
+              : current.overlay.streamingTools,
+            awaitingTranscript: shouldMaterializeCompletedOverlay
+              ? false
+              : current.overlay.awaitingTranscript,
+          },
           updatedAt: Date.now(),
         },
       },

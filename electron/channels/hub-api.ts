@@ -1,6 +1,7 @@
 import https from 'node:https';
 import http from 'node:http';
 import { URL } from 'node:url';
+import { app } from 'electron';
 import { getStoToken } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { resolveSclawHubBaseUrl } from './hub-config';
@@ -18,6 +19,17 @@ interface HubApiEnvelope<T> {
   statusMessage?: string;
   errCode?: string;
   statusCode?: string;
+}
+
+export type HubChannelType = 'dingtalk' | 'mobile';
+export type HubChannelState = 'bound' | 'revoked';
+const CHANNEL_PROTOCOL_VERSION = 2;
+
+function clientIdentity(): { clientVersion: string; protocolVersion: number } {
+  return {
+    clientVersion: app.getVersion(),
+    protocolVersion: CHANNEL_PROTOCOL_VERSION,
+  };
 }
 
 /**
@@ -40,6 +52,39 @@ function resolveHubErrorMessage(json: HubApiEnvelope<unknown>, fallback: string)
     || (json.errCode ? `errCode=${json.errCode}` : '')
     || (json.statusCode ? `statusCode=${json.statusCode}` : '')
     || fallback;
+}
+
+const HUB_LOG_SENSITIVE_KEY = /(token|ticket|authorization|password|secret|qrcontent|^content$)/i;
+
+function redactHubLogValue(key: string, value: unknown): unknown {
+  if (!HUB_LOG_SENSITIVE_KEY.test(key)) return value;
+  if (typeof value === 'string') return `<redacted:length=${value.length}>`;
+  return '<redacted>';
+}
+
+function formatHubLogValue(value: unknown, maxLength = 800): string {
+  if (value === undefined) return '-';
+  try {
+    const text = JSON.stringify(value, redactHubLogValue);
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  } catch {
+    return '<unserializable>';
+  }
+}
+
+function formatHubLogUrl(urlStr: string): string {
+  try {
+    const url = new URL(urlStr);
+    for (const key of url.searchParams.keys()) {
+      if (HUB_LOG_SENSITIVE_KEY.test(key)) {
+        const value = url.searchParams.get(key) || '';
+        url.searchParams.set(key, `REDACTED_len_${value.length}`);
+      }
+    }
+    return url.toString();
+  } catch {
+    return urlStr;
+  }
 }
 
 function nodeHttpRequest(
@@ -94,10 +139,11 @@ async function hubFetch<T>(
     throw new Error('未登录或 stoToken 已过期，请重新登录');
   }
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  const logUrl = formatHubLogUrl(url);
   const headers = buildHubAuthHeaders(token);
   const bodyText = body === undefined ? undefined : JSON.stringify(body);
   logger.info(
-    `[SclawHub] >>> ${method} ${url} hasStotoken=${Boolean(headers.stotoken)} tokenLen=${token.length} via=node-http headerKeys=${Object.keys(headers).join(',')}`,
+    `[SclawHub] >>> ${method} ${logUrl} params=${formatHubLogValue(body)} hasStotoken=${Boolean(headers.stotoken)} tokenLen=${token.length} via=node-http headerKeys=${Object.keys(headers).join(',')}`,
   );
 
   const res = await nodeHttpRequest(method, url, headers, bodyText);
@@ -106,11 +152,11 @@ async function hubFetch<T>(
   try {
     json = JSON.parse(text) as HubApiEnvelope<T>;
   } catch {
-    logger.warn(`[SclawHub] <<< ${method} ${url} status=${res.status} non-json=${text.slice(0, 300)}`);
+    logger.warn(`[SclawHub] <<< ${method} ${logUrl} status=${res.status} non-json=${text.slice(0, 300)}`);
     throw new Error(`Hub API HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
   logger.info(
-    `[SclawHub] <<< ${method} ${url} status=${res.status} success=${json.success} err=${resolveHubErrorMessage(json, '')} body=${text.slice(0, 240)}`,
+    `[SclawHub] <<< ${method} ${logUrl} status=${res.status} success=${json.success} err=${resolveHubErrorMessage(json, '')} body=${formatHubLogValue(json, 500)}`,
   );
 
   if (res.status < 200 || res.status >= 300) {
@@ -133,7 +179,11 @@ export async function hubCreateBind(): Promise<{
     bindToken: string;
     expireSeconds: number;
     qrContent: string;
-  }>('POST', '/api/sclaw/desktop/bind/create', { deviceId });
+  }>('POST', '/api/sclaw/desktop/channel/bind/create', {
+    channelType: 'dingtalk',
+    deviceId,
+    ...clientIdentity(),
+  });
   return {
     ...data,
     qrContent: absolutizeHubUrl(data.qrContent),
@@ -158,7 +208,7 @@ export async function hubPollBind(bindToken: string): Promise<{
   dingUserId?: string;
 }> {
   const q = encodeURIComponent(bindToken);
-  return hubFetch('GET', `/api/sclaw/desktop/bind/poll?bindToken=${q}`);
+  return hubFetch('GET', `/api/sclaw/desktop/channel/bind/poll?channelType=dingtalk&bindToken=${q}`);
 }
 
 export async function hubClaimBind(ticket: string, deviceId?: string): Promise<{
@@ -168,9 +218,11 @@ export async function hubClaimBind(ticket: string, deviceId?: string): Promise<{
   status: string;
 }> {
   const localDeviceId = deviceId || await getLocalDeviceId();
-  return hubFetch('POST', '/api/sclaw/desktop/bind/claim', {
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/claim', {
+    channelType: 'dingtalk',
     ticket,
     deviceId: localDeviceId,
+    ...clientIdentity(),
   });
 }
 
@@ -183,11 +235,15 @@ export async function hubRegisterDesktop(): Promise<{
   workNo?: string;
 }> {
   const deviceId = await getLocalDeviceId();
-  return hubFetch('POST', '/api/sclaw/desktop/bind/register', { deviceId });
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/enable', {
+    channelType: 'mobile',
+    deviceId,
+    ...clientIdentity(),
+  });
 }
 
 export async function hubUnbindRemote(): Promise<void> {
-  await hubFetch('POST', '/api/sclaw/desktop/bind/unbind', {});
+  await hubDisableChannel('dingtalk');
 }
 
 export async function hubBindStatus(): Promise<{
@@ -196,7 +252,38 @@ export async function hubBindStatus(): Promise<{
   deviceId?: string;
   boundAt?: string;
 }> {
-  return hubFetch('GET', '/api/sclaw/desktop/bind/status');
+  return hubFetch('GET', '/api/sclaw/desktop/channel/bind/status?channelType=dingtalk');
+}
+
+export async function hubDisableChannel(channelType: HubChannelType): Promise<{
+  channelType: HubChannelType;
+  bound: boolean;
+  deviceRevoked: boolean;
+}> {
+  const deviceId = await getLocalDeviceId();
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/disable', {
+    channelType,
+    deviceId,
+    ...clientIdentity(),
+  });
+}
+
+export async function hubSyncChannels(channels: Array<{
+  channelType: HubChannelType;
+  status: HubChannelState;
+  externalUserId?: string | null;
+}>): Promise<{
+  deviceId: string;
+  refreshToken?: string | null;
+  status: string;
+  channels: unknown[];
+}> {
+  const deviceId = await getLocalDeviceId();
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/sync', {
+    deviceId,
+    channels,
+    ...clientIdentity(),
+  });
 }
 
 export async function hubReplyStream(input: {

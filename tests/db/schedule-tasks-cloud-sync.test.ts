@@ -266,7 +266,7 @@ describe('schedule-tasks ownership claim', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('only fills created_by IS NULL; marker skips second run; switch user does not re-claim', async () => {
+  it('only fills created_by IS NULL; marker does not block later NULL claims; switch user does not re-claim owned', async () => {
     vi.doMock('../../electron/utils/paths', () => ({
       getStoClawHomeDir: () => tmp,
     }));
@@ -282,12 +282,22 @@ describe('schedule-tasks ownership claim', () => {
     const orphan = (await repo.list({ includeDeleted: true })).find((t) => t.name === 'orphan');
     const owned = (await repo.list({ includeDeleted: true })).find((t) => t.name === 'owned');
     expect(orphan?.createdBy).toBe('1165828');
+    expect(orphan?.syncStatus).toBe('pending');
     expect(owned?.createdBy).toBe('999999');
 
     const second = await claim('000001', repo);
-    expect(second.skipped).toBe(true);
+    expect(second.skipped).toBe(false);
+    expect(second.claimed).toBe(0);
     expect((await repo.list({ includeDeleted: true })).find((t) => t.name === 'owned')?.createdBy).toBe(
       '999999',
     );
+
+    await repo.create({ ...baseInput, actor: null, name: 'late-orphan' });
+    const third = await claim('000001', repo);
+    expect(third.skipped).toBe(false);
+    expect(third.claimed).toBe(1);
+    const late = (await repo.list({ includeDeleted: true })).find((t) => t.name === 'late-orphan');
+    expect(late?.createdBy).toBe('000001');
+    expect(late?.syncStatus).toBe('pending');
   });
 });

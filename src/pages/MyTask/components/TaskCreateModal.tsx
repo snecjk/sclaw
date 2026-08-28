@@ -982,7 +982,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       transition={{ duration: 0.2, ease: 'easeInOut' }}
     >
       <motion.div
-        className="w-full max-w-[min(728px,100%)] bg-[#FFFFFF] rounded-[18px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
+        className="w-full max-w-[min(640px,100%)] bg-[#FFFFFF] rounded-[18px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -1007,7 +1007,8 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </button>
         </div>
 
-        <div className="sto-hide-scrollbar px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
+        <div className="sto-hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-[18px] pb-[16px]">
+          <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <label className={taskCreateFormLabelClass}>{t('myTask.createModal.nameLabel')}</label>
             <input
@@ -1028,23 +1029,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               autoComplete="off"
             />
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className={taskCreateFormLabelClass}>{t('myTask.createModal.engineLabel')}</label>
-            <select
-              value={engineType}
-              disabled={isEditing}
-              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
-              className={cn(
-                taskCreateFormControlClass,
-                formFieldFocusClass,
-                isEditing && 'cursor-not-allowed opacity-60',
-              )}
-            >
-              <option value="openclaw">OpenClaw</option>
-              <option value="claude">Claude Agent</option>
-            </select>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -1212,6 +1196,24 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                 </button>
               </div>
             ) : null}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className={taskCreateFormLabelClass}>{t('myTask.createModal.engineLabel')}</label>
+            <select
+              value={engineType}
+              disabled={isEditing}
+              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
+              className={cn(
+                taskCreateFormControlClass,
+                formFieldFocusClass,
+                isEditing && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              <option value="openclaw">OpenClaw</option>
+              <option value="claude">Claude Agent</option>
+            </select>
+          </div>
           </div>
         </div>
 

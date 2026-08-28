@@ -18,9 +18,8 @@ async function getStore(namespace: string): Promise<Store<BridgeStorageSchema>> 
   let init = storeInits.get(namespace);
   if (!init) {
     init = (async () => {
-      const mod = await import('electron-store');
-      const StoreCtor = mod.default ?? mod;
-      const instance = new StoreCtor<BridgeStorageSchema>({
+      const Store = (await import('electron-store')).default;
+      const instance = new Store<BridgeStorageSchema>({
         name: `bridge-storage-${namespace.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
         projectName: 'sto-claw',
         defaults: { entries: {} },

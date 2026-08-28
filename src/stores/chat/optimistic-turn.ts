@@ -6,6 +6,7 @@ import type { AttachedFileMeta, RawMessage, SendMessageOptions } from './types';
 import { rememberSkillMessageMeta } from '@/lib/skill-message-meta-cache';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
 import { logUserQuestion } from './chat-flow-log';
+import { touchEmbedChatActivity } from '@/lib/sclaw-browser-chat-index';
 
 function attachedFilesFromComposerSegments(
   segments: NonNullable<SendMessageOptions['composerSegments']>,
@@ -80,8 +81,8 @@ export function insertOptimisticUserTurn(input: {
 
   const userMsg: RawMessage = {
     role: 'user',
-    // 仅工作流时 displayText 为空；气泡靠 _composerSegments 渲染 chip。
-    content: displayText || (attachedFiles?.length ? '(file attached)' : ''),
+    // 仅附件/工作流时 displayText 可为空；气泡靠 _composerSegments / _attachedFiles 渲染 chip。
+    content: displayText,
     timestamp: nowMs / 1000,
     id: crypto.randomUUID(),
     _skillMeta: primarySkillMeta,
@@ -150,6 +151,7 @@ export function insertOptimisticUserTurn(input: {
   }
 
   _set((s) => ({ sessionLastActivity: { ...s.sessionLastActivity, [sessionKey]: nowMs } }));
+  touchEmbedChatActivity(sessionKey);
 
   return userMsg;
 }

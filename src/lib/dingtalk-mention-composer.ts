@@ -149,6 +149,24 @@ export function ensureTrailingCaretAnchor(root: HTMLElement): void {
   root.appendChild(document.createTextNode(`\u00A0${COMPOSER_CARET_ANCHOR}`));
 }
 
+/** contenteditable.focus() 会把 caret 放到 offset 0；写完草稿后应落到文末。 */
+export function focusMentionEditorAtEnd(root: HTMLElement): void {
+  root.focus();
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  const lastChild = root.lastChild;
+  if (lastChild?.nodeType === Node.TEXT_NODE) {
+    range.setStart(lastChild, lastChild.textContent?.length ?? 0);
+  } else {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 /** 把 segment / 纯文本里的 `\n` 还原成 `<br>`，避免 contenteditable 把换行压成空格。 */
 function appendTextWithLineBreaks(parent: ParentNode, text: string): void {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -729,6 +747,37 @@ function buildRangeFromPlainTextOffsets(
   }
 }
 
+function readRangeClientRect(range: Range): DOMRect | null {
+  if (typeof range.getClientRects === 'function') {
+    const rects = range.getClientRects();
+    if (rects.length > 0) {
+      return rects[rects.length - 1] ?? null;
+    }
+  }
+  if (typeof range.getBoundingClientRect !== 'function') return null;
+  const rect = range.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return null;
+  return rect;
+}
+
+/** 将 plainText 下标映射为视口矩形（换行时取光标所在最后一行）。 */
+export function getClientRectForPlainTextOffset(
+  root: HTMLElement,
+  offset: number,
+): DOMRect | null {
+  const range = buildRangeFromPlainTextOffsets(root, offset, offset);
+  if (!range) return null;
+  return readRangeClientRect(range);
+}
+
+/** @ 提及激活时，取光标（endOffset）处的视口矩形。 */
+export function getMentionTriggerCaretRect(
+  root: HTMLElement,
+  trigger: ActiveMentionTrigger,
+): DOMRect | null {
+  return getClientRectForPlainTextOffset(root, trigger.endOffset);
+}
+
 export function detectActiveMentionTrigger(root: HTMLElement): ActiveMentionTrigger | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return null;
@@ -832,16 +881,21 @@ export function createWorkflowSpan(
   span.className = [
     WORKFLOW_SPAN_CLASS,
     'inline-flex',
+    'box-border',
+    'h-6',
+    'max-w-[280px]',
+    'ml-1',
+    'mt-1',
     'items-center',
     'gap-0.5',
+    'overflow-hidden',
     'rounded-[4px]',
     'bg-[#EEF3FF]',
     'px-1',
-    'py-0.5',
-    'align-middle',
+    'align-top',
     'text-[12px]',
     'font-medium',
-    'leading-4',
+    'leading-none',
     'text-[#4E6FFF]',
   ].join(' ');
   span.contentEditable = 'false';
@@ -856,7 +910,7 @@ export function createWorkflowSpan(
     '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 4.5V2.5C1.5 1.94772 1.94772 1.5 2.5 1.5H4.5C5.05228 1.5 5.5 1.94772 5.5 2.5V4.5C5.5 5.05228 5.05228 5.5 4.5 5.5H2.5C1.94772 5.5 1.5 5.05228 1.5 4.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M3.5 5.5V7.5C3.5 8.05228 3.94772 8.5 4.5 8.5H6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M6.5 9.5V7.5C6.5 6.94772 6.94772 6.5 7.5 6.5H9.5C10.0523 6.5 10.5 6.94772 10.5 7.5V9.5C10.5 10.0523 10.0523 10.5 9.5 10.5H7.5C6.94772 10.5 6.5 10.0523 6.5 9.5Z" stroke="currentColor" stroke-width="1.2"/></svg>';
 
   const label = document.createElement('span');
-  label.className = 'workflow-token-label';
+  label.className = 'workflow-token-label min-w-0 flex-1 truncate whitespace-nowrap';
   label.textContent = name;
 
   span.append(icon, label);
@@ -866,23 +920,9 @@ export function createWorkflowSpan(
 const ATTACHMENT_SPAN_BASE_CLASS = [
   ATTACHMENT_SPAN_CLASS,
   ATTACHMENT_CHIP_SURFACE_CLASS,
-].join(' ');
-
-const ATTACHMENT_REMOVE_BTN_CLASS = [
-  'attachment-remove-btn',
-  'inline-flex',
-  'h-3.5',
-  'w-3.5',
-  'shrink-0',
-  'items-center',
-  'justify-center',
-  'rounded-full',
-  'text-[11px]',
-  'leading-none',
-  'text-[#86909C]',
-  'transition-colors',
-  'hover:bg-black/5',
-  'hover:text-[#1D2129]',
+  'ml-1',
+  'align-top',
+  'mt-1',
 ].join(' ');
 
 export interface AttachmentSpanInput {
@@ -916,14 +956,7 @@ export function createAttachmentSpan(att: AttachmentSpanInput): HTMLSpanElement 
   label.className = 'attachment-token-label min-w-0 flex-1 truncate whitespace-nowrap';
   label.textContent = middleEllipsisFileName(att.fileName);
 
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.dataset.attachmentRemove = 'true';
-  removeBtn.setAttribute('aria-label', '移除附件');
-  removeBtn.className = ATTACHMENT_REMOVE_BTN_CLASS;
-  removeBtn.textContent = '×';
-
-  span.append(icon, label, removeBtn);
+  span.append(icon, label);
   return span;
 }
 
@@ -1044,7 +1077,7 @@ export function createSkillSpan(slug: string, title: string): HTMLSpanElement {
   icon.innerHTML = SKILL_WRENCH_SVG;
 
   const label = document.createElement('span');
-  label.className = 'skill-token-label';
+  label.className = 'skill-token-label min-w-0 flex-1 truncate whitespace-nowrap';
   label.textContent = title;
 
   span.append(icon, label);

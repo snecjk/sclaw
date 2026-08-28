@@ -148,6 +148,26 @@ describe('chat runtime repository', () => {
     });
   });
 
+  it('persists bridge origin and resolves a run by owner', async () => {
+    await repository.upsert(snapshot({
+      sessionKey: 'agent:main:bridge-ai:demo:c1',
+      runtimePolicy: {
+        origin: 'bridge',
+        ownerId: 'bridge-request-1',
+        deadlineAt: 90_000,
+      },
+    }));
+
+    await expect(repository.getByOwner('bridge', 'bridge-request-1')).resolves.toMatchObject({
+      sessionKey: 'agent:main:bridge-ai:demo:c1',
+      runtimePolicy: {
+        origin: 'bridge',
+        ownerId: 'bridge-request-1',
+        deadlineAt: 90_000,
+      },
+    });
+  });
+
   it('prunes terminal overflow with SQLite-compatible limit and offset syntax', async () => {
     await Promise.all(Array.from({ length: 501 }, (_, index) => repository.upsert(snapshot({
       sessionKey: `agent:main:terminal-${index}`,

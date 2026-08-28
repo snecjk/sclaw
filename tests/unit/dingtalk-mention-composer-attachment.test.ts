@@ -75,7 +75,7 @@ describe('dingtalk-mention-composer attachment token', () => {
       status: 'staging',
     });
     expect(span.dataset.attachmentId).toBe('att-2');
-    expect(span.querySelector('[data-attachment-remove]')).not.toBeNull();
+    expect(span.querySelector('[data-attachment-remove]')).toBeNull();
     expect(span.querySelector('.attachment-token-icon')).not.toBeNull();
     const label = span.querySelector('.attachment-token-label')?.textContent ?? '';
     expect(label.length).toBeLessThan(longName.length);

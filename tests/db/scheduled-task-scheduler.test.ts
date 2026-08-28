@@ -204,6 +204,28 @@ describe('ScheduledTaskScheduler', () => {
       expect((await taskRepo.getById('sf'))?.nextRunAt).toBe('2024-01-01T00:03:00.000Z');
     });
 
+    it('claimRun writes ownerUserCode as created_by/updated_by', async () => {
+      const { dispatcher, dispatched } = makeRecordingDispatcher();
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, dispatcher);
+      scheduler.setOwnerUserCode('2155991233');
+      await taskRepo.create({
+        id: 'owned-run',
+        name: 'Owned',
+        enabled: true,
+        actor: '2155991233',
+        ...baseTaskInput,
+      });
+      await scheduler.refreshSchedule(new Date('2024-01-01T00:00:30.000Z'));
+      await scheduler.tick(new Date('2024-01-01T00:01:30.000Z'));
+      expect(dispatched).toHaveLength(1);
+      expect(dispatched[0].run.createdBy).toBe('2155991233');
+      expect(dispatched[0].run.updatedBy).toBe('2155991233');
+      const listed = (await runRepo.listRuns('owned-run')).filter(
+        (run) => run.createdBy === '2155991233',
+      );
+      expect(listed).toHaveLength(1);
+    });
+
     it('dispatches a multi-cron task once and advances to the earlier remaining slot', async () => {
       const { dispatcher, dispatched } = makeRecordingDispatcher();
       const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, dispatcher);
@@ -393,6 +415,28 @@ describe('ScheduledTaskScheduler', () => {
       const after = await runRepo.getRun(run.runId);
       expect(after?.status).toBe('succeeded');
       expect(after?.completedAt).toBe('2024-01-01T00:00:30.000Z');
+    });
+
+    it('finalizeRunIfRunning without actor keeps created_by and updated_by', async () => {
+      await taskRepo.create({ id: 'keep-actor', name: 'K', enabled: true, ...baseTaskInput, timeoutSec: 60 });
+      const startedAt = '2024-01-01T00:00:00.000Z';
+      const run = await runRepo.createRun({
+        taskId: 'keep-actor',
+        triggerSource: 'schedule',
+        scheduledFor: startedAt,
+        status: 'running',
+        startedAt,
+        idempotencyKey: 'keep-actor:1',
+        actor: '2155991233',
+      });
+      const finalized = await runRepo.finalizeRunIfRunning(run.runId, {
+        status: 'timed_out',
+        completedAt: '2024-01-01T00:02:00.000Z',
+        error: 'stale lease',
+      });
+      expect(finalized?.status).toBe('timed_out');
+      expect(finalized?.createdBy).toBe('2155991233');
+      expect(finalized?.updatedBy).toBe('2155991233');
     });
   });
 

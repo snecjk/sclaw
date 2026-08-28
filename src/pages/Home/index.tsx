@@ -8,6 +8,10 @@ import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { readMainChatDraftState } from '@/lib/main-chat-navigation';
 import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
+import {
+  dispatchJsBridgeStructuredComposerSeed,
+  shouldApplyJsBridgeStructuredComposerSeed,
+} from '@/lib/jsbridge/apply-composer-seed';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
@@ -52,11 +56,16 @@ export function Home() {
   const navigate = useNavigate();
   const locationState = location.state;
   const draftState = readMainChatDraftState(locationState);
-  const bridgeMainSeed = useJsBridgeHostStore((s) => s.mainComposerSeed?.text);
+  const bridgeMainSeed = useJsBridgeHostStore((s) => s.mainComposerSeed);
   const consumedDraftTokensRef = useRef<Set<string>>(new Set());
+  const structuredBridgeSeed = shouldApplyJsBridgeStructuredComposerSeed(bridgeMainSeed);
   const seedText = draftState?.composerHandoff
     ? undefined
-    : draftState?.mainChatDraft ?? bridgeMainSeed;
+    : draftState?.mainChatDraft ?? (structuredBridgeSeed ? undefined : bridgeMainSeed?.text);
+
+  useEffect(() => {
+    dispatchJsBridgeStructuredComposerSeed(bridgeMainSeed);
+  }, [bridgeMainSeed]);
 
   useEffect(() => {
     const currentDraft = readMainChatDraftState(locationState);

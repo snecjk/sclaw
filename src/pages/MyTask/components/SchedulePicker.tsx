@@ -569,9 +569,9 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <div className="flex w-full items-start gap-2.5">
-        {/* 频率：与时刻列顶对齐，新增时刻只在右侧向下叠 */}
-        <div className="w-1/3 min-w-0 max-w-[33.333%] flex-[0_0_33.333%]">
+      <div className="grid w-full grid-cols-6 items-start gap-2.5">
+        {/* 三栏 1:2:3；每天无中间列时时刻占满剩余 5 格 */}
+        <div className="col-span-1 min-w-0">
           <FrequencyPicker
             value={value.frequency}
             onChange={(freq) => update({ frequency: freq })}
@@ -580,7 +580,7 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
         </div>
 
         {value.frequency === 'weekly' && (
-          <div className="min-w-0 flex-1">
+          <div className="col-span-2 min-w-0">
             <WeekdaysPicker
               weekDays={value.weekDays}
               onChange={(days) => update({ weekDays: days })}
@@ -590,7 +590,7 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
         )}
 
         {value.frequency === 'monthly' && (
-          <div className="min-w-0 flex-1">
+          <div className="col-span-2 min-w-0">
             <MonthDayPicker
               monthDays={value.monthDays ?? [1]}
               monthLastDay={Boolean(value.monthLastDay)}
@@ -600,7 +600,10 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+        <div className={cn(
+          'flex min-w-0 flex-col gap-2.5',
+          value.frequency === 'daily' ? 'col-span-5' : 'col-span-3',
+        )}>
           {times.map((time, index) => {
             const isLast = index === times.length - 1;
             const showAdd = isLast && times.length < MAX_SCHEDULE_TIMES;

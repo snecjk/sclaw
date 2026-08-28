@@ -35,6 +35,8 @@ export interface UseInputComposerPickersOptions {
   enableWorkflow?: boolean;
   /** 是否挂载快捷输入 picker；默认 true */
   enableQuickInput?: boolean;
+  /** 收起工具栏时共用锚点（扳手外层 span，避免 Radix asChild 丢掉 ref） */
+  toolbarAnchorRef?: RefObject<HTMLElement | null>;
 }
 
 export function useInputComposerPickers({
@@ -48,6 +50,7 @@ export function useInputComposerPickers({
   enableSkill = true,
   enableWorkflow = true,
   enableQuickInput = true,
+  toolbarAnchorRef,
 }: UseInputComposerPickersOptions) {
   const mutex = useInputComposerPickerMutex();
 
@@ -57,9 +60,11 @@ export function useInputComposerPickers({
     mode: mutex.skillPickerMode,
     setMode: mutex.setSkillPickerMode,
     toggleToolbarFromMutex: mutex.toggleSkillToolbar,
+    openToolbarFromMutex: mutex.openSkillToolbar,
     mentionEditorRef,
     plainText,
     mentionPopoverHostRef,
+    toolbarAnchorRef,
   });
 
   const workflowPicker = useWorkflowPickerController({
@@ -69,19 +74,23 @@ export function useInputComposerPickers({
     setSkillPickerOpen: mutex.setSkillPickerOpen,
     setQuickInputPickerOpen: mutex.setQuickInputPickerOpen,
     toggleToolbarFromMutex: mutex.toggleWorkflowToolbar,
+    openToolbarFromMutex: mutex.openWorkflowToolbar,
     mentionEditorRef,
     plainText,
     isComposingRef,
     composerShellRef,
     closeOthers,
     onClearPendingWorkflow,
+    toolbarAnchorRef,
   });
 
   const quickInputPicker = useQuickInputPickerController({
     open: enableQuickInput ? mutex.quickInputPickerOpen : false,
     setOpen: mutex.setQuickInputPickerOpen,
     toggleFromMutex: mutex.toggleQuickInput,
+    openFromMutex: mutex.openQuickInput,
     mentionEditorRef,
+    toolbarAnchorRef,
   });
 
   const closePickersOnEscape = useCallback(

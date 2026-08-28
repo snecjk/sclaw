@@ -7,7 +7,7 @@ import {
   revokeDingTalkHubBind,
   syncSharedHubRefreshToken,
 } from './binding-service';
-import { hubBindStatus, hubRegisterDesktop } from './hub-api';
+import { hubBindStatus, hubSyncChannels } from './hub-api';
 import { getSclawHubClient } from './hub-client';
 import { resolveSclawHubBaseUrl } from './hub-config';
 import { handleSclawInbound, setChannelGatewayManager } from './ingress';
@@ -125,20 +125,42 @@ export async function ensureSclawHubConnected(
       return;
     }
 
-    // 仍用「本地是否已有共用凭证」判断要不要建连；真正连接改用当前登录重新 register 的新 token
+    // 本地持有任一通道凭证时，把两条通道的真实状态同步到 Hub，再复用共享 token 建连。
     const existing = await resolveSharedHubRefreshToken();
     if (!existing) {
       logger.info('[SclawHub] skip connect: no shared hub refreshToken (dingtalk/mobile)');
       return;
     }
 
-    const registered = await hubRegisterDesktop();
-    const refreshToken = registered.refreshToken;
-    await syncSharedHubRefreshToken({
-      refreshToken,
-      dingUserId: registered.dingUserId ?? null,
-      endpointBaseUrl: resolveSclawHubBaseUrl() || null,
-    });
+    const [dingtalk, mobile] = await Promise.all([
+      getChannelConnection('dingtalk'),
+      getChannelConnection('mobile'),
+    ]);
+    let refreshToken = existing;
+    try {
+      const synced = await hubSyncChannels([
+        {
+          channelType: 'dingtalk',
+          status: dingtalk?.bindStatus === 'bound' ? 'bound' : 'revoked',
+          externalUserId: dingtalk?.externalUserId ?? null,
+        },
+        {
+          channelType: 'mobile',
+          status: mobile?.bindStatus === 'bound' ? 'bound' : 'revoked',
+        },
+      ]);
+      if (synced.refreshToken) {
+        refreshToken = synced.refreshToken;
+        await syncSharedHubRefreshToken({
+          refreshToken,
+          dingUserId: dingtalk?.externalUserId ?? null,
+          endpointBaseUrl: resolveSclawHubBaseUrl() || null,
+        });
+      }
+    } catch (error) {
+      // Hub 先发、Desktop 后发的兼容窗口：同步失败时仍用旧共享凭证，不反向误开 Mobile。
+      logger.warn('[SclawHub] channel state sync failed; fallback to existing token', error);
+    }
 
     const hub = getSclawHubClient();
     if (hub.getStatus().connected) {

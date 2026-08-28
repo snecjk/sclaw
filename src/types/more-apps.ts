@@ -52,6 +52,8 @@ export interface AppItem {
   createdAt?: number;
   /** Sort order */
   order?: number;
+  /** Embed AI composer quick actions (from catalog bridgePolicy). */
+  embedComposerActions?: import('../../shared/embed-composer-actions').EmbedComposerAction[];
 }
 
 export type MoreAppsTab = 'market' | 'installed' | 'dev-apps';

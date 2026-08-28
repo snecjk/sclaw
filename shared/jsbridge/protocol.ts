@@ -20,7 +20,8 @@ export type BridgeErrorCode =
   | 'INVALID_PARAMS'
   | 'INTERNAL_ERROR'
   | 'REQUEST_TIMEOUT'
-  | 'REPLAY_DETECTED';
+  | 'REPLAY_DETECTED'
+  | 'AI_NOT_ENABLED';
 
 export interface BridgeError {
   code: BridgeErrorCode;

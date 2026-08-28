@@ -21,6 +21,13 @@ vi.mock('@/stores/chat/optimistic-turn', () => ({
 }));
 vi.mock('@/stores/chat/media-preview-cache', () => ({ cacheUploadedAttachments: vi.fn() }));
 vi.mock('@/stores/chat/dispatch-chat-request', () => ({ dispatchChatRequest: vi.fn() }));
+vi.mock('@/lib/skill-plaza-resolve', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/skill-plaza-resolve')>(),
+  resolveSkillPrompt: vi.fn(async (slug: string) => ({
+    defaultPrompt: `Prompt for ${slug}`,
+    title: slug,
+  })),
+}));
 
 import { dispatchChatRequest } from '@/stores/chat/dispatch-chat-request';
 import { prepareSendContext } from '@/stores/chat/prepare-send-context';
@@ -190,5 +197,28 @@ describe('chat send action acceptance state', () => {
 
     expect(insertOptimisticUserTurn).not.toHaveBeenCalled();
     expect(dispatchChatRequest).not.toHaveBeenCalled();
+  });
+
+  it('re-bakes every skill prompt and marker when the pre-baked gateway text is gone', async () => {
+    // 队列编辑后 gatewayText 被置空，投递走现烘焙路径：技能 2..n 的 prompt
+    // 与 transcript marker 不得丢失，否则模型收不到这些技能的指令。
+    vi.mocked(dispatchChatRequest).mockResolvedValue({ success: true, result: { runId: 'run-1' } });
+    const { actions } = createHarness();
+
+    await actions.sendMessage({
+      text: '分析财报',
+      skillMetas: [
+        { slug: 'skill-a', title: '技能A' },
+        { slug: 'skill-b', title: '技能B' },
+      ],
+    });
+
+    expect(prepareSendContext).toHaveBeenCalledTimes(1);
+    const baked = vi.mocked(prepareSendContext).mock.calls[0]![0].trimmedText;
+    expect(baked).toContain('Prompt for skill-a');
+    expect(baked).toContain('Prompt for skill-b');
+    expect(baked).toContain('分析财报');
+    expect(baked).toContain('<!-- SClaw-Skill {"slug":"skill-a","title":"技能A","userText":"分析财报"} -->');
+    expect(baked).toContain('<!-- SClaw-Skill {"slug":"skill-b","title":"技能B"} -->');
   });
 });

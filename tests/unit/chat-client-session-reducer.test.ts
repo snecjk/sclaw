@@ -49,6 +49,13 @@ describe('canonical chat client session reducer', () => {
     expect(completed.state.runtime?.phase).toBe('completed');
     expect(completed.state.overlay.streamingMessage).toMatchObject({ content: 'done' });
     expect(completed.state.overlay.awaitingTranscript).toBe(true);
+
+    const transcriptUpdated = reduceSessionEvent(completed.state, event({
+      eventId: 'event-5', sequence: 5, type: 'transcript.updated',
+      payload: { transcriptRevision: 'stable' },
+    }));
+    expect(transcriptUpdated.state.overlay.streamingMessage).toMatchObject({ content: 'done' });
+    expect(transcriptUpdated.state.overlay.awaitingTranscript).toBe(true);
   });
 
   it('keeps committed messages chronological while the current delta stays separate', () => {

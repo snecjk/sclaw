@@ -5,6 +5,7 @@ import {
   stripComposerModelBakeForDisplay,
 } from '@/lib/user-message-display';
 import {
+  dedupeRedundantUserMessages,
   findHistoryUserEcho,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
@@ -28,6 +29,11 @@ describe('composer echo pairing & display', () => {
     expect(normalizeUserMessageForDisplay(
       '使用 [技能: 报表] 生成 html',
     )).toBe('使用 生成 html');
+  });
+
+  it('strips gateway file-only placeholder text for display', () => {
+    expect(normalizeUserMessageForDisplay('运费报价模版.xlsx (file attached)')).toBe('运费报价模版.xlsx');
+    expect(normalizeUserMessageForDisplay('(file attached)')).toBe('');
   });
 
   it('normalizeUserMessageForDisplay preserves newlines for bubble rendering', () => {
@@ -402,6 +408,111 @@ describe('composer echo pairing & display', () => {
     };
 
     expect(isSameUserMessage(historyUser, optimistic, 1710000000000)).toBe(true);
+  });
+
+  it('does not pair skill-only optimistic with a different-skill echo (tag mix-up)', () => {
+    const pdfEcho = {
+      id: 'history-pdf',
+      role: 'user' as const,
+      content: 'pdf\n\n[技能: pdf]\n<!-- SClaw-Skill {"slug":"pdf","title":"pdf"} -->',
+      timestamp: 1710000001,
+    } as RawMessage;
+    const xlsxOptimistic = {
+      id: 'local-xlsx',
+      role: 'user' as const,
+      content: '',
+      timestamp: 1710000002,
+      _skillMeta: { slug: 'xlsx', title: 'xlsx' },
+      _composerSegments: [{ type: 'skill' as const, slug: 'xlsx', title: 'xlsx' }],
+    } as RawMessage;
+
+    // 5s 紧窗口内也不许跨 slug 配对。
+    expect(isSameUserMessage(pdfEcho, xlsxOptimistic, 1710000002000)).toBe(false);
+    expect(findHistoryUserEcho([pdfEcho], xlsxOptimistic, 1710000002000)).toBeUndefined();
+
+    // 展示模型：不得把 xlsx 标签贴到 pdf 回显上，乐观消息应作为独立气泡保留。
+    const overlay = {
+      ...createClientSessionState().overlay,
+      optimisticUserMessage: xlsxOptimistic,
+    };
+    const projected = buildChatDisplayModel([pdfEcho], overlay);
+    const users = projected.filter((message) => message.role === 'user');
+    expect(users).toHaveLength(2);
+    expect(users[0]?._skillMeta).toBeUndefined();
+    expect(users[1]?.id).toBe('local-xlsx');
+  });
+
+  it('does not pair same-text turns carrying different skills (A/B consecutive sends)', () => {
+    // 技能 A 发「分析财报」后技能 B 又发「分析财报」：文案与软后缀证据都会命中，
+    // slug 冲突必须在所有配对路径上否决，否则 B 的乐观消息被贴到 A 的回显上。
+    const echoA = {
+      id: 'history-a',
+      role: 'user' as const,
+      content: '分析财报\n<!-- SClaw-Skill {"slug":"skill-a","title":"技能A","userText":"分析财报"} -->',
+      timestamp: 1710000001,
+    } as RawMessage;
+    const optimisticB = {
+      id: 'local-b',
+      role: 'user' as const,
+      content: '分析财报',
+      timestamp: 1710000002, // 1 秒后——仍在 OPTIMISTIC_SEND_WINDOW_MS 内
+      _skillMeta: { slug: 'skill-b', title: '技能B' },
+      _composerSegments: [
+        { type: 'skill' as const, slug: 'skill-b', title: '技能B' },
+        { type: 'text' as const, text: '分析财报' },
+      ],
+    } as RawMessage;
+
+    expect(isSameUserMessage(echoA, optimisticB, 1710000002000)).toBe(false);
+    expect(findHistoryUserEcho([echoA], optimisticB, 1710000002000)).toBeUndefined();
+  });
+
+  it('dedupe keeps adjacent same-text user turns with conflicting skill slugs', () => {
+    const first = {
+      id: 'u-a',
+      role: 'user' as const,
+      content: '分析财报',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'skill-a', title: '技能A' },
+    } as RawMessage;
+    const second = {
+      id: 'u-b',
+      role: 'user' as const,
+      content: '分析财报',
+      timestamp: 1710000001,
+      _skillMeta: { slug: 'skill-b', title: '技能B' },
+    } as RawMessage;
+
+    const out = dedupeRedundantUserMessages([first, second], null);
+    expect(out).toHaveLength(2);
+  });
+
+  it('still pairs skill-only optimistic with a same-skill echo', () => {
+    const pdfEcho = {
+      id: 'history-pdf',
+      role: 'user' as const,
+      content: 'pdf\n\n[技能: pdf]\n<!-- SClaw-Skill {"slug":"pdf","title":"pdf"} -->',
+      timestamp: 1710000001,
+    } as RawMessage;
+    const pdfOptimistic = {
+      id: 'local-pdf',
+      role: 'user' as const,
+      content: '',
+      timestamp: 1710000002,
+      _skillMeta: { slug: 'pdf', title: 'pdf' },
+      _composerSegments: [{ type: 'skill' as const, slug: 'pdf', title: 'pdf' }],
+    } as RawMessage;
+
+    expect(isSameUserMessage(pdfEcho, pdfOptimistic, 1710000002000)).toBe(true);
+
+    const overlay = {
+      ...createClientSessionState().overlay,
+      optimisticUserMessage: pdfOptimistic,
+    };
+    const projected = buildChatDisplayModel([pdfEcho], overlay);
+    const users = projected.filter((message) => message.role === 'user');
+    expect(users).toHaveLength(1);
+    expect(users[0]?._skillMeta).toEqual({ slug: 'pdf', title: 'pdf' });
   });
 
   it('hydrates inline file/skill/workflow order from gateway bake without optimistic donor', () => {

@@ -72,6 +72,10 @@ export interface HomeComposerProps {
   hideDingTalkMention?: boolean;
   /** 应用开发工作台：接口清单 */
   showInterfaceCatalog?: boolean;
+  /** Embed / 业务场景快捷 pill */
+  composerScenarioActions?: import('../../../shared/embed-composer-actions').EmbedComposerAction[];
+  /** 应用广场窄栏：工具收起到下拉 */
+  toolbarToolsLayout?: 'inline' | 'dropdown';
   /** 可选覆盖默认内联引擎/模型工具栏 */
   toolbarSelectors?: ReactNode;
 }
@@ -91,6 +95,8 @@ export function HomeComposer({
   showProjectPicker = false,
   hideDingTalkMention = false,
   showInterfaceCatalog = false,
+  composerScenarioActions,
+  toolbarToolsLayout,
   toolbarSelectors,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
@@ -174,6 +180,8 @@ export function HomeComposer({
           showProjectPicker={showProjectPicker}
           hideDingTalkMention={hideDingTalkMention}
           showInterfaceCatalog={showInterfaceCatalog}
+          composerScenarioActions={composerScenarioActions}
+          toolbarToolsLayout={toolbarToolsLayout}
         />
       </section>
       {showDisclaimer ? (

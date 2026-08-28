@@ -102,6 +102,9 @@ export function registerIpcHandlers(
   void import('./services/sclaw-embed-browser-guest-preferences').then(({ installSclawEmbedBrowserGuestPreferencesHook }) => {
     installSclawEmbedBrowserGuestPreferencesHook();
   });
+  void import('./services/sclaw-embed-browser-session').then(({ installSclawEmbedBrowserSessionHooks }) => {
+    installSclawEmbedBrowserSessionHooks();
+  });
 
   // Unified request protocol (non-breaking: legacy channels remain available)
   registerUnifiedRequestHandlers(gatewayManager);
@@ -2867,13 +2870,21 @@ function registerSessionHandlers(): void {
     const webContentsId = typeof payload?.webContentsId === 'number' ? payload.webContentsId : 0;
     if (!runtimeId || !webContentsId) return { ok: false };
     const { bindSclawEmbedBrowserWebContents } = await import('./services/sclaw-embed-browser-runtime');
-    const meta = await bindSclawEmbedBrowserWebContents({
-      runtimeId,
-      webContentsId,
-      pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
-      pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
-    });
-    return { ok: true, meta };
+    try {
+      const meta = await bindSclawEmbedBrowserWebContents({
+        runtimeId,
+        webContentsId,
+        pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
+        pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
+      });
+      return { ok: true, meta };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Embed browser runtime not found')) {
+        return { ok: false, error: message };
+      }
+      throw error;
+    }
   });
 
   ipcMain.handle('sclaw-browser:updatePageState', async (_, payload: {

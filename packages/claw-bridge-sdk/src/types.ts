@@ -17,7 +17,25 @@ export type BridgeErrorCode =
   | 'INTERNAL_ERROR'
   | 'REQUEST_TIMEOUT'
   | 'REPLAY_DETECTED'
-  | 'BRIDGE_UNAVAILABLE';
+  | 'BRIDGE_UNAVAILABLE'
+  | 'AI_NOT_ENABLED'
+  | 'AI_INVALID_PARAMS'
+  | 'AI_CONTEXT_TOO_LARGE'
+  | 'AI_SKILL_NOT_ALLOWED'
+  | 'AI_QUOTA_EXCEEDED'
+  | 'AI_CONCURRENCY_EXCEEDED'
+  | 'AI_TIMEOUT'
+  | 'AI_ABORTED'
+  | 'AI_RUN_FAILED';
+
+/** Default wall-clock budget for one headless AI call (guest preload default is 30s). */
+export const BRIDGE_AI_DEFAULT_TIMEOUT_MS = 120_000;
+
+/** Maximum allowed `timeoutMs` for `chat.complete`. */
+export const BRIDGE_AI_MAX_TIMEOUT_MS = 180_000;
+
+/** Serialized `context` byte ceiling for `chat.complete`. */
+export const BRIDGE_AI_MAX_CONTEXT_BYTES = 128 * 1024;
 
 export interface BridgeError extends Error {
   code: BridgeErrorCode;
@@ -95,8 +113,17 @@ export interface NavOpenAppParams {
 
 export type ChatTarget = 'embed' | 'main' | 'auto';
 
+/** 结构化输入框片段（`chat.fillComposer` / `chat.openSession` / `chat.sendMessage`） */
+export type ComposerFillSegment =
+  | { type: 'text'; text: string }
+  | { type: 'skill'; slug: string; title?: string }
+  | { type: 'workflow'; id: string; name?: string };
+
 export interface ChatFillComposerParams {
-  text: string;
+  /** 向后兼容：等价于单个 text segment */
+  text?: string;
+  /** 结构化片段；与 text 至少提供一个 */
+  segments?: ComposerFillSegment[];
   target?: ChatTarget;
   send?: boolean;
   openPanel?: boolean;
@@ -104,15 +131,73 @@ export interface ChatFillComposerParams {
 
 export interface ChatOpenSessionParams {
   target?: 'embed' | 'main';
+  /** 向后兼容：等价于单个 text segment */
   text?: string;
+  /** 结构化片段；与 text 均可选，同时提供时以 segments 为准 */
+  segments?: ComposerFillSegment[];
   send?: boolean;
   title?: string;
 }
 
 export interface ChatSendMessageParams {
-  text: string;
+  /** 向后兼容：等价于单个 text segment */
+  text?: string;
+  /** 结构化片段；与 text 至少提供一个 */
+  segments?: ComposerFillSegment[];
   target?: ChatTarget;
   openPanel?: boolean;
+}
+
+export type ChatCompleteResponseFormat = 'text' | 'json';
+
+export type ChatCompleteFinishReason = 'completed' | 'timeout' | 'aborted' | 'failed';
+
+/** Headless AI invocation — structured business payload in `context`. */
+export interface ChatCompleteParams {
+  prompt: string;
+  context?: unknown;
+  agentId?: string;
+  skillSlugs?: string[];
+  responseFormat?: ChatCompleteResponseFormat;
+  /** Reuse for multi-turn; omitted means a fresh single-shot session. */
+  conversationId?: string;
+  /** Agent run budget; defaults to {@link BRIDGE_AI_DEFAULT_TIMEOUT_MS}. */
+  timeoutMs?: number;
+}
+
+export interface ChatCompleteResult {
+  requestId: string;
+  runId: string | null;
+  text: string;
+  /** Present when `responseFormat: 'json'` and parsing succeeded. */
+  parsed?: unknown;
+  /** Why JSON parsing failed; raw output remains in `text`. */
+  parseError?: string;
+  finishReason: ChatCompleteFinishReason;
+}
+
+export interface ChatCancelParams {
+  requestId: string;
+}
+
+export interface ChatCancelResult {
+  ok: boolean;
+}
+
+/** Recommended file reference shape inside `ChatCompleteParams.context`. */
+export interface BridgeAiFileAttachmentRef {
+  name: string;
+  url: string;
+  mimeType?: string;
+  size?: number;
+}
+
+/** Small-file Base64 payload inside `context` (mind {@link BRIDGE_AI_MAX_CONTEXT_BYTES}). */
+export interface BridgeAiFileAttachmentBase64 {
+  name: string;
+  mimeType?: string;
+  encoding: 'base64';
+  data: string;
 }
 
 export interface AppGetInfoResult {
@@ -120,6 +205,12 @@ export interface AppGetInfoResult {
   trustTier: string;
   origin: string | null;
   runtimeId: string | null;
+}
+
+export interface BridgeSubscribeResult {
+  subscribed: string[];
+  added?: string[];
+  denied?: string[];
 }
 
 export interface StoClawBridgeNative {

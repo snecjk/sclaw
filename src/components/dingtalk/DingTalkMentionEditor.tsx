@@ -21,6 +21,7 @@ import {
   consumeSkillTriggerText,
   consumeSlashTriggerText,
   ensureTrailingCaretAnchor,
+  focusMentionEditorAtEnd,
   insertLineBreakAtCaret,
   readAttachmentIdFromSpan,
   readCaretPlainTextOffset,
@@ -44,27 +45,10 @@ import {
 } from '@/lib/dingtalk-mention-composer';
 import { resolveSkillFromPlaza, resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 
-function focusEditorAtEnd(root: HTMLElement): void {
-  root.focus();
-
-  const selection = window.getSelection();
-  if (!selection) return;
-
-  const range = document.createRange();
-  const lastChild = root.lastChild;
-  if (lastChild?.nodeType === Node.TEXT_NODE) {
-    range.setStart(lastChild, lastChild.textContent?.length ?? 0);
-  } else {
-    range.selectNodeContents(root);
-    range.collapse(false);
-  }
-  range.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
 export interface DingTalkMentionEditorHandle {
   focus: () => void;
+  /** 聚焦并把光标放到文末（fillComposer / seedText / 学习中心回填） */
+  focusAtEnd: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
   readSkillMeta: () => SkillMeta | undefined;
@@ -105,6 +89,8 @@ export interface DingTalkMentionEditorHandle {
   openMentionPicker: () => void;
   /** 任务描述换行：插入 `<br>` 而不是 Chrome 的 DIV */
   insertLineBreak: () => void;
+  /** contenteditable 根节点，供 @ 浮层光标定位 */
+  getEditorElement: () => HTMLElement | null;
 }
 
 interface DingTalkMentionEditorProps {
@@ -206,6 +192,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
     useImperativeHandle(ref, () => ({
       focus: () => editorRef.current?.focus(),
+      focusAtEnd: () => {
+        const root = editorRef.current;
+        if (!root) return;
+        focusMentionEditorAtEnd(root);
+      },
       clear: () => {
         const root = editorRef.current;
         if (!root) return;
@@ -347,6 +338,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         captureCaretOffset();
       },
+      getEditorElement: () => editorRef.current,
     }), [captureCaretOffset, onTriggerChange, rememberCaret, removableMentions, resolveInsertOffset, syncFromDom]);
 
     useEffect(() => {
@@ -366,7 +358,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         if (lastAppliedSeedRef.current === trimmed) return;
         lastAppliedSeedRef.current = trimmed;
         setMentionEditorPlainText(root, `${trimmed} `);
-        focusEditorAtEnd(root);
+        focusMentionEditorAtEnd(root);
         syncFromDom();
         return;
       }
@@ -478,8 +470,9 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         suppressContentEditableWarning
         data-placeholder={placeholder}
         className={cn(
-          'dingtalk-mention-editor min-h-[42px] max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words',
-          'text-[15px] leading-6 text-foreground outline-none',
+          'dingtalk-mention-editor min-h-[42px] max-h-[200px] cursor-text overflow-y-auto whitespace-pre-wrap break-words',
+          // leading-8（32px）+ 标签 h-6（24px）+ align-top/mt-1 → 与文字垂直居中，行间距约 8px
+          'text-[14px] leading-8 text-foreground outline-none',
           'empty:before:text-muted-foreground/55 empty:before:content-[attr(data-placeholder)]',
           className,
         )}

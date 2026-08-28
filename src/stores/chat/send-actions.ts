@@ -9,7 +9,6 @@ import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions } from './types';
 import { AppError, normalizeAppError } from '@/lib/error-model';
 import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
-import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 import { releaseSendAttempt, tryAcquireSendAttempt } from './send-attempt-lock';
@@ -71,8 +70,7 @@ export function createSendActions(
       } = options;
       const userDisplayText = text.trim();
       /** 正式坐标：skillMetas；skillMeta 仅 deprecated 兼容派生 */
-      const resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
-      const primarySkillMeta = resolvedSkillMetas[0];
+      let resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
       const hasWorkflowPayload = Boolean(
         (workflows && workflows.length > 0)
         || composerSegments?.some((seg) => seg.type === 'workflow')
@@ -128,6 +126,11 @@ export function createSendActions(
         requestedSessionKey: requestedSessionKey ?? null,
         resolveTargetMs: targetResolvedAt - sendRequestedAt,
       });
+
+      const { resolveEmbedQuoteSkillInjection } = await import('@/lib/resolve-embed-quote-skill');
+      resolvedSkillMetas = await resolveEmbedQuoteSkillInjection(currentSessionKey, resolvedSkillMetas);
+      const primarySkillMeta = resolvedSkillMetas[0];
+
       if (buildChatSessionRuntimeView(
         useChatRuntimeV2Store.getState().sessionsByKey[currentSessionKey],
       ).sending) {
@@ -157,15 +160,27 @@ export function createSendActions(
 
       let gatewayText = preBakedGatewayText?.trim();
       if (!gatewayText) {
-        if (primarySkillMeta) {
-          gatewayText = appendSkillTranscriptMarker(
-            resolveSkillGatewayText(
-              (await resolveSkillPrompt(primarySkillMeta.slug)).defaultPrompt,
-              userDisplayText,
-            ),
-            primarySkillMeta,
-            userDisplayText,
-          );
+        if (resolvedSkillMetas.length > 0) {
+          // 与 buildComposerGatewayPayload 的多技能烘焙保持一致：全部技能 prompt
+          // 前置并逐个追加 transcript marker。队列编辑后预烘焙 gatewayText 失效
+          // 走这里，只烘焙首个技能会让模型收不到技能 2..n 的指令。
+          const skillPrompts: string[] = [];
+          for (const meta of resolvedSkillMetas) {
+            const { defaultPrompt } = await resolveSkillPrompt(meta.slug);
+            const prompt = defaultPrompt.trim();
+            // slug 本身不是 prompt，不得前置（与 buildComposerGatewayPayload 一致）
+            if (prompt && prompt !== meta.slug) skillPrompts.push(prompt);
+          }
+          gatewayText = skillPrompts.length > 0
+            ? [skillPrompts.join('\n\n'), userDisplayText].filter(Boolean).join('\n\n')
+            : userDisplayText;
+          for (let i = 0; i < resolvedSkillMetas.length; i += 1) {
+            gatewayText = appendSkillTranscriptMarker(
+              gatewayText,
+              resolvedSkillMetas[i]!,
+              i === 0 ? userDisplayText : undefined,
+            );
+          }
         } else {
           gatewayText = userDisplayText;
         }
@@ -177,6 +192,7 @@ export function createSendActions(
         messages: get().currentSessionKey === currentSessionKey ? getSessionDisplayMessages(currentSessionKey) : [],
         workflowContext,
         embedBrowserContext,
+        skillMetas: resolvedSkillMetas,
         clearPendingWorkflow: get().clearPendingWorkflow,
       });
       const { messageWithContext } = preparedContext;

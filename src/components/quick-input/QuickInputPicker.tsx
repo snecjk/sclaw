@@ -84,10 +84,11 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
     }, [open, refreshList]);
 
     useLayoutEffect(() => {
-      if (!open || !anchorRef?.current) {
+      if (!open) {
         setPosition(null);
         return;
       }
+      if (!anchorRef) return;
 
       const updatePosition = () => {
         const rect = anchorRef.current?.getBoundingClientRect();
@@ -105,9 +106,11 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
       };
 
       updatePosition();
+      const retryId = window.requestAnimationFrame(updatePosition);
       window.addEventListener('resize', updatePosition);
       window.addEventListener('scroll', updatePosition, true);
       return () => {
+        cancelAnimationFrame(retryId);
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition, true);
       };
@@ -174,12 +177,15 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
     if (!open) {
       return modals;
     }
+    if (anchorRef && !position) {
+      return modals;
+    }
 
     const panel = (
       <div
         ref={setRefs}
         className={cn(
-          'box-border z-50 flex flex-col justify-center gap-1 overflow-hidden rounded-xl',
+          'box-border z-[100001] flex flex-col justify-center gap-1 overflow-hidden rounded-xl',
           'border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)]',
           'dark:border-border dark:bg-secondary dark:shadow-soft',
           position ? 'fixed' : 'absolute left-0 bottom-full mb-2 w-[280px]',

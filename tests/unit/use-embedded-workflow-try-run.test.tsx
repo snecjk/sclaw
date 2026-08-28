@@ -316,13 +316,14 @@ describe('useEmbeddedWorkflowTryRun', () => {
     expect(editor.sendTryRunState).toHaveBeenLastCalledWith('req-1', 'idle');
   });
 
-  it('synchronizes running and retains the completed terminal state', async () => {
+  it('keeps Web preparing until a new run id exists, then synchronizes running and terminal state', async () => {
     const run = setup();
     act(() => run.result.current.requestFromWeb('req-1'));
     await act(() => run.result.current.confirmAndPrepare());
 
     run.rerender({ ...run.base, isRunStarting: true });
-    await waitFor(() => expect(run.editor.sendTryRunState).toHaveBeenLastCalledWith('req-1', 'running'));
+    expect(run.editor.sendTryRunState).not.toHaveBeenCalledWith('req-1', 'running');
+    expect(run.editor.sendTryRunState).toHaveBeenLastCalledWith('req-1', 'preparing');
     run.rerender({
       ...run.base,
       isRunStarting: false,
@@ -339,6 +340,23 @@ describe('useEmbeddedWorkflowTryRun', () => {
     });
     await waitFor(() => expect(run.editor.sendTryRunState).toHaveBeenLastCalledWith('req-1', 'completed'));
     expect(run.editor.sendTryRunState).not.toHaveBeenCalledWith('req-1', 'idle');
+  });
+
+  it('emits running before an immediate terminal state when the new run id first appears', async () => {
+    const run = setup();
+    act(() => run.result.current.requestFromWeb('req-fast'));
+    await act(() => run.result.current.confirmAndPrepare());
+
+    run.rerender({
+      ...run.base,
+      runId: 'run-fast',
+      runStatus: 'completed',
+    });
+
+    await waitFor(() => expect(run.editor.sendTryRunState.mock.calls.slice(-2)).toEqual([
+      ['req-fast', 'running'],
+      ['req-fast', 'completed'],
+    ]));
   });
 
   it.each([
@@ -383,7 +401,7 @@ describe('useEmbeddedWorkflowTryRun', () => {
     act(() => failed.result.current.requestFromWeb('req-error'));
     await act(() => failed.result.current.confirmAndPrepare());
     failed.rerender({ ...failed.base, isRunStarting: true });
-    await waitFor(() => expect(failed.editor.sendTryRunState).toHaveBeenLastCalledWith('req-error', 'running'));
+    expect(failed.editor.sendTryRunState).toHaveBeenLastCalledWith('req-error', 'preparing');
     failed.rerender({ ...failed.base, isRunStarting: false, launchError: '启动失败' });
     failed.rerender({ ...failed.base, launchError: '启动失败' });
     await waitFor(() => expect(toastError).toHaveBeenCalledOnce());

@@ -411,9 +411,29 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
 
         const existing = await getSkillEntry({ slug: spec.slug, scope: 'global' });
         if (existing && existing.version === desiredVersion && !spec.local) {
+            // Still honor autoEnable flips for already-installed remote skills.
+            if (spec.autoEnable && existing.enabled === false) {
+                toEnable.push(spec.slug);
+            }
             continue;
         }
         if (existing && spec.local && existing.version === desiredVersion) {
+            // Local skill content unchanged — still enable if autoEnable and currently off,
+            // and keep OpenClaw projection in sync below when we re-enter install path.
+            if (spec.autoEnable && existing.enabled === false) {
+                toEnable.push(spec.slug);
+            }
+            // Re-project into OpenClaw package skills dir when local source exists.
+            const openclawRoot = getOpenClawDir();
+            if (!openclawRoot.endsWith('.asar')) {
+                const openclawSkillsDir = join(openclawRoot, 'skills');
+                ensureDir(openclawSkillsDir);
+                const bundledTarget = join(openclawSkillsDir, spec.slug);
+                if (existsSync(bundledTarget)) {
+                    rmSync(bundledTarget, { recursive: true, force: true });
+                }
+                cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
+            }
             continue;
         }
         if (!spec.local && existing && existing.source !== 'stoclaw-preinstalled') {

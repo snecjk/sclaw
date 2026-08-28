@@ -183,6 +183,7 @@ describe('ScheduledTaskService', () => {
 
   describe('updateTask extra merge', () => {
     it('preserves extra.createdVia when incoming extra omits it', async () => {
+      getAuthState.mockResolvedValue({ user: { code: '1165828' } });
       const created = await svc.createTask({
         ...baseCreateInput,
         extra: {
@@ -204,6 +205,10 @@ describe('ScheduledTaskService', () => {
   });
 
   describe('setEnabled / deleteTask', () => {
+    beforeEach(() => {
+      getAuthState.mockResolvedValue({ user: { code: '1165828' } });
+    });
+
     it('toggling enabled off nulls nextRunAt and back on recomputes it', async () => {
       const task = await svc.createTask(baseCreateInput);
       expect(task.nextRunAt).toBeTruthy();
@@ -252,6 +257,122 @@ describe('ScheduledTaskService', () => {
 
       expect((await runRepo.getRun(run.runId))?.status).toBe('cancelled');
       expect((await runRepo.getRun(run.runId))?.error).toBe('task deleted');
+    });
+
+    it('rejects unauthenticated mutate on orphan tasks', async () => {
+      getAuthState.mockResolvedValue({ user: null });
+      const orphan = await svc.createTask({ ...baseCreateInput, actor: null });
+      await expect(svc.deleteTask(orphan.id, null)).rejects.toThrow(/无权删除/);
+      await expect(svc.setEnabled(orphan.id, false, null)).rejects.toThrow(/无权修改/);
+      await expect(svc.triggerTask(orphan.id)).rejects.toThrow(/无权触发/);
+    });
+  });
+
+  describe('ownership isolation (scheme A)', () => {
+    it('listTasks only returns current user tasks', async () => {
+      await svc.createTask({ ...baseCreateInput, name: 'A task', actor: 'user-a' });
+      await svc.createTask({ ...baseCreateInput, name: 'B task', actor: 'user-b' });
+
+      getAuthState.mockResolvedValue({ user: { code: 'user-b' } });
+      const listed = await svc.listTasks();
+      expect(listed.map((t) => t.name)).toEqual(['B task']);
+    });
+
+    it('listTasks matches created_by with surrounding whitespace via trim', async () => {
+      await svc.createTask({ ...baseCreateInput, name: 'spaced', actor: '  user-a  ' });
+      getAuthState.mockResolvedValue({ user: { code: ' user-a ' } });
+      const listed = await svc.listTasks();
+      expect(listed.map((t) => t.name)).toEqual(['spaced']);
+      expect(listed[0]?.createdBy).toBe('user-a');
+    });
+
+    it('rejects update/delete/setEnabled/trigger on another user task', async () => {
+      const aTask = await svc.createTask({ ...baseCreateInput, name: 'A only', actor: 'user-a' });
+      getAuthState.mockResolvedValue({ user: { code: 'user-b' } });
+
+      await expect(svc.updateTask(aTask.id, { name: 'hijack', actor: 'user-b' })).rejects.toThrow(
+        /无权修改/,
+      );
+      await expect(svc.setEnabled(aTask.id, false, 'user-b')).rejects.toThrow(/无权修改/);
+      await expect(svc.deleteTask(aTask.id, 'user-b')).rejects.toThrow(/无权删除/);
+      await expect(svc.triggerTask(aTask.id)).rejects.toThrow(/无权触发/);
+      expect(await svc.getTask(aTask.id)).toBeNull();
+    });
+
+    it('scheduler tick with owner only fires that user tasks', async () => {
+      const { ScheduledTaskScheduler } = await import(
+        '../../electron/scheduled-tasks/scheduled-task-scheduler'
+      );
+      const { ScheduleTaskRepository } = await import(
+        '../../electron/db/repositories/schedule-task-repository'
+      );
+      const { ScheduleTaskRunRepository } = await import(
+        '../../electron/db/repositories/schedule-task-run-repository'
+      );
+      const taskRepo = new ScheduleTaskRepository();
+      const runRepo = new ScheduleTaskRunRepository();
+      const dispatched: string[] = [];
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, {
+        async dispatch({ task }) {
+          dispatched.push(task.name);
+        },
+      });
+
+      const past = new Date(Date.now() - 5_000).toISOString();
+      const a = await taskRepo.create({
+        ...baseCreateInput,
+        name: 'owner-a',
+        actor: 'user-a',
+        cronExpr: '* * * * *',
+      });
+      const b = await taskRepo.create({
+        ...baseCreateInput,
+        name: 'owner-b',
+        actor: 'user-b',
+        cronExpr: '* * * * *',
+      });
+      await taskRepo.updateScheduleState(a.id, { nextRunAt: past, cronExprSnapshot: '* * * * *' });
+      await taskRepo.updateScheduleState(b.id, { nextRunAt: past, cronExprSnapshot: '* * * * *' });
+
+      scheduler.setOwnerUserCode('user-b');
+      await scheduler.tick(new Date());
+      expect(dispatched).toEqual(['owner-b']);
+    });
+
+    it('discardMissedOnStartup with owner only cancels that user queued runs', async () => {
+      const { ScheduledTaskScheduler } = await import(
+        '../../electron/scheduled-tasks/scheduled-task-scheduler'
+      );
+      const { ScheduleTaskRepository } = await import(
+        '../../electron/db/repositories/schedule-task-repository'
+      );
+      const { ScheduleTaskRunRepository } = await import(
+        '../../electron/db/repositories/schedule-task-run-repository'
+      );
+      const taskRepo = new ScheduleTaskRepository();
+      const runRepo = new ScheduleTaskRunRepository();
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo);
+
+      const a = await taskRepo.create({ ...baseCreateInput, name: 'A', actor: 'user-a' });
+      const b = await taskRepo.create({ ...baseCreateInput, name: 'B', actor: 'user-b' });
+      const runA = await runRepo.createRun({
+        taskId: a.id,
+        triggerSource: 'schedule',
+        idempotencyKey: `${a.id}:q`,
+        status: 'queued',
+      });
+      const runB = await runRepo.createRun({
+        taskId: b.id,
+        triggerSource: 'schedule',
+        idempotencyKey: `${b.id}:q`,
+        status: 'queued',
+      });
+
+      scheduler.setOwnerUserCode('user-b');
+      await scheduler.discardMissedOnStartup(new Date());
+
+      expect((await runRepo.getRun(runA.runId))?.status).toBe('queued');
+      expect((await runRepo.getRun(runB.runId))?.status).toBe('cancelled');
     });
   });
 });
