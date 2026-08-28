@@ -7,7 +7,9 @@ import {
 
 describe('app template import rules', () => {
   it.each([
+    '.git',
     '.git/config',
+    '.sclaw',
     '.sclaw/app-template.json',
     'manifest.json',
     'src/sclaw/bootstrap.ts',

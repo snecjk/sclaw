@@ -3,6 +3,10 @@ import { posix } from 'node:path';
 export type TemplateImportPathClass = 'protected' | 'ignored' | 'business';
 
 const PROTECTED_EXACT = new Set([
+  '.git',
+  '.sclaw',
+  'src/sclaw',
+  'openspec/skills',
   'manifest.json',
   'vite.config.ts',
   'vite.config.sclaw.ts',
