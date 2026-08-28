@@ -1,7 +1,56 @@
+/** Enable verbose chat-flow / user-question logs: `localStorage.setItem('sclaw:debug-chat-flow', '1')` */
+export const CHAT_FLOW_DEBUG_STORAGE_KEY = 'sclaw:debug-chat-flow';
+
+const LOG_TEXT_MAX_CHARS = 200;
+
+export function isChatFlowDebugEnabled(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(CHAT_FLOW_DEBUG_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function truncateText(value: string, maxChars = LOG_TEXT_MAX_CHARS): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars - 3)}...`;
+}
+
+function sanitizeLogValue(value: unknown, depth = 0): unknown {
+  if (value == null) return value;
+  if (typeof value === 'string') return truncateText(value);
+  if (typeof value !== 'object') return value;
+  if (depth >= 2) return '[truncated]';
+  if (Array.isArray(value)) {
+    return value.slice(0, 8).map((item) => sanitizeLogValue(item, depth + 1));
+  }
+  const record = value as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (key === 'segments' || key === 'optimisticSegments' || key === 'historySegments') {
+      sanitized[key] = Array.isArray(entry) ? `[segments:${entry.length}]` : entry;
+      continue;
+    }
+    if (key === 'optimisticAttachments' || key === 'historyAttachments' || key === 'attachments') {
+      sanitized[key] = Array.isArray(entry) ? `[attachments:${entry.length}]` : entry;
+      continue;
+    }
+    sanitized[key] = sanitizeLogValue(entry, depth + 1);
+  }
+  return sanitized;
+}
+
+function sanitizeLogData(data?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!data) return undefined;
+  return sanitizeLogValue(data) as Record<string, unknown>;
+}
+
 export function logChatFlow(stage: string, data?: Record<string, unknown>): void {
+  if (!isChatFlowDebugEnabled()) return;
   console.info('[chat-flow]', stage, {
     at: new Date().toISOString(),
-    ...(data ?? {}),
+    ...(sanitizeLogData(data) ?? {}),
   });
 }
 
@@ -85,7 +134,8 @@ export interface UserQuestionServerEchoLog {
 }
 
 export function logUserQuestion(stage: string, data?: Record<string, unknown>): void {
-  console.info(USER_QUESTION_LOG_PREFIX, stage, data ?? {});
+  if (!isChatFlowDebugEnabled()) return;
+  console.info(USER_QUESTION_LOG_PREFIX, stage, sanitizeLogData(data) ?? {});
 }
 
 /** 类型收窄版：专门打 `server-echo`，字段含义见 {@link UserQuestionServerEchoLog} */

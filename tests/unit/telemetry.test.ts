@@ -42,6 +42,7 @@ vi.mock('@electron/utils/logger', () => ({
 vi.mock('electron', () => ({
   app: {
     getVersion: () => '0.2.1',
+    isPackaged: true,
   },
 }));
 

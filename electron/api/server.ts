@@ -115,7 +115,7 @@ export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_
   const server = createServer(async (req, res) => {
     try {
       const requestUrl = new URL(req.url || '/', `http://127.0.0.1:${port}`);
-      logger.info(`[HostApi] ${req.method} ${requestUrl.pathname} — routing...`);
+      logger.debug(`[HostApi] ${req.method} ${requestUrl.pathname} — routing...`);
       for (const handler of routeHandlers) {
         const handled = await handler(req, res, requestUrl, ctx);
         if (handled) {

@@ -1197,15 +1197,13 @@ async function startClaudeQuery(
     const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
-    logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
-    const userPromptPreview =
-      typeof prompt === 'string'
-        ? prompt
-        : '(stream/non-string prompt)';
+    logger.info('[claude-adapter][prompt] final systemPromptAppend', {
+      sessionKey,
+      systemPromptAppendChars: systemPromptAppend.length,
+    });
     logger.info('[claude-adapter][prompt] user message', {
       sessionKey,
       userPromptChars: typeof prompt === 'string' ? prompt.length : null,
-      userPrompt: userPromptPreview,
     });
     const userMessageForLog = typeof prompt === 'string'
       ? prompt
@@ -1548,7 +1546,11 @@ export const claudeAdapter: EngineAdapter = {
       .filter(Boolean)
       .join('\n\n') || undefined;
     if (memorySystemPrompt) {
-      logger.info(`[agent-memory][claude] systemPromptAppend after memory injection:\n${systemPromptAppend}`);
+      logger.info('[agent-memory][claude] systemPromptAppend after memory injection', {
+        sessionKey: params.sessionKey,
+        memoryChars: memorySystemPrompt.length,
+        systemPromptAppendChars: systemPromptAppend?.length ?? 0,
+      });
     }
     return { ...params, systemPromptAppend };
   },
