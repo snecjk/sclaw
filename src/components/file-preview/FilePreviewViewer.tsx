@@ -19,7 +19,7 @@ import {
   isPreviewHttpFetchMessage,
   preparePreviewSrcDoc,
 } from '@/lib/preview-srcdoc';
-import { postResolvedAppearance, useThemeAppearance } from '@/components/theme/ThemeController';
+import { postResolvedAppearance, useThemeAppearance } from '@/components/theme/appearance-context';
 import { UserWatermark } from '@/components/layout/UserWatermark';
 import { ExcelGridViewer } from './ExcelGridViewer';
 import { WordDocViewer } from './WordDocViewer';

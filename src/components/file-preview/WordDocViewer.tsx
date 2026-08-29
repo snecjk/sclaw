@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { uint8ArrayToArrayBuffer } from '@/lib/preview-binary-load';
 import { prepareInlinePreviewSrcDoc } from '@/lib/preview-srcdoc';
-import { postResolvedAppearance, useThemeAppearance } from '@/components/theme/ThemeController';
+import { postResolvedAppearance, useThemeAppearance } from '@/components/theme/appearance-context';
 import { PreviewLoading } from './PreviewLoading';
 
 interface WordDocViewerProps {

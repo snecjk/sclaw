@@ -4,7 +4,7 @@ import { RemoteSrcDocPreview } from '@/components/file-preview/FilePreviewViewer
 
 const themeState = vi.hoisted(() => ({ appearance: 'light' as 'light' | 'dark' }));
 
-vi.mock('@/components/theme/ThemeController', () => ({
+vi.mock('@/components/theme/appearance-context', () => ({
   STO_APPEARANCE_MESSAGE_TYPE: 'sto:appearance-change',
   useThemeAppearance: () => themeState.appearance,
   postResolvedAppearance: vi.fn(),

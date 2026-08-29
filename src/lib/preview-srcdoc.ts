@@ -3,7 +3,7 @@
  * Keeps fetch+srcDoc rendering (OSS attachment pages) while restoring API/download context.
  */
 
-import { STO_APPEARANCE_MESSAGE_TYPE } from '@/components/theme/ThemeController';
+import { STO_APPEARANCE_MESSAGE_TYPE } from '@/components/theme/appearance-context';
 import type { ResolvedAppearance } from '@/hooks/use-resolved-appearance';
 
 export const HTML_PREVIEW_IFRAME_SANDBOX =
