@@ -15,7 +15,9 @@ export const DARK_WINDOW_BACKGROUND = '#0d0d0d';
 const DEFAULT_THEME_PREFERENCE: AppSettings['theme'] = 'light';
 
 let nativeAppearanceObserverCleanup: (() => void) | null = null;
+let currentAppearanceState: StoAppearanceState | null = null;
 const lastPublishedStateByContents = new WeakMap<WebContents, string>();
+const appearanceReplayByContents = new WeakMap<WebContents, () => void>();
 
 export function resolveWindowBackgroundColor(isDark: boolean): string {
   return isDark ? DARK_WINDOW_BACKGROUND : LIGHT_WINDOW_BACKGROUND;
@@ -47,15 +49,40 @@ function updateOpaqueWindowBackgrounds(appearance: StoAppearanceState['appearanc
   }
 }
 
-function broadcastAppearanceState(state: StoAppearanceState): void {
+function publishAppearanceState(contents: WebContents, state: StoAppearanceState): void {
   const stateKey = `${state.preference}:${state.appearance}`;
+  if (lastPublishedStateByContents.get(contents) === stateKey) return;
+  contents.send(STO_APPEARANCE_STATE_EVENT, state);
+  lastPublishedStateByContents.set(contents, stateKey);
+}
+
+function attachAppearanceReplay(contents: WebContents): void {
+  if (appearanceReplayByContents.has(contents)) return;
+
+  const replay = () => {
+    if (contents.isDestroyed() || !currentAppearanceState) return;
+    lastPublishedStateByContents.delete(contents);
+    publishAppearanceState(contents, currentAppearanceState);
+  };
+  const cleanup = () => {
+    contents.removeListener('did-finish-load', replay);
+    appearanceReplayByContents.delete(contents);
+    lastPublishedStateByContents.delete(contents);
+  };
+
+  contents.on('did-finish-load', replay);
+  contents.once('destroyed', cleanup);
+  appearanceReplayByContents.set(contents, replay);
+}
+
+function broadcastAppearanceState(state: StoAppearanceState): void {
+  currentAppearanceState = state;
   for (const window of BrowserWindow.getAllWindows()) {
     if (window.isDestroyed()) continue;
     const { webContents } = window;
     if (webContents.isDestroyed()) continue;
-    if (lastPublishedStateByContents.get(webContents) === stateKey) continue;
-    webContents.send(STO_APPEARANCE_STATE_EVENT, state);
-    lastPublishedStateByContents.set(webContents, stateKey);
+    attachAppearanceReplay(webContents);
+    publishAppearanceState(webContents, state);
   }
 }
 

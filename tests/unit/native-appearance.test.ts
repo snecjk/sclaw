@@ -4,6 +4,41 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const appearanceState = vi.hoisted(() => {
+  const createWebContents = (initiallyDestroyed = false) => {
+    let destroyed = initiallyDestroyed;
+    const listeners = new Map<string, Set<() => void>>();
+    const contents = {
+      isDestroyed: vi.fn(() => destroyed),
+      send: vi.fn(),
+      on: vi.fn((eventName: string, listener: () => void) => {
+        const eventListeners = listeners.get(eventName) ?? new Set<() => void>();
+        eventListeners.add(listener);
+        listeners.set(eventName, eventListeners);
+        return contents;
+      }),
+      once: vi.fn((eventName: string, listener: () => void) => {
+        const onceListener = () => {
+          listeners.get(eventName)?.delete(onceListener);
+          listener();
+        };
+        const eventListeners = listeners.get(eventName) ?? new Set<() => void>();
+        eventListeners.add(onceListener);
+        listeners.set(eventName, eventListeners);
+        return contents;
+      }),
+      removeListener: vi.fn((eventName: string, listener: () => void) => {
+        listeners.get(eventName)?.delete(listener);
+        return contents;
+      }),
+      emit: (eventName: string) => {
+        for (const listener of [...(listeners.get(eventName) ?? [])]) listener();
+      },
+      setDestroyed: (value: boolean) => {
+        destroyed = value;
+      },
+    };
+    return contents;
+  };
   let themeSource: 'light' | 'dark' | 'system' = 'light';
   const themeSourceWrites = vi.fn((value: 'light' | 'dark' | 'system') => {
     themeSource = value;
@@ -20,27 +55,27 @@ const appearanceState = vi.hoisted(() => {
   const mainWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
-    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
+    webContents: createWebContents(),
   };
   const spriteWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
-    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
+    webContents: createWebContents(),
   };
   const floatIconWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
-    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
+    webContents: createWebContents(),
   };
   const destroyedWindow = {
     isDestroyed: vi.fn(() => true),
     setBackgroundColor: vi.fn(),
-    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
+    webContents: createWebContents(),
   };
   const destroyedContentsWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
-    webContents: { isDestroyed: vi.fn(() => true), send: vi.fn() },
+    webContents: createWebContents(true),
   };
   return {
     nativeTheme,
@@ -50,6 +85,7 @@ const appearanceState = vi.hoisted(() => {
     floatIconWindow,
     destroyedWindow,
     destroyedContentsWindow,
+    createWebContents,
     getSetting: vi.fn(),
     getAllSettings: vi.fn(),
     resetSettings: vi.fn(),
@@ -182,10 +218,9 @@ describe('native appearance', () => {
     for (const window of appearanceState.windows) {
       window.isDestroyed.mockClear();
       window.setBackgroundColor.mockReset();
-      window.webContents = {
-        isDestroyed: vi.fn(() => window === appearanceState.destroyedContentsWindow),
-        send: vi.fn(),
-      };
+      window.webContents = appearanceState.createWebContents(
+        window === appearanceState.destroyedContentsWindow,
+      );
     }
   });
 
@@ -241,6 +276,38 @@ describe('native appearance', () => {
     expect(appearanceState.destroyedWindow.webContents.send).not.toHaveBeenCalled();
     expect(appearanceState.destroyedContentsWindow.webContents.isDestroyed).toHaveBeenCalled();
     expect(appearanceState.destroyedContentsWindow.webContents.send).not.toHaveBeenCalled();
+    expect(appearanceState.destroyedContentsWindow.webContents.on).not.toHaveBeenCalled();
+  });
+
+  it('replays the current state once after every renderer load', () => {
+    const contents = appearanceState.mainWindow.webContents;
+
+    applyNativeAppearancePreference('dark');
+    expect(contents.send).toHaveBeenCalledTimes(1);
+    expect(contents.on).toHaveBeenCalledTimes(1);
+    expect(contents.on).toHaveBeenCalledWith('did-finish-load', expect.any(Function));
+
+    contents.emit('did-finish-load');
+    expect(contents.send).toHaveBeenCalledTimes(2);
+    expect(contents.send).toHaveBeenLastCalledWith(
+      'sto:appearance-state',
+      { preference: 'dark', appearance: 'dark' },
+    );
+
+    const cleanup = observeNativeAppearanceUpdates();
+    const observer = appearanceState.nativeTheme.on.mock.calls[0][1] as () => void;
+    observer();
+    expect(contents.send).toHaveBeenCalledTimes(2);
+    expect(contents.on).toHaveBeenCalledTimes(1);
+
+    contents.emit('did-finish-load');
+    expect(contents.send).toHaveBeenCalledTimes(3);
+
+    contents.setDestroyed(true);
+    contents.emit('did-finish-load');
+    expect(contents.send).toHaveBeenCalledTimes(3);
+
+    cleanup();
   });
 
   it('publishes each state once per contents while allowing late windows to catch up', () => {
@@ -256,7 +323,7 @@ describe('native appearance', () => {
     const lateWindow = {
       isDestroyed: vi.fn(() => false),
       setBackgroundColor: vi.fn(),
-      webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
+      webContents: appearanceState.createWebContents(),
     };
     appearanceState.windows.push(lateWindow);
     listener();
