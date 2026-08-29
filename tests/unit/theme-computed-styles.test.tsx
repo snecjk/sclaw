@@ -34,6 +34,7 @@ import {
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const tokensCss = read('src/styles/theme/tokens.css');
 const recipesCss = read('src/styles/theme/recipes.css');
+const moreAppsCss = read('src/components/more-apps/more-apps.css');
 const inputSource = read('src/components/ui/input.tsx');
 const textareaSource = read('src/components/ui/textarea.tsx');
 const states = ['default', 'hover', 'active', 'focus', 'disabled', 'loading', 'error'] as const;
@@ -103,6 +104,80 @@ function installThemeStyles(targetDocument = document): void {
   style.dataset.themeComputedTest = '';
   style.textContent = `${markerRecipes(flattenLayer(recipesCss))}\n:is(.sto-card,.sto-control,.sto-navigation-item,.sto-segment-item,.sto-overlay,.sto-feedback){border-style:solid;border-width:1px}`;
   targetDocument.head.append(style);
+}
+
+function resolveThemeToken(token: string, theme: Theme): string {
+  const declarations = new Map<string, string>();
+  const root = postcss.parse(flattenLayer(tokensCss));
+  root.walkRules((rule) => {
+    const isBase = rule.selector.split(',').some((selector) => selector.trim() === ':root');
+    const isDark = rule.selector.split(',').some((selector) => selector.trim() === '.dark');
+    if (!isBase && !(theme === 'dark' && isDark)) return;
+    rule.walkDecls(/^--sto-/, (declaration) => declarations.set(declaration.prop, declaration.value));
+  });
+
+  let value = declarations.get(token);
+  if (!value) throw new Error(`Missing ${theme} token ${token}`);
+  for (let depth = 0; depth < 12 && value.includes('var('); depth += 1) {
+    value = value.replace(/var\((--sto-[\w-]+)\)/g, (_match, dependency: string) => {
+      const resolved = declarations.get(dependency);
+      if (!resolved) throw new Error(`Missing dependency ${dependency} for ${token}`);
+      return resolved;
+    });
+  }
+  return value;
+}
+
+function installExactThemeStylesForTheme(theme: Theme, targetDocument = document): void {
+  const tokens = [
+    '--sto-navigation-picker-hover-background',
+    '--sto-navigation-selected-hover-background',
+    '--sto-navigation-collapsed-background',
+    '--sto-navigation-collapsed-foreground',
+    '--sto-navigation-collapsed-hover-background',
+    '--sto-navigation-collapsed-selected-background',
+    '--sto-navigation-collapsed-selected-foreground',
+    '--sto-navigation-collapsed-selected-shadow',
+  ];
+  const style = targetDocument.createElement('style');
+  style.textContent = tokens.reduce(
+    (css, token) => css.replaceAll(`var(${token})`, resolveThemeToken(token, theme)),
+    flattenLayer(recipesCss),
+  );
+  targetDocument.head.append(style);
+}
+
+function createExactThemeRoot(theme: Theme): {
+  container: HTMLElement;
+  dispose: () => void;
+} {
+  const frame = document.createElement('iframe');
+  document.body.append(frame);
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) throw new Error('Expected iframe document for exact theme test');
+  installExactThemeStylesForTheme(theme, frameDocument);
+  setTheme(theme, frameDocument);
+  const container = frameDocument.createElement('div');
+  frameDocument.body.append(container);
+  return { container, dispose: () => frame.remove() };
+}
+
+function createAppCardCascadeRoot(theme: Theme): {
+  container: HTMLElement;
+  dispose: () => void;
+} {
+  const frame = document.createElement('iframe');
+  document.body.append(frame);
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) throw new Error('Expected iframe document for app card cascade test');
+  const style = frameDocument.createElement('style');
+  style.textContent = `${markerRecipes(flattenLayer(recipesCss))}\n${moreAppsCss}`;
+  frameDocument.head.append(style);
+  setTheme(theme, frameDocument);
+  const container = frameDocument.createElement('div');
+  container.className = 'page-more-apps';
+  frameDocument.body.append(container);
+  return { container, dispose: () => frame.remove() };
 }
 
 function setTheme(theme: Theme, targetDocument = document): void {
@@ -457,6 +532,136 @@ describe('card cascade combinations', () => {
     expect(card.matches('.sto-card:where(:has(:focus-visible))')).toBe(true);
     expect(recipesCss.indexOf('box-shadow: var(--sto-card-focus-shadow)'))
       .toBeGreaterThan(recipesCss.indexOf('box-shadow: var(--sto-card-flat-hover-shadow)'));
+  });
+
+  it.each(themes)('keeps shared recipe colors above App card geometry CSS in %s', (theme) => {
+    const stateExpectations = {
+      default: normal('--sto-card-flat-bg', '--sto-card-flat-border', '--sto-card-default-foreground'),
+      hover: normal('--sto-card-flat-hover-bg', '--sto-card-flat-hover-border', '--sto-card-default-foreground'),
+      focus: normal('--sto-card-flat-bg', '--sto-card-flat-border', '--sto-card-default-foreground'),
+      selected: normal('--sto-control-active-bg', '--sto-border-heavy', '--sto-text-primary'),
+    } as const;
+
+    for (const [familyClass, borderWidth, borderRadius] of [
+      ['app-market__row', '0.8px', '18px'],
+      ['more-apps-card', '1px', '14px'],
+    ] as const) {
+      for (const [state, expected] of Object.entries(stateExpectations)) {
+        const { container, dispose } = createAppCardCascadeRoot(theme);
+        const result = render(
+          <article
+            data-testid="app-card"
+            className={`sto-card sto-card--flat sto-card--interactive ${familyClass}`}
+            data-sto-state={state === 'hover' || state === 'focus' ? state : undefined}
+            data-selected={state === 'selected' ? 'true' : undefined}
+          />,
+          { container },
+        );
+        const card = result.getByTestId('app-card');
+        expectColors(card, expected);
+        expect(getComputedStyle(card).borderTopWidth).toBe(borderWidth);
+        expect(getComputedStyle(card).borderRadius).toBe(borderRadius);
+        if (state === 'focus') {
+          expect(getComputedStyle(card).boxShadow)
+            .toContain(colorMarker('--sto-card-focus-shadow'));
+        }
+        result.unmount();
+        dispose();
+      }
+    }
+  });
+});
+
+describe('Navigation consumer pixel modifiers', () => {
+  it.each([
+    ['light', 'rgb(240, 242, 245)'],
+    ['dark', 'rgba(255, 255, 255, 0.06)'],
+  ] as const)('preserves the %s picker hover background', (theme, expected) => {
+    const { container, dispose } = createExactThemeRoot(theme);
+    const result = render(
+      <button
+        data-testid="picker-row"
+        className="sto-navigation-item sto-navigation-item--picker"
+        data-sto-state="hover"
+      />,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('picker-row')).backgroundColor).toBe(expected);
+    result.unmount();
+    dispose();
+  });
+
+  it.each([
+    ['light', 'rgb(228, 228, 228)'],
+    ['dark', 'rgb(40, 40, 40)'],
+  ] as const)('preserves the %s selected session hover background', (theme, expected) => {
+    const { container, dispose } = createExactThemeRoot(theme);
+    const result = render(
+      <div
+        data-testid="session-row"
+        className="sto-navigation-item sto-navigation-item--session"
+        data-selected="true"
+        data-sto-state="hover"
+      />,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('session-row')).backgroundColor).toBe(expected);
+    result.unmount();
+    dispose();
+  });
+
+  it.each([
+    ['light', 'rgba(0, 0, 0, 0.06)'],
+    ['dark', 'rgba(255, 255, 255, 0.08)'],
+  ] as const)('preserves the %s collapsed navigation hover background', (theme, expected) => {
+    const { container, dispose } = createExactThemeRoot(theme);
+    const result = render(
+      <a
+        data-testid="collapsed-row"
+        className="sto-navigation-item sto-navigation-item--collapsed"
+        data-sto-state="hover"
+      />,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('collapsed-row')).backgroundColor).toBe(expected);
+    result.unmount();
+    dispose();
+  });
+
+  it.each([
+    ['light', 'rgba(0, 0, 0, 0)', 'rgb(122, 132, 148)'],
+    ['dark', 'rgba(0, 0, 0, 0)', 'rgba(255, 255, 255, 0.5)'],
+  ] as const)('preserves the %s collapsed navigation default pixels', (theme, background, foreground) => {
+    const { container, dispose } = createExactThemeRoot(theme);
+    const result = render(
+      <a data-testid="collapsed-default" className="sto-navigation-item sto-navigation-item--collapsed" />,
+      { container },
+    );
+    const computed = getComputedStyle(result.getByTestId('collapsed-default'));
+    expect(computed.backgroundColor).toBe(background);
+    expect(computed.color).toBe(foreground);
+    result.unmount();
+    dispose();
+  });
+
+  it.each(themes)('preserves the %s collapsed navigation selected pixels', (theme) => {
+    const { container, dispose } = createExactThemeRoot(theme);
+    const result = render(
+      <a
+        data-testid="collapsed-selected"
+        className="sto-navigation-item sto-navigation-item--collapsed"
+        aria-current="page"
+      />,
+      { container },
+    );
+    const computed = getComputedStyle(result.getByTestId('collapsed-selected'));
+    expect(computed.backgroundColor).toBe('rgb(255, 111, 0)');
+    expect(computed.color).toBe('rgb(255, 255, 255)');
+    result.unmount();
+    dispose();
   });
 });
 

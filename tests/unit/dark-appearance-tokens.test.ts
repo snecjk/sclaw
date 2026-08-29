@@ -234,7 +234,7 @@ describe('dark appearance semantic tokens', () => {
       /\.sto-navigation-item\s*\{[^}]*color:\s*var\(--sto-sidebar-text-default\)/s,
     );
     expect(recipesCss).toMatch(
-      /\.sto-navigation-item:is\(\[aria-current='page'\], \[aria-selected='true'\]\)[^}]*color:\s*var\(--sto-sidebar-text-active\)/s,
+      /\.sto-navigation-item:is\(\[aria-current='page'\], \[aria-selected='true'\], \[data-selected='true'\]\)[^}]*color:\s*var\(--sto-sidebar-text-active\)/s,
     );
   });
 

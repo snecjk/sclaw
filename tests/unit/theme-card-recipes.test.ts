@@ -79,8 +79,15 @@ describe('semantic card color recipes', () => {
     );
     expect(connectorCard).toContain('rounded-2xl border px-4');
     expect(skillCard).toContain('rounded-2xl border p-4');
-    expect(moreAppsCss).toMatch(/\.app-market__row\s*\{[\s\S]*border:\s*0\.8px solid var\(--ma-card-border\);[\s\S]*border-radius:\s*18px;/);
-    expect(moreAppsCss).toMatch(/\.more-apps-card\s*\{[\s\S]*border:\s*1px solid var\(--ma-border\);[\s\S]*border-radius:\s*14px;/);
+    for (const [selector, borderWidth, borderRadius] of [
+      ['app-market__row', '0.8px', '18px'],
+      ['more-apps-card', '1px', '14px'],
+    ] as const) {
+      const block = moreAppsCss.match(new RegExp(`\\.page-more-apps \\.${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+      expect(block).toContain(`border-width: ${borderWidth}`);
+      expect(block).toContain(`border-radius: ${borderRadius}`);
+      expect(block).not.toMatch(/(?:background|border-color|box-shadow)\s*:/);
+    }
   });
 
   it('uses one sibling overlay action across clickable collection card families', () => {

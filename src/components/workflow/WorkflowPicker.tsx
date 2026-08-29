@@ -193,7 +193,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     const sectionTitleBaseClass =
       'sticky z-10 flex h-6 w-full items-center bg-white px-2 py-1 text-left text-[12px] font-medium leading-4 text-[#86909C] dark:bg-[var(--sto-surface-primary)] dark:text-[var(--sto-text-tertiary)]';
     const itemClass =
-      'sto-navigation-item flex h-8 w-full items-center gap-1.5 rounded-lg px-2 text-left transition-colors';
+      'sto-navigation-item sto-navigation-item--picker flex h-8 w-full items-center gap-1.5 rounded-lg px-2 text-left transition-colors';
     const itemIconClass = 'h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground';
     const itemTitleClass = 'max-w-[45%] shrink-0 truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground';
     const itemDescriptionClass = 'min-w-0 flex-1 truncate text-[10px] font-normal leading-3.5 text-[#86909C] dark:text-[var(--sto-text-tertiary)]';

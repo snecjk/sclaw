@@ -101,7 +101,7 @@ export function SidebarProjectSessionRow({
         aria-hidden
       />
       <div
-        aria-current={isActive ? 'page' : undefined}
+        data-selected={isActive ? 'true' : undefined}
         className={cn(
           'group relative flex h-8 w-full items-center rounded-lg transition-colors',
           isActive
@@ -111,6 +111,7 @@ export function SidebarProjectSessionRow({
       >
         <button
           type="button"
+          aria-current={isActive ? 'page' : undefined}
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}

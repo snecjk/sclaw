@@ -1343,7 +1343,7 @@ export const skillPickerListClass = 'h-full min-h-0 overflow-y-auto';
 
 /** 技能 Picker 列表行 */
 export const skillPickerRowClass = cn(
-  'sto-navigation-item flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+  'sto-navigation-item sto-navigation-item--picker flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors',
 );
 
 /** 技能 Picker 搜索命中高亮（Brand-6） */
@@ -1712,7 +1712,7 @@ export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinn
 export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';
 
 /** 最近分组内会话选中底 — light #DCDCDC；dark 走 --sto-sidebar-subitem-active-bg */
-export const sidebarRecentSessionActiveClass = 'sto-navigation-item';
+export const sidebarRecentSessionActiveClass = 'sto-navigation-item sto-navigation-item--session';
 
 /**
  * 侧栏单操作行尾槽：标题预留与 28px 点击热区等宽，槽位贴行右缘。

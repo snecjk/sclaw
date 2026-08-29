@@ -3215,7 +3215,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/layout/sidebar-project-session-row.tsx::pageDarkUtility::dark:bg-::inter-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div aria-current={is::1",
+    "key": "src/components/layout/sidebar-project-session-row.tsx::pageDarkUtility::dark:bg-::inter-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div data-selected={i::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -3227,7 +3227,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/layout/sidebar-project-session-row.tsx::rawColor::#DCDCDC::sName="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div aria-c::1",
+    "key": "src/components/layout/sidebar-project-session-row.tsx::rawColor::#DCDCDC::sName="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div data-s::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -3451,14 +3451,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/layout/Sidebar.tsx::pageDarkUtility::dark:bg-::g-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/layout/Sidebar.tsx::pageDarkUtility::dark:text-::0] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]' : 'text-[var(--sto-sidebar-co::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/components/layout/Sidebar.tsx::pageDarkUtility::dark:bg-::? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] dark:bg-[var(--sto-brand-6)]' : 'text-[var(--sto-sid::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -3528,18 +3520,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/components/layout/Sidebar.tsx::rawColor::#DCDCDC::.5 ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border'; const SCLAW_BROWSER_SIDEBAR_PRESERVE_SELEC::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/layout/Sidebar.tsx::rawColor::#ff8d2a::e ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[v::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/layout/Sidebar.tsx::rawColor::#d95700::[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[var(--sto-brand-6)] d::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/layout/Sidebar.tsx::rawColor::#ff8d2a:::text-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]' : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_s::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

@@ -149,7 +149,7 @@ describe('app shell surface tokens (Stage 4)', () => {
     }
 
     expect(recipes).toMatch(/\.sto-navigation-item:is\(:hover,[^}]*background-color:\s*var\(--sto-sidebar-row-hover-bg\)/s);
-    expect(recipes).toMatch(/\.sto-navigation-item:is\(\[aria-current='page'\], \[aria-selected='true'\]\)[^}]*background-color:\s*var\(--sto-sidebar-nav-active-bg\)/s);
+    expect(recipes).toMatch(/\.sto-navigation-item:is\(\[aria-current='page'\], \[aria-selected='true'\], \[data-selected='true'\]\)[^}]*background-color:\s*var\(--sto-sidebar-nav-active-bg\)/s);
     expect(recipes).toMatch(/\.sto-navigation-item:is\(:focus-visible, :has\(:focus-visible\), \[data-sto-state='focus'\]\)[^}]*box-shadow:\s*var\(--sto-control-focus-shadow\)/s);
   });
 

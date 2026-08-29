@@ -4,7 +4,7 @@
  * 完整布局：展开 260px / 收起 72px 图标轨。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
+import { Link, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Wrench,
   Settings as SettingsIcon,
@@ -122,6 +122,7 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
+import { resolveSidebarPrimaryNavActiveOverride } from '@/lib/sidebar-primary-nav-active';
 import { pageLearningDomains } from '@/lib/learning-center-api';
 import {
   sidebarFooterMetaClass,
@@ -629,7 +630,7 @@ function SidebarScheduledTaskGroup({
   );
 }
 
-function SidebarNavLink({
+export function SidebarNavLink({
   to,
   end,
   icon,
@@ -649,7 +650,7 @@ function SidebarNavLink({
   badge?: ReactNode;
 }) {
   const { pathname } = useLocation();
-  // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态不生效。
+  // 路由与业务 override 共同决定同一份 class/aria-current 状态，避免路由组件另行注入选中语义。
   const isActive = isActiveOverride !== undefined
     ? isActiveOverride
     : matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
@@ -658,11 +659,9 @@ function SidebarNavLink({
     'relative flex items-center transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
     collapsed
       ? cn(
-          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-sm font-normal leading-5',
+          'sto-navigation-item sto-navigation-item--collapsed mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-sm font-normal leading-5',
           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
-          isActive
-            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
-            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:text-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
+          '[&_svg]:stroke-current [&_svg]:text-current',
         )
       : cn(
           'shrink-0 gap-[10px] text-[13px] leading-5',
@@ -671,9 +670,9 @@ function SidebarNavLink({
   );
 
   const link = (
-    <NavLink
+    <Link
       to={to}
-      end={end}
+      aria-label={collapsed ? label : undefined}
       aria-current={isActive ? 'page' : undefined}
       className={linkClassName}
       onClick={onClick}
@@ -683,7 +682,7 @@ function SidebarNavLink({
         <span className="min-w-0 flex-1 truncate">{label}</span>
       ) : null}
       {badge}
-    </NavLink>
+    </Link>
   );
 
   if (collapsed) {
@@ -1812,13 +1811,6 @@ export function Sidebar() {
         <div className="flex shrink-0 flex-col gap-0">
         <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
-  // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
-  const shouldDimHome = Boolean(
-    (currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY)
-    || pendingProjectId,
-  );
-  const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
-  
   // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
@@ -1842,11 +1834,12 @@ export function Sidebar() {
       }
     : undefined;
   
-  const myTasksActiveOverride =
-    item.to === '/my-tasks' && location.pathname.startsWith('/workflow')
-      ? true
-      : undefined;
-  const itemActiveOverride = myTasksActiveOverride ?? homeIsActiveOverride;
+  const itemActiveOverride = resolveSidebarPrimaryNavActiveOverride({
+    to: item.to,
+    pathname: location.pathname,
+    currentSessionKey,
+    pendingProjectId,
+  });
 
   return (
     <div key={item.to} className="min-w-0">

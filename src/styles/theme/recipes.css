@@ -269,7 +269,7 @@
     color: var(--sto-navigation-menu-hover-foreground);
   }
 
-  .sto-navigation-item:is([aria-current='page'], [aria-selected='true']),
+  .sto-navigation-item:is([aria-current='page'], [aria-selected='true'], [data-selected='true']),
   .sto-navigation-item[data-state='open'] {
     --sto-disabled-source-background: var(--sto-sidebar-nav-active-bg);
     --sto-disabled-source-foreground: var(--sto-sidebar-text-active);
@@ -305,6 +305,47 @@
     --sto-disabled-source-foreground: var(--sto-text-primary);
     background-color: var(--sto-control-active-bg);
     color: var(--sto-text-primary);
+  }
+
+  .sto-navigation-item--picker:is(:hover, :focus-visible, :has(:focus-visible), [data-sto-state='hover'], [data-sto-state='focus']) {
+    background-color: var(--sto-navigation-picker-hover-background);
+  }
+
+  .sto-navigation-item--session[data-selected='true']:is(:hover, [data-sto-state='hover']) {
+    background-color: var(--sto-navigation-selected-hover-background);
+  }
+
+  .sto-navigation-item--collapsed {
+    --sto-disabled-source-background: var(--sto-navigation-collapsed-background);
+    --sto-disabled-source-border: var(--sto-navigation-collapsed-background);
+    --sto-disabled-source-foreground: var(--sto-navigation-collapsed-foreground);
+    background-color: var(--sto-navigation-collapsed-background);
+    border-color: var(--sto-navigation-collapsed-background);
+    color: var(--sto-navigation-collapsed-foreground);
+  }
+
+  .sto-navigation-item--collapsed:is(:hover, :focus-visible, [data-sto-state='hover'], [data-sto-state='focus']) {
+    background-color: var(--sto-navigation-collapsed-hover-background);
+  }
+
+  .sto-navigation-item--collapsed:is([aria-current='page'], [data-selected='true']) {
+    --sto-disabled-source-background: var(--sto-navigation-collapsed-selected-background);
+    --sto-disabled-source-foreground: var(--sto-navigation-collapsed-selected-foreground);
+    background-color: var(--sto-navigation-collapsed-selected-background);
+    color: var(--sto-navigation-collapsed-selected-foreground);
+    box-shadow: var(--sto-navigation-collapsed-selected-shadow);
+  }
+
+  .sto-navigation-item--collapsed:is([aria-current='page'], [data-selected='true']):is(:hover, [data-sto-state='hover']) {
+    background-color: var(--sto-navigation-collapsed-selected-hover-background);
+  }
+
+  .sto-navigation-item--collapsed:is([aria-current='page'], [data-selected='true']):active {
+    background-color: var(--sto-navigation-collapsed-selected-active-background);
+  }
+
+  .sto-navigation-item--collapsed:is([aria-current='page'], [data-selected='true']):focus-visible {
+    box-shadow: var(--sto-navigation-collapsed-selected-shadow), var(--sto-control-focus-shadow);
   }
 
   /* Segment track is a surface; items preserve Radix active/inactive. */

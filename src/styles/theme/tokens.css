@@ -202,6 +202,16 @@
     --sto-navigation-menu-foreground: hsl(var(--popover-foreground));
     --sto-navigation-menu-hover-background: hsl(var(--muted));
     --sto-navigation-menu-hover-foreground: hsl(var(--foreground));
+    --sto-navigation-picker-hover-background: #f0f2f5;
+    --sto-navigation-selected-hover-background: var(--sto-sidebar-row-hover-bg);
+    --sto-navigation-collapsed-background: transparent;
+    --sto-navigation-collapsed-foreground: var(--sto-sidebar-collapsed-nav-icon-idle);
+    --sto-navigation-collapsed-hover-background: rgba(0, 0, 0, 0.06);
+    --sto-navigation-collapsed-selected-background: var(--sto-brand-6);
+    --sto-navigation-collapsed-selected-foreground: #ffffff;
+    --sto-navigation-collapsed-selected-hover-background: #ff8d2a;
+    --sto-navigation-collapsed-selected-active-background: #d95700;
+    --sto-navigation-collapsed-selected-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
     --sto-overlay-background: hsl(var(--card));
     --sto-overlay-border: hsl(var(--border));
     --sto-overlay-foreground: hsl(var(--popover-foreground));
@@ -396,6 +406,8 @@
     --sto-segment-plain-hover-background: var(--sto-control-hover-bg);
     --sto-segment-plain-track-background: var(--sto-surface-secondary);
     --sto-segment-plain-selected-foreground: var(--sto-text-primary);
+    --sto-navigation-picker-hover-background: rgb(255 255 255 / 6%);
+    --sto-navigation-collapsed-hover-background: rgb(255 255 255 / 8%);
     --sto-overlay-background: var(--sto-surface-elevated);
     --sto-overlay-border: var(--sto-border-default);
     --sto-overlay-foreground: var(--sto-text-primary);

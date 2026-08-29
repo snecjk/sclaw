@@ -93,7 +93,7 @@ export function SidebarRecentSessionRow({
   return (
     <div className={cn('relative flex w-full min-w-0 items-center', className)}>
       <div
-        aria-current={isActive ? 'page' : undefined}
+        data-selected={isActive ? 'true' : undefined}
         className={cn(
           'group relative flex h-8 w-full items-center rounded-lg transition-colors',
           isActive
@@ -103,6 +103,7 @@ export function SidebarRecentSessionRow({
       >
         <button
           type="button"
+          aria-current={isActive ? 'page' : undefined}
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
