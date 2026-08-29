@@ -104,6 +104,43 @@ describe('canonical skill store', () => {
     });
   });
 
+  it('fills missing manifest metadata from SKILL.md frontmatter', async () => {
+    const store = await import('../../electron/services/skills/canonical-store');
+    const skillDir = join(tempRoot, 'users', 'u1', 'skills', 'customer-anomaly-daily-report');
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      [
+        '---',
+        'name: customer-anomaly-daily-report',
+        'title: 网点客户异常监控',
+        'description: 客户异常监控生成技能。用户要求异常监控时触发。',
+        'author: SAI',
+        '---',
+        '',
+        '# 客户异常监控',
+      ].join('\n'),
+      'utf-8',
+    );
+    await store.upsertSkillEntry({
+      slug: 'customer-anomaly-daily-report',
+      scope: 'user',
+      userCode: 'u1',
+      version: '1.0.0',
+      source: 'local',
+      enabled: true,
+    });
+
+    const desired = await store.listDesiredPackages({ userCode: 'u1', agentId: 'main' });
+
+    expect(desired[0]).toMatchObject({
+      slug: 'customer-anomaly-daily-report',
+      name: '网点客户异常监控',
+      description: '客户异常监控生成技能。用户要求异常监控时触发。',
+      author: 'SAI',
+    });
+  });
+
   it('falls back to legacy lock.json when manifest is missing', async () => {
     const store = await import('../../electron/services/skills/canonical-store');
     const openclawDir = join(tempRoot, 'openclaw');

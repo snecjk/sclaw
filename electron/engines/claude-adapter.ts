@@ -2,6 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
+import { routeSessionSkills } from '../services/skills/session-skill-router';
+import { extractClaudeSkillSlugs } from '../services/skills/session-skill-usage';
+import {
+  completeSkillTurn,
+  failSkillTurn,
+  markSkillUsed,
+} from '../services/skills/session-skill-state-service';
 import { logger } from '../utils/logger';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { sclawAgentExtensionState } from '../agent-extensions/runtime';
@@ -729,6 +736,7 @@ export async function consumeClaudeQuery(
   let title: string | undefined;
   let seq = recoveryOptions?.initialSeq ?? 0;
   let seenResult = false;
+  let resultFailed = false;
   let completionEmitted = false;
   let completionDeferred = false;
   let errorThrown = false;
@@ -947,6 +955,8 @@ export async function consumeClaudeQuery(
         flushPendingToolInputDelta();
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
+        resultFailed = typeof (message as { subtype?: unknown }).subtype === 'string'
+          && (message as { subtype: string }).subtype.startsWith('error_');
         seenResult = true;
         // A main-agent result may merely mean "waiting for background tasks".
         // Keep the same app run alive so task_notification/auto-continuation
@@ -1032,6 +1042,16 @@ export async function consumeClaudeQuery(
         // isClaudeRunFragment guard keeps these non-terminal (sending stays true)
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
+          for (const slug of extractClaudeSkillSlugs(nextEntry.content)) {
+            await markSkillUsed(sessionKey, runId, slug).catch((error) => {
+              logger.warn('[skill-router] failed to persist Claude skill usage', {
+                sessionKey,
+                runId,
+                slug,
+                error: String(error),
+              });
+            });
+          }
           clearPendingToolInputDelta();
           streamContent.reset();
           streamThinking = '';
@@ -1076,12 +1096,22 @@ export async function consumeClaudeQuery(
       mode: timing.mode,
       details: { seenResult, completionEmitted, pendingTaskCount: pendingTaskIds.size },
     });
+    const finishSkillTurn = resultFailed ? failSkillTurn(sessionKey, runId) : completeSkillTurn(sessionKey, runId);
+    await finishSkillTurn.catch((error) => {
+      logger.warn('[skill-router] failed to complete Claude skill turn', {
+        sessionKey,
+        runId,
+        error: String(error),
+      });
+    });
   } catch (error) {
     errorThrown = true;
-    if (!(
+    const isSuppressedMissingConversation = Boolean(
       recoveryOptions?.suppressMissingConversationFailure
       && isMissingClaudeConversationError(error)
-    )) {
+    );
+    if (!isSuppressedMissingConversation) {
+      await failSkillTurn(sessionKey, runId).catch(() => {});
       emitEngineEvent({ type: 'turn.failed', errorMessage: String(error) });
     }
     throw error;
@@ -1154,6 +1184,7 @@ async function startClaudeQuery(
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   const launchStartedAt = Date.now();
+  let trackingRunId: string | undefined;
   try {
     const existing = await ensureClaudeRegistryEntry(sessionKey);
     logger.info('[claude-adapter] ensureClaudeRegistryEntry', existing);
@@ -1180,6 +1211,7 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
+    trackingRunId = runId;
     const queryMode = existing?.sessionId ? 'resume' as const : 'new' as const;
     logClaudeQueryTiming('launch_prepared', {
       sessionKey,
@@ -1189,6 +1221,15 @@ async function startClaudeQuery(
       details: { hasExistingSession: Boolean(existing?.sessionId) },
     });
     const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
+    const skillRoute = await routeSessionSkills({
+      sessionKey,
+      runId,
+      agentId,
+      engine: 'claude',
+      mode: options?.permissionProfile === undefined ? 'interactive' : 'scheduled',
+      query: options?.userPrompt ?? (typeof prompt === 'string' ? prompt : ''),
+      rawMessage: typeof prompt === 'string' ? prompt : options?.userPrompt,
+    });
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
@@ -1235,7 +1276,7 @@ async function startClaudeQuery(
       permissionMode,
       allowDangerouslySkipPermissions,
       settingSources: ['user' as const],
-      skills: 'all' as const,
+      skills: skillRoute.selected.map((skill) => skill.slug),
       // Enable token-level streaming events (SDKPartialAssistantMessage) so the
       // consumer loop can forward text deltas to the renderer in real time.
       includePartialMessages: true,
@@ -1435,6 +1476,7 @@ async function startClaudeQuery(
       mode: queryMode,
     });
     void consumeWithMissingSessionRecovery().catch((error) => {
+      void failSkillTurn(sessionKey, runId).catch(() => {});
       logger.error('Claude query failed:', error);
       cacheClaudeErrorMessage(sessionKey, error);
       void patchEngineSessionRegistryEntry(sessionKey, {
@@ -1448,6 +1490,7 @@ async function startClaudeQuery(
     });
     return { success: true, result: { runId } };
   } catch (error) {
+    if (trackingRunId) void failSkillTurn(sessionKey, trackingRunId).catch(() => {});
     return { success: false, error: String(error) };
   }
 }

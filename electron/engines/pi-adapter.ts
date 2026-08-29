@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getAgentPreferredModel } from '../utils/agent-config';
 import { getApiKey } from '../utils/secure-storage';
 import {
@@ -7,14 +7,19 @@ import {
 } from '../services/providers/provider-store';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
 import {
-  getPiAgentSkillsDir,
   getPiConfigDir,
-  getPiSkillsDir,
   getPiSessionsDir,
 } from '../utils/paths';
 import { logger } from '../utils/logger';
 import { getPiRuntimeService } from '../services/pi-runtime-service';
 import { getSkillManager } from '../services/skills/skill-manager';
+import { routeSessionSkills, type RoutedSessionSkill } from '../services/skills/session-skill-router';
+import { extractPiReadPaths, resolvePiReadSkillSlug } from '../services/skills/session-skill-usage';
+import {
+  completeSkillTurn,
+  failSkillTurn,
+  markSkillUsed,
+} from '../services/skills/session-skill-state-service';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { resolveAgentIdForSessionKey } from './session-engine';
 import {
@@ -40,13 +45,34 @@ import type {
 
 const BUILTIN_PI_PROVIDERS = new Set(['anthropic', 'openai', 'google', 'openrouter']);
 const attachedEventSinks = new WeakSet<object>();
+const routedPiSkills = new Map<string, RoutedSessionSkill[]>();
+
+function createSkillSetHash(skills: RoutedSessionSkill[]): string {
+  return createHash('sha256')
+    .update(skills.map((skill) => `${skill.slug}@${skill.sourceHash}`).sort().join('\n'))
+    .digest('hex');
+}
 
 function attachEventSink(ctx: EngineAdapterContext): void {
   const sink = ctx.eventSink ?? ctx.gatewayManager;
   if (!sink || attachedEventSinks.has(sink)) return;
   attachedEventSinks.add(sink);
   const runtime = getPiRuntimeService();
-  runtime.on('event', (event) => sink.emit('chat:message', toLegacyChatMessagePayload(event)));
+  runtime.on('event', (event) => {
+    if (event.sessionKey && event.runId && event.type === 'message.final') {
+      const selected = routedPiSkills.get(event.sessionKey) ?? [];
+      for (const readPath of extractPiReadPaths(event.message)) {
+        const slug = resolvePiReadSkillSlug(selected, readPath);
+        if (slug) void markSkillUsed(event.sessionKey, event.runId, slug).catch(() => {});
+      }
+    }
+    if (event.sessionKey && event.runId && event.type === 'turn.completed') {
+      void completeSkillTurn(event.sessionKey, event.runId).catch(() => {});
+    } else if (event.sessionKey && event.runId && ['turn.failed', 'turn.aborted', 'turn.interrupted'].includes(event.type)) {
+      void failSkillTurn(event.sessionKey, event.runId).catch(() => {});
+    }
+    sink.emit('chat:message', toLegacyChatMessagePayload(event));
+  });
   runtime.on('exit', ({ code, sessions }) => {
     for (const sessionKey of sessions) {
       const event: NormalizedEngineEvent = {
@@ -99,7 +125,8 @@ async function resolvePiModel(
 
 async function buildPiSessionConfig(
   sessionKey: string,
-  params?: Pick<EngineSendWithMediaParams, 'systemPromptAppend' | 'media' | 'allowedRoots' | 'cwdOverride'>,
+  runId?: string,
+  params?: EngineSendWithMediaParams,
 ): Promise<{ config: PiSessionConfig; entry: EngineSessionRegistryEntry }> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
   const agentId = existing?.agentId || await resolveAgentIdForSessionKey(sessionKey);
@@ -111,6 +138,19 @@ async function buildPiSessionConfig(
     { notifyAfterBatch: false },
   );
   const selection = await resolvePiModel(agentId, existing);
+  const selectedSkills = runId && params
+    ? (await routeSessionSkills({
+        sessionKey,
+        runId,
+        agentId,
+        engine: 'pi',
+        mode: params.allowedRoots?.length ? 'scheduled' : 'interactive',
+        query: params.message,
+        rawMessage: params.message,
+        attachmentNames: params.media?.map((item) => item.fileName),
+      })).selected
+    : routedPiSkills.get(sessionKey) ?? [];
+  if (runId) routedPiSkills.set(sessionKey, selectedSkills);
   const workspaceNote = [
     '# SClaw runtime context',
     `The default working directory is: ${cwd}`,
@@ -139,7 +179,13 @@ async function buildPiSessionConfig(
     model: selection.model,
     media: params?.media,
     scheduledAllowedRoots: params?.allowedRoots,
-    skillRoots: [getPiSkillsDir(), getPiAgentSkillsDir(agentId)],
+    skillRoots: selectedSkills.map((skill) => skill.sourceDir),
+    selectedSkills: selectedSkills.map((skill) => ({
+      slug: skill.slug,
+      path: skill.sourceDir,
+      sourceHash: skill.sourceHash,
+    })),
+    skillSetHash: createSkillSetHash(selectedSkills),
   };
   return { config, entry };
 }
@@ -148,10 +194,13 @@ async function sendPiMessage(
   ctx: EngineAdapterContext,
   params: EngineSendWithMediaParams,
 ): Promise<{ success: boolean; result?: { runId?: string }; error?: string }> {
+  const runId = randomUUID();
   try {
     attachEventSink(ctx);
-    const { config, entry } = await buildPiSessionConfig(params.sessionKey, params);
-    const runId = randomUUID();
+    const { config, entry } = await buildPiSessionConfig(params.sessionKey, runId, params);
+    for (const match of params.message.matchAll(/(?:^|\s)\/skill:([a-z0-9._-]+)/gi)) {
+      await markSkillUsed(params.sessionKey, runId, match[1]);
+    }
     await upsertEngineSessionRegistryEntry(entry);
     let result: PiPromptResult;
     try {
@@ -179,6 +228,7 @@ async function sendPiMessage(
     });
     return { success: true, result: { runId: result.runId } };
   } catch (error) {
+    await failSkillTurn(params.sessionKey, runId).catch(() => {});
     logger.warn('[pi-adapter] send failed', { sessionKey: params.sessionKey, error: String(error) });
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -191,6 +241,7 @@ export async function deletePiSession(sessionKey: string): Promise<void> {
     payload: { sessionFile: entry?.piSessionFile },
   }).catch((error) => logger.warn('[pi-adapter] runtime delete failed', { sessionKey, error: String(error) }));
   await deleteEngineSessionRegistryEntry(sessionKey);
+  routedPiSkills.delete(sessionKey);
 }
 
 export const piAdapter: EngineAdapter = {

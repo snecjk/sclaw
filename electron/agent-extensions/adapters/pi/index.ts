@@ -108,11 +108,11 @@ export async function buildPiAgentExtensions(
       || !isValidAgentExtensionId(definition.id)
     ) continue;
     usedExtensionIds.add(definition.id);
-    extensionLogger.debug('[agent-extension] extension.build.start', {
-      engine: 'pi',
-      extensionId: definition.id,
-      mode: input.mode,
-    });
+    // extensionLogger.debug('[agent-extension] extension.build.start', {
+    //   engine: 'pi',
+    //   extensionId: definition.id,
+    //   mode: input.mode,
+    // });
     const missingCapability = definition.requiredCapabilities?.find((token) => !capabilities.has(token));
     if (missingCapability) {
       diagnostics.push({
@@ -305,27 +305,27 @@ export async function buildPiAgentExtensions(
       continue;
     }
     try {
-      const nativeStartedAt = Date.now();
-      extensionLogger.debug('[agent-extension] native.build.start', {
-        engine: 'pi',
-        extensionId: definition.id,
-        mode: native.mode ?? 'augment',
-      });
+      // const nativeStartedAt = Date.now();
+      // extensionLogger.debug('[agent-extension] native.build.start', {
+      //   engine: 'pi',
+      //   extensionId: definition.id,
+      //   mode: native.mode ?? 'augment',
+      // });
       const nativeExtensions = normalizeNativeExtensions(await native.build(contextFor()));
       extensions.push(...nativeExtensions);
       for (const name of native.claims?.tools ?? []) {
         usedToolNames.add(name.trim().toLowerCase());
         enabledToolNames.push(name);
       }
-      extensionLogger.info('[agent-extension] native.build.completed', {
-        engine: 'pi',
-        extensionId: definition.id,
-        mode: native.mode ?? 'augment',
-        inlineExtensions: nativeExtensions.map((extension) => (
-          typeof extension === 'function' ? 'anonymous' : extension.name
-        )),
-        durationMs: Date.now() - nativeStartedAt,
-      });
+      // extensionLogger.info('[agent-extension] native.build.completed', {
+      //   engine: 'pi',
+      //   extensionId: definition.id,
+      //   mode: native.mode ?? 'augment',
+      //   inlineExtensions: nativeExtensions.map((extension) => (
+      //     typeof extension === 'function' ? 'anonymous' : extension.name
+      //   )),
+      //   durationMs: Date.now() - nativeStartedAt,
+      // });
     } catch (error) {
       diagnostics.push({
         extensionId: definition.id,

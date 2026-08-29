@@ -62,6 +62,8 @@ export interface AppSettings {
   selectedBundles: string[];
   enabledSkills: string[];
   disabledSkills: string[];
+  /** Route a bounded Skill set per turn. When false, engines load every enabled installed Skill. */
+  skillDiscoveryEnabled: boolean;
 
   // DingTalk dws
   dingTalkDwsEnabled: boolean;
@@ -129,6 +131,7 @@ function createDefaultSettings(): AppSettings {
     selectedBundles: ['productivity', 'developer'],
     enabledSkills: [],
     disabledSkills: [],
+    skillDiscoveryEnabled: true,
 
     // DingTalk dws
     dingTalkDwsEnabled: true,

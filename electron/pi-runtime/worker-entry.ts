@@ -40,6 +40,9 @@ type PiSession = {
   configKey: string;
   activeRunId?: string;
   settledRunId?: string;
+  lastRunId?: string;
+  lastRunStatus?: 'completed' | 'failed';
+  lastRunError?: string;
   streamingAssistant?: Record<string, unknown> & { role: 'assistant'; content: Array<Record<string, unknown>> };
   unsubscribe: () => void;
 };
@@ -81,6 +84,8 @@ function summarizeSessionConfig(config: PiSessionConfig): Record<string, unknown
     })),
     scheduledAllowedRoots: config.scheduledAllowedRoots ?? [],
     skillRoots: config.skillRoots ?? [],
+    selectedSkills: config.selectedSkills?.map((item) => item.slug) ?? [],
+    skillSetHash: config.skillSetHash ?? '',
   };
 }
 
@@ -139,6 +144,7 @@ function configKey(config: PiSessionConfig): string {
       : '',
     roots: config.scheduledAllowedRoots ?? [],
     skillRoots: config.skillRoots ?? [],
+    skillSetHash: config.skillSetHash ?? '',
     systemPrompt: config.systemPrompt ?? '',
   });
 }
@@ -178,7 +184,9 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     agentDir: config.agentDir,
     settingsManager,
     noExtensions: true,
-    noSkills: false,
+    // Only explicit per-turn paths are loaded. Avoid scanning the full global
+    // and agent Skill roots before filtering them down.
+    noSkills: true,
     additionalSkillPaths: config.skillRoots ?? [],
     skillsOverride: (current) => ({
       ...current,
@@ -326,6 +334,9 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
         if (message?.role === 'assistant') {
           const errorMessage = getPiAssistantError(message);
           if (errorMessage) {
+            entry.lastRunId = runId;
+            entry.lastRunStatus = 'failed';
+            entry.lastRunError = errorMessage;
             emit(config.sessionKey, {
               type: 'turn.failed', sessionKey: config.sessionKey, runId, errorMessage,
             });
@@ -419,6 +430,9 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       const runId = String(payload.runId || randomUUID());
       entry.activeRunId = runId;
       entry.settledRunId = undefined;
+      entry.lastRunId = runId;
+      entry.lastRunStatus = undefined;
+      entry.lastRunError = undefined;
       entry.streamingAssistant = undefined;
       const result: PiPromptResult = { runId, sessionId: entry.sessionId, sessionFile: entry.sessionFile };
       respond(request.requestId, true, result);
@@ -437,6 +451,9 @@ async function handle(request: PiWorkerRequest): Promise<void> {
         .then(() => {
           if (!shouldCompletePiRun(entry.activeRunId, entry.settledRunId, runId)) return;
           logPiCore('session.prompt.completed', { sessionKey: config.sessionKey, runId });
+          entry.lastRunId = runId;
+          entry.lastRunStatus = 'completed';
+          entry.lastRunError = undefined;
           emit(config.sessionKey, { type: 'turn.completed', sessionKey: config.sessionKey, runId });
           entry.activeRunId = undefined;
           entry.settledRunId = undefined;
@@ -444,8 +461,12 @@ async function handle(request: PiWorkerRequest): Promise<void> {
         })
         .catch((error: unknown) => {
           if (entry.activeRunId !== runId) return;
-          logPiCore('session.prompt.failed', { sessionKey: config.sessionKey, runId, error: serializeError(error).message });
-          emit(config.sessionKey, { type: 'turn.failed', sessionKey: config.sessionKey, runId, errorMessage: serializeError(error).message });
+          const errorMessage = serializeError(error).message;
+          entry.lastRunId = runId;
+          entry.lastRunStatus = 'failed';
+          entry.lastRunError = errorMessage;
+          logPiCore('session.prompt.failed', { sessionKey: config.sessionKey, runId, error: errorMessage });
+          emit(config.sessionKey, { type: 'turn.failed', sessionKey: config.sessionKey, runId, errorMessage });
           entry.activeRunId = undefined;
           entry.settledRunId = undefined;
           entry.streamingAssistant = undefined;
@@ -499,16 +520,22 @@ async function handle(request: PiWorkerRequest): Promise<void> {
         return;
       }
       const messages = entry.session.messages as unknown[];
+      const status = entry.activeRunId
+        ? 'active'
+        : entry.lastRunStatus === 'failed'
+          ? 'failed'
+          : 'completed';
       respond(request.requestId, true, {
-        status: entry.activeRunId ? 'active' : 'completed',
-        ...(entry.activeRunId ? { runId: entry.activeRunId } : {}),
+        status,
+        runId: entry.activeRunId ?? entry.lastRunId,
+        ...(status === 'failed' && entry.lastRunError ? { reason: entry.lastRunError } : {}),
         currentTurnMessages: messages,
         transcriptRevision: getPiTranscriptRevision(messages),
       });
       logPiCore('session.inspect.completed', {
         sessionKey: request.sessionKey ?? null,
-        status: entry.activeRunId ? 'active' : 'completed',
-        runId: entry.activeRunId ?? null,
+        status,
+        runId: entry.activeRunId ?? entry.lastRunId ?? null,
         messageCount: messages.length,
       });
       return;

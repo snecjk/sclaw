@@ -76,7 +76,7 @@ export function requireGatewayManager(ctx: EngineAdapterContext): GatewayManager
 }
 
 export interface EngineRuntimeInspection {
-  status: 'active' | 'completed' | 'not_started' | 'unknown';
+  status: 'active' | 'completed' | 'failed' | 'not_started' | 'unknown';
   runId?: string;
   currentTurnMessages?: unknown[];
   transcriptRevision?: string;

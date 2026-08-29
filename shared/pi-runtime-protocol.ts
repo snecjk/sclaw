@@ -32,6 +32,9 @@ export interface PiSessionConfig {
   scheduledAllowedRoots?: string[];
   /** SClaw-managed skill roots exposed to Pi. Project `.pi` resources stay disabled. */
   skillRoots?: string[];
+  /** Exact per-turn Skill selection; used for stable loader reuse and usage attribution. */
+  selectedSkills?: Array<{ slug: string; path: string; sourceHash: string }>;
+  skillSetHash?: string;
 }
 
 export interface PiWorkerRequest {
@@ -65,8 +68,9 @@ export interface PiHistoryResult {
 }
 
 export interface PiInspectResult {
-  status: 'active' | 'completed' | 'not_started';
+  status: 'active' | 'completed' | 'failed' | 'not_started';
   runId?: string;
   currentTurnMessages?: unknown[];
   transcriptRevision?: string;
+  reason?: string;
 }

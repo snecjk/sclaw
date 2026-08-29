@@ -561,6 +561,81 @@ describe('main chat runtime supervisor', () => {
     }
   });
 
+  it('finalizes Pi model errors immediately and never reconciles them as completed', async () => {
+    vi.useFakeTimers();
+    try {
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.handleEngineEvent({
+        type: 'turn.started', sessionKey: 'pi:main:session-error', runId: 'pi-run-error', seq: 1,
+      }, 'pi');
+      engine.getAdapterForSession.mockClear();
+      await supervisor.handleEngineEvent({
+        type: 'turn.failed',
+        sessionKey: 'pi:main:session-error',
+        runId: 'pi-run-error',
+        errorMessage: '405 gateway rejected request',
+        seq: 2,
+      }, 'pi');
+
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(supervisor.get('pi:main:session-error')).toMatchObject({
+        phase: 'failed',
+        error: '405 gateway rejected request',
+      });
+      expect(events.filter((event) => event.type === 'run.failed')).toHaveLength(1);
+      expect(events.some((event) => event.type === 'run.completed')).toBe(false);
+      expect(engine.getAdapterForSession).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses a failed Pi inspection as the terminal result during transcript settling', async () => {
+    vi.useFakeTimers();
+    try {
+      engine.getAdapterForSession.mockResolvedValue({
+        classifyFinalMessage: () => 'progress',
+        inspectRun: vi.fn(async () => ({
+          status: 'failed',
+          runId: 'pi-run-inspection-error',
+          reason: 'upstream request failed',
+          currentTurnMessages: [],
+          transcriptRevision: 'failed-revision',
+        })),
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.handleEngineEvent({
+        type: 'turn.started',
+        sessionKey: 'pi:main:session-inspection-error',
+        runId: 'pi-run-inspection-error',
+        seq: 1,
+      }, 'pi');
+      await supervisor.handleEngineEvent({
+        type: 'turn.completed',
+        sessionKey: 'pi:main:session-inspection-error',
+        runId: 'pi-run-inspection-error',
+        seq: 2,
+      }, 'pi');
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(supervisor.get('pi:main:session-inspection-error')).toMatchObject({
+        phase: 'failed',
+        error: 'upstream request failed',
+      });
+      expect(events.some((event) => event.type === 'run.failed')).toBe(true);
+      expect(events.some((event) => event.type === 'run.completed')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('aborts the engine and publishes interrupted when a policy deadline expires', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-04T05:10:00.000Z'));

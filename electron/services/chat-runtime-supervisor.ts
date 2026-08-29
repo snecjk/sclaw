@@ -596,6 +596,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.scheduleHistoryPoll(sessionKey);
     }
     if (event.type === 'turn.failed') {
+      if ((engineType ?? current.engineType) === 'pi') {
+        await this.publish({
+          ...current,
+          runId: event.runId ?? current.runId,
+          engineType: 'pi',
+          error: event.errorMessage,
+        }, 'run.failed', { error: event.errorMessage }, true);
+        return;
+      }
       this.scheduleErrorFinalization(sessionKey, event.runId ?? current.runId, event.errorMessage);
       return;
     }
@@ -886,6 +895,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         if (awaiting && !isTerminalChatRunPhase(awaiting.phase)) {
           this.startTranscriptSettle(awaiting, 'reconcile');
         }
+      } else if (inspection?.status === 'failed') {
+        const error = inspection.reason?.trim() || 'Engine run failed';
+        await this.publish({ ...latest, error }, 'run.failed', { error }, true);
       } else if (inspection?.status === 'not_started') {
         await this.publish({ ...latest, error: 'The engine did not start this run.' }, 'run.interrupted', {
           reason: 'engine-not-started',
@@ -1095,6 +1107,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
             if (!latest || latest.epoch !== epoch || isTerminalChatRunPhase(latest.phase)) return;
             await this.projectCurrentTranscript(latest, inspection.currentTurnMessages ?? []);
           });
+        }
+        if (inspection.status === 'failed') {
+          const error = inspection.reason?.trim() || 'Engine run failed';
+          await this.enqueueSession(sessionKey, async () => {
+            const latest = this.snapshots.get(sessionKey);
+            if (!latest || latest.epoch !== epoch || isTerminalChatRunPhase(latest.phase)) return;
+            await this.publish({ ...latest, error }, 'run.failed', { error }, true);
+          });
+          return;
         }
         if (inspection.status === 'completed' && inspection.transcriptRevision) {
           if (previousRevision === inspection.transcriptRevision) {

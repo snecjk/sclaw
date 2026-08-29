@@ -331,7 +331,19 @@ The Bash restriction is an application policy, not an operating-system sandbox.
 Pi does not support workflows in phase 1. It loads only SClaw-managed enabled
 global and agent-scoped skills projected from the engine-neutral skills store into
 Pi-owned `~/.stoclaw/pi/skills` and `~/.stoclaw/pi/agents/{agentId}/skills`
-directories. It does not read OpenClaw or Claude skill directories. Project `.pi`
+directories. Each conversation keeps a bounded, persistent local Skill lease set
+(8 for interactive sessions, 4 for scheduled runs); Pi receives only those exact
+paths and reuses its loader while the Skill-set hash is unchanged. Used Skills are
+retained for three following turns, unused selections for one, and agent-scoped
+Skills remain pinned. Claude sessions use the same router and pass the bounded slug
+set to the SDK instead of exposing every installed Skill. Hybrid remote routing uses
+dedicated memory-center Skill routing collection/index with keyword and embedding
+recall plus reciprocal-rank fusion, and degrades to local metadata matching.
+Users can disable Skill discovery from the chat Skill picker; Claude and Pi then
+load every enabled installed Skill and skip remote routing until it is enabled again.
+See [Session Skill routing](docs/session-skill-routing.md).
+
+Pi does not read OpenClaw or Claude skill directories. Project `.pi`
 packages, project-local skill discovery,
 extensions, MCP, prompt templates, and subagents remain disabled. Provider credentials
 are not persisted in Pi auth files. Set
