@@ -1,11 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { access, mkdir, readFile, rm, stat } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import type {
   AgentSession,
   AgentSessionEvent,
-  InlineExtension,
 } from '@earendil-works/pi-coding-agent';
 import type {
   PiPromptResult,
@@ -30,8 +29,8 @@ import {
   updatePiAssistantSnapshot,
 } from './event-policy';
 import { KeyedTaskQueue } from './keyed-task-queue';
-import { isPiToolPathAllowed, piBashViolatesScheduledPolicy } from './path-policy';
 import { filterPiSkills } from './skill-policy';
+import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
 
 type PiSession = {
   session: AgentSession;
@@ -125,41 +124,6 @@ function emit(sessionKey: string, event: NormalizedEngineEvent): void {
   post({ type: 'engine.event', sessionKey, event });
 }
 
-function scheduledGuardExtension(roots: string[]): InlineExtension {
-  return {
-    name: 'sclaw-scheduled-path-guard',
-    factory: (pi) => {
-      pi.on('tool_call', async (event) => {
-        const input = event.input as Record<string, unknown>;
-        if (event.toolName === 'bash') {
-          if (piBashViolatesScheduledPolicy(String(input.command ?? ''), roots)) {
-            logPiCore('tool.blocked', {
-              toolName: event.toolName,
-              reason: 'scheduled-bash-policy',
-              commandPreview: String(input.command ?? '').slice(0, 300),
-            });
-            return { block: true, reason: 'Scheduled Pi task command is outside the configured workspace/artifact roots' };
-          }
-          return undefined;
-        }
-        if (!['read', 'write', 'edit', 'grep', 'find', 'ls'].includes(event.toolName)) return undefined;
-        const requested = typeof input.path === 'string' && input.path.trim() ? input.path : roots[0];
-        if (!requested) return { block: true, reason: 'Scheduled Pi task has no configured workspace' };
-        const absolute = isAbsolute(requested) ? requested : resolve(roots[0] ?? process.cwd(), requested);
-        if (!(await isPiToolPathAllowed(absolute, roots))) {
-          logPiCore('tool.blocked', {
-            toolName: event.toolName,
-            reason: 'scheduled-path-policy',
-            requestedPath: requested,
-          });
-          return { block: true, reason: `Scheduled Pi task path is outside the configured roots: ${requested}` };
-        }
-        return undefined;
-      });
-    },
-  };
-}
-
 function configKey(config: PiSessionConfig): string {
   return JSON.stringify({
     cwd: config.cwd,
@@ -188,6 +152,15 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     compaction: { enabled: true },
     retry: { enabled: true, maxRetries: 2 },
   });
+  const unifiedExtensions = await buildPiAgentExtensions({
+    sessionKey: config.sessionKey,
+    cwd: config.cwd,
+    mode: config.scheduledAllowedRoots?.length ? 'scheduled' : 'interactive',
+    allowedRoots: config.scheduledAllowedRoots,
+  });
+  for (const diagnostic of unifiedExtensions.diagnostics) {
+    logPiCore('extension.diagnostic', diagnostic as unknown as Record<string, unknown>);
+  }
   const managedContextPath = join(config.agentDir, 'AGENTS.md');
   const loader = new sdk.DefaultResourceLoader({
     cwd: config.cwd,
@@ -212,9 +185,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
       `SClaw default workspace: ${config.cwd}. For interactive sessions this is a default working directory, not an access boundary.`,
       config.systemPrompt ?? '',
     ].filter(Boolean),
-    extensionFactories: config.scheduledAllowedRoots?.length
-      ? [scheduledGuardExtension(config.scheduledAllowedRoots)]
-      : [],
+    extensionFactories: unifiedExtensions.extensions,
   });
   await loader.reload();
   const loadedSkills = loader.getSkills();

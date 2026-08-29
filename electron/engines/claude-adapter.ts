@@ -4,6 +4,7 @@ import { dirname, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
 import { logger } from '../utils/logger';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
+import { sclawAgentExtensionState } from '../agent-extensions/runtime';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
@@ -1463,6 +1464,7 @@ function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
 }
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
+  sclawAgentExtensionState.clearSession(sessionKey);
   await ensureClaudeRuntimeReady();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   liveClaudeMessages.delete(sessionKey);

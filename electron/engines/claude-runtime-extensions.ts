@@ -34,6 +34,7 @@ import { logger } from '../utils/logger';
 import { PORTS } from '../utils/config';
 import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
 import { buildConnectorBashGateHooks } from '../connectors/claude-binary-gate';
+import { buildClaudeAgentExtensions } from '../agent-extensions/adapters/claude';
 
 export interface ClaudeRuntimeOptions {
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -264,6 +265,16 @@ export async function buildClaudeRuntimeOptions(
     } catch (error) {
       logger.warn(`[claude-runtime] extension ${extension.id} failed to build after ${Date.now() - start}ms`, error);
     }
+  }
+
+  const unified = await buildClaudeAgentExtensions({
+    sessionKey,
+    userPrompt,
+    mode: isScheduledTaskExecutionSessionKey(sessionKey) ? 'scheduled' : 'interactive',
+  });
+  mergeRuntimeOptions(options, unified.options);
+  for (const diagnostic of unified.diagnostics) {
+    logger.warn('[claude-runtime] unified extension diagnostic', diagnostic);
   }
 
   const result: ClaudeRuntimeOptions = {
