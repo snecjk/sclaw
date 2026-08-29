@@ -1,23 +1,20 @@
-import { BrowserWindow, nativeTheme, type WebContents } from 'electron';
+import { BrowserWindow, nativeTheme } from 'electron';
 import { getSetting, type AppSettings } from '../utils/store';
 import { getFloatIconWindow } from './float-icon-window';
 import { getSpriteWindow } from './sprite-window';
+import {
+  attachAppearanceReplay,
+  broadcastAppearanceState,
+  type StoAppearanceState,
+} from './appearance-replay';
 
-const STO_APPEARANCE_STATE_EVENT = 'sto:appearance-state';
-
-type StoAppearanceState = {
-  preference: AppSettings['theme'];
-  appearance: 'light' | 'dark';
-};
+export { attachAppearanceReplay };
 
 export const LIGHT_WINDOW_BACKGROUND = '#ededed';
 export const DARK_WINDOW_BACKGROUND = '#0d0d0d';
 const DEFAULT_THEME_PREFERENCE: AppSettings['theme'] = 'light';
 
 let nativeAppearanceObserverCleanup: (() => void) | null = null;
-let currentAppearanceState: StoAppearanceState | null = null;
-const lastPublishedStateByContents = new WeakMap<WebContents, string>();
-const appearanceReplayByContents = new WeakMap<WebContents, () => void>();
 
 export function resolveWindowBackgroundColor(isDark: boolean): string {
   return isDark ? DARK_WINDOW_BACKGROUND : LIGHT_WINDOW_BACKGROUND;
@@ -46,43 +43,6 @@ function updateOpaqueWindowBackgrounds(appearance: StoAppearanceState['appearanc
     if (!window.isDestroyed() && !transparentWindows.has(window)) {
       window.setBackgroundColor(background);
     }
-  }
-}
-
-function publishAppearanceState(contents: WebContents, state: StoAppearanceState): void {
-  const stateKey = `${state.preference}:${state.appearance}`;
-  if (lastPublishedStateByContents.get(contents) === stateKey) return;
-  contents.send(STO_APPEARANCE_STATE_EVENT, state);
-  lastPublishedStateByContents.set(contents, stateKey);
-}
-
-function attachAppearanceReplay(contents: WebContents): void {
-  if (appearanceReplayByContents.has(contents)) return;
-
-  const replay = () => {
-    if (contents.isDestroyed() || !currentAppearanceState) return;
-    lastPublishedStateByContents.delete(contents);
-    publishAppearanceState(contents, currentAppearanceState);
-  };
-  const cleanup = () => {
-    contents.removeListener('did-finish-load', replay);
-    appearanceReplayByContents.delete(contents);
-    lastPublishedStateByContents.delete(contents);
-  };
-
-  contents.on('did-finish-load', replay);
-  contents.once('destroyed', cleanup);
-  appearanceReplayByContents.set(contents, replay);
-}
-
-function broadcastAppearanceState(state: StoAppearanceState): void {
-  currentAppearanceState = state;
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue;
-    const { webContents } = window;
-    if (webContents.isDestroyed()) continue;
-    attachAppearanceReplay(webContents);
-    publishAppearanceState(webContents, state);
   }
 }
 

@@ -167,6 +167,7 @@ import {
   resolveWindowBackgroundColor,
   syncNativeAppearanceFromStore,
 } from '../../electron/main/appearance';
+import * as appearanceModule from '../../electron/main/appearance';
 import { handleSettingsRoutes } from '../../electron/api/routes/settings';
 
 const routeContext = {
@@ -186,6 +187,29 @@ function handleSettingsRoute(method: string, path: string): Promise<boolean> {
 }
 
 const splashHtml = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+const mainWindowSource = readFileSync(resolve(process.cwd(), 'electron/main/index.ts'), 'utf8');
+const spriteWindowSource = readFileSync(
+  resolve(process.cwd(), 'electron/main/sprite-window.ts'),
+  'utf8',
+);
+const floatIconWindowSource = readFileSync(
+  resolve(process.cwd(), 'electron/main/float-icon-window.ts'),
+  'utf8',
+);
+
+function expectReplayAttachedBeforeLoad(source: string): void {
+  const constructorIndex = source.indexOf('const win = new BrowserWindow');
+  const attachIndex = source.indexOf('attachAppearanceReplay(win)', constructorIndex);
+  const loadIndexes = [
+    source.indexOf('win.loadURL', constructorIndex),
+    source.indexOf('win.loadFile', constructorIndex),
+  ].filter((index) => index >= 0);
+
+  expect(constructorIndex).toBeGreaterThanOrEqual(0);
+  expect(attachIndex).toBeGreaterThan(constructorIndex);
+  expect(loadIndexes.length).toBeGreaterThan(0);
+  expect(attachIndex).toBeLessThan(Math.min(...loadIndexes));
+}
 
 describe('native appearance', () => {
   beforeEach(() => {
@@ -308,6 +332,40 @@ describe('native appearance', () => {
     expect(contents.send).toHaveBeenCalledTimes(3);
 
     cleanup();
+  });
+
+  it('replays startup state when a window is attached after the initial publication', () => {
+    appearanceState.windows = [];
+    appearanceState.nativeTheme.shouldUseDarkColors = true;
+    applyNativeAppearancePreference('system');
+
+    const attachAppearanceReplay = (
+      appearanceModule as typeof appearanceModule & {
+        attachAppearanceReplay?: (window: typeof appearanceState.mainWindow) => void;
+      }
+    ).attachAppearanceReplay;
+    expect(attachAppearanceReplay).toBeTypeOf('function');
+
+    const window = {
+      isDestroyed: vi.fn(() => false),
+      setBackgroundColor: vi.fn(),
+      webContents: appearanceState.createWebContents(),
+    };
+    attachAppearanceReplay?.(window);
+    expect(window.webContents.send).not.toHaveBeenCalled();
+
+    window.webContents.emit('did-finish-load');
+    expect(window.webContents.send).toHaveBeenCalledTimes(1);
+    expect(window.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      { preference: 'system', appearance: 'dark' },
+    );
+  });
+
+  it('attaches replay before loading every app BrowserWindow', () => {
+    expectReplayAttachedBeforeLoad(mainWindowSource);
+    expectReplayAttachedBeforeLoad(spriteWindowSource);
+    expectReplayAttachedBeforeLoad(floatIconWindowSource);
   });
 
   it('publishes each state once per contents while allowing late windows to catch up', () => {

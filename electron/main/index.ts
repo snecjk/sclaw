@@ -70,6 +70,7 @@ import {
   resolveWindowBackgroundColor,
   syncNativeAppearanceFromStore,
 } from './appearance';
+import { attachAppearanceReplay } from './appearance-replay';
 
 _ts('static imports loaded');
 
@@ -392,6 +393,7 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
     show: false,  // We call show() manually below — before loading content
     backgroundColor: resolveWindowBackgroundColor(nativeTheme.shouldUseDarkColors),
   });
+  attachAppearanceReplay(win);
 
   // Show the window IMMEDIATELY — before loading content.
   // On first run, ready-to-show can take 5-10s because the renderer process
