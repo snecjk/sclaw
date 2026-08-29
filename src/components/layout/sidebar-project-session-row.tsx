@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { SidebarProjectSessionRowTrailing } from '@/components/layout/sidebar-project-session-row-trailing';
 import { cn } from '@/lib/utils';
 import {
+  sidebarBodyTextClass,
   sidebarListItemTextClass,
   sidebarRecentSessionActiveClass,
   sidebarSingleActionRowPaddingClass,
@@ -100,10 +101,11 @@ export function SidebarProjectSessionRow({
         aria-hidden
       />
       <div
+        aria-current={isActive ? 'page' : undefined}
         className={cn(
           'group relative flex h-8 w-full items-center rounded-lg transition-colors',
           isActive
-            ? cn(sidebarRecentSessionActiveClass, 'hover:bg-[var(--sto-sidebar-row-hover-bg)]')
+            ? sidebarRecentSessionActiveClass
             : sidebarSubitemTextIdleClass,
         )}
       >
@@ -118,7 +120,12 @@ export function SidebarProjectSessionRow({
             channelSource && isPinned ? 'pr-[62px]' : 'pr-8',
           )}
         >
-          <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate',
+              isActive ? sidebarBodyTextClass : sidebarListItemTextClass,
+            )}
+          >
             {label}
           </span>
         </button>

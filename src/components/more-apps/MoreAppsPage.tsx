@@ -22,6 +22,7 @@ import { AppCard } from './AppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import {
@@ -529,20 +530,14 @@ export function MoreAppsPage() {
                   installed && 'app-market__row--installed',
                 )}
                 data-app-id={app.id}
-                role="button"
-                tabIndex={0}
-                aria-label={t('moreApps.openApp', {
-                  appName: app.name,
-                  defaultValue: `打开${app.name}`,
-                })}
-                onClick={() => handleOpenApp(app)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    handleOpenApp(app);
-                  }
-                }}
               >
+                <CollectionCardAction
+                  aria-label={t('moreApps.openApp', {
+                    appName: app.name,
+                    defaultValue: `打开${app.name}`,
+                  })}
+                  onClick={() => handleOpenApp(app)}
+                />
                 <div className="app-market__row-main">
                   <AppIcon
                     iconKey={app.iconKey}

@@ -104,11 +104,10 @@ export function SkillPlazaCategoryNav() {
             key={cat.slug || 'all'}
             type="button"
             onClick={() => setActiveCategory(cat.slug)}
+            aria-current={activeCategory === cat.slug ? 'true' : undefined}
             className={cn(
-              "inline-flex items-center gap-0.5 rounded-[12px] border-none bg-transparent px-3 py-1.5 font-['PingFang_SC'] text-[13px] font-medium whitespace-nowrap cursor-pointer transition-colors",
-              activeCategory === cat.slug
-                ? 'bg-[#E5E6EB] text-[#1D2129] font-semibold dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)]'
-                : 'text-[#86909C] hover:text-[#1D2129] dark:text-[var(--sto-text-tertiary)] dark:hover:text-[var(--sto-text-primary)]',
+              "sto-navigation-item sto-navigation-item--filter inline-flex items-center gap-0.5 rounded-[12px] border-none px-3 py-1.5 font-['PingFang_SC'] text-[13px] font-medium whitespace-nowrap cursor-pointer transition-colors",
+              activeCategory === cat.slug && 'font-semibold',
             )}
           >
             <span>{cat.label}</span>

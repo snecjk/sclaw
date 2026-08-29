@@ -41,12 +41,11 @@ export function SidebarHeaderToggle({
       data-sclaw-browser-sidebar-preserve="true"
       onClick={onToggle}
       className={cn(
-        'no-drag flex shrink-0 items-center justify-center rounded-md text-[#86909C] dark:text-[var(--sto-icon-tertiary)]',
+        'sto-navigation-item no-drag flex shrink-0 items-center justify-center rounded-md text-[var(--sto-icon-tertiary)]',
         isContentHeaderCompact
           ? 'h-[var(--sto-content-header-control-h,28px)] w-[var(--sto-content-header-control-h,28px)]'
           : 'h-[var(--sto-sidebar-chrome-toggle-size,28px)] w-[var(--sto-sidebar-chrome-toggle-size,28px)]',
-        'transition-colors hover:bg-black/[0.04] hover:text-[#4E5969] dark:hover:text-[var(--sto-icon-secondary)]',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'transition-colors hover:text-[var(--sto-icon-secondary)]',
         className,
       )}
     >

@@ -33,6 +33,7 @@ import {
   scheduleToggleTrackClass,
 } from '@/lib/surfaces';
 import type { TaskViewModel } from '../types';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 
 /** TaskCard 接收的任务数据 */
 interface TaskCardData extends TaskViewModel {
@@ -59,10 +60,6 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
   const { t } = useTranslation('tasks');
   const [running, setRunning] = useState(false);
 
-  const handleBodyClick = () => {
-    onClick?.(task);
-  };
-
   const handleRun = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (running) return;
@@ -79,7 +76,16 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
   const showWorkflowBadge = Boolean(task.hasWorkflow);
 
   return (
-    <article className={myTaskCardShellClass}>
+    <article className={cn(myTaskCardShellClass, onClick && 'cursor-pointer')}>
+      {onClick ? (
+        <CollectionCardAction
+          aria-label={t('myTask.card.editAria', {
+            taskName: task.name,
+            defaultValue: `编辑${task.name}`,
+          })}
+          onClick={() => onClick(task)}
+        />
+      ) : null}
       {/* 顶栏：时钟图标 + 标题 + badge | 开关 */}
       <div className={myTaskCardTopRowClass}>
         <div className={myTaskCardTitleRowClass}>
@@ -116,18 +122,11 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
 
       {/* 描述 — 点击打开编辑 */}
       {task.description ? (
-        <div
-          className={cn(myTaskCardBodyClass, onClick && 'cursor-pointer')}
-          onClick={onClick ? handleBodyClick : undefined}
-        >
+        <div className={myTaskCardBodyClass}>
           <p className={myTaskCardDescriptionClass}>{task.description}</p>
         </div>
       ) : (
-        <div
-          className={cn(myTaskCardBodyClass, onClick && 'cursor-pointer')}
-          aria-hidden={!onClick}
-          onClick={onClick ? handleBodyClick : undefined}
-        />
+        <div className={myTaskCardBodyClass} aria-hidden />
       )}
 
       {/* 详情与底栏之间：最小 18px，同行等高时由此吸收高度差 */}

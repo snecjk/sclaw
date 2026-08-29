@@ -5,7 +5,7 @@ export const listCardHoverBorderShadowClass = 'sto-card sto-card--flat sto-card-
 
 /** 应用、技能、连接器、工作流等集合卡片共用的外壳与交互状态。 */
 export const collectionCardShellClass = cn(
-  'sto-card sto-card--flat sto-card--interactive',
+  'sto-card sto-card--flat sto-card--interactive sto-collection-card',
   'transition-[background-color,border-color,box-shadow] duration-150',
 );
 
@@ -216,7 +216,7 @@ export const myTaskCreateButtonClass = cn(
 export const myTaskCardShellClass = cn(
   'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] p-4',
   'transition-[border-color,box-shadow] duration-base',
-  listCardHoverBorderShadowClass,
+  collectionCardShellClass,
 );
 
 /** 我的任务运行保障控件：标题行右侧紧凑排布（文案 + 问号 + 开关） */
@@ -1343,8 +1343,7 @@ export const skillPickerListClass = 'h-full min-h-0 overflow-y-auto';
 
 /** 技能 Picker 列表行 */
 export const skillPickerRowClass = cn(
-  'flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors',
-  'hover:bg-[#F0F2F5] dark:hover:bg-white/[0.06]',
+  'sto-navigation-item flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors',
 );
 
 /** 技能 Picker 搜索命中高亮（Brand-6） */
@@ -1648,20 +1647,15 @@ export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 
 /** 展开侧栏主导航 idle — 浅色正文 Grey-10 + 图标 Grey-9；暗色统一为次级层；行高 32px（h-8） */
 export const sidebarNavExpandedIdleClass = cn(
-  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
-  sidebarTextDefaultClass,
+  'sto-navigation-item h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   // stroke：Lucide；text：内联填充图标（如 timer）的 currentColor，避免吃到正文色
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
-  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
 /** 展开侧栏主导航 active — 底色 + 主文字/主图标，字重与 idle 一致；行高 32px（h-8） */
 export const sidebarNavExpandedActiveClass = cn(
-  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
-  'bg-[var(--sto-sidebar-nav-active-bg)]',
-  'text-[var(--sto-sidebar-text-active)]',
+  'sto-navigation-item h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   '[&_svg]:stroke-[var(--sto-sidebar-icon-active)] [&_svg]:text-[var(--sto-sidebar-icon-active)]',
-  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
 /** 任务组名 / 最近会话 / 三级子项 — Grey-10 Regular */
@@ -1670,14 +1664,13 @@ export const sidebarListItemTextClass = cn(sidebarBodyTextClass, sidebarTextDefa
 /** 三级子项 idle — Grey-10 Regular */
 export const sidebarSubitemTextIdleClass = cn(
   sidebarListItemTextClass,
-  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+  'sto-navigation-item',
 );
 
 /** 三级子项路由选中 — Grey-10 Regular + Grey-4 底（MCP 子项无加粗） */
 export const sidebarSubitemTextActiveClass = cn(
   sidebarBodyTextClass,
-  'text-[var(--sto-sidebar-text-active)]',
-  'bg-[var(--sto-sidebar-subitem-active-bg)]',
+  'sto-navigation-item',
 );
 
 /** 「展开全部 / 显示更多」等辅助链 — 12px Regular Grey-8 → hover Grey-10 */
@@ -1719,7 +1712,7 @@ export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinn
 export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';
 
 /** 最近分组内会话选中底 — light #DCDCDC；dark 走 --sto-sidebar-subitem-active-bg */
-export const sidebarRecentSessionActiveClass = 'bg-[var(--sto-sidebar-subitem-active-bg)]';
+export const sidebarRecentSessionActiveClass = 'sto-navigation-item';
 
 /**
  * 侧栏单操作行尾槽：标题预留与 28px 点击热区等宽，槽位贴行右缘。

@@ -15,6 +15,7 @@ import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { collectionCardShellClass } from '@/lib/surfaces';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import messageIcon from '@/assets/icons/message.svg';
 import loadingIcon from '@/assets/icons/loading.svg';
 import moreIcon from '@/assets/icons/more.svg';
@@ -272,9 +273,17 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
         collectionCardShellClass,
         'relative flex min-w-0 cursor-pointer flex-col overflow-visible rounded-2xl border p-4',
       )}
-      onClick={() => onOpenDetail?.(skill)}
       data-skill-installed={canUse}
     >
+      {onOpenDetail ? (
+        <CollectionCardAction
+          aria-label={t('plaza.action.openDetail', {
+            title: skill.title,
+            defaultValue: `查看${skill.title}`,
+          })}
+          onClick={() => onOpenDetail(skill)}
+        />
+      ) : null}
       <div className={cn('flex flex-col flex-1 min-h-0 no-underline text-inherit', isDisabled && 'opacity-50')}>
         {/* Top: icon + title + actions */}
         <div className="flex items-start gap-2.5 mb-3">

@@ -15,7 +15,6 @@ import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
-  sidebarSubitemTextIdleClass,
   sidebarTextIconClass,
   sidebarTooltipArrowClass as SIDEBAR_TOOLTIP_ARROW_CLASS,
   sidebarTooltipContentClass as SIDEBAR_TOOLTIP_CLASS,
@@ -331,7 +330,7 @@ export function SidebarProjectsSection({
                     }
                     onClick={handleProjectBatchExpandOrCollapse}
                     className={cn(
-                      'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                      'sto-navigation-item flex h-7 w-7 items-center justify-center rounded-md transition-colors',
                       sidebarTextIconClass,
                     )}
                   >
@@ -368,7 +367,7 @@ export function SidebarProjectsSection({
                   aria-label={t('sidebar.newProject')}
                   onClick={() => setCreateOpen(true)}
                   className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                    'sto-navigation-item flex h-7 w-7 items-center justify-center rounded-md transition-colors',
                     sidebarTextIconClass,
                   )}
                 >
@@ -398,7 +397,7 @@ export function SidebarProjectsSection({
                 className={cn(
                   'min-w-0 truncate',
                   sidebarListItemTextClass,
-                  'text-[#86909C] dark:text-[var(--sto-text-tertiary)]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
+                  'text-[var(--sto-text-tertiary)]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
                 )}
               >
                 {t('sidebar.projectsEmpty')}
@@ -413,7 +412,7 @@ export function SidebarProjectsSection({
 
             return (
               <div key={workspace.id} className="flex flex-col">
-                <div className="group relative flex w-full min-w-0 items-center">
+                <div className="sto-navigation-item group relative flex w-full min-w-0 items-center rounded-lg">
                   {isEditingProject ? (
                     <input
                       type="text"
@@ -446,7 +445,7 @@ export function SidebarProjectsSection({
                         className={cn(
                           'flex h-8 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-1 pr-16 text-left transition-colors',
                           'outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
-                          sidebarSubitemTextIdleClass,
+                          sidebarListItemTextClass,
                         )}
                       >
                         <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

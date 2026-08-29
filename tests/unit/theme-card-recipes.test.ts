@@ -14,6 +14,9 @@ const appCard = read('src/components/more-apps/AppCard.tsx');
 const moreAppsCss = read('src/components/more-apps/more-apps.css');
 const skillCard = read('src/components/skill-plaza/SkillCard.tsx');
 const connectorCard = read('src/components/connectors/ConnectorCard.tsx');
+const workflowPicker = read('src/components/workflow/WorkflowPicker.tsx');
+const workflowListCard = read('src/pages/Workflow/components/workflow-list-card.tsx');
+const taskCard = read('src/pages/MyTask/components/TaskCard.tsx');
 const surfaces = read('src/lib/surfaces.ts');
 
 describe('semantic card color recipes', () => {
@@ -68,7 +71,7 @@ describe('semantic card color recipes', () => {
     }
 
     expect(surfaces).toContain(`export const collectionCardShellClass = cn(
-  'sto-card sto-card--flat sto-card--interactive',
+  'sto-card sto-card--flat sto-card--interactive sto-collection-card',
   'transition-[background-color,border-color,box-shadow] duration-150',
 );`);
     expect(surfaces).toMatch(
@@ -78,5 +81,37 @@ describe('semantic card color recipes', () => {
     expect(skillCard).toContain('rounded-2xl border p-4');
     expect(moreAppsCss).toMatch(/\.app-market__row\s*\{[\s\S]*border:\s*0\.8px solid var\(--ma-card-border\);[\s\S]*border-radius:\s*18px;/);
     expect(moreAppsCss).toMatch(/\.more-apps-card\s*\{[\s\S]*border:\s*1px solid var\(--ma-border\);[\s\S]*border-radius:\s*14px;/);
+  });
+
+  it('uses one sibling overlay action across clickable collection card families', () => {
+    expect(recipesCss).toContain('.sto-collection-card');
+    expect(recipesCss).toContain('.sto-collection-card__action');
+    expect(recipesCss).toMatch(/\.sto-collection-card__action\s*\{[\s\S]*position:\s*absolute;[\s\S]*inset:\s*0;[\s\S]*z-index:\s*1;/);
+    expect(recipesCss).toMatch(/\.sto-collection-card :where\(button, a, input, select, textarea, \[role='button'\]\):not\(\.sto-collection-card__action\)[^{]*\{[^}]*z-index:\s*2;/s);
+    expect(recipesCss).toMatch(/\.sto-collection-card[^{]*:has\(\.sto-collection-card__action:focus-visible\)/);
+    expect(recipesCss).toMatch(/\.sto-collection-card:has\(\.sto-collection-card__action:focus-visible\)[^{]*\{[^}]*box-shadow:\s*0 0 0 2px var\(--sto-focus-ring\)/s);
+
+    for (const consumer of [
+      moreAppsPage,
+      appCard,
+      skillCard,
+      connectorCard,
+      workflowListCard,
+      taskCard,
+    ]) {
+      expect(consumer).toContain('CollectionCardAction');
+    }
+
+    expect(surfaces).toMatch(
+      /workflowListCardShellClass[\s\S]*collectionCardShellClass/,
+    );
+    expect(workflowPicker).toContain('sto-navigation-item');
+  });
+
+  it('does not retain emulated button semantics on migrated card shells', () => {
+    expect(connectorCard).not.toContain('role="button"');
+    expect(connectorCard).not.toContain('tabIndex={0}');
+    expect(moreAppsPage).not.toContain('role="button"');
+    expect(moreAppsPage).not.toContain('tabIndex={0}');
   });
 });

@@ -69,6 +69,28 @@
     border-top-color: var(--sto-card-loading-spinner-foreground);
   }
 
+  /* Clickable collection cards keep content and secondary controls as siblings. */
+  .sto-collection-card { position: relative; }
+
+  .sto-collection-card:has(.sto-collection-card__action:focus-visible) {
+    box-shadow: 0 0 0 2px var(--sto-focus-ring);
+  }
+
+  .sto-collection-card__action {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    cursor: inherit;
+    border: 0;
+    background: transparent;
+    outline: none;
+  }
+
+  .sto-collection-card :where(button, a, input, select, textarea, [role='button']):not(.sto-collection-card__action) {
+    position: relative;
+    z-index: 2;
+  }
+
   /* Control recipe: modifiers select the approved primitive variant pixels. */
   .sto-control {
     --sto-disabled-source-background: var(--sto-control-bg);
@@ -230,9 +252,15 @@
     color: var(--sto-navigation-menu-foreground);
   }
 
-  .sto-navigation-item:is(:hover, [data-highlighted], [data-sto-state='hover'], [data-sto-state='focus']) {
+  .sto-navigation-item:is(:hover, :focus-visible, :has(:focus-visible), [data-highlighted], [data-sto-state='hover'], [data-sto-state='focus']) {
     background-color: var(--sto-sidebar-row-hover-bg);
     color: var(--sto-sidebar-text-active);
+  }
+
+  .sto-navigation-item:is(:focus-visible, :has(:focus-visible), [data-sto-state='focus']) {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: var(--sto-control-focus-shadow);
   }
 
   .sto-navigation-item--menu:is(:hover, [data-highlighted], [data-sto-state='hover'], [data-sto-state='focus']) {
@@ -256,6 +284,27 @@
     background-color: var(--sto-navigation-menu-hover-background);
     border-color: var(--sto-navigation-menu-background);
     color: var(--sto-navigation-menu-hover-foreground);
+  }
+
+  .sto-navigation-item--filter {
+    --sto-disabled-source-background: transparent;
+    --sto-disabled-source-border: transparent;
+    --sto-disabled-source-foreground: var(--sto-text-tertiary);
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--sto-text-tertiary);
+  }
+
+  .sto-navigation-item--filter:is(:hover, :focus-visible, [data-sto-state='hover'], [data-sto-state='focus']) {
+    background-color: transparent;
+    color: var(--sto-text-primary);
+  }
+
+  .sto-navigation-item--filter:is([aria-selected='true'], [aria-current='true']) {
+    --sto-disabled-source-background: var(--sto-control-active-bg);
+    --sto-disabled-source-foreground: var(--sto-text-primary);
+    background-color: var(--sto-control-active-bg);
+    color: var(--sto-text-primary);
   }
 
   /* Segment track is a surface; items preserve Radix active/inactive. */

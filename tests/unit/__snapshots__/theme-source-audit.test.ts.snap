@@ -3211,23 +3211,11 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/layout/sidebar-header-toggle.tsx::pageDarkUtility::dark:text-::rag flex shrink-0 items-center justify-center rounded-md text-[#86909C] dark:text-[var(--sto-icon-tertiary)]', isContentHeaderCompact ?::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/layout/sidebar-header-toggle.tsx::rawColor::#86909C::'no-drag flex shrink-0 items-center justify-center rounded-md text-[#86909C] dark:text-[var(--sto-icon-tertiary)]', isContentHeaderCompact::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/layout/sidebar-header-toggle.tsx::rawColor::#4E5969::e,28px)]', 'transition-colors hover:bg-black/[0.04] hover:text-[#4E5969] dark:hover:text-[var(--sto-icon-secondary)]', 'focus-visible:o::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
     "key": "src/components/layout/sidebar-project-session-row.tsx::pageDarkUtility::dark:bg-::inter-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <input type="::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/layout/sidebar-project-session-row.tsx::pageDarkUtility::dark:bg-::inter-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div className={cn(::1",
+    "key": "src/components/layout/sidebar-project-session-row.tsx::pageDarkUtility::dark:bg-::inter-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div aria-current={is::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -3239,15 +3227,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/layout/sidebar-project-session-row.tsx::rawColor::#DCDCDC::sName="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div classN::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/layout/sidebar-projects-section.tsx::pageDarkUtility::dark:text-::sidebarListItemTextClass, 'text-[#86909C] dark:text-[var(--sto-text-tertiary)]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/layout/sidebar-projects-section.tsx::rawColor::#86909C::', sidebarListItemTextClass, 'text-[#86909C] dark:text-[var(--sto-text-tertiary)]', // Grey-8，覆盖 sidebarListItemTex::1",
+    "key": "src/components/layout/sidebar-project-session-row.tsx::rawColor::#DCDCDC::sName="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border" aria-hidden /> <div aria-c::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -7103,18 +7083,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::pageDarkUtility::dark:bg-::= cat.slug ? 'bg-[#E5E6EB] text-[#1D2129] font-semibold dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)]'::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::pageDarkUtility::dark:text-::EB] text-[#1D2129] font-semibold dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)]' : 'text-[#86909C] hover:text-::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::pageDarkUtility::dark:text-::-text-primary)]' : 'text-[#86909C] hover:text-[#1D2129] dark:text-[var(--sto-text-tertiary)] dark:hover:text-[var(--sto-text-primary)]',::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::pageDarkUtility::dark:text-::activeCategory === cat.slug ? 'text-[#86909C] dark:text-[var(--sto-text-secondary)]' : 'text-[#C9CDD4] dark:te::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -7145,22 +7113,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   {
     "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::pageDarkUtility::dark:text-::ark:shadow-none' : 'text-[#86909C] hover:text-[#1D2129] dark:text-[var(--sto-text-tertiary)] dark:hover:text-[var(--sto-text-primary)]',::2",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::rawColor::#E5E6EB::lors", activeCategory === cat.slug ? 'bg-[#E5E6EB] text-[#1D2129] font-semibold dark:bg-[var(--sto-control-active-bg)] da::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::rawColor::#1D2129::activeCategory === cat.slug ? 'bg-[#E5E6EB] text-[#1D2129] font-semibold dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::rawColor::#86909C::tive-bg)] dark:text-[var(--sto-text-primary)]' : 'text-[#86909C] hover:text-[#1D2129] dark:text-[var(--sto-text-tertiary)] dark:hover:t::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::rawColor::#1D2129::var(--sto-text-primary)]' : 'text-[#86909C] hover:text-[#1D2129] dark:text-[var(--sto-text-tertiary)] dark:hover:text-[var(--sto-text-p::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
     "key": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx::rawColor::#86909C::activeCategory === cat.slug ? 'text-[#86909C] dark:text-[var(--sto-text-secondary)]' : 'text-[#C9C::1",
@@ -7531,11 +7483,11 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/workflow/WorkflowPicker.tsx::pageDarkUtility::dark:text-::nt-medium leading-4 text-[#86909C] dark:bg-[var(--sto-surface-primary)] dark:text-[var(--sto-text-tertiary)]'; const itemClass = 'flex h-8 w-ful::1",
+    "key": "src/components/workflow/WorkflowPicker.tsx::pageDarkUtility::dark:text-::nt-medium leading-4 text-[#86909C] dark:bg-[var(--sto-surface-primary)] dark:text-[var(--sto-text-tertiary)]'; const itemClass = 'sto-navigation::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/workflow/WorkflowPicker.tsx::pageDarkUtility::dark:text-::ite/[0.06]'; const itemIconClass = 'h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground'; const itemTitleClass = 'max-w-[45%] shrink-0 truncate t::1",
+    "key": "src/components/workflow/WorkflowPicker.tsx::pageDarkUtility::dark:text-::ion-colors'; const itemIconClass = 'h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground'; const itemTitleClass = 'max-w-[45%] shrink-0 truncate t::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -7615,11 +7567,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/workflow/WorkflowPicker.tsx::rawColor::#F0F2F5::ms-center gap-1.5 rounded-lg px-2 text-left transition-colors hover:bg-[#F0F2F5] dark:hover:bg-white/[0.06]'; const itemIconClass = 'h-3 w-3 shrink::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/workflow/WorkflowPicker.tsx::rawColor::#1D2129::ver:bg-white/[0.06]'; const itemIconClass = 'h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground'; const itemTitleClass = 'max-w-[45%] shrink-::1",
+    "key": "src/components/workflow/WorkflowPicker.tsx::rawColor::#1D2129::t transition-colors'; const itemIconClass = 'h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground'; const itemTitleClass = 'max-w-[45%] shrink-::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -8692,10 +8640,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/lib/surfaces.ts::rawColor::rgba(0,0,0,0.35)::-default)] dark:bg-[var(--sto-surface-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]', ); /** 技能 Picker 列表区 */ export const skillPickerListClass = 'h-full::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::rawColor::#F0F2F5::t gap-2 rounded-lg px-2 py-2 text-left transition-colors', 'hover:bg-[#F0F2F5] dark:hover:bg-white/[0.06]', ); /** 技能 Picker 搜索命中高亮（Brand-6） */ expo::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

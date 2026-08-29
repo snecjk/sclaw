@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
 import { collectionCardShellClass } from '@/lib/surfaces';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import { navigateToNewSessionWithDraft } from '@/lib/main-chat-navigation';
 import {
   resolveManagedCliBinary,
@@ -130,21 +131,18 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
   return (
     <>
       <article
-        role="button"
-        tabIndex={0}
-        onClick={handleCardClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleCardClick();
-          }
-        }}
         className={cn(
           collectionCardShellClass,
           'group relative flex h-[80px] min-w-0 cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border px-4',
         )}
         title={item.lastError || undefined}
       >
+        <CollectionCardAction
+          aria-label={`${connected ? '查看' : '配置'}${item.name}`}
+          aria-busy={!connected && inFlight ? 'true' : undefined}
+          disabled={!connected && inFlight}
+          onClick={handleCardClick}
+        />
         {item.iconUrl ? (
           <img
             src={item.iconUrl}

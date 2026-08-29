@@ -346,6 +346,7 @@ function SidebarTaskDateLinks({
                 if (!sk) return;
                 openSubitemSession(entryId, sk, label);
               }}
+              aria-current={active ? 'page' : undefined}
               className={cn(
                 'relative z-[1] inline-flex h-8 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
@@ -604,6 +605,7 @@ function SidebarScheduledTaskGroup({
                     navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                   }}
                   title={label}
+                  aria-current={active ? 'page' : undefined}
                   className={cn(
                     'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                     SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
@@ -669,7 +671,13 @@ function SidebarNavLink({
   );
 
   const link = (
-    <NavLink to={to} end={end} className={linkClassName} onClick={onClick}>
+    <NavLink
+      to={to}
+      end={end}
+      aria-current={isActive ? 'page' : undefined}
+      className={linkClassName}
+      onClick={onClick}
+    >
       <span className="flex shrink-0 items-center justify-center">{icon}</span>
       {!collapsed ? (
         <span className="min-w-0 flex-1 truncate">{label}</span>

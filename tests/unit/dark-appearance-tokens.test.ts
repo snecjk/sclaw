@@ -21,6 +21,10 @@ const themeTokensCss = readFileSync(
   resolve(process.cwd(), 'src/styles/theme/tokens.css'),
   'utf8',
 );
+const recipesCss = readFileSync(
+  resolve(process.cwd(), 'src/styles/theme/recipes.css'),
+  'utf8',
+);
 const chatProcessBlockSource = readFileSync(
   resolve(process.cwd(), 'src/components/chat/chat-process-block.tsx'),
   'utf8',
@@ -220,12 +224,18 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('keeps dark sidebar idle and active foreground roles visually distinct', () => {
-    expect(sidebarNavExpandedIdleClass).toContain('text-[var(--sto-sidebar-text-default)]');
-    expect(sidebarNavExpandedActiveClass).toContain('text-[var(--sto-sidebar-text-active)]');
+    expect(sidebarNavExpandedIdleClass).toContain('sto-navigation-item');
+    expect(sidebarNavExpandedActiveClass).toContain('sto-navigation-item');
     expect(sidebarNavExpandedActiveClass).toContain(
       '[&_svg]:stroke-[var(--sto-sidebar-icon-active)]',
     );
-    expect(sidebarSubitemTextActiveClass).toContain('text-[var(--sto-sidebar-text-active)]');
+    expect(sidebarSubitemTextActiveClass).toContain('sto-navigation-item');
+    expect(recipesCss).toMatch(
+      /\.sto-navigation-item\s*\{[^}]*color:\s*var\(--sto-sidebar-text-default\)/s,
+    );
+    expect(recipesCss).toMatch(
+      /\.sto-navigation-item:is\(\[aria-current='page'\], \[aria-selected='true'\]\)[^}]*color:\s*var\(--sto-sidebar-text-active\)/s,
+    );
   });
 
   it('maps dark thinking summaries and details to separate semantic text roles', () => {
@@ -265,11 +275,11 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('maps dark shell chevrons, weak actions and tertiary copy to explicit roles', () => {
-    expect(sidebarHeaderToggleSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
-    expect(sidebarHeaderToggleSource).toContain('dark:hover:text-[var(--sto-icon-secondary)]');
+    expect(sidebarHeaderToggleSource).toContain('text-[var(--sto-icon-tertiary)]');
+    expect(sidebarHeaderToggleSource).toContain('hover:text-[var(--sto-icon-secondary)]');
     expect(sidebarSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
     expect(accountSwitchMenuItemsSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
-    expect(sidebarProjectsSource).toContain('dark:text-[var(--sto-text-tertiary)]');
+    expect(sidebarProjectsSource).toContain('text-[var(--sto-text-tertiary)]');
     expect(sidebarUpdateNoticeSource).toContain('dark:text-[var(--sto-text-tertiary)]');
     expect(updateContentModalSource).toContain('dark:text-[var(--sto-text-tertiary)]');
     expect(chatMessageSource).toContain('dark:text-[var(--sto-icon-tertiary)]');

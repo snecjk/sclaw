@@ -9,6 +9,7 @@ import { AppIcon } from './AppIcon';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { collectionCardShellClass } from '@/lib/surfaces';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import { formatExternalAppDomain } from './format-external-app-domain';
 
 interface AppCardProps {
@@ -93,8 +94,14 @@ function AppCardImpl({
         isExternal && 'more-apps-card--custom',
         installed && 'more-apps-card--installed',
       )}
-      onClick={handleOpen}
     >
+      <CollectionCardAction
+        aria-label={t('moreApps.openApp', {
+          appName: app.name,
+          defaultValue: `打开${app.name}`,
+        })}
+        onClick={handleOpen}
+      />
       {/* Top row: icon + title + actions */}
       <div className="more-apps-card__top">
         <AppIcon
@@ -110,6 +117,7 @@ function AppCardImpl({
           {isMineTab && isExternal && (
             <div className="more-apps-card__actions">
               <button
+                type="button"
                 className="more-apps-card__icon-btn"
                 onClick={handleEdit}
                 aria-label={t('moreApps.action.edit', { defaultValue: '编辑' })}
@@ -118,6 +126,7 @@ function AppCardImpl({
                 <Pencil className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
+                type="button"
                 className="more-apps-card__icon-btn more-apps-card__icon-btn--danger"
                 onClick={handleDelete}
                 aria-label={t('moreApps.action.delete', { defaultValue: '删除' })}
@@ -158,6 +167,7 @@ function AppCardImpl({
         <div className="more-apps-card__foot-actions">
           {!isExternal && onToggleFavorite && (
             <button
+              type="button"
               className={cn('more-apps-card__favorite', favorite && 'more-apps-card__favorite--active')}
               onClick={handleToggleFavorite}
               aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
@@ -167,7 +177,7 @@ function AppCardImpl({
             </button>
           )}
           {installed ? (
-            <span className="more-apps-card__use" onClick={(e) => { e.stopPropagation(); onOpen(app); }}>
+            <span className="more-apps-card__use">
               {isExternal ? t('moreApps.action.openLink', { defaultValue: '打开链接' }) : t('moreApps.action.open', { defaultValue: '打开' })}
             </span>
           ) : (

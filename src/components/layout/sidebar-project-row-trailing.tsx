@@ -61,7 +61,7 @@ export function SidebarProjectRowTrailing({
         className={cn(
           'absolute inset-0 flex items-center justify-end gap-0.5',
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
-          'rounded-md bg-[var(--sto-sidebar-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+          'rounded-md bg-transparent',
         )}
       >
         <Tooltip delayDuration={300}>

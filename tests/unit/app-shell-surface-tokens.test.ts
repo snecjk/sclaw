@@ -13,6 +13,10 @@ import {
   stoMainCardShellClass,
   stoPreviewContentShellClass,
   stoTaskSubitemChatCanvasBg,
+  sidebarNavExpandedActiveClass,
+  sidebarNavExpandedIdleClass,
+  sidebarSubitemTextActiveClass,
+  sidebarSubitemTextIdleClass,
 } from '@/lib/surfaces';
 
 const globalsCss = readFileSync(
@@ -126,5 +130,43 @@ describe('app shell surface tokens (Stage 4)', () => {
     expect(myTaskSortTriggerClass).toContain('font-medium');
     expect(myTaskCreateButtonClass).not.toMatch(/bg-\[var|text-foreground|hover:bg-/);
     expect(myTaskSortTriggerClass).not.toMatch(/bg-\[var|text-foreground|hover:bg-/);
+  });
+
+  it('routes sidebar hover, selected, and focus colors through Navigation recipes', () => {
+    const recipes = readFileSync(
+      resolve(process.cwd(), 'src/styles/theme/recipes.css'),
+      'utf8',
+    );
+
+    for (const className of [
+      sidebarNavExpandedIdleClass,
+      sidebarNavExpandedActiveClass,
+      sidebarSubitemTextIdleClass,
+      sidebarSubitemTextActiveClass,
+    ]) {
+      expect(className).toContain('sto-navigation-item');
+      expect(className).not.toContain('hover:bg-[var(--sto-sidebar-row-hover-bg)]');
+    }
+
+    expect(recipes).toMatch(/\.sto-navigation-item:is\(:hover,[^}]*background-color:\s*var\(--sto-sidebar-row-hover-bg\)/s);
+    expect(recipes).toMatch(/\.sto-navigation-item:is\(\[aria-current='page'\], \[aria-selected='true'\]\)[^}]*background-color:\s*var\(--sto-sidebar-nav-active-bg\)/s);
+    expect(recipes).toMatch(/\.sto-navigation-item:is\(:focus-visible, :has\(:focus-visible\), \[data-sto-state='focus'\]\)[^}]*box-shadow:\s*var\(--sto-control-focus-shadow\)/s);
+  });
+
+  it('uses the Navigation filter modifier for Skill Plaza categories', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/components/skill-plaza/SkillPlazaCategoryNav.tsx'),
+      'utf8',
+    );
+    const recipes = readFileSync(
+      resolve(process.cwd(), 'src/styles/theme/recipes.css'),
+      'utf8',
+    );
+
+    expect(source).toContain('sto-navigation-item--filter');
+    expect(source).toContain("aria-current={activeCategory === cat.slug ? 'true' : undefined}");
+    expect(source).not.toMatch(/bg-\[#E5E6EB\].*dark:bg-/);
+    expect(recipes).toMatch(/\.sto-navigation-item--filter\s*\{[^}]*var\(--sto-text-tertiary\)/s);
+    expect(recipes).toMatch(/\.sto-navigation-item--filter:is\(\[aria-selected='true'\], \[aria-current='true'\]\)[^}]*var\(--sto-control-active-bg\)/s);
   });
 });
