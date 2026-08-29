@@ -1,0 +1,517 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`theme system contract > keeps all shared visual state families in recipes.css 1`] = `
+[
+  {
+    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
+    "recipe": ".sto-card",
+  },
+  {
+    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
+    "recipe": ".sto-control",
+  },
+  {
+    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
+    "recipe": ".sto-navigation-item",
+  },
+  {
+    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
+    "recipe": ".sto-feedback",
+  },
+]
+`;
+
+exports[`theme system contract > keeps ordinary CSS and TSX free of local dark palette branches 1`] = `
+{
+  "darkSelectors": [
+    {
+      "file": "src/components/more-apps/more-apps.css",
+      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
+    },
+    {
+      "file": "src/components/sclaw-browser/sclaw-browser-overlay.css",
+      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
+    },
+    {
+      "file": "src/pages/LearningCenter/LearningCenterPage.css",
+      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
+    },
+    {
+      "file": "src/pages/WorkflowDesigner/workflow-designer-canvas.css",
+      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
+    },
+    {
+      "file": "src/styles/globals.css",
+      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
+    },
+  ],
+  "darkUtilities": [
+    {
+      "file": "src/components/attachments/ComposerAttachMenu.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/channels/ChannelConfigModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/channels/DingTalkHubBindModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/channels/MobileAppConfigModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/chat/artifact-product-card.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/chat/chat-process-block.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/chat/chat-tool-call-card.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/chat-browser/BrowserPreviewView.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/connectors/ConnectorCard.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/connectors/TokenConnectModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/data-center-file-picker/DataCenterFilePickerModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/dingtalk/DingTalkMentionPopover.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/dingtalk/DingTalkMentionTag.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/file-preview/ArtifactShareDialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/file-preview/ExcelGridViewer.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/file-preview/FilePreviewViewer.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/file-preview/PptxDeckViewer.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/file-preview/PreviewLoading.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/file-preview/SaveArtifactDialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/file-preview/WordDocViewer.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/icons/composer-toolbar-icons.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/input-composer/input-composer-agent-picker.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/input-composer/input-composer-send-button.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/input-composer/input-composer-shell.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/input-composer/input-composer-toolbar.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/jsbridge/JsBridgeHostPortal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/AccountSwitchMenuItems.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/MainLayout.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/sidebar-header-toggle.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/sidebar-project-session-row.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/sidebar-projects-section.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/sidebar-update-notice.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/Sidebar.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/SidebarMobileConnectTooltip.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/update-content-modal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/layout/UserWatermark.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/parameter-form/FormFieldRenderer.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/parameter-form/OptionCardList.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/parameter-form/ParameterFormCard.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/quick-input/QuickInputCreateModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/quick-input/QuickInputListItem.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/quick-input/QuickInputManageListItem.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/quick-input/QuickInputManageModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/quick-input/QuickInputPicker.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/settings/DwsCliSettings.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/settings/ProvidersSettings.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/settings/SettingsShell.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/settings/update/ReleaseChangelogMarkdown.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/settings/update/UpdateChangelogPanel.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/settings/update/UpdateDownloadProgress.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/settings/UpdateSettings.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/skill-plaza/SkillCard.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/skill-plaza/SkillDetailModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/skill-plaza/SkillIcon.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/skill-plaza/SkillPicker.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/skill-plaza/SkillPlazaCategoryNav.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/skill-plaza/SkillPlazaHeader.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/skill-plaza/SkillUploadModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/ui/badge.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/ui/confirm-dialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/ui/sheet.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/workflow/WorkflowPicker.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/workflow/WorkflowPreviewPanel.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/lib/at-mention-highlight.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Agents/AgentDetailPage.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Agents/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/ChatEngineModelSelectors.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/ChatMessage.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/ChatPreviewPanel.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/ChatSearchBar.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/DingTalkSentPreview.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/PendingQueuePanel.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/thinking/thinking-turn-process.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/components/entries.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/components/modals.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/components/navigation.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Home/agent-hub-static-cards.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Home/HomeAgentHubSurface.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Home/HomeMainConversation.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Home/RecommendCategoryTabs.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Login/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Models/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Models/TokenQuotaDialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/MyTask/components/RecordDetailModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/MyTask/components/TaskCreateModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Settings/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Setup/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Skills/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Sprite/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Subscriptions/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Workflow/components/workflow-composer-input.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/WorkflowDesigner/components/history-versions-drawer.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/WorkflowDesigner/components/local-run-history-dialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/WorkflowDesigner/components/startup-run-dialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/WorkflowDesigner/components/test-run-trial-view.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/WorkflowDesigner/workflow-designer.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+  ],
+}
+`;
+
+exports[`theme system contract > keeps renderer and preview theme mappings in tokens.css 1`] = `
+[
+  {
+    "reason": "Migration debt: Task 4 adds the explicit data-sto-theme selector to the canonical token owner.",
+    "selector": "html[data-sto-theme='light']",
+  },
+  {
+    "reason": "Migration debt: Task 4 adds the explicit data-sto-theme selector to the canonical token owner.",
+    "selector": "html[data-sto-theme='dark']",
+  },
+]
+`;
+
+exports[`theme system contract > reuses tokens.css in preview code instead of maintaining a second palette 1`] = `
+[
+  {
+    "reason": "Migration debt: Task 4 makes adaptive preview consume the canonical token stylesheet.",
+    "requirement": "import tokens.css?raw",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-surface:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-surface-secondary:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-surface-elevated:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-text:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-text-secondary:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-border:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-surface:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-surface-secondary:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-surface-elevated:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-text:#",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-text-secondary:rgba(",
+  },
+  {
+    "reason": "Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.",
+    "requirement": "remove duplicate preview literal --sto-preview-border:rgba(",
+  },
+]
+`;

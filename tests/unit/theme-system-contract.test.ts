@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { extname, relative, resolve } from 'node:path';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
@@ -25,6 +25,20 @@ function declarationsFor(source: string, selector: string): Record<string, strin
   });
 
   return declarations;
+}
+
+function sourceFiles(directory: string, extensions: readonly string[]): Array<{ file: string; source: string }> {
+  return readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap((entry) => {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) return sourceFiles(path, extensions);
+      if (!extensions.includes(extname(entry.name))) return [];
+      return [{
+        file: relative(process.cwd(), path).replaceAll('\\', '/'),
+        source: readFileSync(path, 'utf8'),
+      }];
+    });
 }
 
 describe('theme system contract', () => {
@@ -81,5 +95,90 @@ describe('theme system contract', () => {
     expect(rules).toContain('浅色是当前视觉基线');
     expect(rules).toContain('Adaptive');
     expect(rules).toContain('Fidelity');
+  });
+
+  it('keeps renderer and preview theme mappings in tokens.css', () => {
+    const tokens = readIfPresent(themeTokensPath);
+    const selectors = new Set<string>();
+    postcss.parse(tokens).walkRules((rule) => {
+      for (const selector of rule.selectors) selectors.add(selector);
+    });
+
+    const requiredSelectors = [
+      ':root',
+      "html[data-sto-theme='light']",
+      '.dark',
+      "html[data-sto-theme='dark']",
+    ];
+    const missingSelectors = requiredSelectors
+      .filter((selector) => !selectors.has(selector))
+      .map((selector) => ({
+        selector,
+        reason: 'Migration debt: Task 4 adds the explicit data-sto-theme selector to the canonical token owner.',
+      }));
+
+    expect(missingSelectors).toMatchSnapshot();
+  });
+
+  it('keeps all shared visual state families in recipes.css', () => {
+    const recipes = readIfPresent(themeRecipesPath);
+    const requiredRecipes = [
+      '.sto-card',
+      '.sto-control',
+      '.sto-navigation-item',
+      '.sto-segment-item',
+      '.sto-overlay',
+      '.sto-feedback',
+    ];
+    const missingRecipes = requiredRecipes
+      .filter((recipe) => !new RegExp(`${recipe.replace('.', '\\.')}(?:[\\s:{.#\\[])`).test(recipes))
+      .map((recipe) => ({
+        recipe,
+        reason: 'Migration debt: Task 5 completes this shared state family in recipes.css.',
+      }));
+
+    expect(missingRecipes).toMatchSnapshot();
+  });
+
+  it('keeps ordinary CSS and TSX free of local dark palette branches', () => {
+    const srcRoot = resolve(process.cwd(), 'src');
+    const cssOwners = new Set([
+      'src/styles/theme/tokens.css',
+      'src/styles/theme/recipes.css',
+    ]);
+    const darkSelectors = sourceFiles(srcRoot, ['.css']).flatMap(({ file, source }) =>
+      cssOwners.has(file) || !/^\s*\.dark\b/m.test(source) ? [] : [file],
+    );
+    const darkUtilities = sourceFiles(srcRoot, ['.tsx']).flatMap(({ file, source }) =>
+      /dark:(?:bg|text|border|shadow|ring)-/.test(source) ? [file] : [],
+    );
+
+    expect({
+      darkSelectors: darkSelectors.map((file) => ({
+        file,
+        reason: 'Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.',
+      })),
+      darkUtilities: darkUtilities.map((file) => ({
+        file,
+        reason: 'Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.',
+      })),
+    }).toMatchSnapshot();
+  });
+
+  it('reuses tokens.css in preview code instead of maintaining a second palette', () => {
+    const previewSource = readFileSync(resolve(process.cwd(), 'src/lib/preview-srcdoc.ts'), 'utf8');
+    const importsCanonicalTokens = /import\s+\w+\s+from\s+['"]@\/styles\/theme\/tokens\.css\?raw['"]/.test(previewSource);
+    const duplicatePalette = previewSource.match(/--sto-preview-[\w-]+:\s*(?:#|rgba?\()/g) ?? [];
+
+    expect([
+      ...(!importsCanonicalTokens ? [{
+        requirement: 'import tokens.css?raw',
+        reason: 'Migration debt: Task 4 makes adaptive preview consume the canonical token stylesheet.',
+      }] : []),
+      ...duplicatePalette.map((value) => ({
+        requirement: `remove duplicate preview literal ${value}`,
+        reason: 'Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.',
+      })),
+    ]).toMatchSnapshot();
   });
 });
