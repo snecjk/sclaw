@@ -51,7 +51,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           className={cn(
-            'inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#86909C]',
+            'inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#86909C] dark:text-[var(--sto-icon-tertiary)]',
             sortable ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-not-allowed opacity-40',
           )}
           aria-label={t('composer.quickInputManageDragAria')}
@@ -74,7 +74,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           onClick={() => onEdit(item)}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:hover:bg-background dark:hover:text-foreground"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-background dark:hover:text-[var(--sto-icon-secondary)]"
           aria-label={t('composer.quickInputManageEditAria')}
         >
           <Pencil className="h-3.5 w-3.5" aria-hidden />
@@ -82,7 +82,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           onClick={() => onShare(item)}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:hover:bg-background dark:hover:text-foreground"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-background dark:hover:text-[var(--sto-icon-secondary)]"
           aria-label={t('composer.quickInputManageShareAria')}
         >
           <ShareMessageIcon className="h-3.5 w-3.5" />
@@ -90,7 +90,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           onClick={() => onDelete(item)}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:hover:bg-background dark:hover:text-foreground"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-background dark:hover:text-[var(--sto-icon-secondary)]"
           aria-label={t('composer.quickInputManageDeleteAria')}
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />

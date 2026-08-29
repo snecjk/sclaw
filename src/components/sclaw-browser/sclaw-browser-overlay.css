@@ -414,3 +414,69 @@ body.sclaw-browser-split-dragging * {
 webview.sclaw-browser-drawer__frame--webview {
   display: inline-flex;
 }
+
+/* Dark appearance: browser chrome follows the app's neutral surface hierarchy. */
+.dark .sclaw-browser-drawer__backdrop {
+  animation-name: sclaw-browser-backdrop-in-dark;
+}
+
+@keyframes sclaw-browser-backdrop-in-dark {
+  from {
+    background: rgb(0 0 0 / 0%);
+  }
+  to {
+    background: rgb(0 0 0 / 45%);
+  }
+}
+
+.dark .sclaw-browser-drawer-panel,
+.dark .sclaw-browser-split__browser {
+  background: var(--sto-surface-under);
+  box-shadow: -8px 0 32px rgb(0 0 0 / 35%);
+}
+
+.dark .sclaw-browser-toolbar,
+.dark .sclaw-browser-split,
+.dark .sclaw-browser-split__chat,
+.dark .sclaw-browser-embed-chat,
+.dark .sclaw-browser-embed-chat__composer {
+  background: var(--sto-surface-primary);
+}
+
+.dark .sclaw-browser-toolbar,
+.dark .sclaw-browser-split__chat,
+.dark .sclaw-browser-embed-chat__header,
+.dark .sclaw-browser-embed-chat__composer {
+  border-color: var(--sto-border-default);
+}
+
+.dark .sclaw-browser-toolbar__title,
+.dark .sclaw-browser-embed-chat__title {
+  color: var(--sto-text-primary);
+}
+
+.dark .sclaw-browser-toolbar__sidebar-toggle,
+.dark .sclaw-browser-toolbar__back,
+.dark .sclaw-browser-toolbar__chat,
+.dark .sclaw-browser-embed-chat__session-btn,
+.dark .sclaw-browser-embed-chat__session-picker {
+  color: var(--sto-icon-secondary);
+}
+
+.dark .sclaw-browser-embed-chat__subtitle,
+.dark .sclaw-browser-embed-chat__close {
+  color: var(--sto-icon-tertiary);
+}
+
+.dark .sclaw-browser-toolbar__back:hover,
+.dark .sclaw-browser-embed-chat__session-btn:hover,
+.dark .sclaw-browser-embed-chat__session-picker:hover,
+.dark .sclaw-browser-embed-chat__close:hover {
+  background: var(--sto-surface-elevated);
+  color: var(--sto-icon-primary);
+}
+
+.dark .sclaw-browser-embed-chat__session-btn,
+.dark .sclaw-browser-embed-chat__session-picker {
+  background: var(--sto-surface-elevated);
+}

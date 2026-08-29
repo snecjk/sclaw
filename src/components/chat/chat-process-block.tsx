@@ -116,15 +116,24 @@ export function ChatProcessBlock({
       onClick={toggle}
       aria-expanded={expanded}
     >
-      <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      <Icon
+        className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+        aria-hidden
+      />
       {titleWithChevron}
     </button>
   ) : (
     <div className={chatProcessTitleRowClass}>
       {isRunning ? (
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-70" aria-hidden />
+        <Loader2
+          className="h-4 w-4 shrink-0 animate-spin opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+          aria-hidden
+        />
       ) : null}
-      <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      <Icon
+        className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+        aria-hidden
+      />
       {titleWithChevron}
     </div>
   );

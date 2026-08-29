@@ -1,0 +1,233 @@
+@layer base {
+  :root {
+    /* Palette: raw values stay here; consumers use semantic roles below. */
+    --sto-color-brand-hsl: 26.1176 100% 50%; /* #FF6F00 */
+    --sto-color-info-hsl: 231.8033 98.9189% 63.7255%; /* #4760FE */
+    --sto-color-success-hsl: 144.8619 100% 35.4902%; /* #00B54B */
+    --sto-color-danger-hsl: 0 95% 60.7843%; /* #FA3C3C */
+    --sto-color-warning-hsl: 39.913 95.8333% 52.9412%; /* #FAAD14 */
+    --sto-color-white-hsl: 0 0% 100%; /* #FFFFFF */
+    --sto-color-surface-page-hsl: 0 0% 98.0392%; /* #FAFAFA */
+    --sto-color-neutral-1-hsl: 210 25% 98.4314%; /* #FAFBFC */
+    --sto-color-neutral-2-hsl: 210 11.1111% 96.4706%; /* #F5F6F7 */
+    --sto-color-neutral-3-hsl: 220 13.0435% 95.4902%; /* #F2F3F5 */
+    --sto-color-neutral-4-hsl: 230 13.0435% 90.9804%; /* #E5E6EB */
+    --sto-color-neutral-6-hsl: 218.1818 11.3402% 80.9804%; /* #C9CDD4 */
+    --sto-color-neutral-8-hsl: 212.7273 10% 56.8627%; /* #86909C */
+    --sto-color-neutral-9-hsl: 215.5556 14.7541% 35.8824%; /* #4E5969 */
+    --sto-color-neutral-10-hsl: 220 17.1429% 13.7255%; /* #1D2129 */
+    --sto-color-brand-soft-hsl: 36 100% 95.098%; /* #FFF5E6 */
+    --sto-color-brand-strong-hsl: 21.7877 100% 35.098%; /* #B34100 */
+    --sto-color-info-soft-hsl: 222.8571 100% 97.0588%; /* #F0F4FF */
+
+    /* Tailwind / shadcn compatibility aliases. */
+    --background: 220 14% 97%;
+    --foreground: 220 26% 14%;
+    --card: var(--sto-color-white-hsl);
+    --card-foreground: 220 26% 14%;
+    --popover: var(--sto-color-white-hsl);
+    --popover-foreground: 220 26% 14%;
+    --primary: 26 100% 50%;
+    --primary-foreground: var(--sto-color-white-hsl);
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 26% 14%;
+    --muted: 220 13% 96%;
+    --muted-foreground: 215 14% 45%;
+    --accent: 32 100% 95%;
+    --accent-foreground: 26 100% 36%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: var(--sto-color-white-hsl);
+    --success: 130 67% 47%;
+    --success-foreground: var(--sto-color-white-hsl);
+    --warning: 38 99% 59%;
+    --warning-foreground: 220 26% 14%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 26 100% 50%;
+
+    --glass-bg: 220 14% 98%;
+    --glass-opacity: 0.72;
+    --glass-blur: 16px;
+    --glass-border: 220 12% 78% / 0.4;
+    --glass-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+    --glass-highlight: 0 0% 100% / 0.82;
+    --canvas-from: #f7f8fa;
+    --canvas-via: #f5f6f7;
+    --canvas-to: #fafbfc;
+    --link: 231 99% 64%;
+    --link-foreground: 0 0% 100%;
+    --link-muted: 228 100% 97%;
+
+    /* Feedback surfaces. */
+    --sto-toast-info-bg: #f0f4ff;
+    --sto-toast-info-border: #d6e1ff;
+    --sto-toast-info-icon: #4760fe;
+    --sto-toast-warning-bg: #fffbe6;
+    --sto-toast-warning-border: #fff1b8;
+    --sto-toast-warning-icon: #f4aa17;
+    --sto-toast-error-bg: #fff2f0;
+    --sto-toast-error-border: #ffe4e0;
+    --sto-toast-error-icon: #fa3c3c;
+    --sto-toast-success-bg: #eaf6ee;
+    --sto-toast-success-border: #c8ead6;
+    --sto-toast-success-icon: #31af65;
+    --sto-chat-error-bg: #fffbe6;
+    --sto-chat-error-border: #fff1b8;
+    --sto-chat-error-icon: #faad14;
+
+    /* Semantic surfaces: light values are the frozen visual baseline. */
+    --sto-shell-bg: #ededed;
+    --sto-workspace-bg: #fafafa;
+    --sto-panel-bg: #ffffff;
+    --sto-surface-under: var(--sto-shell-bg);
+    --sto-surface-canvas: #f7f8fa;
+    --sto-surface-primary: var(--sto-workspace-bg);
+    --sto-surface-secondary: var(--sto-panel-bg);
+    --sto-surface-elevated: #ffffff;
+    --sto-surface-subtle: #f2f3f5;
+    --sto-brand-primary: hsl(var(--primary));
+    --sto-brand-hover: #d95700;
+    --sto-info-primary: hsl(var(--link));
+    --sto-success-primary: hsl(var(--success));
+    --sto-danger-primary: hsl(var(--destructive));
+    --sto-warning-primary: hsl(var(--warning));
+    --sto-control-bg: var(--sto-panel-bg);
+    --sto-control-hover-bg: #f2f3f5;
+    --sto-control-active-bg: #e5e6eb;
+    --sto-control-placeholder: hsl(var(--muted-foreground));
+    --sto-text-primary: #1d2129;
+    --sto-text-secondary: #4e5969;
+    --sto-text-tertiary: #86909c;
+    --sto-icon-primary: var(--sto-text-primary);
+    --sto-icon-secondary: var(--sto-text-secondary);
+    --sto-icon-tertiary: var(--sto-text-tertiary);
+    --sto-border-light: rgba(29, 33, 41, 0.04);
+    --sto-border-default: #e5e6eb;
+    --sto-border-heavy: #c9cdd4;
+    --sto-surface-edge: #e8eaef;
+    --sto-workspace-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    --sto-page-bg: var(--sto-shell-bg);
+    --sto-sidebar-bg: var(--sto-shell-bg);
+    --sto-sidebar-border: var(--sto-surface-edge);
+    --sto-accent: #ff8c00;
+    --sto-accent-soft: #fff3e0;
+    --sto-brand-6: #ff6f00;
+
+    /* Card roles keep existing light values and vary only in dark appearance. */
+    --sto-card-flat-bg: #ffffff;
+    --sto-card-flat-hover-bg: #ffffff;
+    --sto-card-flat-border: var(--sto-border-default);
+    --sto-card-flat-hover-border: var(--sto-border-heavy);
+    --sto-card-flat-shadow: none;
+    --sto-card-flat-hover-shadow: 0 0 16px rgba(0, 0, 0, 0.12);
+    --sto-card-panel-bg: #ffffff;
+    --sto-card-inset-bg: #fafbfc;
+    --sto-card-elevated-bg: #ffffff;
+    --sto-overlay-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 0 0% 5.1%;
+    --foreground: 0 0% 87.5%;
+    --card: 0 0% 12.9%;
+    --card-foreground: 0 0% 87.5%;
+    --popover: 0 0% 15.7%;
+    --popover-foreground: 0 0% 87.5%;
+    --primary: var(--sto-color-brand-hsl);
+    --primary-foreground: var(--sto-color-white-hsl);
+    --secondary: 0 0% 12.9%;
+    --secondary-foreground: 0 0% 87.5%;
+    --muted: 0 0% 15.7%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 32 45% 16%;
+    --accent-foreground: 32 100% 88%;
+    --destructive: var(--sto-color-danger-hsl);
+    --destructive-foreground: var(--sto-color-white-hsl);
+    --success: var(--sto-color-success-hsl);
+    --success-foreground: var(--sto-color-white-hsl);
+    --warning: var(--sto-color-warning-hsl);
+    --warning-foreground: 220 26% 14%;
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.08;
+    --ring: var(--sto-color-brand-hsl);
+
+    --glass-bg: 0 0% 12.9%;
+    --glass-opacity: 0.52;
+    --glass-blur: 18px;
+    --glass-border: 0 0% 100% / 0.08;
+    --glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    --glass-highlight: 0 0% 100% / 0.08;
+    --canvas-from: #0d0d0d;
+    --canvas-via: #181818;
+    --canvas-to: #212121;
+    --link: var(--sto-color-info-hsl);
+    --link-foreground: var(--sto-color-white-hsl);
+    --link-muted: 231 35% 18%;
+
+    --sto-brand-primary: hsl(var(--sto-color-brand-hsl));
+    --sto-info-primary: hsl(var(--sto-color-info-hsl));
+    --sto-success-primary: hsl(var(--sto-color-success-hsl));
+    --sto-danger-primary: hsl(var(--sto-color-danger-hsl));
+    --sto-warning-primary: hsl(var(--sto-color-warning-hsl));
+
+    --sto-toast-info-bg: hsl(231 35% 18%);
+    --sto-toast-info-border: hsl(231 40% 28%);
+    --sto-toast-info-icon: hsl(231 92% 72%);
+    --sto-toast-warning-bg: hsl(43 45% 14%);
+    --sto-toast-warning-border: hsl(43 50% 24%);
+    --sto-toast-warning-icon: hsl(38 90% 52%);
+    --sto-toast-error-bg: hsl(0 40% 14%);
+    --sto-toast-error-border: hsl(0 45% 24%);
+    --sto-toast-error-icon: hsl(0 72% 56%);
+    --sto-toast-success-bg: hsl(140 30% 14%);
+    --sto-toast-success-border: hsl(140 35% 24%);
+    --sto-toast-success-icon: hsl(130 60% 48%);
+    --sto-chat-error-bg: hsl(43 45% 14%);
+    --sto-chat-error-border: hsl(43 50% 24%);
+    --sto-chat-error-icon: hsl(38 90% 52%);
+
+    --sto-surface-under: #0d0d0d;
+    --sto-surface-canvas: #0d0d0d;
+    --sto-surface-primary: #181818;
+    --sto-surface-secondary: #212121;
+    --sto-surface-elevated: #282828;
+    --sto-surface-subtle: #212121;
+    --sto-brand-hover: #ff8d2a;
+    --sto-control-bg: #212121;
+    --sto-control-hover-bg: #282828;
+    --sto-control-active-bg: #282828;
+    --sto-control-placeholder: var(--sto-text-tertiary);
+    --sto-text-primary: #dfdfdf;
+    --sto-text-secondary: rgba(255, 255, 255, 0.70);
+    --sto-text-tertiary: rgba(255, 255, 255, 0.50);
+    --sto-icon-primary: rgba(255, 255, 255, 0.90);
+    --sto-icon-secondary: rgba(255, 255, 255, 0.70);
+    --sto-icon-tertiary: rgba(255, 255, 255, 0.50);
+    --sto-border-light: rgba(255, 255, 255, 0.04);
+    --sto-border-default: rgba(255, 255, 255, 0.08);
+    --sto-border-heavy: rgba(255, 255, 255, 0.16);
+    --sto-shell-bg: var(--sto-surface-secondary);
+    --sto-workspace-bg: var(--sto-surface-under);
+    --sto-panel-bg: var(--sto-surface-primary);
+    --sto-surface-edge: var(--sto-border-default);
+    --sto-workspace-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
+    --sto-page-bg: var(--sto-surface-under);
+    --sto-sidebar-bg: var(--sto-surface-secondary);
+    --sto-sidebar-border: var(--sto-surface-edge);
+    --sto-accent: #ff9f2e;
+    --sto-accent-soft: hsl(32 45% 14%);
+    --sto-brand-6: var(--sto-brand-primary);
+
+    --sto-card-flat-bg: transparent;
+    --sto-card-flat-hover-bg: #181818;
+    --sto-card-flat-border: var(--sto-border-default);
+    --sto-card-flat-hover-border: var(--sto-border-heavy);
+    --sto-card-flat-shadow: none;
+    --sto-card-flat-hover-shadow: none;
+    --sto-card-panel-bg: #181818;
+    --sto-card-inset-bg: #212121;
+    --sto-card-elevated-bg: #282828;
+    --sto-overlay-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+}

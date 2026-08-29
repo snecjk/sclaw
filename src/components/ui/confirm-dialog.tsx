@@ -129,7 +129,7 @@ export function ConfirmDialog({
             disabled={confirming}
             className={cn(
               'h-8 rounded-md px-3 text-[13px] font-medium shadow-none',
-              variant === 'destructive' && 'bg-[#F53F3F] hover:bg-[#E23B3B]',
+              variant === 'destructive' && 'bg-[#F53F3F] hover:bg-[#E23B3B] dark:bg-destructive dark:hover:bg-destructive/90',
             )}
           >
             {confirming ? (

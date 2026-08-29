@@ -204,7 +204,7 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
         {hasData ? (
           <div className="flex h-[34px] w-full shrink-0 items-center gap-2 self-stretch p-0">
             <div className="box-border flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-[#E8EAEF] bg-white p-2 dark:border-border dark:bg-background">
-              <Search className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden />
+              <Search className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" aria-hidden />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -231,12 +231,12 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
 
         {loading && !hasData ? (
           <div className="flex min-h-[160px] flex-col items-center justify-center gap-3 px-2 py-6">
-            <p className="text-center text-xs text-[#86909C]">{t('composer.quickInputLoading')}</p>
+            <p className="text-center text-xs text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('composer.quickInputLoading')}</p>
           </div>
         ) : hasData ? (
           <div className="h-[200px] overflow-y-auto overscroll-contain py-0.5">
             {filtered.length === 0 ? (
-              <div className="px-3 py-6 text-center text-xs text-[#86909C]">
+              <div className="px-3 py-6 text-center text-xs text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
                 {t('composer.quickInputNoResults')}
               </div>
             ) : (
@@ -255,7 +255,7 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
         ) : (
           <div className="flex min-h-[160px] flex-col items-center justify-center gap-3 px-2 py-6">
             <img src={quickInputEmptyIcon} alt="" width={40} height={40} aria-hidden />
-            <p className="flex h-4 w-[120px] items-center justify-center text-center text-xs font-normal leading-4 text-[#86909C]">
+            <p className="flex h-4 w-[120px] items-center justify-center text-center text-xs font-normal leading-4 text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
               {t('composer.quickInputEmpty')}
             </p>
           </div>

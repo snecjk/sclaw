@@ -29,7 +29,7 @@ const artifactActionPillClass =
   'shrink-0 rounded-md bg-[#F5F6F7] px-3 py-1.5 text-sm leading-[18px] text-foreground dark:bg-muted';
 
 const artifactMenuContentClass =
-  'min-w-[11rem] rounded-lg border border-[#E8EAEF] bg-card p-1 shadow-[0_4px_16px_rgba(15,23,42,0.08)] dark:border-border';
+  'min-w-[11rem] rounded-lg border border-[#E8EAEF] bg-card p-1 shadow-[0_4px_16px_rgba(15,23,42,0.08)] dark:border-border dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]';
 
 const artifactMenuItemClass =
   'gap-2 rounded-md px-2.5 py-2 text-sm text-foreground';

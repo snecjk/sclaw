@@ -19,6 +19,10 @@ const globalsCss = readFileSync(
   resolve(process.cwd(), 'src/styles/globals.css'),
   'utf8',
 );
+const themeTokensCss = readFileSync(
+  resolve(process.cwd(), 'src/styles/theme/tokens.css'),
+  'utf8',
+);
 
 function extractBlock(source: string, marker: string): string {
   const start = source.indexOf(marker);
@@ -27,6 +31,10 @@ function extractBlock(source: string, marker: string): string {
   const end = slice.indexOf('\n  }', marker.length);
   expect(end).toBeGreaterThan(0);
   return slice.slice(0, end);
+}
+
+function extractThemeBlock(marker: ':root {' | '.dark {'): string {
+  return `${extractBlock(themeTokensCss, marker)}\n${extractBlock(globalsCss, marker)}`;
 }
 
 describe('app shell surface tokens (Stage 4)', () => {
@@ -38,23 +46,27 @@ describe('app shell surface tokens (Stage 4)', () => {
       '--sto-surface-edge',
       '--sto-workspace-shadow',
     ]) {
-      expect(globalsCss).toContain(`${token}:`);
+      expect(themeTokensCss).toContain(`${token}:`);
     }
 
-    const root = extractBlock(globalsCss, ':root {');
-    const dark = extractBlock(globalsCss, '.dark {');
+    const root = extractThemeBlock(':root {');
+    const dark = extractThemeBlock('.dark {');
 
-    for (const block of [root, dark]) {
-      expect(block).toMatch(/--sto-page-bg:\s*var\(--sto-shell-bg\)/);
-      expect(block).toMatch(/--sto-sidebar-bg:\s*var\(--sto-shell-bg\)/);
-      expect(block).toMatch(/--sto-main-card-bg:\s*var\(--sto-workspace-bg\)/);
-      expect(block).toMatch(/--sto-main-card-shadow:\s*var\(--sto-workspace-shadow\)/);
-    }
+    expect(root).toMatch(/--sto-page-bg:\s*var\(--sto-shell-bg\)/);
+    expect(root).toMatch(/--sto-sidebar-bg:\s*var\(--sto-shell-bg\)/);
+    expect(root).toMatch(/--sto-main-card-bg:\s*var\(--sto-workspace-bg\)/);
+    expect(root).toMatch(/--sto-main-card-shadow:\s*var\(--sto-workspace-shadow\)/);
+
+    expect(dark).toMatch(/--sto-page-bg:\s*var\(--sto-surface-under\)/);
+    expect(dark).toMatch(/--sto-sidebar-bg:\s*var\(--sto-surface-secondary\)/);
+    expect(dark).toMatch(/--sto-main-card-bg:\s*var\(--sto-surface-under\)/);
+    expect(dark).toMatch(/--sto-main-card-shadow:\s*var\(--sto-workspace-shadow\)/);
   });
 
-  it('keeps dark Sidebar on the same L0 token as Shell (no hue fork)', () => {
-    const dark = extractBlock(globalsCss, '.dark {');
-    expect(dark).toMatch(/--sto-sidebar-bg:\s*var\(--sto-shell-bg\)/);
+  it('keeps dark Sidebar one neutral level above the content canvas', () => {
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toMatch(/--sto-sidebar-bg:\s*var\(--sto-surface-secondary\)/);
+    expect(dark).toMatch(/--sto-page-bg:\s*var\(--sto-surface-under\)/);
     expect(dark).not.toMatch(/--sto-sidebar-bg:\s*hsl\(/);
   });
 
@@ -101,9 +113,9 @@ describe('app shell surface tokens (Stage 4)', () => {
     expect(myTaskSectionTabsTrackClass).toBe(stoSegmentTabsTrackClass);
     expect(myTaskSectionTabClass(true)).toBe(stoSegmentTabClass(true));
     expect(myTaskSectionTabClass(false)).toBe(stoSegmentTabClass(false));
-    expect(myTaskCreateButtonClass).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(myTaskCreateButtonClass).toContain('bg-[var(--sto-control-bg)]');
     expect(myTaskCreateButtonClass).toContain('h-[34px]');
-    expect(myTaskSortTriggerClass).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(myTaskSortTriggerClass).toContain('bg-[var(--sto-control-bg)]');
     expect(myTaskSortTriggerClass).toContain('h-[34px]');
   });
 
@@ -113,7 +125,7 @@ describe('app shell surface tokens (Stage 4)', () => {
     expect(myTaskCreateButtonClass).toContain('active:scale-[0.98]');
     expect(myTaskCreateButtonClass).toContain('focus-visible:ring-2');
     expect(myTaskSortTriggerClass).toContain('font-medium');
-    expect(myTaskCreateButtonClass).toContain('dark:bg-[var(--sto-control-bg)]');
-    expect(myTaskSortTriggerClass).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(myTaskCreateButtonClass).toContain('bg-[var(--sto-control-bg)]');
+    expect(myTaskSortTriggerClass).toContain('bg-[var(--sto-control-bg)]');
   });
 });

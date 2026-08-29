@@ -191,12 +191,12 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     };
 
     const sectionTitleBaseClass =
-      'sticky z-10 flex h-6 w-full items-center bg-white px-2 py-1 text-left text-[12px] font-medium leading-4 text-[#86909C] dark:bg-[#18181B] dark:text-muted-foreground';
+      'sticky z-10 flex h-6 w-full items-center bg-white px-2 py-1 text-left text-[12px] font-medium leading-4 text-[#86909C] dark:bg-[var(--sto-surface-primary)] dark:text-[var(--sto-text-tertiary)]';
     const itemClass =
       'flex h-8 w-full items-center gap-1.5 rounded-lg px-2 text-left transition-colors hover:bg-[#F0F2F5] dark:hover:bg-white/[0.06]';
     const itemIconClass = 'h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground';
     const itemTitleClass = 'max-w-[45%] shrink-0 truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground';
-    const itemDescriptionClass = 'min-w-0 flex-1 truncate text-[10px] font-normal leading-3.5 text-[#86909C]';
+    const itemDescriptionClass = 'min-w-0 flex-1 truncate text-[10px] font-normal leading-3.5 text-[#86909C] dark:text-[var(--sto-text-tertiary)]';
     const workflowEmptyText = (
       <div className="px-2 py-2 text-[12px] font-normal leading-4 text-[#86909C] dark:text-muted-foreground">
         {t('composer.workflowNoTemplates')}
@@ -299,7 +299,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       <div
         ref={setRefs}
         className={cn(
-          'z-[100001] flex max-h-[272px] flex-col overflow-hidden rounded-[18px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_0_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
+          'z-[100001] flex max-h-[272px] flex-col overflow-hidden rounded-[18px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_0_rgba(0,0,0,0.1)] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
           position
             ? 'fixed'
             : 'absolute left-0 bottom-full mb-2 w-[280px]',
@@ -358,7 +358,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
                 </button>
               ))}
 
-              <div className="my-1 h-px bg-[#F2F3F5]" />
+              <div className="my-1 h-px bg-[#F2F3F5] dark:bg-[var(--sto-border-default)]" />
 
               <div ref={skillSectionRef}>
                 <button

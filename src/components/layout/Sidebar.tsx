@@ -145,6 +145,8 @@ import {
   sidebarScrollListClass,
   sidebarScrollContainerClass,
   sidebarScrollOverlayHostClass,
+  sidebarTooltipArrowClass as SIDEBAR_TOOLTIP_ARROW_CLASS,
+  sidebarTooltipContentClass as SIDEBAR_TOOLTIP_CLASS,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
@@ -161,14 +163,6 @@ type SessionBucketKey =
 
 
 const INITIAL_NOW_MS = Date.now();
-
-/** Collapsed rail: offset from narrow bar + opaque popover so glass tooltips do not show main content through them. */
-const SIDEBAR_TOOLTIP_CLASS = cn(
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
-  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
-  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
-);
-const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 /** Footer account dropdown — MasterGo: 160×186 卡片 + 34px 行高菜单项 */
 const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
@@ -2333,7 +2327,7 @@ export function Sidebar() {
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
                   <span className="flex-1">{t('settings:appearance.language')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {SUPPORTED_LANGUAGES.map((lang) => (
@@ -2358,7 +2352,7 @@ export function Sidebar() {
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {(['light', 'dark', 'system'] as const).map((t_value) => (

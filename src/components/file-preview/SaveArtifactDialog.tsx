@@ -666,7 +666,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           <button
             type="button"
             role="menuitem"
-            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[#F53F3F] hover:bg-[#F2F3F5] dark:hover:bg-[var(--sto-control-hover-bg)]"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[#F53F3F] hover:bg-[#F2F3F5] dark:text-destructive dark:hover:bg-[var(--sto-control-hover-bg)]"
             onClick={() => {
               setContextMenu(null);
               setDeletingFolder({ space: contextMenu.space, folder: contextMenu.folder });
@@ -758,7 +758,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 type="button"
                 onClick={() => void handleDeleteFolder()}
                 disabled={deleteSubmitting}
-                className="h-8 rounded-[8px] bg-[#F53F3F] px-4 text-[12px] font-normal text-white hover:bg-[#E23B3B]"
+                className="h-8 rounded-[8px] bg-[#F53F3F] px-4 text-[12px] font-normal text-white hover:bg-[#E23B3B] dark:bg-destructive dark:hover:bg-destructive/90"
               >
                 {deleteSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('dataCenterPage.menu.delete')}
               </Button>

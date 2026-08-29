@@ -298,25 +298,24 @@ const requiredSemanticFragments: Record<(typeof taskSixFiles)[number], readonly 
     'dark:text-[var(--sto-text-primary)]',
   ],
   'src/components/connectors/ConnectorCard.tsx': [
-    'dark:bg-[var(--sto-surface-secondary)]',
     'dark:bg-[var(--sto-surface-elevated)]',
     'dark:hover:bg-[var(--sto-control-hover-bg)]',
   ],
   'src/components/ui/button.tsx': [
-    'dark:bg-[var(--sto-control-bg)]',
-    'dark:hover:bg-[var(--sto-control-hover-bg)]',
+    'sto-control-outline',
+    'sto-control-secondary',
+    'sto-control-ghost',
   ],
   'src/components/ui/input.tsx': [
-    'dark:bg-[var(--sto-control-bg)]',
-    'dark:border-[var(--sto-border-default)]',
+    'sto-control-field',
   ],
   'src/components/ui/tabs.tsx': [
-    'dark:bg-[var(--sto-control-bg)]',
-    'dark:data-[state=active]:bg-[var(--sto-control-active-bg)]',
+    'sto-segment-track',
+    'sto-segment-item',
   ],
   'src/components/ui/dropdown-menu.tsx': [
-    'dark:bg-[var(--sto-surface-elevated)]',
-    'dark:border-[var(--sto-border-default)]',
+    'sto-overlay',
+    'sto-overlay-glass-border',
   ],
   'src/components/file-preview/SaveArtifactDialog.tsx': [
     'dark:bg-[var(--sto-surface-secondary)]',

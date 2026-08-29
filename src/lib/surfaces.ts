@@ -1,11 +1,13 @@
 import { cn } from '@/lib/utils';
 
-/**
- * 列表/广场卡片 hover 描边 + 阴影：与首页推荐卡一致
- *（RecommendCard：hover:border-[#C9CDD4] + hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)]）
- */
-export const listCardHoverBorderShadowClass = cn(
-  'hover:border-[#C9CDD4] hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)] dark:hover:border-border',
+/** 列表/广场卡片沿用全局 Flat Card 交互色。 */
+export const listCardHoverBorderShadowClass = 'sto-card-flat-interactive';
+
+/** 应用、技能、连接器、工作流等集合卡片共用的外壳与交互状态。 */
+export const collectionCardShellClass = cn(
+  'sto-card-flat sto-card-flat-interactive',
+  'transition-[background-color,border-color,box-shadow] duration-150',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
 );
 
 /** Page section surface (Models page, Settings proxy, etc.) — glass gradient + blur */
@@ -20,8 +22,7 @@ export const glassSectionSurface = cn(
 
 /** 设置页右侧内容区白卡片（MasterGo：8px 圆角、#E5E6EB 描边、白底） */
 export const stoSettingsSectionCardClass = cn(
-  'overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-6',
-  'dark:border-border dark:bg-card',
+  'overflow-hidden rounded-[8px] border border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] p-6',
 );
 
 /** 设置页右侧内容卡片外槽：顶/右/底 8px 留白（MasterGo top:8px） */
@@ -188,29 +189,24 @@ export function myTaskSectionTabClass(active: boolean): string {
 }
 
 export const stoOutlineButtonBaseClass = cn(
-  "inline-flex items-center justify-center rounded-[12px] border border-[#E8EAEF] bg-white font-['PingFang_SC'] text-[13px] font-medium leading-none text-[#1D2129]",
-  'transition-colors duration-150 hover:bg-[#F2F3F5]',
-  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]',
+  "inline-flex items-center justify-center rounded-[12px] border border-[var(--sto-surface-edge)] bg-[var(--sto-control-bg)] font-['PingFang_SC'] text-[13px] font-medium leading-none text-[var(--sto-text-primary)]",
+  'transition-colors duration-150 hover:bg-[var(--sto-control-hover-bg)]',
 );
 
 export const stoSearchFieldShellClass = cn(
-  'flex items-center gap-2 rounded-[12px] border border-border bg-white px-3',
-  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)]',
+  'flex items-center gap-2 rounded-[12px] border border-[var(--sto-border-default)] bg-[var(--sto-control-bg)] px-3',
 );
 
 export const stoSortTriggerClass = cn(
-  'flex items-center gap-[6px] rounded-[10px] border border-border bg-white text-[#1D2129]',
-  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]',
+  'flex items-center gap-[6px] rounded-[10px] border border-[var(--sto-border-default)] bg-[var(--sto-control-bg)] text-[var(--sto-text-primary)] hover:bg-[var(--sto-control-hover-bg)]',
 );
 
 export const stoIconSurfaceClass = cn(
-  'flex shrink-0 items-center justify-center rounded-lg border border-border bg-white text-[#1D2129]',
-  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)]',
+  'flex shrink-0 items-center justify-center rounded-lg border border-[var(--sto-border-default)] bg-[var(--sto-control-bg)] text-[var(--sto-text-primary)]',
 );
 
 export const stoNeutralCardClass = cn(
-  'border border-border bg-white',
-  'dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]',
+  'border border-[var(--sto-border-default)] bg-[var(--sto-surface-secondary)]',
 );
 
 export const myTaskCreateButtonClass = cn(
@@ -222,7 +218,7 @@ export const myTaskCreateButtonClass = cn(
 
 /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
-  'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] border-[#E5E6EB] bg-white p-4 dark:border-border dark:bg-secondary',
+  'sto-card-flat relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] p-4',
   'transition-[border-color,box-shadow] duration-base',
   listCardHoverBorderShadowClass,
 );
@@ -388,7 +384,7 @@ export const scheduleToggleThumbClass = cn(
   'transition-transform duration-fast',
 );
 
-/** 我的任务卡片：关联工作流 badge（浅/暗色均用 #F0F4FF 底 + #6171DB 字） */
+/** 我的任务卡片：关联工作流 badge（Info soft + Info primary） */
 export const myTaskWorkflowBadgeClass = cn(
   'inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-[6px]',
   'bg-[#F0F4FF] px-1.5 py-[3px] text-xs font-medium leading-none text-[#6171DB]',
@@ -1161,9 +1157,8 @@ export const workflowListCardGridClass =
 
 /** 工作流列表卡片外框 */
 export const workflowListCardShellClass = cn(
-  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#E9EAEB] bg-card dark:border-border dark:bg-secondary',
-  'transition-[border-color,box-shadow] duration-base',
-  listCardHoverBorderShadowClass,
+  collectionCardShellClass,
+  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#E9EAEB] dark:border-[var(--sto-border-default)]',
 );
 
 /** 工作流卡片头图：距卡片边框上/左/右 4px（设计稿） */
@@ -1344,7 +1339,7 @@ export const skillMessageTagClass = skillComposerTagClass;
 /** Composer 技能 Picker 浮层容器 */
 export const skillPickerShellClass = cn(
   'absolute left-0 bottom-full z-[100001] mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2',
-  'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
+  'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
 );
 
 /** 技能 Picker 列表区 */
@@ -1492,7 +1487,7 @@ export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
 /** 工具调用标题行（13px #86909C，图标 16px，标题行 gap 4px） */
 export const chatToolCallHeaderBtnClass = cn(
   'flex w-full items-center gap-1 text-left',
-  'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground',
+  'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground dark:text-[var(--sto-text-secondary)]',
 );
 
 /** 工具/思考内容区：16px icon 列 + 竖线固定在 icon 中线 */
@@ -1514,13 +1509,13 @@ export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
 /** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
   'sto-chat-content-scrollbar m-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
-  'text-[13px] leading-5 font-normal text-[#86909C]',
+  'text-[13px] leading-5 font-normal text-[#86909C] dark:text-[var(--sto-text-tertiary)]',
 );
 
 /** 思考/工具汇总条标题（MasterGo 4:2177：13/20 #86909C，chevron gap 4px） */
 export const chatThinkingSummaryHeaderClass = cn(
   'flex w-full items-center gap-1 py-1 text-left',
-  'text-[13px] leading-5 font-normal text-[#86909C]',
+  'text-[13px] leading-5 font-normal text-[#86909C] dark:text-[var(--sto-text-secondary)]',
   'transition-colors duration-150 hover:text-foreground',
 );
 
@@ -1532,10 +1527,11 @@ export const chatThinkingSegmentSummaryHeaderClass = cn(
 
 /** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
 export const chatProcessSecondaryTextClass =
-  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[#86909C]';
+  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[#86909C] dark:text-[var(--sto-text-tertiary)]';
 
 /** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
-export const chatProcessLoadingTextClass = 'text-[13px] leading-[18px] font-normal text-[#6B737D]';
+export const chatProcessLoadingTextClass =
+  'text-[13px] leading-[18px] font-normal text-[#6B737D] dark:text-[var(--sto-text-tertiary)]';
 
 /** 过程块标题行（MasterGo 4:2177：icon 16px + 文案，gap 4px） */
 export const chatProcessTitleRowClass = cn(
@@ -1571,7 +1567,7 @@ export const sidebarBodyTextClass = 'text-[13px] font-normal leading-5';
 /** 侧栏正文 13/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
 export const sidebarBodyTextMediumClass = 'text-[13px] font-medium leading-5';
 
-/** 侧栏一级正文色：浅色 #393E47；暗色由 --sto-sidebar-text-default 切换为 #E5E6EB */
+/** 侧栏一级正文色：浅色 #393E47；暗色默认项切换为 70% 白 */
 export const sidebarTextDefaultClass = 'text-[var(--sto-sidebar-text-default)]';
 
 /** 行内图标色 Grey-9 #4E5969 — MCP paint_4:0490「文字/文本-浅色-二级信息」 */
@@ -1580,6 +1576,16 @@ export const sidebarTextIconClass =
 
 /** 三级文字 Grey-8 #86909C — MCP paint_4:0520「文字/文本-更浅-三级信息」 */
 export const sidebarTextSectionClass = 'text-[var(--sto-sidebar-text-section)]';
+
+/** 侧栏窄态提示：浅色沿用设计深底，深色使用中性 Elevated Surface。 */
+export const sidebarTooltipContentClass = cn(
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+  'dark:bg-[var(--sto-surface-elevated)] dark:text-[var(--sto-text-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+);
+
+export const sidebarTooltipArrowClass =
+  'fill-[#1D2129] dark:fill-[var(--sto-surface-elevated)]';
 
 /** 品牌头版本号 — Grey-8，MCP font_8:49208（SF Pro 11px）；相对 logo 基线下移 6px */
 export const sidebarBrandVersionClass = cn(
@@ -1644,7 +1650,7 @@ export const sidebarScrollContainerClass = cn(
 /** 侧栏中部 Overlay 定位壳（不滚动）；复用共享 host 契约 */
 export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 
-/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 32px（h-8） */
+/** 展开侧栏主导航 idle — 浅色正文 Grey-10 + 图标 Grey-9；暗色统一为次级层；行高 32px（h-8） */
 export const sidebarNavExpandedIdleClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
@@ -1653,12 +1659,12 @@ export const sidebarNavExpandedIdleClass = cn(
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致）；行高 32px（h-8） */
+/** 展开侧栏主导航 active — 底色 + 主文字/主图标，字重与 idle 一致；行高 32px（h-8） */
 export const sidebarNavExpandedActiveClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
-  sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
+  'text-[var(--sto-sidebar-text-active)]',
+  '[&_svg]:stroke-[var(--sto-sidebar-icon-active)] [&_svg]:text-[var(--sto-sidebar-icon-active)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
@@ -1674,7 +1680,7 @@ export const sidebarSubitemTextIdleClass = cn(
 /** 三级子项路由选中 — Grey-10 Regular + Grey-4 底（MCP 子项无加粗） */
 export const sidebarSubitemTextActiveClass = cn(
   sidebarBodyTextClass,
-  sidebarTextDefaultClass,
+  'text-[var(--sto-sidebar-text-active)]',
   'bg-[var(--sto-sidebar-subitem-active-bg)]',
 );
 

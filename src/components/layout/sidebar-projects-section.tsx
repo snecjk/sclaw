@@ -17,6 +17,8 @@ import {
   sidebarListItemTextClass,
   sidebarSubitemTextIdleClass,
   sidebarTextIconClass,
+  sidebarTooltipArrowClass as SIDEBAR_TOOLTIP_ARROW_CLASS,
+  sidebarTooltipContentClass as SIDEBAR_TOOLTIP_CLASS,
 } from '@/lib/surfaces';
 import {
   areAllExpandableGroupsExpanded,
@@ -53,13 +55,6 @@ import {
 } from '@/components/ui/tooltip';
 import { invokeIpc } from '@/lib/api-client';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
-
-const SIDEBAR_TOOLTIP_CLASS = cn(
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
-  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
-  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
-);
-const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 interface SidebarProjectsSectionProps {
   collapsed: boolean;
@@ -403,7 +398,7 @@ export function SidebarProjectsSection({
                 className={cn(
                   'min-w-0 truncate',
                   sidebarListItemTextClass,
-                  'text-[#86909C]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
+                  'text-[#86909C] dark:text-[var(--sto-text-tertiary)]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
                 )}
               >
                 {t('sidebar.projectsEmpty')}

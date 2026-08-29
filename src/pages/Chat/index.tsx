@@ -652,7 +652,7 @@ export function Chat() {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
-        <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px]" />
+        <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px] dark:bg-white/[0.025]" />
         <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
       </div>
 
@@ -912,7 +912,7 @@ function WelcomeScreen() {
   return (
     <div className="relative flex h-[68vh] flex-col items-center justify-center overflow-hidden text-center">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-[18%] h-40 w-40 -translate-x-1/2 rounded-full bg-cyan-300/10 blur-[90px]" />
+        <div className="absolute left-1/2 top-[18%] h-40 w-40 -translate-x-1/2 rounded-full bg-cyan-300/10 blur-[90px] dark:bg-white/[0.025]" />
       </div>
 
       <div className="relative z-10 flex max-w-4xl flex-col items-center justify-center">

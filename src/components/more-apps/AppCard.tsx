@@ -8,6 +8,7 @@ import type { AppItem } from '@/types/more-apps';
 import { AppIcon } from './AppIcon';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { collectionCardShellClass } from '@/lib/surfaces';
 import { formatExternalAppDomain } from './format-external-app-domain';
 
 interface AppCardProps {
@@ -87,6 +88,7 @@ function AppCardImpl({
   return (
     <article
       className={cn(
+        collectionCardShellClass,
         'more-apps-card',
         isExternal && 'more-apps-card--custom',
         installed && 'more-apps-card--installed',

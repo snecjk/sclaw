@@ -53,7 +53,7 @@ export interface InputComposerShellProps {
 }
 
 const defaultShellClass = cn(
-  'relative overflow-visible rounded-2xl border bg-white transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
+  'relative overflow-visible rounded-2xl border bg-white transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[var(--sto-panel-bg)]',
   'border-[#E5E6EB] shadow-[0_4px_14px_rgba(29,33,41,0.05)] ring-1 ring-transparent dark:border-border dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
 );
 

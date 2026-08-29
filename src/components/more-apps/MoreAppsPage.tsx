@@ -14,6 +14,7 @@ import { useMoreAppsStore } from '@/stores/more-apps';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
+  collectionCardShellClass,
   stoMainInnerShell,
   stoPageTitleClass,
 } from '@/lib/surfaces';
@@ -522,7 +523,11 @@ export function MoreAppsPage() {
             return (
               <article
                 key={app.id}
-                className={cn('app-market__row', installed && 'app-market__row--installed')}
+                className={cn(
+                  collectionCardShellClass,
+                  'app-market__row',
+                  installed && 'app-market__row--installed',
+                )}
                 data-app-id={app.id}
                 role="button"
                 tabIndex={0}

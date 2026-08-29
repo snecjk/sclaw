@@ -44,7 +44,9 @@ describe('preview-srcdoc', () => {
     );
     expect(out).toContain('data-sto-theme="dark"');
     expect(out).toContain('data-sto-preview-mode="adaptive"');
-    expect(out).toContain('--sto-preview-surface:#212121');
+    expect(out).toContain('--sto-preview-surface:#0d0d0d');
+    expect(out).toContain('--sto-preview-surface-secondary:#181818');
+    expect(out).toContain('--sto-preview-surface-elevated:#212121');
     expect(out).toMatch(/table[\s\S]*th[\s\S]*td/);
     expect(out).toContain('sto:appearance-change');
   });

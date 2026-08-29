@@ -170,7 +170,7 @@ interface ChatMessageProps {
 const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover:opacity-100';
 
 const MESSAGE_META_ICON_BUTTON_CLASS =
-  'h-auto w-auto min-h-0 min-w-0 shrink-0 rounded-none border-0 bg-transparent p-0.5 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground';
+  'h-auto w-auto min-h-0 min-w-0 shrink-0 rounded-none border-0 bg-transparent p-0.5 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground dark:text-[var(--sto-icon-tertiary)] dark:hover:text-[var(--sto-icon-secondary)]';
 
 const MESSAGE_META_SHARE_ICON_CLASS = 'h-3.5 w-3.5';
 
@@ -796,7 +796,7 @@ export const ChatMessage = memo(function ChatMessage({
                 ) : (
                   <div
                     key={`local-${i}`}
-                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground"
+                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground dark:bg-[linear-gradient(180deg,var(--sto-surface-secondary),var(--sto-surface-primary))] dark:text-[var(--sto-icon-tertiary)]"
                   >
                     <File className="h-8 w-8" />
                   </div>
@@ -909,7 +909,7 @@ export const ChatMessage = memo(function ChatMessage({
               }
               if (isImage && !file.preview) {
                 return (
-                  <div key={`preview-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground">
+                  <div key={`preview-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground dark:bg-[linear-gradient(180deg,var(--sto-surface-secondary),var(--sto-surface-primary))] dark:text-[var(--sto-icon-tertiary)]">
                     <File className="h-8 w-8" />
                   </div>
                 );
@@ -1007,7 +1007,7 @@ function ToolStatusBar({
             key={tool.toolCallId || tool.id || tool.name}
             className={cn(
               'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs transition-all duration-300',
-              isRunning && 'border-[hsl(var(--primary)/0.35)] bg-[linear-gradient(135deg,rgba(255,245,230,0.95),rgba(255,232,204,0.75))] text-foreground shadow-[0_8px_18px_rgba(255,111,0,0.08)]',
+              isRunning && 'border-[hsl(var(--primary)/0.35)] bg-[linear-gradient(135deg,rgba(255,245,230,0.95),rgba(255,232,204,0.75))] text-foreground shadow-[0_8px_18px_rgba(255,111,0,0.08)] dark:border-[hsl(var(--primary)/0.25)] dark:bg-[linear-gradient(135deg,hsl(var(--primary)/0.10),var(--sto-surface-primary))] dark:shadow-[0_8px_18px_rgba(0,0,0,0.28)]',
               !isRunning && !isError && cn('border-border text-muted-foreground', assistantChatCardBg),
               isError && 'border-destructive/30 bg-destructive/5 text-destructive',
             )}
@@ -1740,7 +1740,7 @@ function ImageThumbnail({
   void filePath; void base64; void mimeType;
   return (
     <div
-      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08]"
+      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08] dark:shadow-[0_10px_24px_rgba(0,0,0,0.35)]"
       onClick={onPreview}
     >
       <img src={src} alt={fileName} className="w-full h-full object-cover" />
@@ -1772,7 +1772,7 @@ function ImagePreviewCard({
   return (
     <div
       className={cn(
-        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-border shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
+        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-border shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_24px_rgba(0,0,0,0.35)]',
         assistantChatCardBg,
       )}
       onClick={onPreview}

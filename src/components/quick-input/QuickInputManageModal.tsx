@@ -231,7 +231,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#86909C] transition-colors hover:bg-[#F2F3F5] hover:text-[#1D2129] disabled:opacity-50 dark:hover:bg-muted dark:hover:text-foreground"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#86909C] transition-colors hover:bg-[#F2F3F5] hover:text-[#1D2129] disabled:opacity-50 dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-muted dark:hover:text-[var(--sto-icon-secondary)]"
               aria-label={t('composer.quickInputCreateCloseAria')}
             >
               <X className="h-4 w-4" />
@@ -241,7 +241,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
           <div className="flex min-h-0 flex-1 flex-col gap-2 self-stretch px-4 py-2">
             {hasData ? (
               <div className="box-border flex h-[34px] w-full shrink-0 items-center gap-2 rounded-lg border border-[#E8EAEF] bg-white p-2 dark:border-border dark:bg-background">
-                <Search className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden />
+                <Search className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" aria-hidden />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -253,19 +253,19 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
 
             <div className="sto-hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {loading ? (
-                <div className="flex h-full items-center justify-center gap-2 px-3 py-10 text-xs text-[#86909C]">
+                <div className="flex h-full items-center justify-center gap-2 px-3 py-10 text-xs text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   {t('composer.quickInputLoading')}
                 </div>
               ) : !hasData ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 px-2 py-6">
                   <img src={quickInputEmptyIcon} alt="" width={40} height={40} aria-hidden />
-                  <p className="text-center text-xs font-normal leading-4 text-[#86909C]">
+                  <p className="text-center text-xs font-normal leading-4 text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
                     {t('composer.quickInputEmpty')}
                   </p>
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="px-3 py-10 text-center text-xs text-[#86909C]">
+                <div className="px-3 py-10 text-center text-xs text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
                   {t('composer.quickInputNoResults')}
                 </div>
               ) : (

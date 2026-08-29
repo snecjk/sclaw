@@ -22,10 +22,10 @@ interface LocalRunHistoryDialogProps {
 }
 
 const STATUS_META: Record<LocalRunHistoryStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
-  success: { label: '成功', className: 'text-emerald-600 bg-emerald-50', Icon: CheckCircle2 },
+  success: { label: '成功', className: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10', Icon: CheckCircle2 },
   failed: { label: '失败', className: 'text-destructive bg-destructive/10', Icon: XCircle },
-  cancelled: { label: '已取消', className: 'text-slate-500 bg-slate-100', Icon: Circle },
-  interrupted: { label: '已中断', className: 'text-amber-700 bg-amber-50', Icon: AlertCircle },
+  cancelled: { label: '已取消', className: 'text-slate-500 bg-slate-100 dark:text-[var(--sto-text-tertiary)] dark:bg-[var(--sto-surface-elevated)]', Icon: Circle },
+  interrupted: { label: '已中断', className: 'text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10', Icon: AlertCircle },
   running: { label: '进行中', className: 'text-primary bg-primary/10', Icon: CircleDot },
 };
 

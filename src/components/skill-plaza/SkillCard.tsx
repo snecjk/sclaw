@@ -14,7 +14,7 @@ import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/compone
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { listCardHoverBorderShadowClass, stoNeutralCardClass } from '@/lib/surfaces';
+import { collectionCardShellClass } from '@/lib/surfaces';
 import messageIcon from '@/assets/icons/message.svg';
 import loadingIcon from '@/assets/icons/loading.svg';
 import moreIcon from '@/assets/icons/more.svg';
@@ -269,10 +269,8 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
   return (
     <article
       className={cn(
-        stoNeutralCardClass,
-        'relative flex min-w-0 cursor-pointer flex-col overflow-visible rounded-2xl p-4',
-        'transition-[border-color,box-shadow] duration-150',
-        listCardHoverBorderShadowClass,
+        collectionCardShellClass,
+        'relative flex min-w-0 cursor-pointer flex-col overflow-visible rounded-2xl border p-4',
       )}
       onClick={() => onOpenDetail?.(skill)}
       data-skill-installed={canUse}

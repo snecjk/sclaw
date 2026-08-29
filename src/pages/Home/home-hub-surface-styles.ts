@@ -8,16 +8,15 @@ export const homeHubTextPrimary = 'text-[#1D2129] dark:text-foreground';
 
 export const homeHubTextSecondary = 'text-[#4E5969] dark:text-muted-foreground';
 
-/** MasterGo 卡片壳：r18、白底、0.5 浅描边；暗色用 secondary 与主卡片底色分层 */
+/** MasterGo 卡片壳：r18、0.5 浅描边；颜色由全局 flat card recipe 映射 */
 export const homeHubCardShellClass = cn(
-  'box-border flex flex-col items-start gap-3 rounded-[18px] border-[0.5px] border-[#E5E6EB] bg-white p-[18px]',
-  'dark:border-border dark:bg-secondary',
+  'sto-card-flat box-border flex flex-col items-start gap-3 rounded-[18px] border-[0.5px] p-[18px]',
 );
 
 /** 可点击卡片：精简标题+描述；h-full 使 grid 同行等高，设计稿高 106 */
 export const homeHubInteractiveCardShellClass = cn(
   homeHubCardShellClass,
-  'relative h-full min-h-[106px] min-w-0 w-full overflow-hidden text-left transition-colors duration-base hover:border-[#C9CDD4]',
+  'sto-card-flat-interactive relative h-full min-h-[106px] min-w-0 w-full overflow-hidden text-left transition-[background-color,border-color,box-shadow] duration-base',
 );
 
 export const homeHubCardTitleClass = cn('text-[13px] font-medium leading-normal', homeHubTextPrimary);

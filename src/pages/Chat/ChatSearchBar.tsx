@@ -123,7 +123,7 @@ export function ChatSearchBar({
         className={cn(
           'flex h-[var(--sto-content-header-control-h,28px)] w-[16.5rem] items-center gap-1 rounded-[10px] border border-border/80 px-1.5',
           'bg-white/88 shadow-[0_12px_32px_rgba(15,23,42,0.07)] backdrop-blur-md',
-          'dark:bg-white/[0.08]',
+          'dark:bg-white/[0.08] dark:shadow-[0_12px_32px_rgba(0,0,0,0.35)]',
         )}
       >
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">

@@ -74,9 +74,9 @@ html[data-sto-theme="light"] {
 }
 html[data-sto-theme="dark"] {
   color-scheme:dark;
-  --sto-preview-surface:#212121;
-  --sto-preview-surface-secondary:#212121;
-  --sto-preview-surface-elevated:#282828;
+  --sto-preview-surface:#0d0d0d;
+  --sto-preview-surface-secondary:#181818;
+  --sto-preview-surface-elevated:#212121;
   --sto-preview-text:#dfdfdf;
   --sto-preview-text-secondary:rgba(255,255,255,.70);
   --sto-preview-border:rgba(255,255,255,.08);

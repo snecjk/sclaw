@@ -69,7 +69,7 @@ class ErrorBoundary extends Component<
           style={{
             padding: '40px',
             color: '#f87171',
-            background: '#0f172a',
+            background: '#0d0d0d',
             minHeight: '100vh',
             fontFamily: 'monospace',
           }}
@@ -79,7 +79,7 @@ class ErrorBoundary extends Component<
             style={{
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-all',
-              background: '#1e293b',
+              background: '#212121',
               padding: '16px',
               borderRadius: '8px',
               fontSize: '14px',

@@ -18,6 +18,8 @@ import {
   sidebarRecentMenuDividerClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
+  sidebarTooltipArrowClass as SIDEBAR_TOOLTIP_ARROW_CLASS,
+  sidebarTooltipContentClass as SIDEBAR_TOOLTIP_CLASS,
 } from '@/lib/surfaces';
 
 export interface SidebarProjectRowTrailingProps {
@@ -30,13 +32,6 @@ export interface SidebarProjectRowTrailingProps {
 
 /** 容纳两个 28px 按钮及中间 2px 间距，与分区标题 actions 完全同宽。 */
 const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-[58px]';
-const SIDEBAR_TOOLTIP_CLASS = cn(
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
-  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
-  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
-);
-const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
-
 export function SidebarProjectRowTrailing({
   onNewChat,
   onRename,

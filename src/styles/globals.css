@@ -1,104 +1,13 @@
+@import './theme/tokens.css';
+@import './theme/recipes.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Neutrals + Brand / Link per docs/sto-design.md */
-    --background: 220 14% 97%;
-    --foreground: 220 26% 14%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 26% 14%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 26% 14%;
-    /* Brand-6 #FF6F00 */
-    --primary: 26 100% 50%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 26% 14%;
-    /* Grey-2 / Grey-8 */
-    --muted: 220 13% 96%;
-    --muted-foreground: 215 14% 45%;
-    /* Brand-1 tint for soft hovers */
-    --accent: 32 100% 95%;
-    --accent-foreground: 26 100% 36%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    /* Success #28C840 / Warning #FEBC2E — docs/sto-design.md + 02-styles.mdc */
-    --success: 130 67% 47%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 99% 59%;
-    --warning-foreground: 220 26% 14%;
-    /* Grey-4 #E5E6EB */
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 26 100% 50%;
     --radius: 0.5rem;
-
-    --glass-bg: 220 14% 98%;
-    --glass-opacity: 0.72;
-    --glass-blur: 16px;
-    --glass-border: 220 12% 78% / 0.4;
-    --glass-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
-    --glass-highlight: 0 0% 100% / 0.82;
-    --canvas-from: #f7f8fa;
-    --canvas-via: #f5f6f7;
-    --canvas-to: #fafbfc;
-
-    /* Link / Info Blue-6 + Blue-1 (sto-design §二) */
-    --link: 231 99% 64%;
-    --link-foreground: 0 0% 100%;
-    --link-muted: 228 100% 97%;
-
-    /* Toast / chat-error feedback surfaces — MasterGo MCP 45:11515 / 45:11441 */
-    --sto-toast-info-bg: #f0f4ff;
-    --sto-toast-info-border: #d6e1ff;
-    --sto-toast-info-icon: #4760fe;
-    --sto-toast-warning-bg: #fffbe6;
-    --sto-toast-warning-border: #fff1b8;
-    --sto-toast-warning-icon: #f4aa17;
-    --sto-toast-error-bg: #fff2f0;
-    --sto-toast-error-border: #ffe4e0;
-    --sto-toast-error-icon: #fa3c3c;
-    --sto-toast-success-bg: #eaf6ee;
-    --sto-toast-success-border: #c8ead6;
-    --sto-toast-success-icon: #31af65;
-    --sto-chat-error-bg: #fffbe6;
-    --sto-chat-error-border: #fff1b8;
-    --sto-chat-error-icon: #faad14;
-
-    /* S Claw 壳层 Surface 层级（Stage 4 L0/L1/L2；与 dark 共用所有权） */
-    /* L0 Window/Shell/Sidebar/8px Frame */
-    --sto-shell-bg: #ededed;
-    /* L1 Workspace 主承载面 */
-    --sto-workspace-bg: #fafafa;
-    /* L2 Preview / Composer / 内容卡片 */
-    --sto-panel-bg: #ffffff;
-    --sto-surface-under: var(--sto-shell-bg);
-    --sto-surface-primary: var(--sto-workspace-bg);
-    --sto-surface-secondary: var(--sto-panel-bg);
-    --sto-surface-elevated: #ffffff;
-    --sto-control-bg: var(--sto-panel-bg);
-    --sto-control-hover-bg: #f2f3f5;
-    --sto-control-active-bg: #e5e6eb;
-    --sto-text-primary: #1d2129;
-    --sto-text-secondary: #4e5969;
-    --sto-text-tertiary: #86909c;
-    --sto-border-light: rgba(29, 33, 41, 0.04);
-    --sto-border-default: #e5e6eb;
-    --sto-border-heavy: #c9cdd4;
-    /* 共享边缘（弱描边，不用重色相） */
-    --sto-surface-edge: #e8eaef;
-    /* L1 抬升阴影（轻；禁止重黑浮岛） */
-    --sto-workspace-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
-    /* 兼容映射 —— 一律指向语义 Token，禁止组件另写壳层底色 */
-    --sto-page-bg: var(--sto-shell-bg);
-    --sto-sidebar-bg: var(--sto-shell-bg);
-    --sto-sidebar-border: var(--sto-surface-edge);
-    --sto-accent: #ff8c00;
-    --sto-accent-soft: #fff3e0;
-    /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
-    --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
     --sto-content-header-h: 44px;
     --sto-content-header-control-h: 28px;
@@ -154,7 +63,9 @@
 
     /* 侧栏文字色（MasterGo 8:46454 调整标题颜色+任务icon，MCP 2026-06） */
     --sto-sidebar-text-default: #393e47;
+    --sto-sidebar-text-active: #1d2129;
     --sto-sidebar-text-icon: var(--sto-grey-9);
+    --sto-sidebar-icon-active: #1d2129;
     --sto-sidebar-text-section: var(--sto-grey-8);
     --sto-sidebar-row-hover-bg: #e4e4e4;
     --sto-sidebar-nav-active-bg: #dcdcdc;
@@ -211,85 +122,6 @@
   }
 
   .dark {
-    color-scheme: dark;
-    --background: 0 0% 9.4%;
-    --foreground: 0 0% 87.5%;
-    --card: 0 0% 12.9%;
-    --card-foreground: 0 0% 87.5%;
-    --popover: 0 0% 15.7%;
-    --popover-foreground: 0 0% 87.5%;
-    --primary: 26 100% 52%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 12.9%;
-    --secondary-foreground: 0 0% 87.5%;
-    --muted: 0 0% 15.7%;
-    --muted-foreground: 0 0% 70%;
-    --accent: 32 45% 16%;
-    --accent-foreground: 32 100% 88%;
-    --destructive: 0 72% 56%;
-    --destructive-foreground: 0 0% 100%;
-    --success: 130 60% 42%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 90% 52%;
-    --warning-foreground: 220 26% 14%;
-    --border: 0 0% 100% / 0.08;
-    --input: 0 0% 100% / 0.08;
-    --ring: 26 100% 55%;
-
-    --glass-bg: 0 0% 12.9%;
-    --glass-opacity: 0.52;
-    --glass-blur: 18px;
-    --glass-border: 0 0% 100% / 0.08;
-    --glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
-    --glass-highlight: 0 0% 100% / 0.08;
-    --canvas-from: #0d0d0d;
-    --canvas-via: #181818;
-    --canvas-to: #212121;
-
-    --link: 231 92% 72%;
-    --link-foreground: 0 0% 100%;
-    --link-muted: 231 35% 18%;
-
-    --sto-toast-info-bg: hsl(231 35% 18%);
-    --sto-toast-info-border: hsl(231 40% 28%);
-    --sto-toast-info-icon: hsl(231 92% 72%);
-    --sto-toast-warning-bg: hsl(43 45% 14%);
-    --sto-toast-warning-border: hsl(43 50% 24%);
-    --sto-toast-warning-icon: hsl(38 90% 52%);
-    --sto-toast-error-bg: hsl(0 40% 14%);
-    --sto-toast-error-border: hsl(0 45% 24%);
-    --sto-toast-error-icon: hsl(0 72% 56%);
-    --sto-toast-success-bg: hsl(140 30% 14%);
-    --sto-toast-success-border: hsl(140 35% 24%);
-    --sto-toast-success-icon: hsl(130 60% 48%);
-    --sto-chat-error-bg: hsl(43 45% 14%);
-    --sto-chat-error-border: hsl(43 50% 24%);
-    --sto-chat-error-icon: hsl(38 90% 52%);
-
-    --sto-surface-under: #0d0d0d;
-    --sto-surface-primary: #181818;
-    --sto-surface-secondary: #212121;
-    --sto-surface-elevated: #282828;
-    --sto-control-bg: #212121;
-    --sto-control-hover-bg: #282828;
-    --sto-control-active-bg: #282828;
-    --sto-text-primary: #dfdfdf;
-    --sto-text-secondary: rgba(255, 255, 255, 0.70);
-    --sto-text-tertiary: rgba(255, 255, 255, 0.50);
-    --sto-border-light: rgba(255, 255, 255, 0.04);
-    --sto-border-default: rgba(255, 255, 255, 0.08);
-    --sto-border-heavy: rgba(255, 255, 255, 0.16);
-    --sto-shell-bg: var(--sto-surface-under);
-    --sto-workspace-bg: var(--sto-surface-primary);
-    --sto-panel-bg: var(--sto-surface-secondary);
-    --sto-surface-edge: var(--sto-border-default);
-    --sto-workspace-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
-    --sto-page-bg: var(--sto-shell-bg);
-    --sto-sidebar-bg: var(--sto-shell-bg);
-    --sto-sidebar-border: var(--sto-surface-edge);
-    --sto-accent: #ff9f2e;
-    --sto-accent-soft: hsl(32 45% 14%);
-    --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
     --sto-content-header-h: 44px;
     --sto-split-header-to-surface-gap: 0px;
@@ -307,7 +139,7 @@
     /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
     --sto-sidebar-effective-w: 260px;
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: var(--sto-workspace-bg);
+    --sto-main-card-bg: var(--sto-surface-under);
     --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
@@ -320,12 +152,14 @@
     --sto-grey-10: var(--sto-text-primary);
     --sto-grey-9: var(--sto-text-secondary);
     --sto-grey-8: var(--sto-text-tertiary);
-    --sto-sidebar-text-default: var(--sto-text-primary);
-    --sto-sidebar-text-icon: var(--sto-grey-9);
+    --sto-sidebar-text-default: var(--sto-text-secondary);
+    --sto-sidebar-text-active: var(--sto-text-primary);
+    --sto-sidebar-text-icon: var(--sto-icon-secondary);
+    --sto-sidebar-icon-active: var(--sto-icon-primary);
     --sto-sidebar-text-section: var(--sto-grey-8);
     --sto-sidebar-row-hover-bg: var(--sto-control-hover-bg);
-    --sto-sidebar-nav-active-bg: var(--sto-control-active-bg);
-    --sto-sidebar-subitem-active-bg: var(--sto-control-active-bg);
+    --sto-sidebar-nav-active-bg: var(--sto-surface-elevated);
+    --sto-sidebar-subitem-active-bg: var(--sto-surface-elevated);
     --sto-sidebar-footer-name: var(--sto-text-primary);
     --sto-sidebar-footer-meta: var(--sto-text-tertiary);
     --sto-content-pad-x: 20px;
@@ -338,9 +172,9 @@
     --sto-split-default-preview: 50%;
     --sto-main-pad-y-total: 2.5rem;
 
-    --sto-wf-hero-input-bg: hsl(220 22% 11%);
+    --sto-wf-hero-input-bg: var(--sto-surface-primary);
     --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
-    --sto-wf-hero-input-ring: 255 140 0;
+    --sto-wf-hero-input-ring: 255 111 0;
 
     --sto-wf-cover-teal-bg: hsl(160 28% 14%);
     --sto-wf-cover-teal-accent: hsl(160 32% 22%);
@@ -356,16 +190,16 @@
     --sto-wf-cover-pink-icon: #f9a8d4;
 
     --sto-wf-detail-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-    --sto-wf-detail-cover-bg: hsl(220 16% 15%);
+    --sto-wf-detail-cover-bg: var(--sto-surface-elevated);
     --sto-wf-detail-category-bg: hsl(32 45% 14%);
     --sto-wf-detail-category-text: #ffb366;
-    --sto-wf-detail-status-on-bg: rgba(40, 200, 64, 0.14);
-    --sto-wf-detail-status-on-text: #6ee7a0;
-    --sto-wf-detail-status-off-bg: hsl(220 16% 15%);
-    --sto-wf-detail-status-off-text: #86909c;
+    --sto-wf-detail-status-on-bg: hsl(var(--success) / 0.14);
+    --sto-wf-detail-status-on-text: var(--sto-success-primary);
+    --sto-wf-detail-status-off-bg: var(--sto-surface-elevated);
+    --sto-wf-detail-status-off-text: var(--sto-text-tertiary);
 
-    --sto-wf-flow-block-bg: hsl(220 16% 14%);
-    --sto-wf-flow-block-border: hsl(220 14% 20%);
+    --sto-wf-flow-block-bg: var(--sto-surface-primary);
+    --sto-wf-flow-block-border: var(--sto-border-default);
 
     --sto-wf-page-shading-opacity: 0;
   }
@@ -392,7 +226,7 @@
   .dark body {
     background-image:
       radial-gradient(circle at top, hsl(var(--primary) / 0.06), transparent 34%),
-      radial-gradient(circle at 85% 18%, hsl(220 14% 22% / 0.35), transparent 26%);
+      radial-gradient(circle at 85% 18%, rgba(255, 255, 255, 0.035), transparent 26%);
   }
 
   /** 省区 AppShell：无整行顶栏，全高由壳 + 卡片承担 */
@@ -430,14 +264,6 @@
 }
 
 @layer components {
-  .glass {
-    background: hsl(var(--glass-bg) / var(--glass-opacity));
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    border-color: hsl(var(--glass-border));
-    box-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight));
-  }
-
   /** 顶栏等全宽壳层：与 .glass 同磨砂底，但不加外阴影与内高光边（避免与主区底色接茬出现灰/白条） */
   .glass-chrome {
     background: hsl(var(--glass-bg) / var(--glass-opacity));
@@ -1242,8 +1068,17 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   font-style: italic;
 }
 
+.dark .prose-chat-reply {
+  color: var(--sto-text-primary);
+}
+
+.dark .prose-chat-reply h1,
+.dark .prose-chat-reply h2,
+.dark .prose-chat-reply h3,
+.dark .prose-chat-reply h4,
+.dark .prose-chat-reply h5,
 .dark .prose-chat-reply h6 {
-  color: hsl(var(--muted-foreground));
+  color: var(--sto-text-primary);
 }
 
 .dark .prose-chat-reply blockquote {
@@ -1268,10 +1103,19 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 .dark .prose-chat-reply .prose-table-wrap td {
   border-bottom-color: hsl(var(--border));
   border-right-color: hsl(var(--border));
+  color: var(--sto-text-primary);
 }
 
 .dark .prose-chat-reply .prose-table-wrap th {
-  background: hsl(var(--muted));
+  background: var(--sto-surface-secondary);
+}
+
+.dark .prose-chat-reply .prose-table-wrap tbody tr:nth-child(odd) td {
+  background-color: var(--sto-surface-primary);
+}
+
+.dark .prose-chat-reply .prose-table-wrap tbody tr:nth-child(even) td {
+  background-color: var(--sto-surface-secondary);
 }
 
 /* chat-interaction-style-spec §6.1 — Loading / 进行中标题 shimmer */
@@ -1290,6 +1134,10 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   display: inline-block;
   overflow: hidden;
   color: #6b737d;
+}
+
+.dark .chat-interaction-shimmer-text {
+  color: var(--sto-text-tertiary);
 }
 
 .chat-interaction-shimmer-text::after {

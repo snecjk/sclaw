@@ -44,7 +44,7 @@ const pillBase = cn(
   'flex min-w-0 max-w-[min(100vw-11rem,260px)] items-stretch rounded-xl border border-border/70',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
   'shadow-[0_4px_12px_rgba(15,23,42,0.05)]',
-  'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)]',
+  'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.28)]',
 );
 
 const pillBtn = cn(
@@ -849,7 +849,7 @@ export function ChatEngineModelSelectors({ className }: { className?: string }) 
     <div
       className={cn(
         'flex min-w-0 flex-nowrap items-center gap-2 rounded-xl border border-border/60 px-2 py-1',
-        'bg-[hsl(var(--glass-bg)/0.55)] backdrop-blur-sm shadow-[0_6px_14px_rgba(15,23,42,0.05)]',
+        'bg-[hsl(var(--glass-bg)/0.55)] backdrop-blur-sm shadow-[0_6px_14px_rgba(15,23,42,0.05)] dark:shadow-[0_6px_14px_rgba(0,0,0,0.28)]',
         className,
       )}
     >

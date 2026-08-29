@@ -48,13 +48,13 @@ describe('neutral presentational controls', () => {
     expect(onValueChange).toHaveBeenCalledWith('connectors');
   });
 
-  it('preserves light styling and maps outline controls to neutral dark surfaces', () => {
+  it('maps outline controls through the shared neutral surface', () => {
     render(<StoOutlineButton>上传技能</StoOutlineButton>);
 
     const button = screen.getByRole('button', { name: '上传技能' });
     expect(button.className).toContain('h-9');
-    expect(button.className).toContain('bg-white');
-    expect(button.className).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(button.className).toContain('bg-[var(--sto-control-bg)]');
+    expect(button.className).not.toContain('dark:bg-');
   });
 
   it('forwards standard button props and permits page-owned size overrides', () => {
@@ -86,7 +86,8 @@ describe('neutral presentational controls', () => {
     const surface = screen.getByTestId('icon-surface');
     expect(surface).toHaveTextContent('icon');
     expect(surface.className).toContain('h-10');
-    expect(surface.className).toContain('dark:bg-[var(--sto-control-bg)]');
+    expect(surface.className).toContain('bg-[var(--sto-control-bg)]');
+    expect(surface.className).not.toContain('dark:bg-');
   });
 
   it('keeps My Tasks controls at 34px while consuming the shared defaults', () => {
@@ -111,10 +112,8 @@ describe('neutral presentational controls', () => {
 
     const fallback = container.querySelector('img');
     if (!fallback) throw new Error('Expected fallback icon');
-    expect(fallback.parentElement?.className).toContain('bg-white');
-    expect(fallback.parentElement?.className).toContain(
-      'dark:bg-[var(--sto-control-bg)]',
-    );
+    expect(fallback.parentElement?.className).toContain('bg-[var(--sto-control-bg)]');
+    expect(fallback.parentElement?.className).not.toContain('dark:bg-');
     expect(fallback.className).toContain('dark:invert');
   });
 });
