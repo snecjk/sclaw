@@ -41,10 +41,16 @@ function extractBlock(source: string, marker: string): string {
 }
 
 function extractThemeBlock(marker: ':root {' | '.dark {'): string {
-  return `${extractBlock(themeTokensCss, marker)}\n${extractBlock(globalsCss, marker)}`;
+  const tokenMarker = marker === ':root {' ? ':root,' : '.dark,';
+  return `${extractBlock(themeTokensCss, tokenMarker)}\n${extractBlock(globalsCss, marker)}`;
 }
 
 describe('light appearance color system', () => {
+  it('serves renderer and adaptive preview from the same light token selector', () => {
+    expect(themeTokensCss).toContain(':root,');
+    expect(themeTokensCss).toContain("html[data-sto-theme='light']");
+  });
+
   it('preserves the base functional palette exactly', () => {
     const root = extractThemeBlock(':root {');
 

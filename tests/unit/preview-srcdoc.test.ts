@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   documentBaseUrl,
@@ -8,8 +10,18 @@ import {
   PREVIEW_HTTP_FETCH_TIMEOUT_MS,
 } from '@/lib/preview-srcdoc';
 
+const previewSource = readFileSync(
+  resolve(process.cwd(), 'src/lib/preview-srcdoc.ts'),
+  'utf8',
+);
+
 describe('preview-srcdoc', () => {
   const sourceUrl = 'https://cdn.example.com/reports/总部结算对账分析.html';
+
+  it('reuses canonical theme tokens without copying the renderer palette', () => {
+    expect(previewSource).toContain('tokens.css?raw');
+    expect(previewSource).not.toMatch(/--background:\s*#[\da-f]{3,8}/i);
+  });
 
   it('computes document base URL', () => {
     expect(documentBaseUrl(sourceUrl)).toBe('https://cdn.example.com/reports/');
@@ -44,9 +56,8 @@ describe('preview-srcdoc', () => {
     );
     expect(out).toContain('data-sto-theme="dark"');
     expect(out).toContain('data-sto-preview-mode="adaptive"');
-    expect(out).toContain('--sto-preview-surface:#0d0d0d');
-    expect(out).toContain('--sto-preview-surface-secondary:#181818');
-    expect(out).toContain('--sto-preview-surface-elevated:#212121');
+    expect(out).toContain('background:var(--sto-canvas) !important');
+    expect(out).not.toContain('--sto-preview-surface:');
     expect(out).toMatch(/table[\s\S]*th[\s\S]*td/);
     expect(out).toContain('sto:appearance-change');
   });
@@ -57,7 +68,7 @@ describe('preview-srcdoc', () => {
       mode: 'fidelity',
     });
     expect(out).toContain('data-sto-preview-mode="fidelity"');
-    expect(out).not.toContain('data-sto-preview-mode="adaptive"] table');
+    expect(out).not.toContain('html[data-sto-preview-mode="adaptive"');
   });
 
   it('accepts appearance messages only from the parent with the expected payload', () => {

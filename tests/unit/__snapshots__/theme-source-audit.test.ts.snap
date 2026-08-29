@@ -7939,54 +7939,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#ffffff::data-sto-theme="light"] { color-scheme:light; --sto-preview-surface:#ffffff; --sto-preview-surface-secondary:#f8f8f8; --sto-preview-surface-ele::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#f8f8f8::ght; --sto-preview-surface:#ffffff; --sto-preview-surface-secondary:#f8f8f8; --sto-preview-surface-elevated:#f2f3f5; --sto-preview-text:#1d2129::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#f2f3f5::sto-preview-surface-secondary:#f8f8f8; --sto-preview-surface-elevated:#f2f3f5; --sto-preview-text:#1d2129; --sto-preview-text-secondary:#4e5969;::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#1d2129::#f8f8f8; --sto-preview-surface-elevated:#f2f3f5; --sto-preview-text:#1d2129; --sto-preview-text-secondary:#4e5969; --sto-preview-border:#e5e6eb::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#4e5969::d:#f2f3f5; --sto-preview-text:#1d2129; --sto-preview-text-secondary:#4e5969; --sto-preview-border:#e5e6eb; } html[data-sto-theme="dark"] { colo::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#e5e6eb::#1d2129; --sto-preview-text-secondary:#4e5969; --sto-preview-border:#e5e6eb; } html[data-sto-theme="dark"] { color-scheme:dark; --sto-preview-s::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#0d0d0d::l[data-sto-theme="dark"] { color-scheme:dark; --sto-preview-surface:#0d0d0d; --sto-preview-surface-secondary:#181818; --sto-preview-surface-ele::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#181818::ark; --sto-preview-surface:#0d0d0d; --sto-preview-surface-secondary:#181818; --sto-preview-surface-elevated:#212121; --sto-preview-text:#dfdfdf::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#212121::sto-preview-surface-secondary:#181818; --sto-preview-surface-elevated:#212121; --sto-preview-text:#dfdfdf; --sto-preview-text-secondary:rgba(255,::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::#dfdfdf::#181818; --sto-preview-surface-elevated:#212121; --sto-preview-text:#dfdfdf; --sto-preview-text-secondary:rgba(255,255,255,.70); --sto-preview-::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::rgba(255,255,255,.70)::d:#212121; --sto-preview-text:#dfdfdf; --sto-preview-text-secondary:rgba(255,255,255,.70); --sto-preview-border:rgba(255,255,255,.08); }\${adaptiveStyles} </sty::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
-    "key": "src/lib/preview-srcdoc.ts::rawColor::rgba(255,255,255,.08)::to-preview-text-secondary:rgba(255,255,255,.70); --sto-preview-border:rgba(255,255,255,.08); }\${adaptiveStyles} </style>\`; } function buildPreviewThemeScript(): s::1",
-    "reason": "Migration debt: the duplicated adaptive preview palette is removed when preview imports canonical tokens in Task 4.",
-  },
-  {
     "key": "src/lib/surfaces.ts::pageDarkUtility::dark:border-::2px_16px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.55)]', 'dark:border-border dark:bg-[linear-gradient(165deg,rgba(255,255,255,0.1),rgba(255,25::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -13311,7 +13263,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/styles/globals.css::pageDarkSelector::.dark::工作流页底纹可见度（暗色在 .dark 中隐藏） */ --sto-wf-page-shading-opacity: 1; } .dark { --sto-header-h: 52px; --sto-content-header-h: 44px; --s::1",
+    "key": "src/styles/globals.css::pageDarkSelector::.dark::f-page-shading-h: 330px; --sto-wf-page-shading-tile-w: 1152px; } .dark { --sto-header-h: 52px; --sto-content-header-h: 44px; --s::1",
     "reason": "Migration debt: ordinary CSS dark selector must move to semantic tokens or recipes in Tasks 7-8.",
   },
   {
@@ -13523,10 +13475,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: ordinary CSS dark selector must move to semantic tokens or recipes in Tasks 7-8.",
   },
   {
-    "key": "src/styles/globals.css::coolDarkShadow::rgba(15, 23, 42::sterGo Dialog 2:09392） */ --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18); --sto-wf-detail-cover-bg: #f0f1f5; --sto-wf-detail-cate::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
     "key": "src/styles/globals.css::coolDarkShadow::rgba(15, 23, 42::rder-color: hsl(var(--glass-border)); box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18), 0 0 0 1px hsl(var(--primary) / 0.08), inset 0 1px 0::1",
     "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
   },
@@ -13541,234 +13489,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   {
     "key": "src/styles/globals.css::coolDarkShadow::rgba(15, 23, 42::cx-wrapper > section.docx { background: #fff; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12); margin-bottom: 16px; } .dark .sclaw-docx-host .docx-wrapper::1",
     "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#7A8494::ar-w-collapsed: 72px; /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */ --sto-sidebar-collapsed-nav-item-w: 59px; --sto-sidebar-col::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#7a8494::ebar-collapsed-nav-px: 10px; --sto-sidebar-collapsed-nav-icon-idle: #7a8494; --sto-content-pad-x: 20px; --sto-chat-max-w-home: 780px; -::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#4e5969::total: 2.5rem; /* Grey-9 次要文字（快捷 chip / 手动创建等） */ --sto-grey-9: #4e5969; /* Grey-8 三级文字（侧栏分区标题 / 版本号 — MasterGo paint_4:0520） */ --sto-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#86909c::Grey-8 三级文字（侧栏分区标题 / 版本号 — MasterGo paint_4:0520） */ --sto-grey-8: #86909c; /* Grey-10 侧栏一级正文（MasterGo paint_4:0441「文字/文本-默认」） */ --sto-gr::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#1d2129::* Grey-10 侧栏一级正文（MasterGo paint_4:0441「文字/文本-默认」） */ --sto-grey-10: #1d2129; /* 侧栏文字色（MasterGo 8:46454 调整标题颜色+任务icon，MCP 2026-06） */ --sto::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#393e47::o 8:46454 调整标题颜色+任务icon，MCP 2026-06） */ --sto-sidebar-text-default: #393e47; --sto-sidebar-text-active: #1d2129; --sto-sidebar-text-icon: v::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#1d2129::--sto-sidebar-text-default: #393e47; --sto-sidebar-text-active: #1d2129; --sto-sidebar-text-icon: var(--sto-grey-9); --sto-sidebar-icon::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#1d2129::to-sidebar-text-icon: var(--sto-grey-9); --sto-sidebar-icon-active: #1d2129; --sto-sidebar-text-section: var(--sto-grey-8); --sto-sidebar-r::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#e4e4e4::idebar-text-section: var(--sto-grey-8); --sto-sidebar-row-hover-bg: #e4e4e4; --sto-sidebar-nav-active-bg: #dcdcdc; /** 分区标题 sticky 行高（任务 to::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#dcdcdc::--sto-sidebar-row-hover-bg: #e4e4e4; --sto-sidebar-nav-active-bg: #dcdcdc; /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */ --sto-sidebar-section-s::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#5f9274::-sto-sidebar-section-sticky-h: 32px; --sto-sidebar-running-spinner: #5f9274; --sto-sidebar-subitem-active-bg: #dcdcdc; --sto-sidebar-footer::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#dcdcdc::-sidebar-running-spinner: #5f9274; --sto-sidebar-subitem-active-bg: #dcdcdc; --sto-sidebar-footer-name: #1a1a1a; --sto-sidebar-footer-meta:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#1a1a1a::-sto-sidebar-subitem-active-bg: #dcdcdc; --sto-sidebar-footer-name: #1a1a1a; --sto-sidebar-footer-meta: #8b9099; /* MainLayout main \`[scrol::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#8b9099::--sto-sidebar-footer-name: #1a1a1a; --sto-sidebar-footer-meta: #8b9099; /* MainLayout main \`[scrollbar-gutter:stable]\` 预留宽度，底纹右出血需一并抵消 */::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#FFFFFF::sto-main-scrollbar-gutter: 15px; /* 工作流 Hero 输入复合框（MasterGo 2:7326 #FFFFFF / Grey-4 #E5E6EB） */ --sto-wf-hero-input-bg: #ffffff; --sto-wf-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#E5E6EB::r-gutter: 15px; /* 工作流 Hero 输入复合框（MasterGo 2:7326 #FFFFFF / Grey-4 #E5E6EB） */ --sto-wf-hero-input-bg: #ffffff; --sto-wf-hero-input-border::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#ffffff::asterGo 2:7326 #FFFFFF / Grey-4 #E5E6EB） */ --sto-wf-hero-input-bg: #ffffff; --sto-wf-hero-input-border: #e5e6eb; --sto-wf-hero-input-ring:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#e5e6eb::*/ --sto-wf-hero-input-bg: #ffffff; --sto-wf-hero-input-border: #e5e6eb; --sto-wf-hero-input-ring: 255 140 0; /* 工作流页底纹夹层：top 64px（设计稿::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#e1f5ee::/* 工作流卡片封面 pastel（MasterGo 工作流列表稿） */ --sto-wf-cover-teal-bg: #e1f5ee; --sto-wf-cover-teal-accent: #9fe1cb; --sto-wf-cover-teal-icon:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#9fe1cb::*/ --sto-wf-cover-teal-bg: #e1f5ee; --sto-wf-cover-teal-accent: #9fe1cb; --sto-wf-cover-teal-icon: #0f6e56; --sto-wf-cover-coral-bg: #f::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#0f6e56::--sto-wf-cover-teal-accent: #9fe1cb; --sto-wf-cover-teal-icon: #0f6e56; --sto-wf-cover-coral-bg: #faece7; --sto-wf-cover-coral-accent:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#faece7::cb; --sto-wf-cover-teal-icon: #0f6e56; --sto-wf-cover-coral-bg: #faece7; --sto-wf-cover-coral-accent: #f5c4b3; --sto-wf-cover-coral-ico::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#f5c4b3::--sto-wf-cover-coral-bg: #faece7; --sto-wf-cover-coral-accent: #f5c4b3; --sto-wf-cover-coral-icon: #993c1d; --sto-wf-cover-purple-bg:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#993c1d::--sto-wf-cover-coral-accent: #f5c4b3; --sto-wf-cover-coral-icon: #993c1d; --sto-wf-cover-purple-bg: #eeedfe; --sto-wf-cover-purple-accen::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#eeedfe::; --sto-wf-cover-coral-icon: #993c1d; --sto-wf-cover-purple-bg: #eeedfe; --sto-wf-cover-purple-accent: #cecbf6; --sto-wf-cover-purple-i::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#cecbf6::--sto-wf-cover-purple-bg: #eeedfe; --sto-wf-cover-purple-accent: #cecbf6; --sto-wf-cover-purple-icon: #3c3489; --sto-wf-cover-pink-bg: #::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#3c3489::--sto-wf-cover-purple-accent: #cecbf6; --sto-wf-cover-purple-icon: #3c3489; --sto-wf-cover-pink-bg: #fbeaf0; --sto-wf-cover-pink-accent: #::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#fbeaf0::6; --sto-wf-cover-purple-icon: #3c3489; --sto-wf-cover-pink-bg: #fbeaf0; --sto-wf-cover-pink-accent: #f4c0d1; --sto-wf-cover-pink-icon:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#f4c0d1::9; --sto-wf-cover-pink-bg: #fbeaf0; --sto-wf-cover-pink-accent: #f4c0d1; --sto-wf-cover-pink-icon: #993556; /* 工作流详情弹窗（MasterGo Dialog::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#993556::--sto-wf-cover-pink-accent: #f4c0d1; --sto-wf-cover-pink-icon: #993556; /* 工作流详情弹窗（MasterGo Dialog 2:09392） */ --sto-wf-detail-modal-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::rgba(15, 23, 42, 0.18)::sterGo Dialog 2:09392） */ --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18); --sto-wf-detail-cover-bg: #f0f1f5; --sto-wf-detail-category-bg::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#f0f1f5::adow: 0 24px 80px rgba(15, 23, 42, 0.18); --sto-wf-detail-cover-bg: #f0f1f5; --sto-wf-detail-category-bg: #fff6f0; --sto-wf-detail-category::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#fff6f0::--sto-wf-detail-cover-bg: #f0f1f5; --sto-wf-detail-category-bg: #fff6f0; --sto-wf-detail-category-text: #ce7d46; /* 详情弹窗标题「已开启」badge（Ma::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#ce7d46::-sto-wf-detail-category-bg: #fff6f0; --sto-wf-detail-category-text: #ce7d46; /* 详情弹窗标题「已开启」badge（MasterGo Overlay 2:16910） */ --sto-wf-deta::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::rgba(136, 188, 157, 0.16)::开启」badge（MasterGo Overlay 2:16910） */ --sto-wf-detail-status-on-bg: rgba(136, 188, 157, 0.16); --sto-wf-detail-status-on-text: #5f9274; --sto-wf-detail-statu::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#5f9274::s-on-bg: rgba(136, 188, 157, 0.16); --sto-wf-detail-status-on-text: #5f9274; --sto-wf-detail-status-off-bg: #f0f1f2; --sto-wf-detail-status::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#f0f1f2::o-wf-detail-status-on-text: #5f9274; --sto-wf-detail-status-off-bg: #f0f1f2; --sto-wf-detail-status-off-text: #86909c; /* 工作流卡片节点灰底区块（Grey::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#86909c::-wf-detail-status-off-bg: #f0f1f2; --sto-wf-detail-status-off-text: #86909c; /* 工作流卡片节点灰底区块（Grey-2 / Grey-3 描边） */ --sto-wf-flow-block-bg:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#fafbfc::/* 工作流卡片节点灰底区块（Grey-2 / Grey-3 描边） */ --sto-wf-flow-block-bg: #fafbfc; --sto-wf-flow-block-border: #f2f3f5; /* 工作流页底纹可见度（暗色在 .dark 中::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#f2f3f5::*/ --sto-wf-flow-block-bg: #fafbfc; --sto-wf-flow-block-border: #f2f3f5; /* 工作流页底纹可见度（暗色在 .dark 中隐藏） */ --sto-wf-page-shading-opacity:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(var(--primary) / 0.35)::o-input-bg: var(--sto-surface-primary); --sto-wf-hero-input-border: hsl(var(--primary) / 0.35); --sto-wf-hero-input-ring: 255 111 0; --sto-wf-cover-teal-bg:::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(160 28% 14%)::; --sto-wf-hero-input-ring: 255 111 0; --sto-wf-cover-teal-bg: hsl(160 28% 14%); --sto-wf-cover-teal-accent: hsl(160 32% 22%); --sto-wf-cover-t::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(160 32% 22%)::sto-wf-cover-teal-bg: hsl(160 28% 14%); --sto-wf-cover-teal-accent: hsl(160 32% 22%); --sto-wf-cover-teal-icon: #6ee7b7; --sto-wf-cover-coral-bg: hs::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#6ee7b7::o-wf-cover-teal-accent: hsl(160 32% 22%); --sto-wf-cover-teal-icon: #6ee7b7; --sto-wf-cover-coral-bg: hsl(18 32% 14%); --sto-wf-cover-coral::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(18 32% 14%)::%); --sto-wf-cover-teal-icon: #6ee7b7; --sto-wf-cover-coral-bg: hsl(18 32% 14%); --sto-wf-cover-coral-accent: hsl(18 36% 22%); --sto-wf-cover-c::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(18 36% 22%)::to-wf-cover-coral-bg: hsl(18 32% 14%); --sto-wf-cover-coral-accent: hsl(18 36% 22%); --sto-wf-cover-coral-icon: #fca58a; --sto-wf-cover-purple-bg:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#fca58a::-wf-cover-coral-accent: hsl(18 36% 22%); --sto-wf-cover-coral-icon: #fca58a; --sto-wf-cover-purple-bg: hsl(248 28% 16%); --sto-wf-cover-pur::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(248 28% 16%)::; --sto-wf-cover-coral-icon: #fca58a; --sto-wf-cover-purple-bg: hsl(248 28% 16%); --sto-wf-cover-purple-accent: hsl(248 32% 24%); --sto-wf-cover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(248 32% 24%)::wf-cover-purple-bg: hsl(248 28% 16%); --sto-wf-cover-purple-accent: hsl(248 32% 24%); --sto-wf-cover-purple-icon: #a5b4fc; --sto-wf-cover-pink-bg: h::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#a5b4fc::-cover-purple-accent: hsl(248 32% 24%); --sto-wf-cover-purple-icon: #a5b4fc; --sto-wf-cover-pink-bg: hsl(330 28% 14%); --sto-wf-cover-pink-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(330 28% 14%)::); --sto-wf-cover-purple-icon: #a5b4fc; --sto-wf-cover-pink-bg: hsl(330 28% 14%); --sto-wf-cover-pink-accent: hsl(330 32% 22%); --sto-wf-cover-p::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(330 32% 22%)::sto-wf-cover-pink-bg: hsl(330 28% 14%); --sto-wf-cover-pink-accent: hsl(330 32% 22%); --sto-wf-cover-pink-icon: #f9a8d4; --sto-wf-detail-modal-shad::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#f9a8d4::o-wf-cover-pink-accent: hsl(330 32% 22%); --sto-wf-cover-pink-icon: #f9a8d4; --sto-wf-detail-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::rgba(0, 0, 0, 0.55)::over-pink-icon: #f9a8d4; --sto-wf-detail-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.55); --sto-wf-detail-cover-bg: var(--sto-surface-elevated); --sto-w::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(32 45% 14%)::cover-bg: var(--sto-surface-elevated); --sto-wf-detail-category-bg: hsl(32 45% 14%); --sto-wf-detail-category-text: #ffb366; --sto-wf-detail-status::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::#ffb366::detail-category-bg: hsl(32 45% 14%); --sto-wf-detail-category-text: #ffb366; --sto-wf-detail-status-on-bg: hsl(var(--success) / 0.14); --st::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/globals.css::rawColor::hsl(var(--success) / 0.14)::sto-wf-detail-category-text: #ffb366; --sto-wf-detail-status-on-bg: hsl(var(--success) / 0.14); --sto-wf-detail-status-on-text: var(--sto-success-primary); --::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
   },
   {
     "key": "src/styles/globals.css::rawColor::hsl(var(--background))::tings: "rlig" 1, "calt" 1; min-height: 100vh; background-color: hsl(var(--background)); background-image: radial-gradient(circle at top, rgba(255, 1::1",
@@ -14480,6 +14200,10 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/styles/theme/tokens.css::coolDarkShadow::rgba(15, 23, 42::--glass-border: 220 12% 78% / 0.4; --glass-shadow: 0 18px 48px rgba(15, 23, 42, 0.08); --glass-highlight: 0 0% 100% / 0.82; --canvas-from: #f7::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/styles/theme/tokens.css::coolDarkShadow::rgba(15, 23, 42::cover-pink-icon: #993556; --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18); --sto-wf-detail-cover-bg: #f0f1f5; --sto-wf-detail-cate::1",
     "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
   },
 ]

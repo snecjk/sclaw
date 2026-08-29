@@ -1,5 +1,8 @@
 @layer base {
-  :root {
+  :root,
+  html[data-sto-theme='light'] {
+    color-scheme: light;
+
     /* Palette: raw values stay here; consumers use semantic roles below. */
     --sto-color-brand-hsl: 26.1176 100% 50%; /* #FF6F00 */
     --sto-color-info-hsl: 231.8033 98.9189% 63.7255%; /* #4760FE */
@@ -19,6 +22,14 @@
     --sto-color-brand-soft-hsl: 36 100% 95.098%; /* #FFF5E6 */
     --sto-color-brand-strong-hsl: 21.7877 100% 35.098%; /* #B34100 */
     --sto-color-info-soft-hsl: 222.8571 100% 97.0588%; /* #F0F4FF */
+
+    /* Canonical neutral hierarchy shared by Renderer and adaptive previews. */
+    --sto-canvas: #f7f8fa;
+    --sto-panel: #fafafa;
+    --sto-sidebar: #ededed;
+    --sto-elevated: #ffffff;
+    --sto-border: #e5e6eb;
+    --sto-border-strong: #c9cdd4;
 
     /* Tailwind / shadcn compatibility aliases. */
     --background: 220 14% 97%;
@@ -106,12 +117,59 @@
     --sto-border-heavy: #c9cdd4;
     --sto-surface-edge: #e8eaef;
     --sto-workspace-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    --sto-main-card-bg: var(--sto-workspace-bg);
+    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-page-bg: var(--sto-shell-bg);
     --sto-sidebar-bg: var(--sto-shell-bg);
     --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff8c00;
     --sto-accent-soft: #fff3e0;
     --sto-brand-6: #ff6f00;
+
+    /* Sidebar semantic colors. */
+    --sto-sidebar-collapsed-nav-icon-idle: #7a8494;
+    --sto-grey-9: #4e5969;
+    --sto-grey-8: #86909c;
+    --sto-grey-10: #1d2129;
+    --sto-sidebar-text-default: #393e47;
+    --sto-sidebar-text-active: #1d2129;
+    --sto-sidebar-text-icon: var(--sto-grey-9);
+    --sto-sidebar-icon-active: #1d2129;
+    --sto-sidebar-text-section: var(--sto-grey-8);
+    --sto-sidebar-row-hover-bg: #e4e4e4;
+    --sto-sidebar-nav-active-bg: #dcdcdc;
+    --sto-sidebar-running-spinner: #5f9274;
+    --sto-sidebar-subitem-active-bg: #dcdcdc;
+    --sto-sidebar-footer-name: #1a1a1a;
+    --sto-sidebar-footer-meta: #8b9099;
+
+    /* Workflow semantic colors. */
+    --sto-wf-hero-input-bg: #ffffff;
+    --sto-wf-hero-input-border: #e5e6eb;
+    --sto-wf-hero-input-ring: 255 140 0;
+    --sto-wf-cover-teal-bg: #e1f5ee;
+    --sto-wf-cover-teal-accent: #9fe1cb;
+    --sto-wf-cover-teal-icon: #0f6e56;
+    --sto-wf-cover-coral-bg: #faece7;
+    --sto-wf-cover-coral-accent: #f5c4b3;
+    --sto-wf-cover-coral-icon: #993c1d;
+    --sto-wf-cover-purple-bg: #eeedfe;
+    --sto-wf-cover-purple-accent: #cecbf6;
+    --sto-wf-cover-purple-icon: #3c3489;
+    --sto-wf-cover-pink-bg: #fbeaf0;
+    --sto-wf-cover-pink-accent: #f4c0d1;
+    --sto-wf-cover-pink-icon: #993556;
+    --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+    --sto-wf-detail-cover-bg: #f0f1f5;
+    --sto-wf-detail-category-bg: #fff6f0;
+    --sto-wf-detail-category-text: #ce7d46;
+    --sto-wf-detail-status-on-bg: rgba(136, 188, 157, 0.16);
+    --sto-wf-detail-status-on-text: #5f9274;
+    --sto-wf-detail-status-off-bg: #f0f1f2;
+    --sto-wf-detail-status-off-text: #86909c;
+    --sto-wf-flow-block-bg: #fafbfc;
+    --sto-wf-flow-block-border: #f2f3f5;
+    --sto-wf-page-shading-opacity: 1;
 
     /* Card roles keep existing light values and vary only in dark appearance. */
     --sto-card-flat-bg: #ffffff;
@@ -126,8 +184,15 @@
     --sto-overlay-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
   }
 
-  .dark {
+  .dark,
+  html[data-sto-theme='dark'] {
     color-scheme: dark;
+    --sto-canvas: #0d0d0d;
+    --sto-panel: #181818;
+    --sto-sidebar: #212121;
+    --sto-elevated: #282828;
+    --sto-border: rgb(255 255 255 / 8%);
+    --sto-border-strong: rgb(255 255 255 / 16%);
     --background: 0 0% 5.1%;
     --foreground: 0 0% 87.5%;
     --card: 0 0% 12.9%;
@@ -199,8 +264,8 @@
     --sto-control-active-bg: #282828;
     --sto-control-placeholder: var(--sto-text-tertiary);
     --sto-text-primary: #dfdfdf;
-    --sto-text-secondary: rgba(255, 255, 255, 0.70);
-    --sto-text-tertiary: rgba(255, 255, 255, 0.50);
+    --sto-text-secondary: rgb(255 255 255 / 70%);
+    --sto-text-tertiary: rgb(255 255 255 / 50%);
     --sto-icon-primary: rgba(255, 255, 255, 0.90);
     --sto-icon-secondary: rgba(255, 255, 255, 0.70);
     --sto-icon-tertiary: rgba(255, 255, 255, 0.50);
@@ -212,12 +277,56 @@
     --sto-panel-bg: var(--sto-surface-primary);
     --sto-surface-edge: var(--sto-border-default);
     --sto-workspace-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
+    --sto-main-card-bg: var(--sto-surface-under);
+    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-page-bg: var(--sto-surface-under);
     --sto-sidebar-bg: var(--sto-surface-secondary);
     --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff9f2e;
     --sto-accent-soft: hsl(32 45% 14%);
     --sto-brand-6: var(--sto-brand-primary);
+
+    --sto-sidebar-collapsed-nav-icon-idle: var(--sto-text-tertiary);
+    --sto-grey-10: var(--sto-text-primary);
+    --sto-grey-9: var(--sto-text-secondary);
+    --sto-grey-8: var(--sto-text-tertiary);
+    --sto-sidebar-text-default: var(--sto-text-secondary);
+    --sto-sidebar-text-active: var(--sto-text-primary);
+    --sto-sidebar-text-icon: var(--sto-icon-secondary);
+    --sto-sidebar-icon-active: var(--sto-icon-primary);
+    --sto-sidebar-text-section: var(--sto-grey-8);
+    --sto-sidebar-row-hover-bg: var(--sto-control-hover-bg);
+    --sto-sidebar-nav-active-bg: var(--sto-surface-elevated);
+    --sto-sidebar-subitem-active-bg: var(--sto-surface-elevated);
+    --sto-sidebar-footer-name: var(--sto-text-primary);
+    --sto-sidebar-footer-meta: var(--sto-text-tertiary);
+
+    --sto-wf-hero-input-bg: var(--sto-surface-primary);
+    --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
+    --sto-wf-hero-input-ring: 255 111 0;
+    --sto-wf-cover-teal-bg: hsl(160 28% 14%);
+    --sto-wf-cover-teal-accent: hsl(160 32% 22%);
+    --sto-wf-cover-teal-icon: #6ee7b7;
+    --sto-wf-cover-coral-bg: hsl(18 32% 14%);
+    --sto-wf-cover-coral-accent: hsl(18 36% 22%);
+    --sto-wf-cover-coral-icon: #fca58a;
+    --sto-wf-cover-purple-bg: hsl(248 28% 16%);
+    --sto-wf-cover-purple-accent: hsl(248 32% 24%);
+    --sto-wf-cover-purple-icon: #a5b4fc;
+    --sto-wf-cover-pink-bg: hsl(330 28% 14%);
+    --sto-wf-cover-pink-accent: hsl(330 32% 22%);
+    --sto-wf-cover-pink-icon: #f9a8d4;
+    --sto-wf-detail-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    --sto-wf-detail-cover-bg: var(--sto-surface-elevated);
+    --sto-wf-detail-category-bg: hsl(32 45% 14%);
+    --sto-wf-detail-category-text: #ffb366;
+    --sto-wf-detail-status-on-bg: hsl(var(--success) / 0.14);
+    --sto-wf-detail-status-on-text: var(--sto-success-primary);
+    --sto-wf-detail-status-off-bg: var(--sto-surface-elevated);
+    --sto-wf-detail-status-off-text: var(--sto-text-tertiary);
+    --sto-wf-flow-block-bg: var(--sto-surface-primary);
+    --sto-wf-flow-block-border: var(--sto-border-default);
+    --sto-wf-page-shading-opacity: 0;
 
     --sto-card-flat-bg: transparent;
     --sto-card-flat-hover-bg: #181818;

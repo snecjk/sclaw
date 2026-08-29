@@ -5,6 +5,7 @@
 
 import { STO_APPEARANCE_MESSAGE_TYPE } from '@/components/theme/appearance-context';
 import type { ResolvedAppearance } from '@/hooks/use-resolved-appearance';
+import themeTokensCss from '@/styles/theme/tokens.css?raw';
 
 export const HTML_PREVIEW_IFRAME_SANDBOX =
   'allow-scripts allow-same-origin allow-popups allow-forms allow-downloads';
@@ -31,57 +32,39 @@ function escapeHtmlAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
 
-function buildPreviewThemeStyle(mode: PreviewAppearanceMode): string {
-  const adaptiveStyles = mode === 'adaptive' ? `
+const adaptivePreviewRules = `
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] body {
-  color:var(--sto-preview-text) !important;
-  background:var(--sto-preview-surface) !important;
+  color:var(--sto-text-primary) !important;
+  background:var(--sto-canvas) !important;
 }
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] :is(table, th, td) {
-  color:var(--sto-preview-text) !important;
-  border-color:var(--sto-preview-border) !important;
+  color:var(--sto-text-primary) !important;
+  border-color:var(--sto-border) !important;
 }
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] table,
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] th {
-  background:var(--sto-preview-surface-elevated) !important;
+  background:var(--sto-sidebar) !important;
 }
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] td {
-  background:var(--sto-preview-surface-secondary) !important;
+  background:var(--sto-panel) !important;
 }
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] :is(input, button) {
-  color:var(--sto-preview-text) !important;
-  background:var(--sto-preview-surface-secondary) !important;
-  border-color:var(--sto-preview-border) !important;
+  color:var(--sto-text-primary) !important;
+  background:var(--sto-panel) !important;
+  border-color:var(--sto-border) !important;
 }
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] :is(code, pre) {
-  color:var(--sto-preview-text) !important;
-  background:var(--sto-preview-surface-secondary) !important;
+  color:var(--sto-text-primary) !important;
+  background:var(--sto-panel) !important;
 }
 html[data-sto-preview-mode="adaptive"][data-sto-theme="dark"] blockquote {
-  color:var(--sto-preview-text-secondary) !important;
-  border-color:var(--sto-preview-border) !important;
-}` : '';
+  color:var(--sto-text-secondary) !important;
+  border-color:var(--sto-border) !important;
+}`;
 
-  return `<style data-sto-preview-theme>
-html[data-sto-theme="light"] {
-  color-scheme:light;
-  --sto-preview-surface:#ffffff;
-  --sto-preview-surface-secondary:#f8f8f8;
-  --sto-preview-surface-elevated:#f2f3f5;
-  --sto-preview-text:#1d2129;
-  --sto-preview-text-secondary:#4e5969;
-  --sto-preview-border:#e5e6eb;
-}
-html[data-sto-theme="dark"] {
-  color-scheme:dark;
-  --sto-preview-surface:#0d0d0d;
-  --sto-preview-surface-secondary:#181818;
-  --sto-preview-surface-elevated:#212121;
-  --sto-preview-text:#dfdfdf;
-  --sto-preview-text-secondary:rgba(255,255,255,.70);
-  --sto-preview-border:rgba(255,255,255,.08);
-}${adaptiveStyles}
-</style>`;
+function buildPreviewThemeStyle(mode: PreviewAppearanceMode): string {
+  const modeRules = mode === 'adaptive' ? adaptivePreviewRules : '';
+  return `<style data-sto-preview-theme>${themeTokensCss}\n${modeRules}</style>`;
 }
 
 function buildPreviewThemeScript(): string {

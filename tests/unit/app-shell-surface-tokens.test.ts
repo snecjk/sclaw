@@ -34,7 +34,8 @@ function extractBlock(source: string, marker: string): string {
 }
 
 function extractThemeBlock(marker: ':root {' | '.dark {'): string {
-  return `${extractBlock(themeTokensCss, marker)}\n${extractBlock(globalsCss, marker)}`;
+  const tokenMarker = marker === ':root {' ? ':root,' : '.dark,';
+  return `${extractBlock(themeTokensCss, tokenMarker)}\n${extractBlock(globalsCss, marker)}`;
 }
 
 describe('app shell surface tokens (Stage 4)', () => {

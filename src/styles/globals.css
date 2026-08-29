@@ -35,16 +35,13 @@
     --sto-sidebar-effective-w: 260px;
     /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影 */
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: var(--sto-workspace-bg);
-    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
-    /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */
+    /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px） */
     --sto-sidebar-collapsed-nav-item-w: 59px;
     --sto-sidebar-collapsed-nav-item-h: 28px;
     --sto-sidebar-collapsed-nav-py: 5px;
     --sto-sidebar-collapsed-nav-px: 10px;
-    --sto-sidebar-collapsed-nav-icon-idle: #7a8494;
     --sto-content-pad-x: 20px;
     --sto-chat-max-w-home: 780px;
     --sto-chat-max-w-page: 862px;
@@ -54,71 +51,15 @@
     --sto-split-max-preview: 70%;
     --sto-split-default-preview: 50%;
     --sto-main-pad-y-total: 2.5rem;
-    /* Grey-9 次要文字（快捷 chip / 手动创建等） */
-    --sto-grey-9: #4e5969;
-    /* Grey-8 三级文字（侧栏分区标题 / 版本号 — MasterGo paint_4:0520） */
-    --sto-grey-8: #86909c;
-    /* Grey-10 侧栏一级正文（MasterGo paint_4:0441「文字/文本-默认」） */
-    --sto-grey-10: #1d2129;
-
-    /* 侧栏文字色（MasterGo 8:46454 调整标题颜色+任务icon，MCP 2026-06） */
-    --sto-sidebar-text-default: #393e47;
-    --sto-sidebar-text-active: #1d2129;
-    --sto-sidebar-text-icon: var(--sto-grey-9);
-    --sto-sidebar-icon-active: #1d2129;
-    --sto-sidebar-text-section: var(--sto-grey-8);
-    --sto-sidebar-row-hover-bg: #e4e4e4;
-    --sto-sidebar-nav-active-bg: #dcdcdc;
     /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */
     --sto-sidebar-section-sticky-h: 32px;
-    --sto-sidebar-running-spinner: #5f9274;
-    --sto-sidebar-subitem-active-bg: #dcdcdc;
-    --sto-sidebar-footer-name: #1a1a1a;
-    --sto-sidebar-footer-meta: #8b9099;
     /* MainLayout main `[scrollbar-gutter:stable]` 预留宽度，底纹右出血需一并抵消 */
     --sto-main-scrollbar-gutter: 15px;
-
-    /* 工作流 Hero 输入复合框（MasterGo 2:7326 #FFFFFF / Grey-4 #E5E6EB） */
-    --sto-wf-hero-input-bg: #ffffff;
-    --sto-wf-hero-input-border: #e5e6eb;
-    --sto-wf-hero-input-ring: 255 140 0;
 
     /* 工作流页底纹夹层：top 64px（设计稿 Y），高度与切图 workflow-page-shading.png 一致 */
     --sto-wf-page-shading-top: 64px;
     --sto-wf-page-shading-h: 330px;
     --sto-wf-page-shading-tile-w: 1152px;
-
-    /* 工作流卡片封面 pastel（MasterGo 工作流列表稿） */
-    --sto-wf-cover-teal-bg: #e1f5ee;
-    --sto-wf-cover-teal-accent: #9fe1cb;
-    --sto-wf-cover-teal-icon: #0f6e56;
-    --sto-wf-cover-coral-bg: #faece7;
-    --sto-wf-cover-coral-accent: #f5c4b3;
-    --sto-wf-cover-coral-icon: #993c1d;
-    --sto-wf-cover-purple-bg: #eeedfe;
-    --sto-wf-cover-purple-accent: #cecbf6;
-    --sto-wf-cover-purple-icon: #3c3489;
-    --sto-wf-cover-pink-bg: #fbeaf0;
-    --sto-wf-cover-pink-accent: #f4c0d1;
-    --sto-wf-cover-pink-icon: #993556;
-
-    /* 工作流详情弹窗（MasterGo Dialog 2:09392） */
-    --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
-    --sto-wf-detail-cover-bg: #f0f1f5;
-    --sto-wf-detail-category-bg: #fff6f0;
-    --sto-wf-detail-category-text: #ce7d46;
-    /* 详情弹窗标题「已开启」badge（MasterGo Overlay 2:16910） */
-    --sto-wf-detail-status-on-bg: rgba(136, 188, 157, 0.16);
-    --sto-wf-detail-status-on-text: #5f9274;
-    --sto-wf-detail-status-off-bg: #f0f1f2;
-    --sto-wf-detail-status-off-text: #86909c;
-
-    /* 工作流卡片节点灰底区块（Grey-2 / Grey-3 描边） */
-    --sto-wf-flow-block-bg: #fafbfc;
-    --sto-wf-flow-block-border: #f2f3f5;
-
-    /* 工作流页底纹可见度（暗色在 .dark 中隐藏） */
-    --sto-wf-page-shading-opacity: 1;
   }
 
   .dark {
@@ -139,29 +80,12 @@
     /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
     --sto-sidebar-effective-w: 260px;
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: var(--sto-surface-under);
-    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     --sto-sidebar-collapsed-nav-item-w: 59px;
     --sto-sidebar-collapsed-nav-item-h: 28px;
     --sto-sidebar-collapsed-nav-py: 5px;
     --sto-sidebar-collapsed-nav-px: 10px;
-    --sto-sidebar-collapsed-nav-icon-idle: var(--sto-text-tertiary);
-    /* 侧栏文字/交互 token — 与 :root 层级对应，暗色底上保持可读 + 选中/hover 不用浅色块 */
-    --sto-grey-10: var(--sto-text-primary);
-    --sto-grey-9: var(--sto-text-secondary);
-    --sto-grey-8: var(--sto-text-tertiary);
-    --sto-sidebar-text-default: var(--sto-text-secondary);
-    --sto-sidebar-text-active: var(--sto-text-primary);
-    --sto-sidebar-text-icon: var(--sto-icon-secondary);
-    --sto-sidebar-icon-active: var(--sto-icon-primary);
-    --sto-sidebar-text-section: var(--sto-grey-8);
-    --sto-sidebar-row-hover-bg: var(--sto-control-hover-bg);
-    --sto-sidebar-nav-active-bg: var(--sto-surface-elevated);
-    --sto-sidebar-subitem-active-bg: var(--sto-surface-elevated);
-    --sto-sidebar-footer-name: var(--sto-text-primary);
-    --sto-sidebar-footer-meta: var(--sto-text-tertiary);
     --sto-content-pad-x: 20px;
     --sto-chat-max-w-home: 780px;
     --sto-chat-max-w-page: 862px;
@@ -171,37 +95,6 @@
     --sto-split-max-preview: 70%;
     --sto-split-default-preview: 50%;
     --sto-main-pad-y-total: 2.5rem;
-
-    --sto-wf-hero-input-bg: var(--sto-surface-primary);
-    --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
-    --sto-wf-hero-input-ring: 255 111 0;
-
-    --sto-wf-cover-teal-bg: hsl(160 28% 14%);
-    --sto-wf-cover-teal-accent: hsl(160 32% 22%);
-    --sto-wf-cover-teal-icon: #6ee7b7;
-    --sto-wf-cover-coral-bg: hsl(18 32% 14%);
-    --sto-wf-cover-coral-accent: hsl(18 36% 22%);
-    --sto-wf-cover-coral-icon: #fca58a;
-    --sto-wf-cover-purple-bg: hsl(248 28% 16%);
-    --sto-wf-cover-purple-accent: hsl(248 32% 24%);
-    --sto-wf-cover-purple-icon: #a5b4fc;
-    --sto-wf-cover-pink-bg: hsl(330 28% 14%);
-    --sto-wf-cover-pink-accent: hsl(330 32% 22%);
-    --sto-wf-cover-pink-icon: #f9a8d4;
-
-    --sto-wf-detail-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-    --sto-wf-detail-cover-bg: var(--sto-surface-elevated);
-    --sto-wf-detail-category-bg: hsl(32 45% 14%);
-    --sto-wf-detail-category-text: #ffb366;
-    --sto-wf-detail-status-on-bg: hsl(var(--success) / 0.14);
-    --sto-wf-detail-status-on-text: var(--sto-success-primary);
-    --sto-wf-detail-status-off-bg: var(--sto-surface-elevated);
-    --sto-wf-detail-status-off-text: var(--sto-text-tertiary);
-
-    --sto-wf-flow-block-bg: var(--sto-surface-primary);
-    --sto-wf-flow-block-border: var(--sto-border-default);
-
-    --sto-wf-page-shading-opacity: 0;
   }
 }
 

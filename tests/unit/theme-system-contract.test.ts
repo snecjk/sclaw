@@ -19,7 +19,7 @@ function declarationsFor(source: string, selector: string): Record<string, strin
   if (!source) return declarations;
 
   postcss.parse(source).walkRules((rule) => {
-    if (rule.selector !== selector) return;
+    if (!rule.selectors.includes(selector)) return;
     rule.walkDecls((declaration) => {
       declarations[declaration.prop] = declaration.value;
     });
@@ -32,18 +32,38 @@ function directDeclarations(rule: postcss.Rule): postcss.Declaration[] {
   return (rule.nodes ?? []).filter((node): node is postcss.Declaration => node.type === 'decl');
 }
 
-function semanticMappingSelectors(source: string): Set<string> {
+function semanticMappingSelectors(
+  source: string,
+  canonicalProperties?: ReadonlySet<string>,
+): Set<string> {
   const selectors = new Set<string>();
   if (!source) return selectors;
 
   postcss.parse(source).walkRules((rule) => {
     const hasSemanticMapping = directDeclarations(rule).some((declaration) =>
-      declaration.prop.startsWith('--sto-') && declaration.value.trim().length > 0,
+      declaration.prop.startsWith('--sto-')
+        && declaration.value.trim().length > 0
+        && (!canonicalProperties || canonicalProperties.has(declaration.prop)),
     );
     if (!hasSemanticMapping) return;
     for (const selector of rule.selectors) selectors.add(selector);
   });
   return selectors;
+}
+
+function semanticMappingProperties(source: string, selectors: readonly string[]): Set<string> {
+  const properties = new Set<string>();
+  if (!source) return properties;
+
+  postcss.parse(source).walkRules((rule) => {
+    if (!rule.selectors.some((selector) => selectors.includes(selector))) return;
+    directDeclarations(rule).forEach((declaration) => {
+      if (declaration.prop.startsWith('--sto-') && declaration.value.trim().length > 0) {
+        properties.add(declaration.prop);
+      }
+    });
+  });
+  return properties;
 }
 
 function missingSemanticMappings(source: string, requiredSelectors: readonly string[]): string[] {
@@ -282,6 +302,11 @@ describe('theme system contract', () => {
 
   it('keeps renderer and preview theme mappings in tokens.css', () => {
     const tokens = readIfPresent(themeTokensPath);
+    expect(tokens).toContain(':root,');
+    expect(tokens).toContain("html[data-sto-theme='light']");
+    expect(tokens).toContain('.dark,');
+    expect(tokens).toContain("html[data-sto-theme='dark']");
+
     const requiredSelectors = [
       ':root',
       "html[data-sto-theme='light']",
@@ -296,9 +321,10 @@ describe('theme system contract', () => {
 
     expect(missingSelectors).toMatchSnapshot();
 
+    const canonicalProperties = semanticMappingProperties(tokens, requiredSelectors);
     const unexpectedOwners = sourceFiles(resolve(process.cwd(), 'src'), ['.css'])
       .filter(({ file }) => file !== 'src/styles/theme/tokens.css')
-      .flatMap(({ file, source }) => [...semanticMappingSelectors(source)]
+      .flatMap(({ file, source }) => [...semanticMappingSelectors(source, canonicalProperties)]
         .filter((selector) => requiredSelectors.includes(selector))
         .map((selector) => ({
           file,

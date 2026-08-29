@@ -157,10 +157,16 @@ function extractBlock(source: string, marker: string): string {
 }
 
 function extractThemeBlock(marker: ':root {' | '.dark {'): string {
-  return `${extractBlock(themeTokensCss, marker)}\n${extractBlock(globalsCss, marker)}`;
+  const tokenMarker = marker === ':root {' ? ':root,' : '.dark,';
+  return `${extractBlock(themeTokensCss, tokenMarker)}\n${extractBlock(globalsCss, marker)}`;
 }
 
 describe('dark appearance semantic tokens', () => {
+  it('serves renderer and adaptive preview from the same dark token selector', () => {
+    expect(themeTokensCss).toContain('.dark,');
+    expect(themeTokensCss).toContain("html[data-sto-theme='dark']");
+  });
+
   it('keeps light surfaces unchanged and exposes semantic aliases', () => {
     const root = extractThemeBlock(':root {');
 
@@ -188,8 +194,8 @@ describe('dark appearance semantic tokens', () => {
     expect(dark).toContain('--sto-surface-secondary: #212121');
     expect(dark).toContain('--sto-surface-elevated: #282828');
     expect(dark).toContain('--sto-text-primary: #dfdfdf');
-    expect(dark).toContain('--sto-text-secondary: rgba(255, 255, 255, 0.70)');
-    expect(dark).toContain('--sto-text-tertiary: rgba(255, 255, 255, 0.50)');
+    expect(dark).toContain('--sto-text-secondary: rgb(255 255 255 / 70%)');
+    expect(dark).toContain('--sto-text-tertiary: rgb(255 255 255 / 50%)');
     expect(dark).toContain('--sto-icon-primary: rgba(255, 255, 255, 0.90)');
     expect(dark).toContain('--sto-icon-secondary: rgba(255, 255, 255, 0.70)');
     expect(dark).toContain('--sto-icon-tertiary: rgba(255, 255, 255, 0.50)');
