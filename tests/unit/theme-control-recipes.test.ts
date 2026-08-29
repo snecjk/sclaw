@@ -17,6 +17,27 @@ const primitiveFiles = [
 ] as const;
 
 describe('semantic control and overlay recipes', () => {
+  it('defines complete semantic state chains for every shared recipe family', () => {
+    for (const family of [
+      'control',
+      'navigation-item',
+      'segment-item',
+      'overlay',
+      'feedback',
+    ]) {
+      for (const state of ['hover', 'active', 'focus', 'disabled', 'loading', 'error']) {
+        expect(recipes).toContain(`.sto-${family}[data-state='${state}']`);
+      }
+    }
+
+    expect(recipes).toContain('.sto-control:focus-visible');
+    expect(recipes).toContain('.sto-control:disabled');
+    expect(recipes).toContain(".sto-control[aria-invalid='true']");
+    expect(recipes).not.toMatch(
+      /\.sto-control[^{]*\[[^\]]*disabled[^\]]*\][^{]*\{[^}]*opacity\s*:/s,
+    );
+  });
+
   it('defines color-only recipes for fields, controls, segments, overlays and scrims', () => {
     for (const recipe of [
       '.sto-control-field',
@@ -41,11 +62,11 @@ describe('semantic control and overlay recipes', () => {
 
   it('keeps every shared primitive attached to a semantic recipe', () => {
     const expectedRecipe: Record<(typeof primitiveFiles)[number], RegExp> = {
-      'src/components/ui/button.tsx': /sto-control-(?:outline|secondary|ghost)/,
-      'src/components/ui/input.tsx': /sto-control-field/,
-      'src/components/ui/textarea.tsx': /sto-control-field/,
+      'src/components/ui/button.tsx': /sto-control sto-control--/,
+      'src/components/ui/input.tsx': /sto-control sto-control-field/,
+      'src/components/ui/textarea.tsx': /sto-control sto-control-field/,
       'src/components/ui/tabs.tsx': /sto-segment-(?:track|item)/,
-      'src/components/ui/select.tsx': /sto-control-field/,
+      'src/components/ui/select.tsx': /sto-control sto-control-field/,
       'src/components/ui/dialog.tsx': /sto-overlay/,
       'src/components/ui/dropdown-menu.tsx': /sto-overlay/,
       'src/components/ui/tooltip.tsx': /sto-overlay/,
@@ -53,6 +74,19 @@ describe('semantic control and overlay recipes', () => {
 
     for (const file of primitiveFiles) {
       expect(read(file), file).toMatch(expectedRecipe[file]);
+    }
+  });
+
+  it('keeps disabled color semantics readable in primitive source', () => {
+    for (const file of [
+      'src/components/ui/button.tsx',
+      'src/components/ui/input.tsx',
+      'src/components/ui/textarea.tsx',
+      'src/components/ui/select.tsx',
+      'src/components/ui/tabs.tsx',
+      'src/components/ui/dropdown-menu.tsx',
+    ]) {
+      expect(read(file), file).not.toMatch(/disabled:opacity-|data-\[disabled\]:opacity-/);
     }
   });
 });

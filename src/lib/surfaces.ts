@@ -1,13 +1,12 @@
 import { cn } from '@/lib/utils';
 
 /** 列表/广场卡片沿用全局 Flat Card 交互色。 */
-export const listCardHoverBorderShadowClass = 'sto-card-flat-interactive';
+export const listCardHoverBorderShadowClass = 'sto-card sto-card--flat sto-card--interactive';
 
 /** 应用、技能、连接器、工作流等集合卡片共用的外壳与交互状态。 */
 export const collectionCardShellClass = cn(
-  'sto-card-flat sto-card-flat-interactive',
+  'sto-card sto-card--flat sto-card--interactive',
   'transition-[background-color,border-color,box-shadow] duration-150',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
 );
 
 /** Page section surface (Models page, Settings proxy, etc.) — glass gradient + blur */
@@ -172,14 +171,12 @@ export const myTaskPageSubtitleClass =
   'm-0 mt-1.5 text-sm font-normal leading-5 text-muted-foreground';
 
 export const stoSegmentTabsTrackClass =
-  'inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-[var(--sto-surface-secondary)]';
+  'sto-segment-track sto-segment-track--plain inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] p-0.5';
 
 export function stoSegmentTabClass(active: boolean): string {
   return cn(
-    "inline-flex items-center gap-1.5 rounded-[10px] px-3.5 py-[7px] font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
-    active
-      ? 'bg-white text-[#1A1A1A] dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)]'
-      : 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]',
+    "sto-segment-item sto-segment-item--plain inline-flex items-center gap-1.5 rounded-[10px] px-3.5 py-[7px] font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
+    active && 'sto-segment-item--selected',
   );
 }
 
@@ -189,36 +186,35 @@ export function myTaskSectionTabClass(active: boolean): string {
 }
 
 export const stoOutlineButtonBaseClass = cn(
-  "inline-flex items-center justify-center rounded-[12px] border border-[var(--sto-surface-edge)] bg-[var(--sto-control-bg)] font-['PingFang_SC'] text-[13px] font-medium leading-none text-[var(--sto-text-primary)]",
-  'transition-colors duration-150 hover:bg-[var(--sto-control-hover-bg)]',
+  "sto-control sto-control--outline sto-control--neutral-outline inline-flex items-center justify-center rounded-[12px] border font-['PingFang_SC'] text-[13px] font-medium leading-none",
+  'transition-colors duration-150',
 );
 
 export const stoSearchFieldShellClass = cn(
-  'flex items-center gap-2 rounded-[12px] border border-[var(--sto-border-default)] bg-[var(--sto-control-bg)] px-3',
+  'sto-control sto-control-field sto-control--field sto-control--neutral-field flex items-center gap-2 rounded-[12px] border px-3',
 );
 
 export const stoSortTriggerClass = cn(
-  'flex items-center gap-[6px] rounded-[10px] border border-[var(--sto-border-default)] bg-[var(--sto-control-bg)] text-[var(--sto-text-primary)] hover:bg-[var(--sto-control-hover-bg)]',
+  'sto-control sto-control--outline sto-control--neutral-outline-default flex items-center gap-[6px] rounded-[10px] border',
 );
 
 export const stoIconSurfaceClass = cn(
-  'flex shrink-0 items-center justify-center rounded-lg border border-[var(--sto-border-default)] bg-[var(--sto-control-bg)] text-[var(--sto-text-primary)]',
+  'sto-control sto-control--outline sto-control--neutral-outline-default flex shrink-0 items-center justify-center rounded-lg border',
 );
 
 export const stoNeutralCardClass = cn(
-  'border border-[var(--sto-border-default)] bg-[var(--sto-surface-secondary)]',
+  'sto-card sto-card--secondary border',
 );
 
 export const myTaskCreateButtonClass = cn(
   stoOutlineButtonBaseClass,
   'h-[34px] shrink-0 gap-1.5 px-3.5 text-sm',
-  'text-foreground hover:bg-black/[0.04] active:scale-[0.98]',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  'active:scale-[0.98]',
 );
 
 /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
-  'sto-card-flat relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] p-4',
+  'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] p-4',
   'transition-[border-color,box-shadow] duration-base',
   listCardHoverBorderShadowClass,
 );

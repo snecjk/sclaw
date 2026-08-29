@@ -8015,22 +8015,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/lib/surfaces.ts::pageDarkUtility::dark:bg-::it flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-[var(--sto-surface-secondary)]'; export function stoSegmentTabClass(act::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::pageDarkUtility::dark:bg-::ition-colors duration-150", active ? 'bg-white text-[#1A1A1A] dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)]'::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::pageDarkUtility::dark:text-::? 'bg-white text-[#1A1A1A] dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)]' : 'bg-transparent text-[#4E5969] hover:::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::pageDarkUtility::dark:text-::g-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)]::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/lib/surfaces.ts::pageDarkUtility::dark:text-::'m-0 min-w-0 truncate text-sm font-medium leading-[18px] text-[#1A1A1A] dark:text-foreground'; /** 我的任务卡片描述：12px / Regular / #8B9099 / 两行截断 */ export con::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -8427,23 +8411,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/lib/surfaces.ts::rawColor::#EDEDED::inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-[var(--sto-surface-secondary)]'; export function stoSeg::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::rawColor::#1A1A1A::one transition-colors duration-150", active ? 'bg-white text-[#1A1A1A] dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-prima::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::rawColor::#4E5969::bg)] dark:text-[var(--sto-text-primary)]' : 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-[var(--sto-text-s::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::rawColor::#1D2129::: 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/lib/surfaces.ts::rawColor::#E5E6EB::ing-ring focus-visible:ring-offset-2', ); /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */ export const myTaskCardShellClass = cn( 'sto-::1",
+    "key": "src/lib/surfaces.ts::rawColor::#E5E6EB::3.5 text-sm', 'active:scale-[0.98]', ); /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */ export const myTaskCardShellClass = cn( 'rela::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -14116,86 +14084,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/styles/globals.css::rawColor::rgba(0, 0, 0, 0.5)::.sclaw-docx-host .docx-wrapper > section.docx { box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5); }::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-bg) / var(--glass-opacity))::@layer components { .glass, .sto-card-panel { background: hsl(var(--glass-bg) / var(--glass-opacity)); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-fil::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-border))::-webkit-backdrop-filter: blur(var(--glass-blur)); border-color: hsl(var(--glass-border)); box-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-h::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-highlight))::(--glass-border)); box-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight)); } .dark .sto-card-panel { background: var(--sto-card-panel-bg::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-bg) / 0.7)::r: var(--sto-text-primary); } .sto-control-field { background: hsl(var(--glass-bg) / 0.7); border-color: hsl(var(--glass-border)); backdrop-filter: blur(::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-border))::l-field { background: hsl(var(--glass-bg) / 0.7); border-color: hsl(var(--glass-border)); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-fil::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-bg) / 0.5)::it-backdrop-filter: none; } .sto-control-outline { background: hsl(var(--glass-bg) / 0.5); border-color: hsl(var(--glass-border)); backdrop-filter: blur(::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-border))::outline { background: hsl(var(--glass-bg) / 0.5); border-color: hsl(var(--glass-border)); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-fil::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::rgba(0, 0, 0, 0.06)::lur(var(--glass-blur)); } .sto-control-outline:hover { background: rgba(0, 0, 0, 0.06); } .sto-control-secondary { background: rgba(255, 255, 255, 0.15); }::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::rgba(255, 255, 255, 0.15)::kground: rgba(0, 0, 0, 0.06); } .sto-control-secondary { background: rgba(255, 255, 255, 0.15); } .sto-control-secondary:hover { background: rgba(255, 255, 255, 0.2::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::rgba(255, 255, 255, 0.25)::ba(255, 255, 255, 0.15); } .sto-control-secondary:hover { background: rgba(255, 255, 255, 0.25); } .sto-control-ghost:hover { background: hsl(var(--accent) / 0.1); }::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--accent) / 0.1)::: rgba(255, 255, 255, 0.25); } .sto-control-ghost:hover { background: hsl(var(--accent) / 0.1); } .dark .sto-control-outline, .dark .sto-control-secondary {::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::rgba(255, 255, 255, 0.2)::ar(--sto-control-hover-bg); } .sto-segment-track { background: rgba(255, 255, 255, 0.2); border-color: hsl(var(--glass-border)); backdrop-filter: blur(::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-border))::ent-track { background: rgba(255, 255, 255, 0.2); border-color: hsl(var(--glass-border)); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-fil::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::rgba(255, 255, 255, 0.6)::fault); } .sto-segment-item[data-state='active'] { background: rgba(255, 255, 255, 0.6); color: hsl(var(--foreground)); box-shadow: var(--glass-shadow)::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--foreground))::-state='active'] { background: rgba(255, 255, 255, 0.6); color: hsl(var(--foreground)); box-shadow: var(--glass-shadow); } .dark .sto-segment-item[da::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--card))::color: var(--sto-text-primary); } .sto-overlay { background: hsl(var(--card)); border-color: hsl(var(--border)); } .sto-overlay-glass-border::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--border))::} .sto-overlay { background: hsl(var(--card)); border-color: hsl(var(--border)); } .sto-overlay-glass-border { border-color: hsl(var(--glass-borde::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--glass-border))::r: hsl(var(--border)); } .sto-overlay-glass-border { border-color: hsl(var(--glass-border)); } .dark .sto-overlay, .dark .sto-overlay-glass-border { backg::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::rgba(0, 0, 0, 0.4)::hadow: var(--sto-overlay-shadow); } .sto-overlay-scrim { background: rgba(0, 0, 0, 0.4); } .dark .sto-overlay-scrim { background: rgba(0, 0, 0, 0.6); } }::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/styles/theme/recipes.css::rawColor::rgba(0, 0, 0, 0.6)::kground: rgba(0, 0, 0, 0.4); } .dark .sto-overlay-scrim { background: rgba(0, 0, 0, 0.6); } }::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

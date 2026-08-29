@@ -114,19 +114,17 @@ describe('app shell surface tokens (Stage 4)', () => {
     expect(myTaskSectionTabsTrackClass).toBe(stoSegmentTabsTrackClass);
     expect(myTaskSectionTabClass(true)).toBe(stoSegmentTabClass(true));
     expect(myTaskSectionTabClass(false)).toBe(stoSegmentTabClass(false));
-    expect(myTaskCreateButtonClass).toContain('bg-[var(--sto-control-bg)]');
+    expect(myTaskCreateButtonClass).toContain('sto-control sto-control--outline');
     expect(myTaskCreateButtonClass).toContain('h-[34px]');
-    expect(myTaskSortTriggerClass).toContain('bg-[var(--sto-control-bg)]');
+    expect(myTaskSortTriggerClass).toContain('sto-control sto-control--outline');
     expect(myTaskSortTriggerClass).toContain('h-[34px]');
   });
 
   it('preserves My Task compatibility light interactions while using semantic dark controls', () => {
-    expect(myTaskCreateButtonClass).toContain('text-foreground');
-    expect(myTaskCreateButtonClass).toContain('hover:bg-black/[0.04]');
+    expect(myTaskCreateButtonClass).toContain('sto-control--outline');
     expect(myTaskCreateButtonClass).toContain('active:scale-[0.98]');
-    expect(myTaskCreateButtonClass).toContain('focus-visible:ring-2');
     expect(myTaskSortTriggerClass).toContain('font-medium');
-    expect(myTaskCreateButtonClass).toContain('bg-[var(--sto-control-bg)]');
-    expect(myTaskSortTriggerClass).toContain('bg-[var(--sto-control-bg)]');
+    expect(myTaskCreateButtonClass).not.toMatch(/bg-\[var|text-foreground|hover:bg-/);
+    expect(myTaskSortTriggerClass).not.toMatch(/bg-\[var|text-foreground|hover:bg-/);
   });
 });

@@ -17,13 +17,34 @@ const connectorCard = read('src/components/connectors/ConnectorCard.tsx');
 const surfaces = read('src/lib/surfaces.ts');
 
 describe('semantic card color recipes', () => {
+  it('defines the complete card state chain with semantic color values', () => {
+    for (const selector of [
+      '.sto-card',
+      '.sto-card:hover',
+      ".sto-card[data-state='active']",
+      ".sto-card[data-selected='true']",
+      '.sto-card:has(:focus-visible)',
+      ".sto-card[aria-disabled='true']",
+      ".sto-card[data-state='loading']",
+      ".sto-card[data-state='error']",
+    ]) {
+      expect(recipesCss, selector).toContain(selector);
+    }
+    expect(recipesCss).toContain('--sto-card-disabled-foreground');
+    expect(recipesCss).toContain('--sto-card-disabled-background');
+    expect(recipesCss).toContain('--sto-card-disabled-border');
+    expect(recipesCss).not.toMatch(
+      /\.sto-card[^{]*\[[^\]]*disabled[^\]]*\][^{]*\{[^}]*opacity\s*:/s,
+    );
+  });
+
   it('keeps the existing light Home card colors while flattening ordinary dark cards', () => {
     expect(tokensCss).toMatch(/--sto-card-flat-bg:\s*#ffffff/);
     expect(tokensCss).toMatch(/--sto-card-flat-border:\s*var\(--sto-border-default\)/);
     expect(tokensCss).toMatch(/--sto-card-flat-hover-shadow:\s*0 0 16px rgba\(0, 0, 0, 0\.12\)/);
-    expect(tokensCss).toMatch(/\.dark\s*\{[\s\S]*--sto-card-flat-bg:\s*transparent/);
-    expect(tokensCss).toMatch(/\.dark\s*\{[\s\S]*--sto-card-flat-hover-bg:\s*#181818/);
-    expect(tokensCss).toMatch(/\.dark\s*\{[\s\S]*--sto-card-flat-hover-shadow:\s*none/);
+    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-bg:\s*transparent/);
+    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-hover-bg:\s*#181818/);
+    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-hover-shadow:\s*none/);
   });
 
   it('owns card colors in recipes rather than Home component strings', () => {
@@ -36,8 +57,8 @@ describe('semantic card color recipes', () => {
   });
 
   it('uses the shared panel recipe without retaining the legacy glass class', () => {
-    expect(recipesCss).toContain('.sto-card-panel');
-    expect(card).toContain('sto-card-panel');
+    expect(recipesCss).toContain('.sto-card');
+    expect(card).toContain('sto-card');
     expect(card).not.toMatch(/['"`]glass(?:\s|['"`])/);
   });
 
@@ -47,9 +68,8 @@ describe('semantic card color recipes', () => {
     }
 
     expect(surfaces).toContain(`export const collectionCardShellClass = cn(
-  'sto-card-flat sto-card-flat-interactive',
+  'sto-card sto-card--flat sto-card--interactive',
   'transition-[background-color,border-color,box-shadow] duration-150',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
 );`);
     expect(surfaces).toMatch(
       /workflowListCardShellClass[\s\S]*collectionCardShellClass[\s\S]*rounded-\[18px\][\s\S]*border/,

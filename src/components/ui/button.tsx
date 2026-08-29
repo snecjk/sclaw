@@ -8,20 +8,26 @@ import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
+const buttonRecipeClass = {
+  default: 'sto-control sto-control--primary',
+  destructive: 'sto-control sto-control--destructive',
+  outline: 'sto-control sto-control--outline sto-control-outline',
+  secondary: 'sto-control sto-control--secondary sto-control-secondary',
+  ghost: 'sto-control sto-control--ghost sto-control-ghost',
+  link: 'sto-control sto-control--link',
+} as const;
+
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive:
-          'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline:
-          'sto-control-outline border hover:text-foreground',
-        secondary:
-          'sto-control-secondary text-secondary-foreground',
-        ghost: 'sto-control-ghost hover:text-foreground',
-        link: 'text-link underline-offset-4 hover:underline',
+        default: buttonRecipeClass.default,
+        destructive: buttonRecipeClass.destructive,
+        outline: `${buttonRecipeClass.outline} border`,
+        secondary: buttonRecipeClass.secondary,
+        ghost: buttonRecipeClass.ghost,
+        link: `${buttonRecipeClass.link} underline-offset-4 hover:underline`,
       },
       size: {
         default: 'h-10 px-4 py-2',

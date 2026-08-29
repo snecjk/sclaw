@@ -53,7 +53,7 @@ describe('neutral presentational controls', () => {
 
     const button = screen.getByRole('button', { name: '上传技能' });
     expect(button.className).toContain('h-9');
-    expect(button.className).toContain('bg-[var(--sto-control-bg)]');
+    expect(button).toHaveClass('sto-control', 'sto-control--outline');
     expect(button.className).not.toContain('dark:bg-');
   });
 
@@ -86,7 +86,7 @@ describe('neutral presentational controls', () => {
     const surface = screen.getByTestId('icon-surface');
     expect(surface).toHaveTextContent('icon');
     expect(surface.className).toContain('h-10');
-    expect(surface.className).toContain('bg-[var(--sto-control-bg)]');
+    expect(surface).toHaveClass('sto-control', 'sto-control--outline');
     expect(surface.className).not.toContain('dark:bg-');
   });
 
@@ -104,7 +104,10 @@ describe('neutral presentational controls', () => {
     render(<SectionTabs activeSection="tasks" onSectionChange={vi.fn()} />);
 
     const tablist = screen.getByRole('tablist');
-    expect(tablist.className).toContain('dark:bg-[var(--sto-surface-secondary)]');
+    expect(tablist).toHaveClass('sto-segment-track');
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveClass('sto-segment-item');
+    }
   });
 
   it('uses the shared neutral surface for the Skill Plaza fallback icon', () => {
@@ -112,7 +115,7 @@ describe('neutral presentational controls', () => {
 
     const fallback = container.querySelector('img');
     if (!fallback) throw new Error('Expected fallback icon');
-    expect(fallback.parentElement?.className).toContain('bg-[var(--sto-control-bg)]');
+    expect(fallback.parentElement).toHaveClass('sto-control', 'sto-control--outline');
     expect(fallback.parentElement?.className).not.toContain('dark:bg-');
     expect(fallback.className).toContain('dark:invert');
   });

@@ -302,9 +302,9 @@ const requiredSemanticFragments: Record<(typeof taskSixFiles)[number], readonly 
     'dark:hover:bg-[var(--sto-control-hover-bg)]',
   ],
   'src/components/ui/button.tsx': [
-    'sto-control-outline',
-    'sto-control-secondary',
-    'sto-control-ghost',
+    'sto-control sto-control--outline',
+    'sto-control sto-control--secondary',
+    'sto-control sto-control--ghost',
   ],
   'src/components/ui/input.tsx': [
     'sto-control-field',
@@ -400,7 +400,9 @@ describe('dark appearance application surface guard', () => {
     );
     expect(failures).toEqual([]);
     for (const fragment of requiredSemanticFragments[file]) {
-      expect(classGroups.some((group) => group.includes(fragment))).toBe(true);
+      const mapsVariantRecipe = file === 'src/components/ui/button.tsx'
+        && source.includes(fragment);
+      expect(mapsVariantRecipe || classGroups.some((group) => group.includes(fragment))).toBe(true);
     }
   });
 

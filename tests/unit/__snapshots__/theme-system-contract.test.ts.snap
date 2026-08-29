@@ -1,25 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`theme system contract > keeps all shared visual state families in recipes.css 1`] = `
-[
-  {
-    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
-    "recipe": ".sto-card",
-  },
-  {
-    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
-    "recipe": ".sto-control",
-  },
-  {
-    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
-    "recipe": ".sto-navigation-item",
-  },
-  {
-    "reason": "Migration debt: Task 5 completes this shared state family in recipes.css.",
-    "recipe": ".sto-feedback",
-  },
-]
-`;
+exports[`theme system contract > keeps all shared visual state families in recipes.css 1`] = `[]`;
 
 exports[`theme system contract > keeps ordinary CSS and TSX free of local dark palette branches 1`] = `
 {
