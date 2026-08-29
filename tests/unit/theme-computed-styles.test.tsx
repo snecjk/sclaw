@@ -632,6 +632,37 @@ describe('Navigation consumer pixel modifiers', () => {
   });
 
   it.each([
+    ['light', 'hover', 'rgba(0, 0, 0, 0.06)', 'rgb(122, 132, 148)'],
+    ['light', 'focus-visible', 'rgba(0, 0, 0, 0.06)', 'rgb(122, 132, 148)'],
+    ['dark', 'hover', 'rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.5)'],
+    ['dark', 'focus-visible', 'rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.5)'],
+  ] as const)(
+    'preserves the %s inactive collapsed %s background and foreground',
+    (theme, state, background, foreground) => {
+      const { container, dispose } = createExactThemeRoot(theme);
+      const result = render(
+        <a
+          href="/inactive"
+          data-testid="collapsed-combined-state"
+          className="sto-navigation-item sto-navigation-item--collapsed"
+          data-sto-state={state === 'hover' ? 'hover' : undefined}
+        />,
+        { container },
+      );
+      const row = result.getByTestId('collapsed-combined-state');
+      if (state === 'focus-visible') {
+        row.focus();
+        expect(row.matches(':focus-visible')).toBe(true);
+      }
+      const computed = getComputedStyle(row);
+      expect(computed.backgroundColor).toBe(background);
+      expect(computed.color).toBe(foreground);
+      result.unmount();
+      dispose();
+    },
+  );
+
+  it.each([
     ['light', 'rgba(0, 0, 0, 0)', 'rgb(122, 132, 148)'],
     ['dark', 'rgba(0, 0, 0, 0)', 'rgba(255, 255, 255, 0.5)'],
   ] as const)('preserves the %s collapsed navigation default pixels', (theme, background, foreground) => {

@@ -326,6 +326,7 @@
 
   .sto-navigation-item--collapsed:is(:hover, :focus-visible, [data-sto-state='hover'], [data-sto-state='focus']) {
     background-color: var(--sto-navigation-collapsed-hover-background);
+    color: var(--sto-navigation-collapsed-foreground);
   }
 
   .sto-navigation-item--collapsed:is([aria-current='page'], [data-selected='true']) {
