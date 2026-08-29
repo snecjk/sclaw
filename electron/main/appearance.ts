@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeTheme } from 'electron';
+import { BrowserWindow, nativeTheme, type WebContents } from 'electron';
 import { getSetting, type AppSettings } from '../utils/store';
 import { getFloatIconWindow } from './float-icon-window';
 import { getSpriteWindow } from './sprite-window';
@@ -15,6 +15,7 @@ export const DARK_WINDOW_BACKGROUND = '#0d0d0d';
 const DEFAULT_THEME_PREFERENCE: AppSettings['theme'] = 'light';
 
 let nativeAppearanceObserverCleanup: (() => void) | null = null;
+const lastPublishedStateByContents = new WeakMap<WebContents, string>();
 
 export function resolveWindowBackgroundColor(isDark: boolean): string {
   return isDark ? DARK_WINDOW_BACKGROUND : LIGHT_WINDOW_BACKGROUND;
@@ -47,10 +48,14 @@ function updateOpaqueWindowBackgrounds(appearance: StoAppearanceState['appearanc
 }
 
 function broadcastAppearanceState(state: StoAppearanceState): void {
+  const stateKey = `${state.preference}:${state.appearance}`;
   for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send(STO_APPEARANCE_STATE_EVENT, state);
-    }
+    if (window.isDestroyed()) continue;
+    const { webContents } = window;
+    if (webContents.isDestroyed()) continue;
+    if (lastPublishedStateByContents.get(webContents) === stateKey) continue;
+    webContents.send(STO_APPEARANCE_STATE_EVENT, state);
+    lastPublishedStateByContents.set(webContents, stateKey);
   }
 }
 

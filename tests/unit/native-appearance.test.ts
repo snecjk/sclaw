@@ -20,30 +20,36 @@ const appearanceState = vi.hoisted(() => {
   const mainWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
-    webContents: { send: vi.fn() },
+    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
   };
   const spriteWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
-    webContents: { send: vi.fn() },
+    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
   };
   const floatIconWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
-    webContents: { send: vi.fn() },
+    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
   };
   const destroyedWindow = {
     isDestroyed: vi.fn(() => true),
     setBackgroundColor: vi.fn(),
-    webContents: { send: vi.fn() },
+    webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
+  };
+  const destroyedContentsWindow = {
+    isDestroyed: vi.fn(() => false),
+    setBackgroundColor: vi.fn(),
+    webContents: { isDestroyed: vi.fn(() => true), send: vi.fn() },
   };
   return {
     nativeTheme,
-    windows: [mainWindow, spriteWindow, floatIconWindow, destroyedWindow],
+    windows: [mainWindow, spriteWindow, floatIconWindow, destroyedWindow, destroyedContentsWindow],
     mainWindow,
     spriteWindow,
     floatIconWindow,
     destroyedWindow,
+    destroyedContentsWindow,
     getSetting: vi.fn(),
     getAllSettings: vi.fn(),
     resetSettings: vi.fn(),
@@ -147,6 +153,13 @@ const splashHtml = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
 
 describe('native appearance', () => {
   beforeEach(() => {
+    appearanceState.windows = [
+      appearanceState.mainWindow,
+      appearanceState.spriteWindow,
+      appearanceState.floatIconWindow,
+      appearanceState.destroyedWindow,
+      appearanceState.destroyedContentsWindow,
+    ];
     appearanceState.setThemeSource('light');
     appearanceState.themeSourceWrites.mockReset();
     appearanceState.nativeTheme.shouldUseDarkColors = false;
@@ -169,7 +182,10 @@ describe('native appearance', () => {
     for (const window of appearanceState.windows) {
       window.isDestroyed.mockClear();
       window.setBackgroundColor.mockReset();
-      window.webContents.send.mockReset();
+      window.webContents = {
+        isDestroyed: vi.fn(() => window === appearanceState.destroyedContentsWindow),
+        send: vi.fn(),
+      };
     }
   });
 
@@ -223,6 +239,36 @@ describe('native appearance', () => {
       payload,
     );
     expect(appearanceState.destroyedWindow.webContents.send).not.toHaveBeenCalled();
+    expect(appearanceState.destroyedContentsWindow.webContents.isDestroyed).toHaveBeenCalled();
+    expect(appearanceState.destroyedContentsWindow.webContents.send).not.toHaveBeenCalled();
+  });
+
+  it('publishes each state once per contents while allowing late windows to catch up', () => {
+    applyNativeAppearancePreference('dark');
+    const cleanup = observeNativeAppearanceUpdates();
+    const listener = appearanceState.nativeTheme.on.mock.calls[0][1] as () => void;
+
+    listener();
+    expect(appearanceState.mainWindow.webContents.send).toHaveBeenCalledTimes(1);
+    expect(appearanceState.spriteWindow.webContents.send).toHaveBeenCalledTimes(1);
+    expect(appearanceState.floatIconWindow.webContents.send).toHaveBeenCalledTimes(1);
+
+    const lateWindow = {
+      isDestroyed: vi.fn(() => false),
+      setBackgroundColor: vi.fn(),
+      webContents: { isDestroyed: vi.fn(() => false), send: vi.fn() },
+    };
+    appearanceState.windows.push(lateWindow);
+    listener();
+
+    expect(appearanceState.mainWindow.webContents.send).toHaveBeenCalledTimes(1);
+    expect(lateWindow.webContents.send).toHaveBeenCalledTimes(1);
+    expect(lateWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      { preference: 'dark', appearance: 'dark' },
+    );
+
+    cleanup();
   });
 
   it('synchronizes the persisted preference before window creation', async () => {
@@ -273,6 +319,7 @@ describe('native appearance', () => {
       { preference: 'system', appearance: 'dark' },
     );
     expect(appearanceState.destroyedWindow.webContents.send).not.toHaveBeenCalled();
+    expect(appearanceState.destroyedContentsWindow.webContents.send).not.toHaveBeenCalled();
 
     firstCleanup();
     expect(appearanceState.nativeTheme.removeListener).toHaveBeenCalledWith('updated', listener);

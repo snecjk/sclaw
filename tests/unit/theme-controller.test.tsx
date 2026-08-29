@@ -88,8 +88,8 @@ describe('theme controller appearance helpers', () => {
     expect(matchMedia).toHaveBeenCalledTimes(2);
   });
 
-  it('synchronizes a stale secondary renderer across explicit and system transitions', async () => {
-    let systemDark = false;
+  it('honors authoritative state in a stale secondary renderer across preference transitions', async () => {
+    const systemDark = false;
     const mediaListeners = new Set<() => void>();
     vi.mocked(window.matchMedia).mockImplementation((query) => ({
       get matches() {
@@ -118,9 +118,9 @@ describe('theme controller appearance helpers', () => {
     expect(useSettingsStore.getState().theme).toBe('light');
     expect(postMessage).not.toHaveBeenCalled();
 
-    act(() => appearanceSubscription()({ preference: 'dark', appearance: 'dark' }));
+    act(() => appearanceSubscription()({ preference: 'system', appearance: 'dark' }));
     await waitFor(() => expect(document.documentElement).toHaveClass('dark'));
-    expect(useSettingsStore.getState().theme).toBe('dark');
+    expect(useSettingsStore.getState().theme).toBe('system');
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenLastCalledWith(
       { type: 'sto:appearance-change', appearance: 'dark' },
@@ -128,22 +128,22 @@ describe('theme controller appearance helpers', () => {
     );
 
     postMessage.mockClear();
+    act(() => appearanceSubscription()({ preference: 'dark', appearance: 'dark' }));
+    expect(useSettingsStore.getState().theme).toBe('dark');
+    expect(document.documentElement).toHaveClass('dark');
+    expect(postMessage).not.toHaveBeenCalled();
+
     act(() => appearanceSubscription()({ preference: 'light', appearance: 'light' }));
     await waitFor(() => expect(document.documentElement).toHaveClass('light'));
     expect(useSettingsStore.getState().theme).toBe('light');
     expect(postMessage).toHaveBeenCalledTimes(1);
 
     postMessage.mockClear();
-    act(() => appearanceSubscription()({ preference: 'system', appearance: 'light' }));
-    expect(useSettingsStore.getState().theme).toBe('system');
-    expect(postMessage).not.toHaveBeenCalled();
-
     act(() => {
-      systemDark = true;
-      mediaListeners.forEach((listener) => listener());
+      useSettingsStore.setState({ theme: 'dark' });
     });
     await waitFor(() => expect(document.documentElement).toHaveClass('dark'));
-    expect(useSettingsStore.getState().theme).toBe('system');
+    expect(useSettingsStore.getState().theme).toBe('dark');
     expect(postMessage).toHaveBeenCalledTimes(1);
 
     postMessage.mockClear();
@@ -153,6 +153,7 @@ describe('theme controller appearance helpers', () => {
 
     act(() => appearanceSubscription()({ preference: 'system', appearance: 'dark' }));
     expect(useSettingsStore.getState().theme).toBe('system');
+    expect(document.documentElement).toHaveClass('dark');
     expect(postMessage).not.toHaveBeenCalled();
     expect(persistPreference).not.toHaveBeenCalled();
 
