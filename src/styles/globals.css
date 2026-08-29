@@ -236,15 +236,15 @@
     --input: 0 0% 100% / 0.08;
     --ring: 26 100% 55%;
 
-    --glass-bg: 220 18% 12%;
+    --glass-bg: 0 0% 12.9%;
     --glass-opacity: 0.52;
     --glass-blur: 18px;
-    --glass-border: 220 14% 30% / 0.45;
+    --glass-border: 0 0% 100% / 0.08;
     --glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
     --glass-highlight: 0 0% 100% / 0.08;
-    --canvas-from: #0a0f14;
-    --canvas-via: #0d1218;
-    --canvas-to: #121a22;
+    --canvas-from: #0d0d0d;
+    --canvas-via: #181818;
+    --canvas-to: #212121;
 
     --link: 231 92% 72%;
     --link-foreground: 0 0% 100%;
@@ -315,19 +315,19 @@
     --sto-sidebar-collapsed-nav-item-h: 28px;
     --sto-sidebar-collapsed-nav-py: 5px;
     --sto-sidebar-collapsed-nav-px: 10px;
-    --sto-sidebar-collapsed-nav-icon-idle: #9aa5b8;
+    --sto-sidebar-collapsed-nav-icon-idle: var(--sto-text-tertiary);
     /* 侧栏文字/交互 token — 与 :root 层级对应，暗色底上保持可读 + 选中/hover 不用浅色块 */
-    --sto-grey-10: #e5e6eb;
-    --sto-grey-9: #a4aab3;
-    --sto-grey-8: #9aa5b8;
-    --sto-sidebar-text-default: #e5e6eb;
+    --sto-grey-10: var(--sto-text-primary);
+    --sto-grey-9: var(--sto-text-secondary);
+    --sto-grey-8: var(--sto-text-tertiary);
+    --sto-sidebar-text-default: var(--sto-text-primary);
     --sto-sidebar-text-icon: var(--sto-grey-9);
     --sto-sidebar-text-section: var(--sto-grey-8);
-    --sto-sidebar-row-hover-bg: hsl(204 24% 16%);
-    --sto-sidebar-nav-active-bg: hsl(204 22% 18%);
-    --sto-sidebar-subitem-active-bg: hsl(220 14% 22%);
-    --sto-sidebar-footer-name: #e5e6eb;
-    --sto-sidebar-footer-meta: #9aa5b8;
+    --sto-sidebar-row-hover-bg: var(--sto-control-hover-bg);
+    --sto-sidebar-nav-active-bg: var(--sto-control-active-bg);
+    --sto-sidebar-subitem-active-bg: var(--sto-control-active-bg);
+    --sto-sidebar-footer-name: var(--sto-text-primary);
+    --sto-sidebar-footer-meta: var(--sto-text-tertiary);
     --sto-content-pad-x: 20px;
     --sto-chat-max-w-home: 780px;
     --sto-chat-max-w-page: 862px;

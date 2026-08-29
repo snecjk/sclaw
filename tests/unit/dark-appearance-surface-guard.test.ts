@@ -7,6 +7,8 @@ const guardedFiles = [
   'src/components/skill-plaza/SkillPlazaHeader.tsx',
   'src/components/skill-plaza/SkillPlazaCategoryNav.tsx',
   'src/components/skill-plaza/SkillIcon.tsx',
+  'src/components/skill-plaza/SkillCard.tsx',
+  'src/components/skill-plaza/SkillPlazaPage.tsx',
   'src/components/skill-plaza/SkillUploadModal.tsx',
   'src/components/workflow/WorkflowPreviewPanel.tsx',
   'src/components/connectors/ConnectorCard.tsx',
@@ -18,7 +20,7 @@ const guardedFiles = [
   'src/components/file-preview/ArtifactShareDialog.tsx',
 ] as const;
 
-const taskSixFiles = guardedFiles.slice(3);
+const taskSixFiles = guardedFiles.slice(5);
 
 function readSource(file: string): string {
   return readFileSync(resolve(process.cwd(), file), 'utf8');
@@ -403,7 +405,7 @@ describe('dark appearance application surface guard', () => {
     }
   });
 
-  it('keeps exact fidelity canvas selectors outside the application surface guard', () => {
+  it('keeps exact Word and slide fidelity canvases outside the application surface guard', () => {
     const globals = readSource('src/styles/globals.css');
     expect(globals).toMatch(
       /\.sclaw-pptx-host \.pptx-preview-wrapper\s*\{\s*background:\s*#fff;/,
@@ -411,10 +413,5 @@ describe('dark appearance application surface guard', () => {
     expect(globals).toMatch(
       /\.sclaw-docx-host \.docx-wrapper > section\.docx\s*\{\s*background:\s*#fff;/,
     );
-
-    const previewSource = readSource('src/components/file-preview/FilePreviewViewer.tsx');
-    expect(previewSource).toContain('function isImageFile');
-    expect(previewSource).toContain('function isCodeFile');
-    expect(previewSource).toContain('function HtmlIframeView');
   });
 });

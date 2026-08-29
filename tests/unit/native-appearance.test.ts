@@ -20,21 +20,30 @@ const appearanceState = vi.hoisted(() => {
   const mainWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
+    webContents: { send: vi.fn() },
   };
   const spriteWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
+    webContents: { send: vi.fn() },
   };
   const floatIconWindow = {
     isDestroyed: vi.fn(() => false),
     setBackgroundColor: vi.fn(),
+    webContents: { send: vi.fn() },
+  };
+  const destroyedWindow = {
+    isDestroyed: vi.fn(() => true),
+    setBackgroundColor: vi.fn(),
+    webContents: { send: vi.fn() },
   };
   return {
     nativeTheme,
-    windows: [mainWindow, spriteWindow, floatIconWindow],
+    windows: [mainWindow, spriteWindow, floatIconWindow, destroyedWindow],
     mainWindow,
     spriteWindow,
     floatIconWindow,
+    destroyedWindow,
     getSetting: vi.fn(),
     getAllSettings: vi.fn(),
     resetSettings: vi.fn(),
@@ -160,6 +169,7 @@ describe('native appearance', () => {
     for (const window of appearanceState.windows) {
       window.isDestroyed.mockClear();
       window.setBackgroundColor.mockReset();
+      window.webContents.send.mockReset();
     }
   });
 
@@ -172,6 +182,9 @@ describe('native appearance', () => {
     expect(splashHtml).toContain('background: #ededed;');
     expect(splashHtml).toContain('@media (prefers-color-scheme: dark)');
     expect(splashHtml).toContain('background: #0d0d0d;');
+    expect(splashHtml).toMatch(
+      /@media \(prefers-color-scheme: dark\)[\s\S]*?\.splash-spinner\s*\{[\s\S]*?border-color:\s*rgba\(255, 255, 255, 0\.1\);[\s\S]*?border-top-color:\s*#ff6f00;/,
+    );
   });
 
   it.each(['light', 'dark', 'system'] as const)('accepts the persisted %s preference', (theme) => {
@@ -188,6 +201,28 @@ describe('native appearance', () => {
     expect(appearanceState.mainWindow.setBackgroundColor).toHaveBeenCalledWith('#0d0d0d');
     expect(appearanceState.spriteWindow.setBackgroundColor).not.toHaveBeenCalled();
     expect(appearanceState.floatIconWindow.setBackgroundColor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['light', 'light'],
+    ['dark', 'dark'],
+  ] as const)('broadcasts an explicit %s preference to every live window', (preference, appearance) => {
+    applyNativeAppearancePreference(preference);
+
+    const payload = { preference, appearance };
+    expect(appearanceState.mainWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      payload,
+    );
+    expect(appearanceState.spriteWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      payload,
+    );
+    expect(appearanceState.floatIconWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      payload,
+    );
+    expect(appearanceState.destroyedWindow.webContents.send).not.toHaveBeenCalled();
   });
 
   it('synchronizes the persisted preference before window creation', async () => {
@@ -217,6 +252,7 @@ describe('native appearance', () => {
     expect(appearanceState.nativeTheme.on).toHaveBeenCalledWith('updated', expect.any(Function));
     expect(secondCleanup).toBe(firstCleanup);
 
+    appearanceState.setThemeSource('system');
     appearanceState.nativeTheme.shouldUseDarkColors = true;
     const listener = appearanceState.nativeTheme.on.mock.calls[0][1] as () => void;
     listener();
@@ -224,6 +260,19 @@ describe('native appearance', () => {
     expect(appearanceState.mainWindow.setBackgroundColor).toHaveBeenCalledWith('#0d0d0d');
     expect(appearanceState.spriteWindow.setBackgroundColor).not.toHaveBeenCalled();
     expect(appearanceState.floatIconWindow.setBackgroundColor).not.toHaveBeenCalled();
+    expect(appearanceState.mainWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      { preference: 'system', appearance: 'dark' },
+    );
+    expect(appearanceState.spriteWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      { preference: 'system', appearance: 'dark' },
+    );
+    expect(appearanceState.floatIconWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      { preference: 'system', appearance: 'dark' },
+    );
+    expect(appearanceState.destroyedWindow.webContents.send).not.toHaveBeenCalled();
 
     firstCleanup();
     expect(appearanceState.nativeTheme.removeListener).toHaveBeenCalledWith('updated', listener);

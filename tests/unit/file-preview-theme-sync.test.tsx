@@ -1,21 +1,25 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RemoteSrcDocPreview } from '@/components/file-preview/FilePreviewViewer';
+import { FilePreviewViewer, RemoteSrcDocPreview } from '@/components/file-preview/FilePreviewViewer';
 
-const themeState = vi.hoisted(() => ({ appearance: 'light' as 'light' | 'dark' }));
+const themeState = vi.hoisted(() => ({
+  appearance: 'light' as 'light' | 'dark',
+  postResolvedAppearance: vi.fn(),
+}));
 
 vi.mock('@/components/theme/appearance-context', () => ({
   STO_APPEARANCE_MESSAGE_TYPE: 'sto:appearance-change',
   useThemeAppearance: () => themeState.appearance,
-  postResolvedAppearance: vi.fn(),
+  postResolvedAppearance: themeState.postResolvedAppearance,
 }));
 
 describe('remote srcDoc appearance synchronization', () => {
   beforeEach(() => {
     themeState.appearance = 'light';
+    themeState.postResolvedAppearance.mockReset();
   });
 
-  it('preserves the iframe and srcDoc when only appearance changes', () => {
+  it('preserves the adaptive iframe and sends one runtime update when appearance changes', async () => {
     const props = {
       html: '<html><head></head><body>draft</body></html>',
       sourceUrl: 'https://cdn.example.com/reports/draft.html',
@@ -25,6 +29,10 @@ describe('remote srcDoc appearance synchronization', () => {
     const initialFrame = screen.getByTitle(props.fileName);
     const initialSrcDoc = initialFrame.getAttribute('srcdoc');
     expect(initialSrcDoc).toContain('data-sto-theme="light"');
+    expect(initialSrcDoc).toContain('data-sto-preview-mode="adaptive"');
+    expect(initialFrame).toHaveAttribute('data-sto-theme-sync', 'true');
+    await waitFor(() => expect(themeState.postResolvedAppearance).toHaveBeenCalledTimes(1));
+    themeState.postResolvedAppearance.mockClear();
 
     themeState.appearance = 'dark';
     rerender(<RemoteSrcDocPreview {...props} />);
@@ -32,6 +40,32 @@ describe('remote srcDoc appearance synchronization', () => {
     const updatedFrame = screen.getByTitle(props.fileName);
     expect(updatedFrame).toBe(initialFrame);
     expect(updatedFrame.getAttribute('srcdoc')).toBe(initialSrcDoc);
+    await waitFor(() => {
+      expect(themeState.postResolvedAppearance).toHaveBeenCalledTimes(1);
+      expect(themeState.postResolvedAppearance).toHaveBeenCalledWith(
+        updatedFrame.contentWindow,
+        'dark',
+      );
+    });
+  });
+
+  it('keeps directly served authored HTML in fidelity mode', () => {
+    themeState.appearance = 'dark';
+
+    render(
+      <FilePreviewViewer
+        filePath="/tmp/authored-report.html"
+        fileName="authored-report.html"
+        mimeType="text/html"
+      />,
+    );
+
+    const frame = screen.getByTitle('authored-report.html');
+    expect(frame).toHaveAttribute('src');
+    expect(frame).not.toHaveAttribute('srcdoc');
+    expect(frame).not.toHaveAttribute('data-sto-theme-sync');
+    expect(frame).toHaveStyle({ colorScheme: 'dark' });
+    expect(themeState.postResolvedAppearance).not.toHaveBeenCalled();
   });
 
   it.each([
