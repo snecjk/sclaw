@@ -1,5 +1,10 @@
 import type { RawMessage } from '@/stores/chat';
 import { mergeStreamingToolRecords } from '@/lib/tool-input-merge';
+import {
+  STREAMING_OVERLAY_BUFFER_LIMIT,
+  capWindow,
+  truncateToolPayload,
+} from '../../shared/chat-tool-payload';
 
 /** parse / UI 补工具用的 streamingTools 形态 */
 export type CachedTurnStreamingTool = {
@@ -27,7 +32,7 @@ function normalizeStreamingTool(tool: CachedTurnStreamingTool): CachedTurnStream
     id: tool.id,
     toolCallId: tool.toolCallId,
     name: tool.name,
-    input: tool.input,
+    input: truncateToolPayload(tool.input),
     status: tool.status,
   };
 }
@@ -45,7 +50,7 @@ export function writeTurnStreamingToolsCache(
   );
   turnToolsCache.set(turnStableKey, {
     ...prev,
-    streamingTools: merged,
+    streamingTools: capWindow(merged, STREAMING_OVERLAY_BUFFER_LIMIT),
     updatedAt: Date.now(),
   });
 }
@@ -67,7 +72,13 @@ export function appendTurnToolResultCache(
   if (already) return;
   turnToolsCache.set(turnStableKey, {
     ...prev,
-    toolResults: [...prev.toolResults, toolResultMessage],
+    toolResults: capWindow(
+      [...prev.toolResults, {
+        ...toolResultMessage,
+        content: truncateToolPayload(toolResultMessage.content),
+      }],
+      STREAMING_OVERLAY_BUFFER_LIMIT,
+    ),
     updatedAt: Date.now(),
   });
 }
@@ -124,8 +135,8 @@ export function migrateTurnToolsCache(
   }
 
   turnToolsCache.set(toKey, {
-    streamingTools,
-    toolResults,
+    streamingTools: capWindow(streamingTools, STREAMING_OVERLAY_BUFFER_LIMIT),
+    toolResults: capWindow(toolResults, STREAMING_OVERLAY_BUFFER_LIMIT),
     updatedAt: Math.max(existing.updatedAt, source.updatedAt),
   });
   turnToolsCache.delete(fromKey);

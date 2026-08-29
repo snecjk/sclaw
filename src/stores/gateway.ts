@@ -87,8 +87,6 @@ function handleCanonicalChatEvent(event: CanonicalChatEvent): void {
           }, {
             sessionKey: event.sessionKey,
             agentId: getAgentIdFromSessionKey(event.sessionKey),
-          }).then(() => {
-            void chatModule.useChatStore.getState().loadHistory(true, true, event.sessionKey);
           });
         }
         return;

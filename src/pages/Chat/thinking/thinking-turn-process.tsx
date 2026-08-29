@@ -61,6 +61,9 @@ import {
   type ThinkingToolGroupSegment,
   type ThinkingTurnSegment,
 } from '@/pages/Chat/thinking-turn-segments';
+import { foldThinkingTimelineTools, resolveTurnToolCount } from '@/pages/Chat/thinking/fold-turn-tools';
+import { useChatStore } from '@/stores/chat';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 
 /** 无外层卡片：思考过程直接铺在对话区底色上 */
 const thinkingPanelRootClass = 'w-full';
@@ -262,6 +265,13 @@ function TimelineBody({
   const { t } = useTranslation('chat');
   const skills = useSkillsStore((state) => state.skills);
   const ThinkingIcon = resolveChatThinkingIcon();
+  const sessionKey = useChatStore((state) => state.currentSessionKey);
+  const toolEventCount = useChatSessionRuntimeView(sessionKey).toolEventCount;
+  const folded = foldThinkingTimelineTools(timeline);
+  const displayTimeline = folded.visible;
+  const displayToolCount = resolveTurnToolCount(toolEventCount, folded.totalToolCount);
+  const showCollapsedToolSummary =
+    folded.hiddenToolCount > 0 || displayToolCount > folded.totalToolCount;
 
   const streamingStatusByKey = useMemo(() => {
     const map = new Map<string, StreamingTool['status']>();
@@ -272,7 +282,7 @@ function TimelineBody({
   }, [streamingTools]);
 
   const { markBlockRevealFinished, getBlockRevealState, sequentialIndex } = useSequentialTypewriterQueue(
-    timeline,
+    displayTimeline,
     enableProcessTypewriter,
   );
 
@@ -280,7 +290,12 @@ function TimelineBody({
 
   return (
     <div className={cn(isLiveStream ? 'space-y-3' : 'space-y-3 pb-1 pt-1')}>
-      {timeline.map((item, i) => {
+      {showCollapsedToolSummary ? (
+        <p className="text-sm leading-5 text-muted-foreground">
+          {t('streaming.collapsedSummaryToolsOnly', { toolCount: displayToolCount })}
+        </p>
+      ) : null}
+      {displayTimeline.map((item, i) => {
         const blockResetKey = timelineBlockResetKey(item, i);
         const reveal = getBlockRevealState(i, blockResetKey);
         if (!reveal.isVisible) return null;
@@ -292,7 +307,7 @@ function TimelineBody({
           );
           const collapse = resolveTimelineBlockCollapseState(
             i,
-            timeline.length,
+            displayTimeline.length,
             isLiveStream,
             batchIsCompleted,
             sequentialIndex,
@@ -323,7 +338,7 @@ function TimelineBody({
         const toolStatus = streamingStatusByKey.get(key);
         const collapse = resolveTimelineBlockCollapseState(
           i,
-          timeline.length,
+          displayTimeline.length,
           isLiveStream,
           batchIsCompleted,
           sequentialIndex,

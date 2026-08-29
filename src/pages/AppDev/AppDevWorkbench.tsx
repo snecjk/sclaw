@@ -16,7 +16,7 @@ import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatSessionRuntimeView, useChatSessionSending } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
-import { ChatMessage } from '@/pages/Chat/ChatMessage';
+import { ChatStaticItemsList } from '@/components/chat/ChatStaticItemsList';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
@@ -58,6 +58,10 @@ import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
 import { logChatFlow } from '@/stores/chat/chat-flow-log';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
+import {
+  APP_DEV_IDE_CHAT_SPLIT_DEFAULT,
+  APP_DEV_IDE_CHAT_SPLIT_STORAGE_KEY,
+} from '@/lib/app-dev-split';
 
 const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
@@ -76,8 +80,9 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   const {
     sending,
     pendingFinal,
+    transcriptPending,
     lastEventAt: lastChatEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage,
     streamingMessages,
     streamingToolResults,
@@ -96,9 +101,10 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     lastChatEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamMsg,
     streamText,
     streamingMessages,
@@ -119,29 +125,16 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
             </div>
           ) : (
             <>
-              {staticItems.map((item) => {
-                if (item.type === 'assistant-turn') {
-                  return (
-                    <AssistantTurnMessage
-                      key={item.key}
-                      sessionMessages={messages}
-                      turnMessages={item.messages}
-                      turnToolResults={item.toolResults}
-                      precedingUserMessage={item.precedingUserMessage}
-                      showThinking={showThinking}
-                    />
-                  );
-                }
-                if (item.type !== 'single') return null;
-                return (
-                  <ChatMessage
-                    key={item.key}
-                    message={item.message}
-                    sessionMessages={messages}
-                    showThinking={showThinking}
-                  />
-                );
-              })}
+              <ChatStaticItemsList
+                items={staticItems}
+                messages={messages}
+                showThinking={showThinking}
+                scrollRef={scrollRef}
+                variant="home"
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory(sessionKey);
+                }}
+              />
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"
@@ -181,7 +174,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   );
 });
 
-export default function AppDevWorkbench() {
+export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' | 'ide' }) {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
   const [status, setStatus] = useState<AppDevStatus | null>(null);
@@ -431,18 +424,20 @@ export default function AppDevWorkbench() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
-        <button
-          type="button"
-          onClick={() => {
-            useMoreAppsStore.getState().setActiveTab('dev-apps');
-            navigate('/more-apps');
-          }}
-          className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          开发应用
-        </button>
-        <div className="h-4 w-px bg-border" aria-hidden />
+        {layout === 'page' ? (
+          <button
+            type="button"
+            onClick={() => {
+              useMoreAppsStore.getState().setActiveTab('dev-apps');
+              navigate('/more-apps');
+            }}
+            className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            开发应用
+          </button>
+        ) : null}
+        {layout === 'page' ? <div className="h-4 w-px bg-border" aria-hidden /> : null}
         <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">{appName}</h1>
         <AppDevPageTypeBadge pageType={pageType} />
         <div className="flex-1" />
@@ -546,6 +541,8 @@ export default function AppDevWorkbench() {
       </header>
 
       <AppDevSplitBody
+        defaultPercent={layout === 'ide' ? APP_DEV_IDE_CHAT_SPLIT_DEFAULT : undefined}
+        storageKey={layout === 'ide' ? APP_DEV_IDE_CHAT_SPLIT_STORAGE_KEY : undefined}
         chat={
           appDevSessionKey
             ? (
@@ -571,6 +568,7 @@ export default function AppDevWorkbench() {
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
+          initialMode={layout === 'ide' ? 'code' : 'preview'}
         />
       </AppDevSplitBody>
 

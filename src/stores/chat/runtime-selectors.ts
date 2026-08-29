@@ -31,6 +31,7 @@ export interface ChatSessionRuntimeView {
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
+  toolEventCount: number;
 }
 
 export interface ChatRuntimeIndicator {
@@ -80,6 +81,7 @@ const EMPTY_RUNTIME_VIEW: ChatSessionRuntimeView = {
   streamingMessages: [],
   streamingToolResults: [],
   streamingTools: [],
+  toolEventCount: 0,
 };
 const runtimeViewCache = new WeakMap<ClientSessionState, ChatSessionRuntimeView>();
 
@@ -128,6 +130,7 @@ export function buildChatSessionRuntimeView(
     streamingMessages: session?.overlay.streamingMessages ?? [],
     streamingToolResults: session?.overlay.streamingToolResults ?? [],
     streamingTools: session?.overlay.streamingTools ?? [],
+    toolEventCount: session?.overlay.toolEventCount ?? 0,
   };
   return view;
 }

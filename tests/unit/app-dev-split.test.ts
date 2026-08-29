@@ -78,6 +78,10 @@ describe('app-dev workbench split wiring', () => {
     expect(plazaSrc).toContain('AppDevSplitBody');
     expect(plazaSrc).toContain('chatOpen={chatOpen}');
     expect(workbenchSrc).toContain('AppDevSplitBody');
+    expect(plazaSrc).toContain('ChatStaticItemsList');
+    expect(workbenchSrc).toContain('ChatStaticItemsList');
+    expect(plazaSrc).not.toContain('staticItems.map');
+    expect(workbenchSrc).not.toContain('staticItems.map');
     expect(plazaSrc).not.toContain('w-[400px] min-w-[340px]');
     expect(workbenchSrc).not.toContain('w-[400px] min-w-[340px]');
   });

@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  Code2,
   History,
   MessageCircle,
   Upload,
@@ -17,7 +18,7 @@ import { useChatStore } from '@/stores/chat';
 import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatSessionRuntimeView, useChatSessionSending } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
-import { ChatMessage } from '@/pages/Chat/ChatMessage';
+import { ChatStaticItemsList } from '@/components/chat/ChatStaticItemsList';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
@@ -62,6 +63,7 @@ import {
 } from '@/stores/app-plaza-shell';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
+import { openAppDevIdeWindow, useAppDevIdeOwnership } from '@/hooks/use-app-dev-ide-ownership';
 import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
 import { logChatFlow } from '@/stores/chat/chat-flow-log';
 import {
@@ -86,8 +88,9 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   const {
     sending,
     pendingFinal,
+    transcriptPending,
     lastEventAt: lastChatEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage,
     streamingMessages,
     streamingToolResults,
@@ -106,9 +109,10 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     lastChatEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamMsg,
     streamText,
     streamingMessages,
@@ -129,29 +133,16 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
             </div>
           ) : (
             <>
-              {staticItems.map((item) => {
-                if (item.type === 'assistant-turn') {
-                  return (
-                    <AssistantTurnMessage
-                      key={item.key}
-                      sessionMessages={messages}
-                      turnMessages={item.messages}
-                      turnToolResults={item.toolResults}
-                      precedingUserMessage={item.precedingUserMessage}
-                      showThinking={showThinking}
-                    />
-                  );
-                }
-                if (item.type !== 'single') return null;
-                return (
-                  <ChatMessage
-                    key={item.key}
-                    message={item.message}
-                    sessionMessages={messages}
-                    showThinking={showThinking}
-                  />
-                );
-              })}
+              <ChatStaticItemsList
+                items={staticItems}
+                messages={messages}
+                showThinking={showThinking}
+                scrollRef={scrollRef}
+                variant="home"
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory(sessionKey);
+                }}
+              />
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"
@@ -226,7 +217,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const listedApp = useAppDevCatalogStore((s) =>
     s.apps.find((app) => app.workspaceId === workspaceId),
   );
-  const appDevSessionKey = useAppDevChatSession(workspaceId, active);
+  const ideOwnership = useAppDevIdeOwnership(workspaceId);
+  const appDevSessionKey = useAppDevChatSession(
+    workspaceId,
+    active && ideOwnership.ready && !ideOwnership.open,
+  );
   const sending = useChatSessionSending(appDevSessionKey ?? '');
   const {
     pending: runPending,
@@ -627,6 +622,22 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             type="button"
             variant="ghost"
             size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            title="在独立编辑器窗口打开（代码 + 加宽对话）"
+            onClick={() => {
+              void openAppDevIdeWindow(workspaceId, appName).catch((error) => {
+                toast.error(error instanceof Error ? error.message : '无法打开编辑器');
+              });
+            }}
+          >
+            <Code2 className="h-3.5 w-3.5" aria-hidden />
+            {ideOwnership.open ? '回到编辑器' : '在编辑器打开'}
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             className={cn(
               'h-7 gap-1 px-2 text-xs',
               chatOpen && 'bg-muted text-foreground',
@@ -644,7 +655,16 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       <AppDevSplitBody
         chatOpen={chatOpen}
         chat={
-          appDevSessionKey
+          ideOwnership.open
+            ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+                <p className="text-sm text-foreground">编程会话已在独立编辑器窗口</p>
+                <p className="max-w-[280px] text-xs leading-relaxed text-muted-foreground">
+                  广场窗口继续预览即可。点击「回到编辑器」继续改代码。
+                </p>
+              </div>
+            )
+            : appDevSessionKey
             ? (
               <WorkbenchChatPane
                 sessionKey={appDevSessionKey}

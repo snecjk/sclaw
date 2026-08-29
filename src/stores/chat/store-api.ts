@@ -21,7 +21,7 @@ export type SessionActions = Pick<
   | 'releaseScheduledSessionActivating'
 >;
 
-export type HistoryActions = Pick<ChatState, 'loadHistory'>;
+export type HistoryActions = Pick<ChatState, 'loadHistory' | 'loadOlderHistory'>;
 export type RuntimeActions = Pick<
   ChatState,
   'sendMessage' | 'abortRun' | 'toggleThinking' | 'refresh' | 'clearError'
