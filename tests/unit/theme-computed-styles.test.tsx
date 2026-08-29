@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
 import postcss from 'postcss';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -20,18 +20,50 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const tokensCss = read('src/styles/theme/tokens.css');
 const recipesCss = read('src/styles/theme/recipes.css');
+const inputSource = read('src/components/ui/input.tsx');
+const textareaSource = read('src/components/ui/textarea.tsx');
 const states = ['default', 'hover', 'active', 'focus', 'disabled', 'loading', 'error'] as const;
 const themes = ['light', 'dark'] as const;
-const families = ['card', 'control', 'navigation', 'segment', 'overlay', 'feedback'] as const;
+const primitives = [
+  'Button',
+  'Card',
+  'Input',
+  'Textarea',
+  'Select',
+  'Tabs',
+  'Dialog',
+  'Dropdown',
+  'Tooltip',
+] as const;
+const primitiveStates: Record<(typeof primitives)[number], readonly State[]> = {
+  Button: states,
+  Card: states,
+  Input: states,
+  Textarea: states,
+  Select: states,
+  Tabs: states,
+  Dialog: states,
+  Dropdown: states,
+  Tooltip: states,
+};
 
 type State = (typeof states)[number];
 type Theme = (typeof themes)[number];
-type Family = (typeof families)[number];
+type Primitive = (typeof primitives)[number];
 type SemanticProps = Record<string, string | boolean | undefined>;
 type StateColors = { background: string; border: string; foreground: string };
 
@@ -43,16 +75,54 @@ function flattenLayer(css: string): string {
   return (layer?.nodes ?? root.nodes).map((node) => node.toString()).join('\n');
 }
 
-function installThemeStyles(): void {
-  const style = document.createElement('style');
-  style.dataset.themeComputedTest = '';
-  style.textContent = `${flattenLayer(tokensCss)}\n${flattenLayer(recipesCss)}\n:is(.sto-card,.sto-control,.sto-navigation-item,.sto-segment-item,.sto-overlay,.sto-feedback){border-style:solid;border-width:1px}`;
-  document.head.append(style);
+function colorMarker(token: string): string {
+  let hash = 17;
+  for (const character of token) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  const red = 32 + (hash % 192);
+  const green = 32 + ((hash >>> 8) % 192);
+  const blue = 32 + ((hash >>> 16) % 192);
+  return `rgb(${red}, ${green}, ${blue})`;
 }
 
-function setTheme(theme: Theme): void {
-  document.documentElement.className = theme === 'dark' ? 'dark' : '';
-  document.documentElement.dataset.stoTheme = theme;
+function tokenMarker(token: string): string {
+  if (token.includes('arrow') && token.endsWith('-image')) {
+    return `url("sto-marker://${token.slice(2)}")`;
+  }
+  if (token.includes('shadow')) return `0 0 0 3px ${colorMarker(token)}`;
+  if (token.includes('backdrop-filter')) return 'none';
+  return colorMarker(token);
+}
+
+function markerRecipes(css: string): string {
+  return css.replace(/var\((--sto-[\w-]+)\)/g, (_match, token: string) => tokenMarker(token));
+}
+
+function installThemeStyles(targetDocument = document): void {
+  if (targetDocument.head.querySelector('style[data-theme-computed-test]')) return;
+  const style = targetDocument.createElement('style');
+  style.dataset.themeComputedTest = '';
+  style.textContent = `${markerRecipes(flattenLayer(recipesCss))}\n:is(.sto-card,.sto-control,.sto-navigation-item,.sto-segment-item,.sto-overlay,.sto-feedback){border-style:solid;border-width:1px}`;
+  targetDocument.head.append(style);
+}
+
+function setTheme(theme: Theme, targetDocument = document): void {
+  targetDocument.documentElement.className = theme === 'dark' ? 'dark' : '';
+  targetDocument.documentElement.dataset.stoTheme = theme;
+}
+
+function createIsolatedThemeRoot(theme: Theme): {
+  container: HTMLElement;
+  dispose: () => void;
+} {
+  const frame = document.createElement('iframe');
+  document.body.append(frame);
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) throw new Error('Expected iframe document for isolated cascade test');
+  installThemeStyles(frameDocument);
+  setTheme(theme, frameDocument);
+  const container = frameDocument.createElement('div');
+  frameDocument.body.append(container);
+  return { container, dispose: () => frame.remove() };
 }
 
 function semanticProps(state: State): SemanticProps {
@@ -64,33 +134,62 @@ function semanticProps(state: State): SemanticProps {
   };
 }
 
-function mountRepresentative(family: Family, state: State, theme: Theme): HTMLElement {
+function mountPrimitive(primitive: Primitive, state: State, theme: Theme): HTMLElement {
   installThemeStyles();
   setTheme(theme);
   const props = semanticProps(state);
+  const disabled = state === 'disabled';
+  const markerClass = `marker-${theme}-${primitive.toLowerCase()}-${state}`;
 
-  if (family === 'card') {
+  if (primitive === 'Button') {
+    render(<Button data-testid="primitive" className={markerClass} disabled={disabled} {...props}>Action</Button>);
+  } else if (primitive === 'Card') {
     render(
       <Card
-        data-testid="representative"
+        data-testid="primitive"
+        className={markerClass}
         data-selected={state === 'active' ? 'true' : undefined}
         {...props}
       />,
     );
-  } else if (family === 'control') {
+  } else if (primitive === 'Input') {
+    render(<Input data-testid="primitive" className={markerClass} disabled={disabled} placeholder="Input" {...props} />);
+  } else if (primitive === 'Textarea') {
+    render(<Textarea data-testid="primitive" className={markerClass} disabled={disabled} placeholder="Textarea" {...props} />);
+  } else if (primitive === 'Select') {
     render(
-      <Button data-testid="representative" disabled={state === 'disabled'} {...props}>
-        Action
-      </Button>,
+      <Select data-testid="primitive" className={markerClass} disabled={disabled} {...props}>
+        <option>Option</option>
+      </Select>,
     );
-  } else if (family === 'navigation') {
+  } else if (primitive === 'Tabs') {
+    render(
+      <Tabs value={state === 'active' ? 'one' : 'two'}>
+        <TabsList>
+          <TabsTrigger data-testid="primitive" className={markerClass} value="one" disabled={disabled} {...props}>
+            One
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+  } else if (primitive === 'Dialog') {
+    render(
+      <Dialog open>
+        <DialogContent data-testid="primitive" className={markerClass} {...props}>
+          <DialogTitle>Title</DialogTitle>
+          <DialogDescription>Description</DialogDescription>
+        </DialogContent>
+      </Dialog>,
+    );
+  } else if (primitive === 'Dropdown') {
     render(
       <DropdownMenu open>
         <DropdownMenuTrigger>Menu</DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem
-            data-testid="representative"
-            disabled={state === 'disabled'}
+            data-testid="primitive"
+            className={markerClass}
+            disabled={disabled}
             aria-selected={state === 'active' ? 'true' : undefined}
             {...props}
           >
@@ -99,41 +198,24 @@ function mountRepresentative(family: Family, state: State, theme: Theme): HTMLEl
         </DropdownMenuContent>
       </DropdownMenu>,
     );
-  } else if (family === 'segment') {
-    render(
-      <Tabs value={state === 'active' ? 'one' : 'two'}>
-        <TabsList>
-          <TabsTrigger
-            data-testid="representative"
-            value="one"
-            disabled={state === 'disabled'}
-            {...props}
-          >
-            One
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>,
-    );
-  } else if (family === 'overlay') {
-    render(
-      <Dialog open>
-        <DialogContent data-testid="representative" {...props}>
-          <DialogTitle>Title</DialogTitle>
-          <DialogDescription>Description</DialogDescription>
-        </DialogContent>
-      </Dialog>,
-    );
   } else {
-    render(<div data-testid="representative" className="sto-feedback" {...props}>Feedback</div>);
+    render(
+      <TooltipProvider>
+        <Tooltip open>
+          <TooltipTrigger>Trigger</TooltipTrigger>
+          <TooltipContent data-testid="primitive" className={markerClass} {...props}>Tip</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
   }
 
-  return screen.getByTestId('representative');
+  return screen.getByTestId('primitive');
 }
 
 const normal = (background: string, border: string, foreground: string): StateColors => ({
-  background: `var(${background})`,
-  border: `var(${border})`,
-  foreground: `var(${foreground})`,
+  background,
+  border,
+  foreground,
 });
 
 const sharedLoading = normal('--sto-loading-background', '--sto-loading-border', '--sto-loading-foreground');
@@ -149,147 +231,263 @@ const interactiveDisabled = normal(
   '--sto-interactive-disabled-foreground',
 );
 
-const expectedStates: Record<Family, Record<State, StateColors>> = {
-  card: {
-    default: normal('--sto-card-default-background', '--sto-card-default-border', '--sto-card-default-foreground'),
-    hover: normal('--sto-card-default-background', '--sto-card-default-border', '--sto-card-default-foreground'),
-    active: normal('--sto-control-active-bg', '--sto-border-heavy', '--sto-text-primary'),
-    focus: normal('--sto-card-default-background', '--sto-card-default-border', '--sto-card-default-foreground'),
-    disabled: sharedDisabled,
-    loading: sharedLoading,
-    error: sharedError,
-  },
-  control: {
-    default: normal('--sto-brand-primary', '--sto-brand-primary', '--sto-control-primary-foreground'),
-    hover: normal(
-      '--sto-control-primary-hover-background',
-      '--sto-control-primary-hover-background',
-      '--sto-control-primary-foreground',
-    ),
-    active: normal(
-      '--sto-control-primary-hover-background',
-      '--sto-control-primary-hover-background',
-      '--sto-control-primary-foreground',
-    ),
-    focus: normal('--sto-brand-primary', '--sto-brand-primary', '--sto-control-primary-foreground'),
-    disabled: interactiveDisabled,
-    loading: sharedLoading,
-    error: sharedError,
-  },
-  navigation: {
-    default: normal(
-      '--sto-navigation-menu-background',
-      '--sto-navigation-menu-background',
-      '--sto-navigation-menu-foreground',
-    ),
-    hover: normal(
-      '--sto-navigation-menu-hover-background',
-      '--sto-navigation-menu-background',
-      '--sto-navigation-menu-hover-foreground',
-    ),
-    active: normal(
-      '--sto-navigation-menu-hover-background',
-      '--sto-navigation-menu-background',
-      '--sto-navigation-menu-hover-foreground',
-    ),
-    focus: normal(
-      '--sto-navigation-menu-hover-background',
-      '--sto-navigation-menu-background',
-      '--sto-navigation-menu-hover-foreground',
-    ),
-    disabled: interactiveDisabled,
-    loading: sharedLoading,
-    error: sharedError,
-  },
-  segment: {
-    default: normal('--sto-control-ghost-background', '--sto-control-ghost-background', '--sto-segment-default-foreground'),
-    hover: normal('--sto-segment-hover-background', '--sto-control-ghost-background', '--sto-segment-default-foreground'),
-    active: normal(
-      '--sto-segment-selected-background',
-      '--sto-control-ghost-background',
-      '--sto-segment-selected-foreground',
-    ),
-    focus: normal('--sto-control-ghost-background', '--sto-control-ghost-background', '--sto-segment-default-foreground'),
-    disabled: interactiveDisabled,
-    loading: sharedLoading,
-    error: sharedError,
-  },
-  overlay: {
-    default: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
-    hover: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
-    active: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
-    focus: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
-    disabled: sharedDisabled,
-    loading: sharedLoading,
-    error: sharedError,
-  },
-  feedback: {
-    default: normal(
-      '--sto-feedback-info-background',
-      '--sto-feedback-info-border',
-      '--sto-feedback-info-foreground',
-    ),
-    hover: normal(
-      '--sto-feedback-info-background',
-      '--sto-feedback-info-border',
-      '--sto-feedback-info-foreground',
-    ),
-    active: normal(
-      '--sto-feedback-info-background',
-      '--sto-feedback-info-border',
-      '--sto-feedback-info-foreground',
-    ),
-    focus: normal(
-      '--sto-feedback-info-background',
-      '--sto-feedback-info-border',
-      '--sto-feedback-info-foreground',
-    ),
-    disabled: sharedDisabled,
-    loading: sharedLoading,
-    error: sharedError,
-  },
+const cardStates: Record<State, StateColors> = {
+  default: normal('--sto-card-default-background', '--sto-card-default-border', '--sto-card-default-foreground'),
+  hover: normal('--sto-card-default-background', '--sto-card-default-border', '--sto-card-default-foreground'),
+  active: normal('--sto-control-active-bg', '--sto-border-heavy', '--sto-text-primary'),
+  focus: normal('--sto-card-default-background', '--sto-card-default-border', '--sto-card-default-foreground'),
+  disabled: sharedDisabled,
+  loading: sharedLoading,
+  error: sharedError,
+};
+
+const primaryControlStates: Record<State, StateColors> = {
+  default: normal('--sto-brand-primary', '--sto-brand-primary', '--sto-control-primary-foreground'),
+  hover: normal(
+    '--sto-control-primary-hover-background',
+    '--sto-control-primary-hover-background',
+    '--sto-control-primary-foreground',
+  ),
+  active: normal(
+    '--sto-control-primary-hover-background',
+    '--sto-control-primary-hover-background',
+    '--sto-control-primary-foreground',
+  ),
+  focus: normal('--sto-brand-primary', '--sto-brand-primary', '--sto-control-primary-foreground'),
+  disabled: interactiveDisabled,
+  loading: sharedLoading,
+  error: sharedError,
+};
+
+const fieldStates: Record<State, StateColors> = {
+  default: normal('--sto-control-field-background', '--sto-control-field-border', '--sto-control-field-foreground'),
+  hover: normal('--sto-control-field-background', '--sto-control-field-border', '--sto-control-field-foreground'),
+  active: normal('--sto-control-field-background', '--sto-control-field-border', '--sto-control-field-foreground'),
+  focus: normal('--sto-control-field-background', '--sto-control-field-border', '--sto-control-field-foreground'),
+  disabled: interactiveDisabled,
+  loading: sharedLoading,
+  error: sharedError,
+};
+
+const navigationStates: Record<State, StateColors> = {
+  default: normal(
+    '--sto-navigation-menu-background',
+    '--sto-navigation-menu-background',
+    '--sto-navigation-menu-foreground',
+  ),
+  hover: normal(
+    '--sto-navigation-menu-hover-background',
+    '--sto-navigation-menu-background',
+    '--sto-navigation-menu-hover-foreground',
+  ),
+  active: normal(
+    '--sto-navigation-menu-hover-background',
+    '--sto-navigation-menu-background',
+    '--sto-navigation-menu-hover-foreground',
+  ),
+  focus: normal(
+    '--sto-navigation-menu-hover-background',
+    '--sto-navigation-menu-background',
+    '--sto-navigation-menu-hover-foreground',
+  ),
+  disabled: interactiveDisabled,
+  loading: sharedLoading,
+  error: sharedError,
+};
+
+const segmentStates: Record<State, StateColors> = {
+  default: normal('--sto-control-ghost-background', '--sto-control-ghost-background', '--sto-segment-default-foreground'),
+  hover: normal('--sto-segment-hover-background', '--sto-control-ghost-background', '--sto-segment-default-foreground'),
+  active: normal(
+    '--sto-segment-selected-background',
+    '--sto-control-ghost-background',
+    '--sto-segment-selected-foreground',
+  ),
+  focus: normal('--sto-control-ghost-background', '--sto-control-ghost-background', '--sto-segment-default-foreground'),
+  disabled: interactiveDisabled,
+  loading: sharedLoading,
+  error: sharedError,
+};
+
+const overlayStates: Record<State, StateColors> = {
+  default: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
+  hover: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
+  active: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
+  focus: normal('--sto-overlay-background', '--sto-overlay-border', '--sto-overlay-foreground'),
+  disabled: sharedDisabled,
+  loading: sharedLoading,
+  error: sharedError,
+};
+
+const expectedByPrimitive: Record<Primitive, Record<State, StateColors>> = {
+  Button: primaryControlStates,
+  Card: cardStates,
+  Input: fieldStates,
+  Textarea: fieldStates,
+  Select: fieldStates,
+  Tabs: segmentStates,
+  Dialog: overlayStates,
+  Dropdown: navigationStates,
+  Tooltip: overlayStates,
 };
 
 function expectColors(element: HTMLElement, expected: StateColors): void {
-  const computed = getComputedStyle(element);
-  expect(computed.backgroundColor).toBe(expected.background);
-  let mountedBorder = computed.borderColor;
-  if (!mountedBorder) {
-    postcss.parse(recipesCss).walkRules((rule) => {
-      if (!rule.selectors.some((selector) => {
-        try {
-          return element.matches(selector);
-        } catch {
-          return false;
-        }
-      })) return;
-      rule.walkDecls('border-color', (declaration) => {
-        mountedBorder = declaration.value;
-      });
-    });
-  }
-  expect(mountedBorder).toBe(expected.border);
-  expect(computed.color).toBe(expected.foreground);
+  const computed = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (!computed) throw new Error('Expected mounted element to have a computed style view');
+  expect(computed.backgroundColor).toBe(colorMarker(expected.background));
+  expect(computed.borderColor).toBe(colorMarker(expected.border));
+  expect(computed.color).toBe(colorMarker(expected.foreground));
 }
 
 afterEach(() => {
   document.documentElement.className = '';
   delete document.documentElement.dataset.stoTheme;
+});
+
+afterAll(() => {
   document.head.querySelectorAll('style[data-theme-computed-test]').forEach((node) => node.remove());
 });
 
 describe('mounted primitive theme recipe matrix', () => {
   for (const theme of themes) {
-    for (const family of families) {
-      for (const state of states) {
-        it(`${theme} ${family} applies semantic ${state} colors`, () => {
-          const representative = mountRepresentative(family, state, theme);
-          expect(representative).toHaveClass(`sto-${family === 'navigation' || family === 'segment' ? `${family}-item` : family}`);
-          expectColors(representative, expectedStates[family][state]);
+    for (const primitive of primitives) {
+      for (const state of primitiveStates[primitive]) {
+        it(`${theme} ${primitive} applies semantic ${state} colors`, () => {
+          const mounted = mountPrimitive(primitive, state, theme);
+          expectColors(mounted, expectedByPrimitive[primitive][state]);
+          if (state === 'focus' && primitive === 'Card') {
+            expect(getComputedStyle(mounted).boxShadow)
+              .toContain(colorMarker('--sto-card-focus-shadow'));
+          } else if (
+            state === 'focus'
+            && ['Button', 'Input', 'Textarea', 'Select', 'Tabs'].includes(primitive)
+          ) {
+            expect(getComputedStyle(mounted).boxShadow)
+              .toContain(colorMarker('--sto-control-focus-shadow'));
+          }
         });
       }
     }
   }
+
+  it.each(themes)('mounts Feedback across every semantic state in %s', (theme) => {
+    const feedbackStates: Record<State, StateColors> = {
+      default: normal('--sto-feedback-info-background', '--sto-feedback-info-border', '--sto-feedback-info-foreground'),
+      hover: normal('--sto-feedback-info-background', '--sto-feedback-info-border', '--sto-feedback-info-foreground'),
+      active: normal('--sto-feedback-info-background', '--sto-feedback-info-border', '--sto-feedback-info-foreground'),
+      focus: normal('--sto-feedback-info-background', '--sto-feedback-info-border', '--sto-feedback-info-foreground'),
+      disabled: sharedDisabled,
+      loading: sharedLoading,
+      error: sharedError,
+    };
+
+    for (const state of states) {
+      installThemeStyles();
+      setTheme(theme);
+      const { unmount } = render(
+        <div data-testid={`feedback-${state}`} className="sto-feedback" {...semanticProps(state)} />,
+      );
+      const feedback = screen.getByTestId(`feedback-${state}`);
+      expectColors(feedback, feedbackStates[state]);
+      if (state === 'focus') {
+        expect(getComputedStyle(feedback).boxShadow)
+          .toContain(colorMarker('--sto-control-focus-shadow'));
+      }
+      unmount();
+    }
+  });
+});
+
+describe('card cascade combinations', () => {
+  it('keeps card state selectors specificity-neutral', () => {
+    expect(recipesCss).not.toContain('.sto-card:not(.sto-card--flat):not(.sto-card-flat)');
+    expect(recipesCss).toContain(
+      ".sto-card:where(.sto-card--flat.sto-card--interactive):where(:hover, [data-sto-state='hover'])",
+    );
+    expect(recipesCss).toContain(
+      ".sto-card:where(:focus-visible, :has(:focus-visible), [data-sto-state='focus'])",
+    );
+  });
+
+  it.each(themes)('makes disabled win over hover in %s', (theme) => {
+    installThemeStyles();
+    setTheme(theme);
+    render(<Card data-testid="card" data-sto-state="hover" aria-disabled="true" />);
+    expectColors(screen.getByTestId('card'), sharedDisabled);
+  });
+
+  it.each(themes)('makes selected win over hover in %s', (theme) => {
+    installThemeStyles();
+    setTheme(theme);
+    render(<Card data-testid="card" data-sto-state="hover" data-selected="true" />);
+    expectColors(screen.getByTestId('card'), cardStates.active);
+  });
+
+  it.each(themes)('preserves the secondary variant during hover in %s', (theme) => {
+    installThemeStyles();
+    setTheme(theme);
+    render(<Card data-testid="card" className="sto-card--secondary" data-sto-state="hover" />);
+    expectColors(
+      screen.getByTestId('card'),
+      normal('--sto-surface-secondary', '--sto-border-default', '--sto-card-default-foreground'),
+    );
+  });
+
+  it.each(themes)('keeps flat hover surface and focus ring together in %s', (theme) => {
+    installThemeStyles();
+    setTheme(theme);
+    render(
+      <Card
+        data-testid="card"
+        className="sto-card--flat sto-card--interactive"
+        data-sto-state="hover"
+      >
+        <button type="button">Focus target</button>
+      </Card>,
+    );
+    screen.getByRole('button', { name: 'Focus target' }).focus();
+
+    const card = screen.getByTestId('card');
+    const computed = getComputedStyle(card);
+    expect(computed.backgroundColor).toBe(colorMarker('--sto-card-flat-hover-bg'));
+    expect(computed.borderColor).toBe(colorMarker('--sto-card-flat-hover-border'));
+    expect(card.matches(
+      ".sto-card:where(.sto-card--flat.sto-card--interactive):where([data-sto-state='hover'])",
+    )).toBe(true);
+    expect(card.matches('.sto-card:where(:has(:focus-visible))')).toBe(true);
+    expect(recipesCss.indexOf('box-shadow: var(--sto-card-focus-shadow)'))
+      .toBeGreaterThan(recipesCss.indexOf('box-shadow: var(--sto-card-flat-hover-shadow)'));
+  });
+});
+
+describe('disabled field pixels', () => {
+  it.each(themes)('switches the mounted Select arrow to its disabled semantic image in %s', (theme) => {
+    installThemeStyles();
+    setTheme(theme);
+    render(
+      <>
+        <Select data-testid="normal-select"><option>Normal</option></Select>
+        <Select data-testid="disabled-select" disabled><option>Disabled</option></Select>
+      </>,
+    );
+
+    expect(getComputedStyle(screen.getByTestId('normal-select')).backgroundImage)
+      .toContain('sto-control-select-arrow-image');
+    expect(getComputedStyle(screen.getByTestId('disabled-select')).backgroundImage)
+      .toContain('sto-control-select-arrow-disabled-image');
+  });
+
+  it('owns disabled placeholder and select arrow appearance in theme source', () => {
+    expect(tokensCss).toContain('--sto-control-disabled-placeholder:');
+    expect(tokensCss).toContain('--sto-control-select-arrow-image:');
+    expect(tokensCss).toContain('--sto-control-select-arrow-disabled-image:');
+    expect(recipesCss).toMatch(/\.sto-control[^{}]+:disabled[^{}]+::placeholder/);
+    expect(recipesCss).toMatch(/\.sto-control--field::placeholder\s*\{[^}]*--sto-control-placeholder/);
+    expect(inputSource).not.toContain('placeholder:text-');
+    expect(textareaSource).not.toContain('placeholder:text-');
+    expect(recipesCss).toMatch(/\.sto-control--select\s*\{[^}]*background-image:\s*var\(--sto-control-select-arrow-image\)/);
+    expect(recipesCss).toMatch(/\.sto-control--select:disabled,[^}]+background-image:\s*var\(--sto-control-select-arrow-disabled-image\)/);
+  });
 });
 
 describe('Radix state and cascade combinations', () => {
@@ -326,29 +524,37 @@ describe('Radix state and cascade combinations', () => {
     expect(screen.getByTestId('busy-navigation')).toHaveAttribute('data-state', 'open');
     for (const testId of ['busy-segment', 'busy-overlay', 'busy-navigation']) {
       expect(getComputedStyle(screen.getByTestId(testId)).backgroundColor)
-        .toBe('var(--sto-loading-background)');
+        .toBe(colorMarker('--sto-loading-background'));
     }
   });
 
   it.each(themes)('makes disabled win over simultaneous loading and error in %s', (theme) => {
-    installThemeStyles();
-    setTheme(theme);
-    render(
+    const { container, dispose } = createIsolatedThemeRoot(theme);
+    const mounted = render(
       <>
-        <Button data-testid="disabled-control" disabled aria-busy="true" aria-invalid="true">Action</Button>
+        <Button
+          data-testid="disabled-control"
+          className="marker-combination-disabled-control"
+          disabled
+          aria-busy="true"
+          aria-invalid="true"
+        >Action</Button>
         <div
           data-testid="disabled-feedback"
-          className="sto-feedback"
+          className="sto-feedback marker-combination-disabled-feedback"
           aria-disabled="true"
           aria-busy="true"
           aria-invalid="true"
           data-variant="error"
         />
       </>,
+      { container },
     );
 
-    expectColors(screen.getByTestId('disabled-control'), interactiveDisabled);
-    expectColors(screen.getByTestId('disabled-feedback'), sharedDisabled);
+    expectColors(mounted.getByTestId('disabled-control'), interactiveDisabled);
+    expectColors(mounted.getByTestId('disabled-feedback'), sharedDisabled);
+    mounted.unmount();
+    dispose();
   });
 
   it.each(themes)('preserves selected colors when card, navigation and segment receive focus in %s', (theme) => {
@@ -372,11 +578,15 @@ describe('Radix state and cascade combinations', () => {
     );
 
     expect(getComputedStyle(screen.getByTestId('focused-card')).backgroundColor)
-      .toBe('var(--sto-control-active-bg)');
+      .toBe(colorMarker('--sto-control-active-bg'));
+    expect(getComputedStyle(screen.getByTestId('focused-card')).boxShadow)
+      .toContain(colorMarker('--sto-card-focus-shadow'));
     expect(getComputedStyle(screen.getByTestId('focused-navigation')).backgroundColor)
-      .toBe('var(--sto-navigation-menu-hover-background)');
+      .toBe(colorMarker('--sto-navigation-menu-hover-background'));
     expect(getComputedStyle(screen.getByTestId('focused-segment')).backgroundColor)
-      .toBe('var(--sto-segment-selected-background)');
+      .toBe(colorMarker('--sto-segment-selected-background'));
+    expect(getComputedStyle(screen.getByTestId('focused-segment')).boxShadow)
+      .toContain(colorMarker('--sto-control-focus-shadow'));
   });
 });
 

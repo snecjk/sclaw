@@ -38,27 +38,7 @@
     border-color: var(--sto-border-default);
   }
 
-  .sto-card:not(.sto-card--flat):not(.sto-card-flat):is(:hover, [data-sto-state='hover']) {
-    background-color: var(--sto-card-default-background);
-    border-color: var(--sto-card-default-border);
-    color: var(--sto-card-default-foreground);
-  }
-
-  .sto-card--secondary:is(:hover, [data-sto-state='hover']) {
-    background-color: var(--sto-surface-secondary);
-    border-color: var(--sto-border-default);
-  }
-
-  .sto-card:is([data-selected='true'], [data-sto-state='active']) {
-    --sto-disabled-source-background: var(--sto-control-active-bg);
-    --sto-disabled-source-border: var(--sto-border-heavy);
-    --sto-disabled-source-foreground: var(--sto-text-primary);
-    background-color: var(--sto-control-active-bg);
-    border-color: var(--sto-border-heavy);
-    color: var(--sto-text-primary);
-  }
-
-  .sto-card--flat.sto-card--interactive:is(:hover, [data-sto-state='hover']),
+  .sto-card:where(.sto-card--flat.sto-card--interactive):where(:hover, [data-sto-state='hover']),
   .sto-card-flat-interactive:hover {
     --sto-disabled-source-background: var(--sto-card-flat-hover-bg);
     --sto-disabled-source-border: var(--sto-card-flat-hover-border);
@@ -67,7 +47,16 @@
     box-shadow: var(--sto-card-flat-hover-shadow);
   }
 
-  .sto-card:is(:focus-visible, :has(:focus-visible), [data-sto-state='focus']) {
+  .sto-card:where([data-selected='true'], [data-sto-state='active']) {
+    --sto-disabled-source-background: var(--sto-control-active-bg);
+    --sto-disabled-source-border: var(--sto-border-heavy);
+    --sto-disabled-source-foreground: var(--sto-text-primary);
+    background-color: var(--sto-control-active-bg);
+    border-color: var(--sto-border-heavy);
+    color: var(--sto-text-primary);
+  }
+
+  .sto-card:where(:focus-visible, :has(:focus-visible), [data-sto-state='focus']) {
     outline: 2px solid transparent;
     outline-offset: 2px;
     box-shadow: var(--sto-card-focus-shadow);
@@ -146,6 +135,9 @@
     backdrop-filter: var(--sto-control-field-backdrop-filter);
     -webkit-backdrop-filter: var(--sto-control-field-backdrop-filter);
   }
+
+  .sto-control--field::placeholder { color: var(--sto-control-placeholder); }
+  .sto-control--select { background-image: var(--sto-control-select-arrow-image); }
 
   .sto-control:not([class*='sto-control--']):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-hover-bg);
@@ -402,5 +394,15 @@
     background-color: var(--sto-neutral-disabled-background);
     border-color: var(--sto-neutral-disabled-border);
     color: var(--sto-neutral-disabled-foreground);
+  }
+
+  .sto-control:is(:disabled, [aria-disabled='true'], [data-disabled])::placeholder {
+    color: var(--sto-control-disabled-placeholder);
+  }
+
+  .sto-control--select:disabled,
+  .sto-control--select[aria-disabled='true'],
+  .sto-control--select[data-disabled] {
+    background-image: var(--sto-control-select-arrow-disabled-image);
   }
 }
