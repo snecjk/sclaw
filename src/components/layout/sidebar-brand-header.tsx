@@ -8,7 +8,7 @@ import sidebarLogoSvg from '@/assets/sidebar-logo.svg';
 import sidebarLogoDarkSvg from '@/assets/sidebar-logo-dark.svg';
 import { cn } from '@/lib/utils';
 import { sidebarBrandLogoClass, sidebarBrandVersionClass } from '@/lib/surfaces';
-import { useThemeAppearance } from '@/components/theme/ThemeController';
+import { useThemeAppearance } from '@/components/theme/appearance-context';
 import { formatAppDisplayVersion } from '@/lib/format-app-display-version';
 import { ChromeEnvBadge } from '@/components/layout/chrome-env-badge';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';

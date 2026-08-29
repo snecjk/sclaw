@@ -1,24 +1,10 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
-import { useResolvedAppearance, type ResolvedAppearance } from '@/hooks/use-resolved-appearance';
-
-export const STO_APPEARANCE_MESSAGE_TYPE = 'sto:appearance-change' as const;
-
-const ResolvedAppearanceContext = createContext<ResolvedAppearance>('light');
-
-export function useThemeAppearance(): ResolvedAppearance {
-  return useContext(ResolvedAppearanceContext);
-}
-
-export function applyResolvedAppearance(root: HTMLElement, appearance: ResolvedAppearance): void {
-  root.classList.remove('light', 'dark');
-  root.classList.add(appearance);
-  root.dataset.theme = appearance;
-  root.style.colorScheme = appearance;
-}
-
-export function postResolvedAppearance(target: Window, appearance: ResolvedAppearance): void {
-  target.postMessage({ type: STO_APPEARANCE_MESSAGE_TYPE, appearance }, '*');
-}
+import { useEffect, type ReactNode } from 'react';
+import { useResolvedAppearance } from '@/hooks/use-resolved-appearance';
+import {
+  applyResolvedAppearance,
+  postResolvedAppearance,
+  ResolvedAppearanceContext,
+} from './appearance-context';
 
 export function ThemeController({ children }: { children?: ReactNode }) {
   const appearance = useResolvedAppearance();

@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { ThemeController } from '@/components/theme/ThemeController';
 import {
   applyResolvedAppearance,
   postResolvedAppearance,
   STO_APPEARANCE_MESSAGE_TYPE,
-  ThemeController,
-} from '@/components/theme/ThemeController';
+} from '@/components/theme/appearance-context';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 
 describe('theme controller appearance helpers', () => {
