@@ -12,11 +12,6 @@ import {
   WORKFLOW_SYSTEM_PROMPT,
 } from '../../sto-plugin/claude/sto-workflow-tool/hooks';
 import { createWorkflowMcpServer } from '../../sto-plugin/claude/sto-workflow-tool/tools';
-import { buildScheduledTaskHooks } from '../../sto-plugin/claude/claude-scheduled-task-tool/hooks';
-import {
-  CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
-  createClaudeScheduledTaskMcpServer,
-} from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
 import {
   createUserSkillMcpServer,
   USER_SKILL_SYSTEM_PROMPT,
@@ -24,7 +19,6 @@ import {
 import { buildUserSkillHooks } from '../../sto-plugin/claude/sto-user-skill-tool/hooks';
 import {
   isScheduledTaskExecutionSessionKey,
-  SCHEDULED_TASK_CORE_PROMPT,
 } from '../../shared/scheduled-task-instruction';
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
@@ -127,30 +121,6 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
   },
 };
 
-const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
-  id: 'claude-scheduled-task-tool',
-  async build({ sessionKey }) {
-    const isExecutionContext = isScheduledTaskExecutionSessionKey(sessionKey);
-    if (isExecutionContext) {
-      return {
-        hooks: buildScheduledTaskHooks(sessionKey),
-        // 模块 B：纯执行语义。钉钉格式/必发由执行器 systemPromptAppend 条件注入。
-        systemPromptAppend: SCHEDULED_TASK_CORE_PROMPT,
-      };
-    }
-
-    return {
-      hooks: buildScheduledTaskHooks(sessionKey),
-      systemPromptAppend: CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
-      mcpServers: {
-        'claude-scheduled-task-tool': createClaudeScheduledTaskMcpServer({
-          sessionKey,
-        }),
-      },
-    };
-  },
-};
-
 const userSkillToolExtension: ClaudeRuntimeExtension = {
   id: 'sto-user-skill-tool',
   build() {
@@ -239,7 +209,6 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   browserToolExtension,
   dingTalkSendGuardExtension,
   workflowToolExtension,
-  scheduledTaskToolExtension,
   userSkillToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,

@@ -9,6 +9,7 @@ import {
   runSclawBeforeToolPolicies,
   sclawToolFailure,
   supportsEngine,
+  supportsSessionMode,
   type SclawAgentSessionMode,
   type SclawCapabilityResolver,
   type SclawExtensionBuildContext,
@@ -18,14 +19,17 @@ import {
   type SclawToolOutcome,
 } from '../../../../shared/agent-extensions';
 import {
-  SCLAW_AGENT_EXTENSIONS,
   isValidAgentExtensionId,
   isValidAgentExtensionResourceName,
   validateAgentExtensionRegistry,
   type RegisteredAgentExtension,
 } from '../../registry';
+import { PI_AGENT_EXTENSIONS } from './registry';
+import { STO_SCHEDULED_TASK_CAPABILITY } from '../../extensions/sto-scheduled-task-tool/capability';
+import { createHostApiScheduledTaskPort } from '../../extensions/sto-scheduled-task-tool/host-api-capability';
 
-const defaultCapabilities = new SclawCapabilityRegistry();
+const defaultCapabilities = new SclawCapabilityRegistry()
+  .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort());
 const defaultStateManager = new SclawExtensionStateManager();
 const defaultLogger: SclawExtensionLogger = {
   debug: (message, details) => console.debug(message, details ?? ''),
@@ -40,6 +44,8 @@ export interface BuildPiAgentExtensionsInput {
   cwd?: string;
   allowedRoots?: readonly string[];
   agentId?: string;
+  model?: string;
+  accountId?: string;
   runId?: string;
   entries?: readonly RegisteredAgentExtension[];
   capabilities?: SclawCapabilityResolver;
@@ -68,7 +74,7 @@ function normalizeNativeExtensions(value: InlineExtension | readonly InlineExten
 export async function buildPiAgentExtensions(
   input: BuildPiAgentExtensionsInput,
 ): Promise<BuildPiAgentExtensionsResult> {
-  const entries = input.entries ?? SCLAW_AGENT_EXTENSIONS;
+  const entries = input.entries ?? PI_AGENT_EXTENSIONS;
   const capabilities = input.capabilities ?? defaultCapabilities;
   const stateManager = input.stateManager ?? defaultStateManager;
   const extensionLogger = input.logger ?? defaultLogger;
@@ -76,6 +82,20 @@ export async function buildPiAgentExtensions(
   const extensions: InlineExtension[] = [];
   const usedExtensionIds = new Set<string>();
   const usedToolNames = new Set<string>();
+  const buildStartedAt = Date.now();
+
+  extensionLogger.info('[agent-extension] build.start', {
+    engine: 'pi',
+    sessionKey: input.sessionKey,
+    mode: input.mode,
+    registryEntries: entries.length,
+  });
+  for (const diagnostic of diagnostics) {
+    extensionLogger.warn('[agent-extension] registry.diagnostic', {
+      engine: 'pi',
+      ...diagnostic,
+    });
+  }
 
   for (const entry of entries) {
     const definition = entry.common;
@@ -85,6 +105,11 @@ export async function buildPiAgentExtensions(
       || !isValidAgentExtensionId(definition.id)
     ) continue;
     usedExtensionIds.add(definition.id);
+    extensionLogger.debug('[agent-extension] extension.build.start', {
+      engine: 'pi',
+      extensionId: definition.id,
+      mode: input.mode,
+    });
     const missingCapability = definition.requiredCapabilities?.find((token) => !capabilities.has(token));
     if (missingCapability) {
       diagnostics.push({
@@ -92,6 +117,12 @@ export async function buildPiAgentExtensions(
         contributionId: missingCapability.id,
         code: 'MISSING_CAPABILITY',
         message: `Required capability is unavailable: ${missingCapability.id}`,
+      });
+      extensionLogger.warn('[agent-extension] extension.skipped', {
+        engine: 'pi',
+        extensionId: definition.id,
+        reason: 'missing-capability',
+        capabilityId: missingCapability.id,
       });
       continue;
     }
@@ -104,6 +135,8 @@ export async function buildPiAgentExtensions(
       cwd: input.cwd,
       allowedRoots: input.allowedRoots,
       agentId: input.agentId,
+      model: input.model,
+      accountId: input.accountId,
       runId: input.runId,
       capabilities,
       state: stateManager.forExtension(input.sessionKey, definition.id),
@@ -114,19 +147,32 @@ export async function buildPiAgentExtensions(
 
     if (!replaceCommon) {
       const tools: SclawToolDefinition[] = [];
-      for (const tool of (definition.tools ?? []).filter((item) => supportsEngine(item, 'pi'))) {
+      for (const tool of (definition.tools ?? []).filter(
+        (item) => supportsEngine(item, 'pi') && supportsSessionMode(item, input.mode),
+      )) {
         if (!isValidAgentExtensionResourceName(tool.name)) continue;
         const normalizedName = tool.name.trim().toLowerCase();
         if (usedToolNames.has(normalizedName)) continue;
         tools.push(tool);
         usedToolNames.add(normalizedName);
       }
-      const policies = (definition.policies ?? []).filter((item) => supportsEngine(item, 'pi'));
-      const prompts = (definition.prompts ?? []).filter((item) => supportsEngine(item, 'pi'));
+      const policies = (definition.policies ?? []).filter(
+        (item) => supportsEngine(item, 'pi') && supportsSessionMode(item, input.mode),
+      );
+      const prompts = (definition.prompts ?? []).filter(
+        (item) => supportsEngine(item, 'pi') && supportsSessionMode(item, input.mode),
+      );
 
       extensions.push({
         name: definition.id,
         factory(pi) {
+          extensionLogger.info('[agent-extension] extension.activated', {
+            engine: 'pi',
+            extensionId: definition.id,
+            tools: tools.length,
+            policies: policies.length,
+            prompts: prompts.length,
+          });
           for (const toolDefinition of tools) {
             pi.registerTool({
               name: toolDefinition.name,
@@ -134,7 +180,14 @@ export async function buildPiAgentExtensions(
               description: toolDefinition.description,
               parameters: toolDefinition.parameters,
               async execute(toolCallId, params, signal) {
+                const startedAt = Date.now();
                 let outcome: SclawToolOutcome;
+                extensionLogger.debug('[agent-extension] tool.execute.start', {
+                  engine: 'pi',
+                  extensionId: definition.id,
+                  toolName: toolDefinition.name,
+                  toolCallId,
+                });
                 try {
                   outcome = await toolDefinition.execute(params, {
                     ...contextFor(),
@@ -142,18 +195,39 @@ export async function buildPiAgentExtensions(
                     signal,
                   });
                 } catch (error) {
+                  extensionLogger.error('[agent-extension] tool.execute.failed', {
+                    engine: 'pi',
+                    extensionId: definition.id,
+                    toolName: toolDefinition.name,
+                    toolCallId,
+                    error: error instanceof Error ? error.message : String(error),
+                  });
                   outcome = sclawToolFailure(
                     definition.id,
                     'extension_tool_failed',
                     error instanceof Error ? error.message : String(error),
                   );
                 }
+                extensionLogger.info('[agent-extension] tool.execute.completed', {
+                  engine: 'pi',
+                  extensionId: definition.id,
+                  toolName: toolDefinition.name,
+                  toolCallId,
+                  success: outcome.success,
+                  errorCode: outcome.success ? undefined : outcome.error.code,
+                  durationMs: Date.now() - startedAt,
+                });
                 if (!outcome.success) throw new SclawToolExecutionError(outcome);
                 return {
                   content: [{ type: 'text', text: JSON.stringify(outcome) }],
                   details: outcome,
                 };
               },
+            });
+            extensionLogger.debug('[agent-extension] tool.registered', {
+              engine: 'pi',
+              extensionId: definition.id,
+              toolName: toolDefinition.name,
             });
           }
 
@@ -218,16 +292,43 @@ export async function buildPiAgentExtensions(
         code: 'NATIVE_CONTRIBUTION_COLLISION',
         message: `Pi native contribution collides with ${collision}`,
       });
+      extensionLogger.warn('[agent-extension] native.skipped', {
+        engine: 'pi',
+        extensionId: definition.id,
+        reason: 'resource-collision',
+        resourceName: collision,
+      });
       continue;
     }
     try {
-      extensions.push(...normalizeNativeExtensions(await native.build(contextFor())));
+      const nativeStartedAt = Date.now();
+      extensionLogger.debug('[agent-extension] native.build.start', {
+        engine: 'pi',
+        extensionId: definition.id,
+        mode: native.mode ?? 'augment',
+      });
+      const nativeExtensions = normalizeNativeExtensions(await native.build(contextFor()));
+      extensions.push(...nativeExtensions);
       for (const name of native.claims?.tools ?? []) usedToolNames.add(name.trim().toLowerCase());
+      extensionLogger.info('[agent-extension] native.build.completed', {
+        engine: 'pi',
+        extensionId: definition.id,
+        mode: native.mode ?? 'augment',
+        inlineExtensions: nativeExtensions.map((extension) => (
+          typeof extension === 'function' ? 'anonymous' : extension.name
+        )),
+        durationMs: Date.now() - nativeStartedAt,
+      });
     } catch (error) {
       diagnostics.push({
         extensionId: definition.id,
         code: 'NATIVE_CONTRIBUTION_FAILED',
         message: error instanceof Error ? error.message : String(error),
+      });
+      extensionLogger.error('[agent-extension] native.build.failed', {
+        engine: 'pi',
+        extensionId: definition.id,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -244,5 +345,15 @@ export async function buildPiAgentExtensions(
     });
   }
 
+  extensionLogger.info('[agent-extension] build.completed', {
+    engine: 'pi',
+    sessionKey: input.sessionKey,
+    mode: input.mode,
+    extensionsBuilt: usedExtensionIds.size,
+    inlineExtensions: extensions.length,
+    tools: usedToolNames.size,
+    diagnostics: diagnostics.length,
+    durationMs: Date.now() - buildStartedAt,
+  });
   return { extensions, diagnostics };
 }

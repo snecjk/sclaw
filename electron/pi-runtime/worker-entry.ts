@@ -155,6 +155,9 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   const unifiedExtensions = await buildPiAgentExtensions({
     sessionKey: config.sessionKey,
     cwd: config.cwd,
+    agentId: config.sessionKey.startsWith('agent:') ? config.sessionKey.split(':')[1] : 'main',
+    model: config.model.model,
+    accountId: config.model.accountId,
     mode: config.scheduledAllowedRoots?.length ? 'scheduled' : 'interactive',
     allowedRoots: config.scheduledAllowedRoots,
   });

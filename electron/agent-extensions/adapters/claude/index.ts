@@ -14,6 +14,7 @@ import {
   runSclawBeforeToolPolicies,
   sclawToolFailure,
   supportsEngine,
+  supportsSessionMode,
   type SclawAgentSessionMode,
   type SclawCapabilityResolver,
   type SclawExtensionBuildContext,
@@ -30,13 +31,13 @@ import {
   sclawAgentExtensionState,
 } from '../../runtime';
 import {
-  SCLAW_AGENT_EXTENSIONS,
   isValidAgentExtensionId,
   isValidAgentExtensionResourceName,
   validateAgentExtensionRegistry,
   type RegisteredAgentExtension,
 } from '../../registry';
 import { typeBoxObjectToZodRawShape } from '../../schema/typebox-to-zod';
+import { CLAUDE_AGENT_EXTENSIONS } from './registry';
 
 export interface BuildClaudeAgentExtensionsInput {
   sessionKey: string;
@@ -44,6 +45,8 @@ export interface BuildClaudeAgentExtensionsInput {
   userPrompt?: string;
   cwd?: string;
   agentId?: string;
+  model?: string;
+  accountId?: string;
   runId?: string;
   entries?: readonly RegisteredAgentExtension[];
   capabilities?: SclawCapabilityResolver;
@@ -181,7 +184,7 @@ function missingCapabilityDiagnostic(
 export async function buildClaudeAgentExtensions(
   input: BuildClaudeAgentExtensionsInput,
 ): Promise<BuildClaudeAgentExtensionsResult> {
-  const entries = input.entries ?? SCLAW_AGENT_EXTENSIONS;
+  const entries = input.entries ?? CLAUDE_AGENT_EXTENSIONS;
   const capabilities = input.capabilities ?? sclawAgentExtensionCapabilities;
   const stateManager = input.stateManager ?? sclawAgentExtensionState;
   const extensionLogger = input.logger ?? sclawAgentExtensionLogger;
@@ -190,6 +193,20 @@ export async function buildClaudeAgentExtensions(
   const usedExtensionIds = new Set<string>();
   const usedToolNames = new Set<string>();
   const usedMcpServers = new Set<string>();
+  const buildStartedAt = Date.now();
+
+  extensionLogger.info('[agent-extension] build.start', {
+    engine: 'claude',
+    sessionKey: input.sessionKey,
+    mode: input.mode,
+    registryEntries: entries.length,
+  });
+  for (const diagnostic of diagnostics) {
+    extensionLogger.warn('[agent-extension] registry.diagnostic', {
+      engine: 'claude',
+      ...diagnostic,
+    });
+  }
 
   stateManager.beginTurn(input.sessionKey);
 
@@ -201,10 +218,21 @@ export async function buildClaudeAgentExtensions(
       || !isValidAgentExtensionId(definition.id)
     ) continue;
     usedExtensionIds.add(definition.id);
+    extensionLogger.debug('[agent-extension] extension.build.start', {
+      engine: 'claude',
+      extensionId: definition.id,
+      mode: input.mode,
+    });
 
     const missingCapability = definition.requiredCapabilities?.find((token) => !capabilities.has(token));
     if (missingCapability) {
       diagnostics.push(missingCapabilityDiagnostic(definition.id, missingCapability.id));
+      extensionLogger.warn('[agent-extension] extension.skipped', {
+        engine: 'claude',
+        extensionId: definition.id,
+        reason: 'missing-capability',
+        capabilityId: missingCapability.id,
+      });
       continue;
     }
 
@@ -215,6 +243,8 @@ export async function buildClaudeAgentExtensions(
       userPrompt: input.userPrompt,
       cwd: input.cwd,
       agentId: input.agentId,
+      model: input.model,
+      accountId: input.accountId,
       runId: input.runId,
       capabilities,
       state: stateManager.forExtension(input.sessionKey, definition.id),
@@ -225,7 +255,9 @@ export async function buildClaudeAgentExtensions(
 
     if (!replaceCommon) {
       const sdkTools = [];
-      for (const toolDefinition of (definition.tools ?? []).filter((item) => supportsEngine(item, 'claude'))) {
+      for (const toolDefinition of (definition.tools ?? []).filter(
+        (item) => supportsEngine(item, 'claude') && supportsSessionMode(item, input.mode),
+      )) {
         if (!isValidAgentExtensionResourceName(toolDefinition.name)) continue;
         const normalizedName = toolDefinition.name.trim().toLowerCase();
         if (usedToolNames.has(normalizedName)) continue;
@@ -237,13 +269,27 @@ export async function buildClaudeAgentExtensions(
             shape,
             async (params, extra): Promise<CallToolResult> => {
               const toolCallId = resolveToolCallId(extra, definition.id);
+              const startedAt = Date.now();
               let outcome: SclawToolOutcome;
+              extensionLogger.debug('[agent-extension] tool.execute.start', {
+                engine: 'claude',
+                extensionId: definition.id,
+                toolName: toolDefinition.name,
+                toolCallId,
+              });
               try {
                 outcome = await toolDefinition.execute(params, {
                   ...context,
                   toolCallId,
                 });
               } catch (error) {
+                extensionLogger.error('[agent-extension] tool.execute.failed', {
+                  engine: 'claude',
+                  extensionId: definition.id,
+                  toolName: toolDefinition.name,
+                  toolCallId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
                 outcome = sclawToolFailure(
                   definition.id,
                   'extension_tool_failed',
@@ -254,16 +300,36 @@ export async function buildClaudeAgentExtensions(
                 // Clear the execution scope here; policy scopes are cleared by PostToolUse.
                 stateManager.completeToolCall(context.sessionKey, toolCallId);
               }
+              extensionLogger.info('[agent-extension] tool.execute.completed', {
+                engine: 'claude',
+                extensionId: definition.id,
+                toolName: toolDefinition.name,
+                toolCallId,
+                success: outcome.success,
+                errorCode: outcome.success ? undefined : outcome.error.code,
+                durationMs: Date.now() - startedAt,
+              });
               return outcomeResult(outcome);
             },
           ));
           usedToolNames.add(normalizedName);
+          extensionLogger.debug('[agent-extension] tool.registered', {
+            engine: 'claude',
+            extensionId: definition.id,
+            toolName: toolDefinition.name,
+          });
         } catch (error) {
           diagnostics.push({
             extensionId: definition.id,
             contributionId: toolDefinition.name,
             code: 'UNSUPPORTED_TOOL_SCHEMA',
             message: error instanceof Error ? error.message : String(error),
+          });
+          extensionLogger.warn('[agent-extension] tool.skipped', {
+            engine: 'claude',
+            extensionId: definition.id,
+            toolName: toolDefinition.name,
+            reason: 'unsupported-schema',
           });
         }
       }
@@ -277,9 +343,13 @@ export async function buildClaudeAgentExtensions(
         usedMcpServers.add(definition.id);
       }
 
-      const policies = (definition.policies ?? []).filter((item) => supportsEngine(item, 'claude'));
+      const policies = (definition.policies ?? []).filter(
+        (item) => supportsEngine(item, 'claude') && supportsSessionMode(item, input.mode),
+      );
       if (policies.length > 0) mergeOptions(options, { hooks: policyHooks(definition.id, policies, context, stateManager) });
-      const prompts = (definition.prompts ?? []).filter((item) => supportsEngine(item, 'claude'));
+      const prompts = (definition.prompts ?? []).filter(
+        (item) => supportsEngine(item, 'claude') && supportsSessionMode(item, input.mode),
+      );
       const prompt = await buildSclawPrompt(definition.id, prompts, context, diagnostics);
       if (prompt) mergeOptions(options, { systemPromptAppend: prompt });
     }
@@ -300,9 +370,21 @@ export async function buildClaudeAgentExtensions(
         code: 'NATIVE_CONTRIBUTION_COLLISION',
         message: `Claude native contribution collides with ${claimedToolCollision ?? claimedServerCollision}`,
       });
+      extensionLogger.warn('[agent-extension] native.skipped', {
+        engine: 'claude',
+        extensionId: definition.id,
+        reason: 'resource-collision',
+        resourceName: claimedToolCollision ?? claimedServerCollision,
+      });
       continue;
     }
     try {
+      const nativeStartedAt = Date.now();
+      extensionLogger.debug('[agent-extension] native.build.start', {
+        engine: 'claude',
+        extensionId: definition.id,
+        mode: native.mode ?? 'augment',
+      });
       const built = await native.build(context);
       const actualServerCollision = Object.keys(built.mcpServers ?? {}).find(
         (name) => usedMcpServers.has(name),
@@ -314,19 +396,49 @@ export async function buildClaudeAgentExtensions(
           code: 'NATIVE_CONTRIBUTION_COLLISION',
           message: `Claude native MCP server collides with ${actualServerCollision}`,
         });
+        extensionLogger.warn('[agent-extension] native.skipped', {
+          engine: 'claude',
+          extensionId: definition.id,
+          reason: 'resource-collision',
+          resourceName: actualServerCollision,
+        });
         continue;
       }
       mergeOptions(options, built);
       for (const name of native.claims?.tools ?? []) usedToolNames.add(name.trim().toLowerCase());
       for (const name of Object.keys(built.mcpServers ?? {})) usedMcpServers.add(name);
+      extensionLogger.info('[agent-extension] native.build.completed', {
+        engine: 'claude',
+        extensionId: definition.id,
+        mode: native.mode ?? 'augment',
+        mcpServers: Object.keys(built.mcpServers ?? {}),
+        hookEvents: Object.keys(built.hooks ?? {}),
+        hasPrompt: Boolean(built.systemPromptAppend?.trim()),
+        durationMs: Date.now() - nativeStartedAt,
+      });
     } catch (error) {
       diagnostics.push({
         extensionId: definition.id,
         code: 'NATIVE_CONTRIBUTION_FAILED',
         message: error instanceof Error ? error.message : String(error),
       });
+      extensionLogger.error('[agent-extension] native.build.failed', {
+        engine: 'claude',
+        extensionId: definition.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
+  extensionLogger.info('[agent-extension] build.completed', {
+    engine: 'claude',
+    sessionKey: input.sessionKey,
+    mode: input.mode,
+    extensionsBuilt: usedExtensionIds.size,
+    tools: usedToolNames.size,
+    mcpServers: usedMcpServers.size,
+    diagnostics: diagnostics.length,
+    durationMs: Date.now() - buildStartedAt,
+  });
   return { options, diagnostics };
 }

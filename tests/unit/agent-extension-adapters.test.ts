@@ -70,6 +70,14 @@ describe('Claude agent extension adapter', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.options.mcpServers?.['synthetic-extension']).toBeDefined();
     expect(result.options.systemPromptAppend).toBe('shared prompt\n\nclaude prompt');
+    expect(logger.info).toHaveBeenCalledWith('[agent-extension] build.start', expect.objectContaining({
+      engine: 'claude',
+      sessionKey: 'claude-session',
+    }));
+    expect(logger.info).toHaveBeenCalledWith('[agent-extension] build.completed', expect.objectContaining({
+      engine: 'claude',
+      diagnostics: 0,
+    }));
 
     const callback = result.options.hooks?.PreToolUse?.[0]?.hooks[0] as HookCallback;
     const hookResult = await callback({
@@ -94,6 +102,12 @@ describe('Claude agent extension adapter', () => {
       success: true,
       data: { text: 'hello', engine: 'claude' },
     });
+    expect(logger.info).toHaveBeenCalledWith('[agent-extension] tool.execute.completed', expect.objectContaining({
+      engine: 'claude',
+      extensionId: 'synthetic-extension',
+      toolName: 'synthetic_echo',
+      success: true,
+    }));
   });
 
   it('supports native augment and replace modes without silent collisions', async () => {
@@ -221,6 +235,10 @@ describe('Pi agent extension adapter', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
       .toEqual(['sclaw-extension-lifecycle', 'synthetic-extension']);
+    expect(logger.info).toHaveBeenCalledWith('[agent-extension] build.completed', expect.objectContaining({
+      engine: 'pi',
+      diagnostics: 0,
+    }));
 
     type FakeHandler = (event: Record<string, unknown>) => Promise<unknown> | unknown;
     type FakeTool = {

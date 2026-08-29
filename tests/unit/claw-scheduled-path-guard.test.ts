@@ -61,7 +61,7 @@ afterEach(async () => {
 });
 
 describe('claw scheduled path guard extension', () => {
-  it('does not load for interactive PI sessions', async () => {
+  it('does not load the path guard for interactive PI sessions', async () => {
     const root = await createRoot();
     const result = await buildPiAgentExtensions({
       sessionKey: 'pi:interactive',
@@ -70,14 +70,20 @@ describe('claw scheduled path guard extension', () => {
       allowedRoots: [root],
       logger,
     });
-    expect(result.extensions).toEqual([]);
+    expect(result.extensions.map((extension) => (
+      typeof extension === 'function' ? 'anonymous' : extension.name
+    ))).toEqual(['sclaw-extension-lifecycle', 'sto-scheduled-task-tool']);
     expect(result.diagnostics).toEqual([]);
   });
 
   it('loads through the production registry for scheduled sessions', async () => {
     const root = await createRoot();
     const guard = await buildGuard(root);
-    expect(guard.names).toEqual(['sclaw-extension-lifecycle', 'sclaw-scheduled-path-guard']);
+    expect(guard.names).toEqual([
+      'sclaw-extension-lifecycle',
+      'sclaw-scheduled-path-guard',
+      'sto-scheduled-task-tool',
+    ]);
   });
 
   it('allows paths inside configured roots and blocks paths outside them', async () => {

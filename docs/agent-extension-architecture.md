@@ -10,7 +10,7 @@ SClaw business extensions are compiled into the desktop application and register
 4. The Claude adapter compiles common tools to an in-process MCP server and policies to Claude hooks.
 5. The Pi adapter compiles the same definitions to `InlineExtension`, `registerTool`, and Pi lifecycle events.
 
-The production registry is `SCLAW_AGENT_EXTENSIONS` in `electron/agent-extensions/registry.ts`. The first migrated entry is the PI-only `claw-scheduled-path-guard`; additional business extensions remain separate migration work.
+The production common allowlist is `SCLAW_AGENT_EXTENSIONS` in `electron/agent-extensions/registry.ts`. Each adapter materializes its own engine registry and attaches only its native contributions, preventing Claude native code from entering the PI worker bundle and vice versa. Migrated entries currently include the PI-only `claw-scheduled-path-guard` and the common `sto-scheduled-task-tool`. The scheduled-task extension uses a typed capability/Port backed by the local Host API, so Claude Main and the PI Utility Process share one business implementation without sharing process-local service singletons.
 
 ## Common-first rule
 
@@ -28,6 +28,18 @@ A registered extension may include `native.claude` or `native.pi` contributions:
 
 Native code lives in the corresponding adapter or the extension's `claude.ts` / `pi.ts`. It may use the complete engine SDK, but shared business behavior must remain in the common modules. Native contributions declare claimed tool and MCP server names; collisions are diagnosed and never silently overwrite another contribution.
 
+Recommended layout:
+
+```text
+extensions/<extension-id>/
+├─ definition.ts            # common tools, policies, and prompts
+├─ operations.ts            # engine-independent orchestration
+├─ capability.ts            # typed business Port token, when needed
+├─ host-api-capability.ts    # bundled host-side Port implementation, when needed
+├─ claude.ts                # optional Claude-native escape hatch
+└─ pi.ts                    # optional Pi-native escape hatch
+```
+
 ## Security and compatibility
 
 - Only compile-time registry entries are loaded.
@@ -35,3 +47,7 @@ Native code lives in the corresponding adapter or the extension's `claude.ts` / 
 - Before-tool policy exceptions fail closed; after-tool observers and prompt contributors fail independently and are logged.
 - Tool names are unique across the enabled common and native contributions for each engine.
 - OpenClaw remains on its legacy plugin path and is not part of this abstraction.
+
+## Runtime diagnostics
+
+Framework logs use the stable `[agent-extension]` prefix and structured fields. Important events include `build.start`, `build.completed`, `registry.diagnostic`, `native.build.*`, `tool.execute.*`, `policy.before.denied`, and `prompt.build.completed`. Inputs and prompt bodies are deliberately excluded; logs contain identifiers, outcome codes, counts, and durations only.

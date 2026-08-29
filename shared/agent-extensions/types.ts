@@ -43,6 +43,8 @@ export interface SclawExtensionContext {
   cwd?: string;
   allowedRoots?: readonly string[];
   agentId?: string;
+  model?: string;
+  accountId?: string;
   runId?: string;
   capabilities: SclawCapabilityResolver;
   state: SclawExtensionState;
@@ -62,6 +64,7 @@ export type SclawToolPolicyContext = SclawExtensionBuildContext;
 
 export interface SclawContributionSelector {
   engines?: readonly SclawAgentEngine[];
+  modes?: readonly SclawAgentSessionMode[];
 }
 
 export interface SclawToolSuccess<T = unknown> {
@@ -159,6 +162,13 @@ export function supportsEngine(
   engine: SclawAgentEngine,
 ): boolean {
   return !contribution.engines || contribution.engines.includes(engine);
+}
+
+export function supportsSessionMode(
+  contribution: SclawContributionSelector,
+  mode: SclawAgentSessionMode,
+): boolean {
+  return !contribution.modes || contribution.modes.includes(mode);
 }
 
 export function normalizeSclawToolName(toolName: string): string {

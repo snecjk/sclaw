@@ -3,7 +3,7 @@ import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
 import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { SCHEDULED_TASK_CORE_PROMPT } from '../../shared/scheduled-task-instruction';
-import { CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
+import { STO_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-scheduled-task-tool/definition';
 import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 import { resetDingTalkSendRateLimitForTests } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/dingtalk-send-guard';
 
@@ -42,8 +42,8 @@ describe('buildClaudeRuntimeOptions', () => {
     const runtime = await buildClaudeRuntimeOptions('claude-task:task-1:2026-06-25');
 
     expect(runtime.systemPromptAppend).toContain(SCHEDULED_TASK_CORE_PROMPT);
-    expect(runtime.systemPromptAppend).not.toContain(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT);
-    expect(runtime.mcpServers?.['claude-scheduled-task-tool']).toBeUndefined();
+    expect(runtime.systemPromptAppend).not.toContain(STO_SCHEDULED_TASK_SYSTEM_PROMPT);
+    expect(runtime.mcpServers?.['sto-scheduled-task-tool']).toBeUndefined();
   });
 
   it('keeps management prompt and MCP for ordinary chat sessions', async () => {
@@ -51,8 +51,8 @@ describe('buildClaudeRuntimeOptions', () => {
 
     const runtime = await buildClaudeRuntimeOptions('agent:main:main');
 
-    expect(runtime.systemPromptAppend).toContain(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT);
-    expect(runtime.mcpServers?.['claude-scheduled-task-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain(STO_SCHEDULED_TASK_SYSTEM_PROMPT);
+    expect(runtime.mcpServers?.['sto-scheduled-task-tool']).toBeDefined();
     expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
     expect(runtime.systemPromptAppend).toContain('bridge_click');
   });
@@ -66,18 +66,16 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(runtime.systemPromptAppend).toContain('不要调用 ba_*');
   });
 
-  it('uses the Chinese Claude scheduled-task management policy', () => {
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('Claude 本地定时任务工具使用规则');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【意图分流】');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【时间规则】');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('0 9 * * *;30 15 * * *');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('0 9 L * *');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【任务指令与结构化字段');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('当前更新工具暂不支持改 recipients');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('`dws chat message send` 是普通钉钉消息发送');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('Claude scheduled task tools:');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('【仅创建、当前会话不执行】');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('当前会话不要执行');
+  it('uses the engine-neutral Chinese scheduled-task management policy', () => {
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('SClaw 本地定时任务工具使用规则');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【意图分流】');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【时间规则】');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('0 9 * * *;30 15 * * *');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('0 9 L * *');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【执行目标与结构化字段】');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('create/list/get/update/delete/trigger_sto_scheduled_task');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('`dws chat message send` 是普通钉钉消息发送');
+    expect(STO_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('Claude 本地定时任务工具使用规则');
   });
 
   it('injects oral send guard for ordinary chat without pending mentions', async () => {

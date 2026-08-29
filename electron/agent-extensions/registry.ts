@@ -7,6 +7,7 @@ import {
 import type { ClaudeNativeContribution } from './adapters/claude/types';
 import type { PiNativeContribution } from './adapters/pi/types';
 import { clawScheduledPathGuardDefinition } from './extensions/claw-scheduled-path-guard/definition';
+import { stoScheduledTaskToolDefinition } from './extensions/sto-scheduled-task-tool/definition';
 
 export interface RegisteredAgentExtension {
   common: SclawAgentExtensionDefinition;
@@ -19,17 +20,8 @@ export interface RegisteredAgentExtension {
 /** Internal, compile-time allowlist. Entries are reviewed and bundled with SClaw. */
 export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
   common: clawScheduledPathGuardDefinition,
-  native: {
-    pi: {
-      mode: 'replace',
-      async build(context) {
-        const { buildClawScheduledPathGuard } = await import(
-          './extensions/claw-scheduled-path-guard/pi'
-        );
-        return buildClawScheduledPathGuard(context);
-      },
-    },
-  },
+}, {
+  common: stoScheduledTaskToolDefinition,
 }];
 
 const EXTENSION_ID_PATTERN = /^[a-z][a-z0-9-]{0,127}$/;

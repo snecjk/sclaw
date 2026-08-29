@@ -4,8 +4,11 @@ import {
   SclawExtensionStateManager,
   type SclawExtensionLogger,
 } from '../../shared/agent-extensions';
+import { STO_SCHEDULED_TASK_CAPABILITY } from './extensions/sto-scheduled-task-tool/capability';
+import { createHostApiScheduledTaskPort } from './extensions/sto-scheduled-task-tool/host-api-capability';
 
-export const sclawAgentExtensionCapabilities = new SclawCapabilityRegistry();
+export const sclawAgentExtensionCapabilities = new SclawCapabilityRegistry()
+  .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort());
 export const sclawAgentExtensionState = new SclawExtensionStateManager();
 
 export const sclawAgentExtensionLogger: SclawExtensionLogger = {

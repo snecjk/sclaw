@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isScheduledTaskShellCommand } from '../../sto-plugin/claude/claude-scheduled-task-tool/hooks';
+import { isScheduledTaskShellCommand } from '../../electron/agent-extensions/extensions/sto-scheduled-task-tool/operations';
 
 describe('isScheduledTaskShellCommand', () => {
-  it('blocks shell commands that manage Claude scheduled tasks', () => {
+  it('blocks shell commands that manage SClaw scheduled tasks', () => {
     expect(isScheduledTaskShellCommand('claude-scheduled-task create --name x')).toBe(true);
+    expect(isScheduledTaskShellCommand('sto-scheduled-task create --name x')).toBe(true);
     expect(isScheduledTaskShellCommand('echo \'{"cron":"0 9 * * *"}\' > ~/.claude/scheduled_tasks.json')).toBe(true);
     expect(isScheduledTaskShellCommand('echo "0 9 * * * root cron-job" > /etc/cron.d/nightly')).toBe(true);
   });

@@ -16,10 +16,19 @@ export async function buildSclawPrompt(
 ): Promise<string | undefined> {
   const blocks: string[] = [];
   for (const prompt of prompts) {
+    const startedAt = Date.now();
     try {
       if (prompt.text?.trim()) blocks.push(prompt.text.trim());
       const dynamic = await prompt.build?.(context);
       if (dynamic?.trim()) blocks.push(dynamic.trim());
+      context.logger.debug('[agent-extension] prompt.build.completed', {
+        engine: context.engine,
+        extensionId,
+        contributionId: prompt.id,
+        durationMs: Date.now() - startedAt,
+        hasStatic: Boolean(prompt.text?.trim()),
+        hasDynamic: Boolean(dynamic?.trim()),
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       diagnostics.push({
@@ -49,8 +58,25 @@ export async function runSclawBeforeToolPolicies(
     try {
       const decision = await policy.beforeTool({ ...event, input }, context);
       if (!decision || decision.action === 'allow') continue;
-      if (decision.action === 'deny') return decision;
+      if (decision.action === 'deny') {
+        context.logger.warn('[agent-extension] policy.before.denied', {
+          engine: context.engine,
+          extensionId,
+          policyId: policy.id,
+          toolName: event.toolName,
+          toolCallId: event.toolCallId,
+          terminate: Boolean(decision.terminate),
+        });
+        return decision;
+      }
       input = decision.input;
+      context.logger.debug('[agent-extension] policy.before.patched', {
+        engine: context.engine,
+        extensionId,
+        policyId: policy.id,
+        toolName: event.toolName,
+        toolCallId: event.toolCallId,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       context.logger.error(`[agent-extension:${extensionId}] before-tool policy failed`, {

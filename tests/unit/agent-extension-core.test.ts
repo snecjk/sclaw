@@ -157,11 +157,12 @@ describe('TypeBox to Zod conversion', () => {
 });
 
 describe('agent extension registry validation', () => {
-  it('registers only the migrated scheduled path guard in production', () => {
+  it('registers the migrated production extensions', () => {
     expect(SCLAW_AGENT_EXTENSIONS.map((entry) => entry.common.id))
-      .toEqual(['claw-scheduled-path-guard']);
+      .toEqual(['claw-scheduled-path-guard', 'sto-scheduled-task-tool']);
     expect(SCLAW_AGENT_EXTENSIONS[0].common.engines).toEqual(['pi']);
-    expect(SCLAW_AGENT_EXTENSIONS[0].native?.pi?.mode).toBe('replace');
+    expect(SCLAW_AGENT_EXTENSIONS[1].common.engines).toBeUndefined();
+    expect(SCLAW_AGENT_EXTENSIONS.every((entry) => entry.native == null)).toBe(true);
   });
 
   it('reports duplicate extension and tool names plus augment collisions', () => {
