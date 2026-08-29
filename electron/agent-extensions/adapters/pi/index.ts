@@ -55,6 +55,8 @@ export interface BuildPiAgentExtensionsInput {
 
 export interface BuildPiAgentExtensionsResult {
   extensions: InlineExtension[];
+  /** Exact tool names that must be included in Pi's createAgentSession tools allowlist. */
+  toolNames: string[];
   diagnostics: SclawExtensionDiagnostic[];
 }
 
@@ -82,6 +84,7 @@ export async function buildPiAgentExtensions(
   const extensions: InlineExtension[] = [];
   const usedExtensionIds = new Set<string>();
   const usedToolNames = new Set<string>();
+  const enabledToolNames: string[] = [];
   const buildStartedAt = Date.now();
 
   extensionLogger.info('[agent-extension] build.start', {
@@ -155,6 +158,7 @@ export async function buildPiAgentExtensions(
         if (usedToolNames.has(normalizedName)) continue;
         tools.push(tool);
         usedToolNames.add(normalizedName);
+        enabledToolNames.push(tool.name);
       }
       const policies = (definition.policies ?? []).filter(
         (item) => supportsEngine(item, 'pi') && supportsSessionMode(item, input.mode),
@@ -309,7 +313,10 @@ export async function buildPiAgentExtensions(
       });
       const nativeExtensions = normalizeNativeExtensions(await native.build(contextFor()));
       extensions.push(...nativeExtensions);
-      for (const name of native.claims?.tools ?? []) usedToolNames.add(name.trim().toLowerCase());
+      for (const name of native.claims?.tools ?? []) {
+        usedToolNames.add(name.trim().toLowerCase());
+        enabledToolNames.push(name);
+      }
       extensionLogger.info('[agent-extension] native.build.completed', {
         engine: 'pi',
         extensionId: definition.id,
@@ -355,5 +362,5 @@ export async function buildPiAgentExtensions(
     diagnostics: diagnostics.length,
     durationMs: Date.now() - buildStartedAt,
   });
-  return { extensions, diagnostics };
+  return { extensions, toolNames: enabledToolNames, diagnostics };
 }

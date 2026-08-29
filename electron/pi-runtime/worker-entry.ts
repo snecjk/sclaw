@@ -30,6 +30,7 @@ import {
 } from './event-policy';
 import { KeyedTaskQueue } from './keyed-task-queue';
 import { filterPiSkills } from './skill-policy';
+import { buildPiEnabledToolNames } from './tool-policy';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
 
 type PiSession = {
@@ -164,6 +165,13 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   for (const diagnostic of unifiedExtensions.diagnostics) {
     logPiCore('extension.diagnostic', diagnostic as unknown as Record<string, unknown>);
   }
+  const enabledToolNames = buildPiEnabledToolNames(unifiedExtensions.toolNames);
+  logPiCore('extension.tools-enabled', {
+    sessionKey: config.sessionKey,
+    mode: config.scheduledAllowedRoots?.length ? 'scheduled' : 'interactive',
+    toolCount: enabledToolNames.length,
+    tools: enabledToolNames,
+  });
   const managedContextPath = join(config.agentDir, 'AGENTS.md');
   const loader = new sdk.DefaultResourceLoader({
     cwd: config.cwd,
@@ -263,7 +271,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     settingsManager,
     resourceLoader: loader,
     sessionManager,
-    tools: ['read', 'write', 'edit', 'bash', 'grep', 'find', 'ls'],
+    tools: enabledToolNames,
   });
 
   const entry: PiSession = {

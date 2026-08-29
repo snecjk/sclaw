@@ -235,6 +235,7 @@ describe('Pi agent extension adapter', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
       .toEqual(['sclaw-extension-lifecycle', 'synthetic-extension']);
+    expect(result.toolNames).toEqual(['synthetic_echo']);
     expect(logger.info).toHaveBeenCalledWith('[agent-extension] build.completed', expect.objectContaining({
       engine: 'pi',
       diagnostics: 0,
@@ -290,6 +291,7 @@ describe('Pi agent extension adapter', () => {
         native: {
           pi: {
             mode: 'replace',
+            claims: { tools: ['pi_native_tool'] },
             build: () => ({ name: 'pi-native', factory: () => {} }),
           },
         },
@@ -298,6 +300,7 @@ describe('Pi agent extension adapter', () => {
     });
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
       .toEqual(['sclaw-extension-lifecycle', 'pi-native']);
+    expect(result.toolNames).toEqual(['pi_native_tool']);
   });
 
   it('appends native PI contributions in augment mode', async () => {
@@ -309,6 +312,7 @@ describe('Pi agent extension adapter', () => {
         native: {
           pi: {
             mode: 'augment',
+            claims: { tools: ['pi_native_tool'] },
             build: () => ({ name: 'pi-native', factory: () => {} }),
           },
         },
@@ -317,6 +321,7 @@ describe('Pi agent extension adapter', () => {
     });
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
       .toEqual(['sclaw-extension-lifecycle', 'synthetic-extension', 'pi-native']);
+    expect(result.toolNames).toEqual(['synthetic_echo', 'pi_native_tool']);
   });
 
   it('throws a controlled error carrying the common failure envelope', async () => {

@@ -23,6 +23,10 @@ import {
 import { KeyedTaskQueue } from '../../electron/pi-runtime/keyed-task-queue';
 import { abortPiActiveRun } from '../../electron/pi-runtime/abort-policy';
 import { filterPiSkills, isPiSkillPathAllowed } from '../../electron/pi-runtime/skill-policy';
+import {
+  PI_BUILTIN_TOOL_NAMES,
+  buildPiEnabledToolNames,
+} from '../../electron/pi-runtime/tool-policy';
 
 describe('Pi engine descriptor', () => {
   it('registers chat and scheduled tasks but rejects workflow capability', () => {
@@ -41,6 +45,30 @@ describe('Pi engine descriptor', () => {
       taskId: 'task-1',
       appId: null,
     });
+  });
+});
+
+describe('Pi session tool allowlist', () => {
+  it.each([
+    ['new session', undefined],
+    ['reopened follow-up session', 'D:/sessions/existing.jsonl'],
+  ])('keeps extension tools enabled for a %s', (_scenario, _sessionFile) => {
+    const extensionTools = [
+      'create_sto_scheduled_task',
+      'list_sto_scheduled_tasks',
+    ];
+
+    expect(buildPiEnabledToolNames(extensionTools)).toEqual([
+      ...PI_BUILTIN_TOOL_NAMES,
+      ...extensionTools,
+    ]);
+  });
+
+  it('deduplicates tool names case-insensitively without replacing built-ins', () => {
+    expect(buildPiEnabledToolNames([' read ', 'CUSTOM_TOOL', 'custom_tool', ''])).toEqual([
+      ...PI_BUILTIN_TOOL_NAMES,
+      'CUSTOM_TOOL',
+    ]);
   });
 });
 

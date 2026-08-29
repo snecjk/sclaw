@@ -61,6 +61,7 @@ describe('sto-scheduled-task-tool common extension', () => {
     const pi = await buildPiAgentExtensions({
       sessionKey: 'agent:main:chat', mode: 'interactive', entries, ...deps,
     });
+    expect(pi.toolNames).toEqual(expectedTools);
     const registered: string[] = [];
     const common = pi.extensions.find(
       (extension) => typeof extension !== 'function' && extension.name === 'sto-scheduled-task-tool',
@@ -85,6 +86,7 @@ describe('sto-scheduled-task-tool common extension', () => {
     const pi = await buildPiAgentExtensions({
       sessionKey: 'agent:main:scheduled-task:t1:2026-08-29', mode: 'scheduled', entries, ...deps,
     });
+    expect(pi.toolNames).toEqual([]);
     const registered: string[] = [];
     const handlers = new Map<string, (...args: never[]) => unknown>();
     const common = pi.extensions.find(
