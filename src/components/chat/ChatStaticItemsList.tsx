@@ -1,9 +1,16 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
+  useRef,
   type RefObject,
 } from 'react';
+import {
+  measureChatScroll,
+  shouldArmOlderHistoryLoader,
+  shouldLoadOlderHistoryFromScroll,
+} from '@/components/chat/chat-static-items-scroll';
 import type { RawMessage } from '@/stores/chat';
 import type { AttachedFileMeta } from '@/stores/chat';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
@@ -34,6 +41,7 @@ export interface ChatStaticItemsListProps {
   variant: ChatStaticItemsListVariant;
   /** 搜索打开时关闭虚拟化，保证 DOM 索引与滚动定位可用。 */
   forceFullRender?: boolean;
+  onReachStart?: () => void;
   matchedMessageKeys?: Set<string>;
   activeSearchMessageKey?: string | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
@@ -90,6 +98,7 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
     forceFullRender = false,
     matchedMessageKeys,
     activeSearchMessageKey = null,
+    onReachStart,
     onPreviewFile,
     onCreateScheduledTask,
     onEditMessage,
@@ -117,6 +126,41 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
         return true;
       },
     }), [items, virtualize, virtualizer]);
+
+    const virtualItems = virtualizer.getVirtualItems();
+    const onReachStartRef = useRef(onReachStart);
+    onReachStartRef.current = onReachStart;
+    const tailKey = items[items.length - 1]?.key ?? '';
+    const enableOlderHistory = typeof onReachStart === 'function';
+
+    useEffect(() => {
+      if (!enableOlderHistory) return;
+      const el = scrollRef.current;
+      if (!el) return;
+
+      let armed = false;
+      const syncArm = () => {
+        const metrics = measureChatScroll(el);
+        if (!armed && shouldArmOlderHistoryLoader(metrics)) {
+          armed = true;
+        }
+      };
+      const onScroll = () => {
+        syncArm();
+        if (shouldLoadOlderHistoryFromScroll(armed, measureChatScroll(el))) {
+          onReachStartRef.current?.();
+        }
+      };
+
+      el.addEventListener('scroll', onScroll, { passive: true });
+      const resizeObserver = new ResizeObserver(syncArm);
+      resizeObserver.observe(el);
+      syncArm();
+      return () => {
+        el.removeEventListener('scroll', onScroll);
+        resizeObserver.disconnect();
+      };
+    }, [scrollRef, tailKey, enableOlderHistory]);
 
     const renderItem = (item: ChatDisplayItem) => {
       if (item.type === 'workflow-run') {
@@ -183,8 +227,6 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
         </>
       );
     }
-
-    const virtualItems = virtualizer.getVirtualItems();
 
     return (
       <div

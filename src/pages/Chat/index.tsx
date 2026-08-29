@@ -293,6 +293,11 @@ export function Chat() {
 
   useEffect(() => {
     if (!isSearchOpen) return;
+    void useChatStore.getState().loadOlderHistory(currentSessionKey, { drain: true });
+  }, [isSearchOpen, currentSessionKey]);
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
 
     const contentElement = contentRef.current;
     if (!contentElement) {
@@ -688,6 +693,9 @@ export function Chat() {
                 onCreateScheduledTask={openWorkflowCronTaskModal}
                 onEditMessage={handleEditMessage}
                 onOpenWorkflow={openWorkflowList}
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory(currentSessionKey);
+                }}
               />
 
               {activeTurn ? (

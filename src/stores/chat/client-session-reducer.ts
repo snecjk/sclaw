@@ -9,6 +9,7 @@ import type {
   ChatRuntimeSnapshot,
 } from '../../../shared/chat-runtime-protocol';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
+import type { ChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
 import type { AttachedFileMeta, RawMessage, ToolStatus } from './types';
 import { collectToolUpdates, isToolResultRole, upsertToolStatuses } from './helpers';
 import { appendStreamingAssistantSnapshot } from './streaming-state';
@@ -61,6 +62,8 @@ export interface ClientSessionState {
   error: AppError | null;
   sync: ClientSessionSyncState;
   updatedAt: number;
+  historyFingerprint: ChatHistoryFingerprint | null;
+  historyTotalCount: number;
 }
 
 export interface SessionEventReduction {
@@ -93,6 +96,8 @@ export function createClientSessionState(): ClientSessionState {
       bufferOverflowed: false,
     },
     updatedAt: 0,
+    historyFingerprint: null,
+    historyTotalCount: 0,
   };
 }
 

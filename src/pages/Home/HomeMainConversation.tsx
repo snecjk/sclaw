@@ -209,6 +209,11 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   useEffect(() => {
     if (!isSearchOpen) return;
+    void useChatStore.getState().loadOlderHistory(currentSessionKey, { drain: true });
+  }, [isSearchOpen, currentSessionKey]);
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
 
     const contentElement = contentRef.current;
     if (!contentElement) {
@@ -550,6 +555,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                 onPreviewFile={openArtifactPreview}
                 onCreateScheduledTask={openWorkflowCronTaskModal}
                 onOpenWorkflow={openWorkflowList}
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory(currentSessionKey);
+                }}
               />
               {activeTurn ? (
                 <AssistantTurnMessage

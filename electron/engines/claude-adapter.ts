@@ -27,6 +27,8 @@ import {
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
 import { logUserSend } from '../../shared/user-send-log';
+import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
+import { sliceHistoryPage } from '../../shared/chat-history-page';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -669,6 +671,12 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     thinkingLevel: null,
     isRunning: activeClaudeQueries.has(sessionKey),
     runtimeResult: claudeRuntimeResults.get(sessionKey) ?? null,
+    fingerprint: buildChatHistoryFingerprint({
+      messages: mergedMessages,
+      persistedCount: persistedMessages.length,
+      liveCount: cachedMessages.length,
+      archivedIds,
+    }),
   };
 }
 
@@ -1588,7 +1596,28 @@ export const claudeAdapter: EngineAdapter = {
         entry.sessionId ?? '',
         entry.cwd,
       );
-      return { success: true, result };
+      const page = sliceHistoryPage(result.messages as Array<{ id?: string }>, {
+        limit: params.limit,
+        beforeId: params.beforeId,
+      });
+      logger.info('[claude-adapter][transcript-timing]', {
+        stage: 'history_page',
+        sessionKey: params.sessionKey,
+        totalCount: page.totalCount,
+        pageCount: page.messages.length,
+        hasMore: page.hasMore,
+        beforeId: params.beforeId ?? null,
+        limit: params.limit,
+      });
+      return {
+        success: true,
+        result: {
+          ...result,
+          messages: page.messages,
+          hasMore: page.hasMore,
+          totalCount: page.totalCount,
+        },
+      };
     } catch (error) {
       return { success: false, error: String(error) };
     }

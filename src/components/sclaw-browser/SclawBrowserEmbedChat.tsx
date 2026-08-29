@@ -203,6 +203,9 @@ export function SclawBrowserEmbedChat({
                 showThinking={showThinking}
                 scrollRef={scrollRef}
                 variant="embed"
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory();
+                }}
               />
               {activeTurn ? (
                 <AssistantTurnMessage

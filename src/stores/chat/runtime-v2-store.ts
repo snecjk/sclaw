@@ -3,6 +3,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { AppError } from '@/lib/error-model';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
+import type { ChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
 import type { RawMessage } from './types';
 import { findHistoryUserEcho } from './user-message-merge';
 import { materializeCompletedOverlay } from './display-model';
@@ -19,6 +20,8 @@ interface ChatRuntimeV2State {
   hydrate: (sessionKey: string) => Promise<void>;
   applyEvent: (event: CanonicalChatEvent) => boolean;
   setTranscript: (sessionKey: string, transcript: RawMessage[]) => void;
+  setHistoryFingerprint: (sessionKey: string, fingerprint: ChatHistoryFingerprint | null) => void;
+  setHistoryTotalCount: (sessionKey: string, totalCount: number) => void;
   setDisplayProjection: (sessionKey: string, messages: RawMessage[] | null) => void;
   setOptimisticUserMessage: (sessionKey: string, message: RawMessage | null) => void;
   clearError: (sessionKey: string) => void;
@@ -202,6 +205,33 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
             awaitingTranscript: transcriptSettled ? false : current.overlay.awaitingTranscript,
           },
           updatedAt: Date.now(),
+        },
+      },
+    };
+  }),
+  setHistoryFingerprint: (sessionKey, fingerprint) => set((state) => {
+    const current = state.sessionsByKey[sessionKey];
+    if (!current || current.historyFingerprint === fingerprint) return state;
+    return {
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...current,
+          historyFingerprint: fingerprint,
+        },
+      },
+    };
+  }),
+  setHistoryTotalCount: (sessionKey, totalCount) => set((state) => {
+    const current = state.sessionsByKey[sessionKey];
+    const nextCount = Number.isFinite(totalCount) && totalCount > 0 ? Math.floor(totalCount) : 0;
+    if (!current || current.historyTotalCount === nextCount) return state;
+    return {
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...current,
+          historyTotalCount: nextCount,
         },
       },
     };
