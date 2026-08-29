@@ -11,9 +11,9 @@ import { cn } from '@/lib/utils';
 const buttonRecipeClass = {
   default: 'sto-control sto-control--primary',
   destructive: 'sto-control sto-control--destructive',
-  outline: 'sto-control sto-control--outline sto-control-outline',
-  secondary: 'sto-control sto-control--secondary sto-control-secondary',
-  ghost: 'sto-control sto-control--ghost sto-control-ghost',
+  outline: 'sto-control sto-control--outline',
+  secondary: 'sto-control sto-control--secondary',
+  ghost: 'sto-control sto-control--ghost',
   link: 'sto-control sto-control--link',
 } as const;
 
@@ -50,12 +50,34 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({
+    className,
+    variant,
+    size,
+    asChild = false,
+    disabled,
+    'aria-disabled': ariaDisabled,
+    tabIndex,
+    onClickCapture,
+    ...props
+  }, ref) => {
     const Comp = asChild ? Slot : 'button';
+    const childIsDisabled = asChild
+      && (disabled === true || ariaDisabled === true || ariaDisabled === 'true');
+
+    function preventDisabledActivation(event: React.SyntheticEvent): void {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        disabled={asChild ? undefined : disabled}
+        aria-disabled={childIsDisabled ? true : ariaDisabled}
+        tabIndex={childIsDisabled ? -1 : tabIndex}
+        onClickCapture={childIsDisabled ? preventDisabledActivation : onClickCapture}
         {...props}
       />
     );

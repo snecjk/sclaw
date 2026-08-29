@@ -20,19 +20,19 @@ describe('semantic card color recipes', () => {
   it('defines the complete card state chain with semantic color values', () => {
     for (const selector of [
       '.sto-card',
-      '.sto-card:hover',
-      ".sto-card[data-state='active']",
-      ".sto-card[data-selected='true']",
-      '.sto-card:has(:focus-visible)',
-      ".sto-card[aria-disabled='true']",
-      ".sto-card[data-state='loading']",
-      ".sto-card[data-state='error']",
+      "[data-sto-state='hover']",
+      "[data-sto-state='active']",
+      "[data-selected='true']",
+      ':has(:focus-visible)',
+      "[aria-disabled='true']",
+      "[aria-busy='true']",
+      "[aria-invalid='true']",
     ]) {
       expect(recipesCss, selector).toContain(selector);
     }
-    expect(recipesCss).toContain('--sto-card-disabled-foreground');
-    expect(recipesCss).toContain('--sto-card-disabled-background');
-    expect(recipesCss).toContain('--sto-card-disabled-border');
+    expect(recipesCss).toContain('--sto-disabled-foreground');
+    expect(recipesCss).toContain('--sto-disabled-background');
+    expect(recipesCss).toContain('--sto-disabled-border');
     expect(recipesCss).not.toMatch(
       /\.sto-card[^{]*\[[^\]]*disabled[^\]]*\][^{]*\{[^}]*opacity\s*:/s,
     );

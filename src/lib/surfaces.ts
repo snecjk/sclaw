@@ -191,7 +191,7 @@ export const stoOutlineButtonBaseClass = cn(
 );
 
 export const stoSearchFieldShellClass = cn(
-  'sto-control sto-control-field sto-control--field sto-control--neutral-field flex items-center gap-2 rounded-[12px] border px-3',
+  'sto-control sto-control--field sto-control--neutral-field flex items-center gap-2 rounded-[12px] border px-3',
 );
 
 export const stoSortTriggerClass = cn(

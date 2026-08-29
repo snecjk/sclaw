@@ -12,7 +12,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <select
         className={cn(
-          'sto-control sto-control-field sto-control--field flex h-10 w-full rounded-md border px-3 py-2 text-sm',
+          'sto-control sto-control--field flex h-10 w-full rounded-md border px-3 py-2 text-sm',
           'dark:[color-scheme:dark]',
           '[-webkit-appearance:none] appearance-none',
           'bg-[length:16px_16px] bg-[right_12px_center] bg-no-repeat',

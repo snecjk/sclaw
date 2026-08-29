@@ -7,8 +7,11 @@
     -webkit-backdrop-filter: var(--sto-glass-backdrop-filter);
   }
 
-  /* Card recipe: shared surface states; geometry remains consumer-owned. */
+  /* Card recipe: consumers retain geometry; recipes own color and state. */
   .sto-card {
+    --sto-disabled-source-background: var(--sto-card-default-background);
+    --sto-disabled-source-border: var(--sto-card-default-border);
+    --sto-disabled-source-foreground: var(--sto-card-default-foreground);
     background-color: var(--sto-card-default-background);
     border-color: var(--sto-card-default-border);
     color: var(--sto-card-default-foreground);
@@ -17,61 +20,10 @@
     -webkit-backdrop-filter: var(--sto-card-backdrop-filter);
   }
 
-  .sto-card:hover,
-  .sto-card[data-state='hover'] {
-    background-color: var(--sto-card-default-background);
-    border-color: var(--sto-card-default-border);
-    color: var(--sto-card-default-foreground);
-  }
-
-  .sto-card[data-selected='true'],
-  .sto-card[data-state='active'] {
-    background-color: var(--sto-control-active-bg);
-    border-color: var(--sto-border-heavy);
-    color: var(--sto-text-primary);
-  }
-
-  .sto-card:focus-visible,
-  .sto-card:has(:focus-visible),
-  .sto-card[data-state='focus'] {
-    background-color: var(--sto-card-default-background);
-    border-color: var(--sto-card-default-border);
-    color: var(--sto-card-default-foreground);
-    outline-color: var(--sto-focus-ring);
-    outline-style: solid;
-    outline-width: 2px;
-    outline-offset: 2px;
-  }
-
-  .sto-card[data-selected='true']:focus-visible,
-  .sto-card[data-selected='true']:has(:focus-visible) {
-    background-color: var(--sto-control-active-bg);
-    border-color: var(--sto-border-heavy);
-    color: var(--sto-text-primary);
-  }
-
-  .sto-card[aria-disabled='true'],
-  .sto-card[data-state='disabled'] {
-    background-color: var(--sto-card-disabled-background);
-    border-color: var(--sto-card-disabled-border);
-    color: var(--sto-card-disabled-foreground);
-  }
-
-  .sto-card[data-state='loading'] {
-    background-color: var(--sto-card-default-background);
-    border-color: var(--sto-loading-border);
-    color: var(--sto-loading-foreground);
-  }
-
-  .sto-card[aria-invalid='true'],
-  .sto-card[data-state='error'] {
-    background-color: var(--sto-feedback-error-background);
-    border-color: var(--sto-feedback-error-border);
-    color: var(--sto-feedback-error-foreground);
-  }
-
   .sto-card--flat,
   .sto-card-flat {
+    --sto-disabled-source-background: var(--sto-card-flat-bg);
+    --sto-disabled-source-border: var(--sto-card-flat-border);
     background-color: var(--sto-card-flat-bg);
     border-color: var(--sto-card-flat-border);
     box-shadow: var(--sto-card-flat-shadow);
@@ -80,31 +32,45 @@
   }
 
   .sto-card--secondary {
+    --sto-disabled-source-background: var(--sto-surface-secondary);
+    --sto-disabled-source-border: var(--sto-border-default);
     background-color: var(--sto-surface-secondary);
     border-color: var(--sto-border-default);
+  }
+
+  .sto-card:not(.sto-card--flat):not(.sto-card-flat):is(:hover, [data-sto-state='hover']) {
+    background-color: var(--sto-card-default-background);
+    border-color: var(--sto-card-default-border);
     color: var(--sto-card-default-foreground);
   }
 
-  .sto-card--secondary:hover,
-  .sto-card--secondary[data-state='hover'] {
+  .sto-card--secondary:is(:hover, [data-sto-state='hover']) {
     background-color: var(--sto-surface-secondary);
     border-color: var(--sto-border-default);
-    color: var(--sto-card-default-foreground);
   }
 
-  .sto-card--flat:focus-visible,
-  .sto-card--flat:has(:focus-visible) {
-    background-color: var(--sto-card-flat-bg);
-    border-color: var(--sto-card-flat-border);
-    color: var(--sto-card-default-foreground);
+  .sto-card:is([data-selected='true'], [data-sto-state='active']) {
+    --sto-disabled-source-background: var(--sto-control-active-bg);
+    --sto-disabled-source-border: var(--sto-border-heavy);
+    --sto-disabled-source-foreground: var(--sto-text-primary);
+    background-color: var(--sto-control-active-bg);
+    border-color: var(--sto-border-heavy);
+    color: var(--sto-text-primary);
   }
 
-  .sto-card--flat.sto-card--interactive:hover,
-  .sto-card--flat.sto-card--interactive[data-state='hover'],
+  .sto-card--flat.sto-card--interactive:is(:hover, [data-sto-state='hover']),
   .sto-card-flat-interactive:hover {
+    --sto-disabled-source-background: var(--sto-card-flat-hover-bg);
+    --sto-disabled-source-border: var(--sto-card-flat-hover-border);
     background-color: var(--sto-card-flat-hover-bg);
     border-color: var(--sto-card-flat-hover-border);
     box-shadow: var(--sto-card-flat-hover-shadow);
+  }
+
+  .sto-card:is(:focus-visible, :has(:focus-visible), [data-sto-state='focus']) {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: var(--sto-card-focus-shadow);
   }
 
   .sto-card-busy-overlay { background-color: var(--sto-card-loading-overlay); }
@@ -114,52 +80,66 @@
     border-top-color: var(--sto-card-loading-spinner-foreground);
   }
 
-  /* Control recipe and public variants. */
+  /* Control recipe: modifiers select the approved primitive variant pixels. */
   .sto-control {
+    --sto-disabled-source-background: var(--sto-control-bg);
+    --sto-disabled-source-border: var(--sto-border-default);
+    --sto-disabled-source-foreground: var(--sto-control-default-foreground);
     background-color: var(--sto-control-bg);
     border-color: var(--sto-border-default);
     color: var(--sto-control-default-foreground);
   }
 
   .sto-control--primary {
+    --sto-disabled-source-background: var(--sto-brand-primary);
+    --sto-disabled-source-border: var(--sto-brand-primary);
+    --sto-disabled-source-foreground: var(--sto-control-primary-foreground);
     background-color: var(--sto-brand-primary);
     border-color: var(--sto-brand-primary);
     color: var(--sto-control-primary-foreground);
   }
 
   .sto-control--destructive {
+    --sto-disabled-source-background: var(--sto-danger-primary);
+    --sto-disabled-source-border: var(--sto-danger-primary);
+    --sto-disabled-source-foreground: var(--sto-control-destructive-foreground);
     background-color: var(--sto-danger-primary);
     border-color: var(--sto-danger-primary);
     color: var(--sto-control-destructive-foreground);
   }
 
-  .sto-control--outline,
-  .sto-control-outline {
+  .sto-control--outline {
+    --sto-disabled-source-background: var(--sto-control-outline-background);
+    --sto-disabled-source-border: var(--sto-control-outline-border);
     background-color: var(--sto-control-outline-background);
     border-color: var(--sto-control-outline-border);
-    color: var(--sto-control-default-foreground);
     backdrop-filter: var(--sto-control-field-backdrop-filter);
     -webkit-backdrop-filter: var(--sto-control-field-backdrop-filter);
   }
 
-  .sto-control--secondary,
-  .sto-control-secondary {
+  .sto-control--secondary {
+    --sto-disabled-source-background: var(--sto-control-secondary-background);
+    --sto-disabled-source-foreground: var(--sto-control-secondary-foreground);
     background-color: var(--sto-control-secondary-background);
-    border-color: var(--sto-border-default);
     color: var(--sto-control-secondary-foreground);
   }
 
-  .sto-control--ghost,
-  .sto-control-ghost,
-  .sto-control--link {
+  .sto-control:is(.sto-control--ghost, .sto-control--link) {
+    --sto-disabled-source-background: var(--sto-control-ghost-background);
+    --sto-disabled-source-border: var(--sto-control-ghost-background);
     background-color: var(--sto-control-ghost-background);
     border-color: var(--sto-control-ghost-background);
   }
 
-  .sto-control--link { color: var(--sto-info-primary); }
+  .sto-control--link {
+    --sto-disabled-source-foreground: var(--sto-info-primary);
+    color: var(--sto-info-primary);
+  }
 
-  .sto-control--field,
-  .sto-control-field {
+  .sto-control--field {
+    --sto-disabled-source-background: var(--sto-control-field-background);
+    --sto-disabled-source-border: var(--sto-control-field-border);
+    --sto-disabled-source-foreground: var(--sto-control-field-foreground);
     background-color: var(--sto-control-field-background);
     border-color: var(--sto-control-field-border);
     color: var(--sto-control-field-foreground);
@@ -167,154 +147,55 @@
     -webkit-backdrop-filter: var(--sto-control-field-backdrop-filter);
   }
 
-  .sto-control:hover,
-  .sto-control[data-state='hover'] {
+  .sto-control:not([class*='sto-control--']):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-hover-bg);
     border-color: var(--sto-border-heavy);
     color: var(--sto-text-primary);
   }
 
-  .sto-control--primary:hover,
-  .sto-control--primary[data-state='hover'] {
+  .sto-control--primary:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-primary-hover-background);
     border-color: var(--sto-control-primary-hover-background);
-    color: var(--sto-control-primary-foreground);
   }
 
-  .sto-control--destructive:hover,
-  .sto-control--destructive[data-state='hover'] {
+  .sto-control--destructive:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-destructive-hover-background);
     border-color: var(--sto-control-destructive-hover-background);
-    color: var(--sto-control-destructive-foreground);
   }
 
-  .sto-control--outline:hover,
-  .sto-control--outline[data-state='hover'],
-  .sto-control-outline:hover,
-  .sto-control-outline[data-state='hover'] {
+  .sto-control--outline:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-outline-hover-background);
-    border-color: var(--sto-control-outline-border);
-    color: var(--sto-control-default-foreground);
   }
 
-  .sto-control--secondary:hover,
-  .sto-control--secondary[data-state='hover'],
-  .sto-control-secondary:hover,
-  .sto-control-secondary[data-state='hover'] {
+  .sto-control--secondary:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-secondary-hover-background);
-    border-color: var(--sto-border-default);
-    color: var(--sto-control-secondary-foreground);
   }
 
-  .sto-control--ghost:hover,
-  .sto-control--ghost[data-state='hover'],
-  .sto-control-ghost:hover,
-  .sto-control-ghost[data-state='hover'] {
+  .sto-control--ghost:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-ghost-hover-background);
-    border-color: var(--sto-control-ghost-background);
     color: var(--sto-control-default-foreground);
   }
 
-  .sto-control--field:hover,
-  .sto-control--field[data-state='hover'],
-  .sto-control-field:hover,
-  .sto-control-field[data-state='hover'] {
+  .sto-control--field:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-field-background);
     border-color: var(--sto-control-field-border);
     color: var(--sto-control-field-foreground);
   }
 
-  .sto-control:active,
-  .sto-control[data-state='active'] {
-    background-color: var(--sto-control-active-bg);
-    border-color: var(--sto-border-heavy);
-    color: var(--sto-text-primary);
-  }
-
-  .sto-control--primary:active,
-  .sto-control--primary[data-state='active'] {
-    background-color: var(--sto-control-primary-hover-background);
-    border-color: var(--sto-control-primary-hover-background);
-    color: var(--sto-control-primary-foreground);
-  }
-
-  .sto-control--destructive:active,
-  .sto-control--destructive[data-state='active'] {
-    background-color: var(--sto-control-destructive-hover-background);
-    border-color: var(--sto-control-destructive-hover-background);
-    color: var(--sto-control-destructive-foreground);
-  }
-
-  .sto-control:focus-visible,
-  .sto-control:has(:focus-visible),
-  .sto-control[data-state='focus'] {
-    background-color: var(--sto-control-bg);
-    border-color: var(--sto-border-default);
-    color: var(--sto-text-primary);
-    outline-color: var(--sto-focus-ring);
-    outline-style: solid;
-    outline-width: 2px;
+  .sto-control:is(:focus-visible, [data-sto-state='focus']),
+  .sto-control--neutral-field:has(:focus-visible) {
+    outline: 2px solid transparent;
     outline-offset: 2px;
+    box-shadow: var(--sto-control-focus-shadow);
   }
 
-  .sto-control--primary:focus-visible,
-  .sto-control--primary[data-state='focus'] {
-    background-color: var(--sto-brand-primary);
-    border-color: var(--sto-brand-primary);
-    color: var(--sto-control-primary-foreground);
-  }
-
-  .sto-control--destructive:focus-visible,
-  .sto-control--destructive[data-state='focus'] {
-    background-color: var(--sto-danger-primary);
-    border-color: var(--sto-danger-primary);
-    color: var(--sto-control-destructive-foreground);
-  }
-
-  .sto-control--outline:focus-visible,
-  .sto-control--outline[data-state='focus'],
-  .sto-control-outline:focus-visible,
-  .sto-control-outline[data-state='focus'] {
-    background-color: var(--sto-control-outline-background);
-    border-color: var(--sto-control-outline-border);
-    color: var(--sto-control-default-foreground);
-  }
-
-  .sto-control--secondary:focus-visible,
-  .sto-control--secondary[data-state='focus'],
-  .sto-control-secondary:focus-visible,
-  .sto-control-secondary[data-state='focus'] {
-    background-color: var(--sto-control-secondary-background);
-    border-color: var(--sto-border-default);
-    color: var(--sto-control-secondary-foreground);
-  }
-
-  .sto-control--ghost:focus-visible,
-  .sto-control--ghost[data-state='focus'],
-  .sto-control-ghost:focus-visible,
-  .sto-control-ghost[data-state='focus'],
-  .sto-control--link:focus-visible,
-  .sto-control--link[data-state='focus'] {
-    background-color: var(--sto-control-ghost-background);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-control-default-foreground);
-  }
-
-  .sto-control--field:focus-visible,
-  .sto-control--field[data-state='focus'],
-  .sto-control-field:focus-visible,
-  .sto-control-field[data-state='focus'] {
-    background-color: var(--sto-control-field-background);
-    border-color: var(--sto-control-field-border);
-    color: var(--sto-control-field-foreground);
-  }
-
-  .sto-control--link:focus-visible,
-  .sto-control--link[data-state='focus'] { color: var(--sto-info-primary); }
-
-  .sto-control--neutral-outline,
-  .sto-control--neutral-outline-default,
-  .sto-control--neutral-field {
+  .sto-control:is(.sto-control--neutral-outline, .sto-control--neutral-outline-default, .sto-control--neutral-field) {
+    --sto-disabled-source-background: var(--sto-control-bg);
+    --sto-disabled-source-border: var(--sto-border-default);
+    --sto-disabled-source-foreground: var(--sto-control-neutral-foreground);
+    --sto-neutral-disabled-background: var(--sto-disabled-source-background);
+    --sto-neutral-disabled-border: var(--sto-disabled-source-border);
+    --sto-neutral-disabled-foreground: var(--sto-disabled-source-foreground);
     background-color: var(--sto-control-bg);
     border-color: var(--sto-border-default);
     color: var(--sto-control-neutral-foreground);
@@ -322,155 +203,70 @@
     -webkit-backdrop-filter: none;
   }
 
-  .sto-control--neutral-outline { border-color: var(--sto-control-neutral-edge-border); }
-
-  .sto-control--neutral-outline:hover,
-  .sto-control--neutral-outline[data-state='hover'],
-  .sto-control--neutral-outline-default:hover,
-  .sto-control--neutral-outline-default[data-state='hover'] {
-    background-color: var(--sto-control-hover-bg);
-    color: var(--sto-control-neutral-foreground);
-  }
-
-  .sto-control--neutral-field:hover,
-  .sto-control--neutral-field[data-state='hover'] {
-    background-color: var(--sto-control-bg);
-    border-color: var(--sto-border-default);
-    color: var(--sto-control-neutral-foreground);
-  }
-
-  .sto-control--neutral-outline:active,
-  .sto-control--neutral-outline[data-state='active'],
-  .sto-control--neutral-outline-default:active,
-  .sto-control--neutral-outline-default[data-state='active'] {
-    background-color: var(--sto-control-hover-bg);
-    color: var(--sto-control-neutral-foreground);
-  }
-
-  .sto-control--neutral-outline:focus-visible,
-  .sto-control--neutral-outline[data-state='focus'],
-  .sto-control--neutral-outline-default:focus-visible,
-  .sto-control--neutral-outline-default[data-state='focus'],
-  .sto-control--neutral-field:focus-visible,
-  .sto-control--neutral-field:has(:focus-visible),
-  .sto-control--neutral-field[data-state='focus'] {
-    background-color: var(--sto-control-bg);
-    border-color: var(--sto-border-default);
-    color: var(--sto-control-neutral-foreground);
-  }
-
-  .sto-control--neutral-outline:focus-visible,
-  .sto-control--neutral-outline[data-state='focus'] {
+  .sto-control--neutral-outline {
+    --sto-disabled-source-border: var(--sto-control-neutral-edge-border);
     border-color: var(--sto-control-neutral-edge-border);
   }
 
-  .sto-control:disabled,
-  .sto-control[aria-disabled='true'],
-  .sto-control[data-disabled],
-  .sto-control[data-state='disabled'] {
-    background-color: var(--sto-control-disabled-background);
-    border-color: var(--sto-control-disabled-border);
-    color: var(--sto-control-disabled-foreground);
+  .sto-control:is(.sto-control--neutral-outline, .sto-control--neutral-outline-default):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
+    background-color: var(--sto-control-hover-bg);
+    color: var(--sto-control-neutral-foreground);
   }
 
-  .sto-control[data-state='loading'] {
-    background-color: var(--sto-loading-background);
-    border-color: var(--sto-loading-border);
-    color: var(--sto-loading-foreground);
+  .sto-control--neutral-field:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
+    background-color: var(--sto-control-bg);
+    border-color: var(--sto-border-default);
+    color: var(--sto-control-neutral-foreground);
   }
 
-  .sto-control[aria-invalid='true'],
-  .sto-control[data-state='error'] {
-    background-color: var(--sto-feedback-error-background);
-    border-color: var(--sto-feedback-error-border);
-    color: var(--sto-feedback-error-foreground);
-  }
-
-  /* Navigation recipe. */
+  /* Navigation recipe: Radix highlighted/open remain native meanings. */
   .sto-navigation-item {
+    --sto-disabled-source-background: var(--sto-control-ghost-background);
+    --sto-disabled-source-border: var(--sto-control-ghost-background);
+    --sto-disabled-source-foreground: var(--sto-sidebar-text-default);
     background-color: var(--sto-control-ghost-background);
     border-color: var(--sto-control-ghost-background);
     color: var(--sto-sidebar-text-default);
-  }
-
-  .sto-navigation-item:hover,
-  .sto-navigation-item[data-highlighted],
-  .sto-navigation-item[data-state='hover'] {
-    background-color: var(--sto-sidebar-row-hover-bg);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-sidebar-text-active);
-  }
-
-  .sto-navigation-item[aria-current='page'],
-  .sto-navigation-item[aria-selected='true'],
-  .sto-navigation-item[data-state='open'],
-  .sto-navigation-item[data-state='active'] {
-    background-color: var(--sto-sidebar-nav-active-bg);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-sidebar-text-active);
-  }
-
-  .sto-navigation-item:focus-visible,
-  .sto-navigation-item[data-state='focus'] {
-    background-color: var(--sto-control-ghost-background);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-sidebar-text-default);
-    outline-color: var(--sto-focus-ring);
-    outline-style: solid;
-    outline-width: 2px;
-    outline-offset: 2px;
-  }
-
-  .sto-navigation-item[aria-disabled='true'],
-  .sto-navigation-item[data-disabled],
-  .sto-navigation-item[data-state='disabled'] {
-    background-color: var(--sto-navigation-disabled-background);
-    border-color: var(--sto-navigation-disabled-border);
-    color: var(--sto-navigation-disabled-foreground);
-  }
-
-  .sto-navigation-item[data-state='loading'] {
-    background-color: var(--sto-loading-background);
-    border-color: var(--sto-loading-border);
-    color: var(--sto-loading-foreground);
-  }
-
-  .sto-navigation-item[aria-invalid='true'],
-  .sto-navigation-item[data-state='error'] {
-    background-color: var(--sto-feedback-error-background);
-    border-color: var(--sto-feedback-error-border);
-    color: var(--sto-feedback-error-foreground);
   }
 
   .sto-navigation-item--menu {
+    --sto-disabled-source-background: var(--sto-navigation-menu-background);
+    --sto-disabled-source-border: var(--sto-navigation-menu-background);
+    --sto-disabled-source-foreground: var(--sto-navigation-menu-foreground);
     background-color: var(--sto-navigation-menu-background);
     border-color: var(--sto-navigation-menu-background);
     color: var(--sto-navigation-menu-foreground);
   }
 
-  .sto-navigation-item--menu:hover,
-  .sto-navigation-item--menu[data-highlighted],
-  .sto-navigation-item--menu[data-state='hover'] {
+  .sto-navigation-item:is(:hover, [data-highlighted], [data-sto-state='hover'], [data-sto-state='focus']) {
+    background-color: var(--sto-sidebar-row-hover-bg);
+    color: var(--sto-sidebar-text-active);
+  }
+
+  .sto-navigation-item--menu:is(:hover, [data-highlighted], [data-sto-state='hover'], [data-sto-state='focus']) {
     background-color: var(--sto-navigation-menu-hover-background);
     border-color: var(--sto-navigation-menu-background);
     color: var(--sto-navigation-menu-hover-foreground);
   }
 
-  .sto-navigation-item--menu[data-state='open'],
-  .sto-navigation-item--menu[data-state='active'] {
+  .sto-navigation-item:is([aria-current='page'], [aria-selected='true']),
+  .sto-navigation-item[data-state='open'] {
+    --sto-disabled-source-background: var(--sto-sidebar-nav-active-bg);
+    --sto-disabled-source-foreground: var(--sto-sidebar-text-active);
+    background-color: var(--sto-sidebar-nav-active-bg);
+    color: var(--sto-sidebar-text-active);
+  }
+
+  .sto-navigation-item--menu:is([aria-current='page'], [aria-selected='true']),
+  .sto-navigation-item--menu[data-state='open'] {
+    --sto-disabled-source-background: var(--sto-navigation-menu-hover-background);
+    --sto-disabled-source-foreground: var(--sto-navigation-menu-hover-foreground);
     background-color: var(--sto-navigation-menu-hover-background);
     border-color: var(--sto-navigation-menu-background);
     color: var(--sto-navigation-menu-hover-foreground);
   }
 
-  .sto-navigation-item--menu:focus-visible,
-  .sto-navigation-item--menu[data-state='focus'] {
-    background-color: var(--sto-navigation-menu-background);
-    border-color: var(--sto-navigation-menu-background);
-    color: var(--sto-navigation-menu-foreground);
-  }
-
-  /* Segment track is a surface; items own the seven interaction states. */
+  /* Segment track is a surface; items preserve Radix active/inactive. */
   .sto-segment-track {
     background-color: var(--sto-segment-track-background);
     border-color: var(--sto-segment-track-border);
@@ -478,203 +274,81 @@
     -webkit-backdrop-filter: var(--sto-segment-track-backdrop-filter);
   }
 
+  .sto-segment-track--plain { background-color: var(--sto-segment-plain-track-background); }
+
   .sto-segment-item {
+    --sto-disabled-source-background: var(--sto-control-ghost-background);
+    --sto-disabled-source-border: var(--sto-control-ghost-background);
+    --sto-disabled-source-foreground: var(--sto-segment-default-foreground);
     background-color: var(--sto-control-ghost-background);
     border-color: var(--sto-control-ghost-background);
     color: var(--sto-segment-default-foreground);
   }
 
-  .sto-segment-item:hover,
-  .sto-segment-item[data-state='hover'] {
+  .sto-segment-item--plain {
+    --sto-disabled-source-foreground: var(--sto-segment-plain-foreground);
+    color: var(--sto-segment-plain-foreground);
+  }
+
+  .sto-segment-item:is(:hover, [data-sto-state='hover']) {
     background-color: var(--sto-segment-hover-background);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-segment-default-foreground);
   }
 
-  .sto-segment-item:active,
-  .sto-segment-item[aria-selected='true'],
-  .sto-segment-item[data-state='active'] {
-    background-color: var(--sto-segment-selected-background);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-segment-selected-foreground);
-    box-shadow: var(--sto-segment-selected-shadow);
-  }
-
-  .sto-segment-track--plain { background-color: var(--sto-segment-plain-track-background); }
-
-  .sto-segment-item--plain { color: var(--sto-segment-plain-foreground); }
-
-  .sto-segment-item--plain:hover,
-  .sto-segment-item--plain[data-state='hover'] {
+  .sto-segment-item--plain:is(:hover, [data-sto-state='hover']) {
     background-color: var(--sto-segment-plain-hover-background);
     color: var(--sto-text-primary);
   }
 
-  .sto-segment-item--plain[aria-selected='true'],
-  .sto-segment-item--selected,
-  .sto-segment-item--plain[data-state='active'] {
+  .sto-segment-item:is(:active, [aria-selected='true']),
+  .sto-segment-item[data-state='active'],
+  .sto-segment-item[data-sto-state='active'] {
+    --sto-disabled-source-background: var(--sto-segment-selected-background);
+    --sto-disabled-source-foreground: var(--sto-segment-selected-foreground);
+    background-color: var(--sto-segment-selected-background);
+    color: var(--sto-segment-selected-foreground);
+    box-shadow: var(--sto-segment-selected-shadow);
+  }
+
+  .sto-segment-item--plain:is([aria-selected='true'], .sto-segment-item--selected),
+  .sto-segment-item--plain[data-state='active'],
+  .sto-segment-item--plain[data-sto-state='active'] {
+    --sto-disabled-source-background: var(--sto-segment-plain-background);
+    --sto-disabled-source-foreground: var(--sto-segment-plain-selected-foreground);
     background-color: var(--sto-segment-plain-background);
     color: var(--sto-segment-plain-selected-foreground);
     box-shadow: none;
   }
 
-  .sto-segment-item:focus-visible,
-  .sto-segment-item[data-state='focus'] {
-    background-color: var(--sto-control-ghost-background);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-segment-default-foreground);
-    outline-color: var(--sto-focus-ring);
-    outline-style: solid;
-    outline-width: 2px;
+  .sto-segment-item:is(:focus-visible, [data-sto-state='focus']) {
+    outline: 2px solid transparent;
     outline-offset: 2px;
+    box-shadow: var(--sto-control-focus-shadow);
   }
 
-  .sto-segment-item[aria-selected='true']:focus-visible,
-  .sto-segment-item[data-state='active']:focus-visible {
-    background-color: var(--sto-segment-selected-background);
-    border-color: var(--sto-control-ghost-background);
-    color: var(--sto-segment-selected-foreground);
-  }
-
-  .sto-segment-item--plain[aria-selected='true']:focus-visible,
-  .sto-segment-item--selected:focus-visible {
-    background-color: var(--sto-segment-plain-background);
-    color: var(--sto-segment-plain-selected-foreground);
-  }
-
-  .sto-segment-item:disabled,
-  .sto-segment-item[aria-disabled='true'],
-  .sto-segment-item[data-disabled],
-  .sto-segment-item[data-state='disabled'] {
-    background-color: var(--sto-segment-disabled-background);
-    border-color: var(--sto-segment-disabled-border);
-    color: var(--sto-segment-disabled-foreground);
-  }
-
-  .sto-segment-item[data-state='loading'] {
-    background-color: var(--sto-loading-background);
-    border-color: var(--sto-loading-border);
-    color: var(--sto-loading-foreground);
-  }
-
-  .sto-segment-item[aria-invalid='true'],
-  .sto-segment-item[data-state='error'] {
-    background-color: var(--sto-feedback-error-background);
-    border-color: var(--sto-feedback-error-border);
-    color: var(--sto-feedback-error-foreground);
-  }
-
-  /* Overlay recipe. */
-  .sto-overlay {
+  /* Overlay states remain color-stable; containers gain no new focus outline. */
+  .sto-overlay,
+  .sto-overlay:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
     background-color: var(--sto-overlay-background);
     border-color: var(--sto-overlay-border);
     color: var(--sto-overlay-foreground);
   }
 
-  .sto-overlay:hover,
-  .sto-overlay[data-state='hover'] {
-    background-color: var(--sto-overlay-background);
-    border-color: var(--sto-overlay-border);
-    color: var(--sto-overlay-foreground);
-  }
-
-  .sto-overlay:active,
-  .sto-overlay[data-state='active'] {
-    background-color: var(--sto-overlay-background);
-    border-color: var(--sto-border-heavy);
-    color: var(--sto-overlay-foreground);
-  }
-
-  .sto-overlay:focus-visible,
-  .sto-overlay:has(:focus-visible),
-  .sto-overlay[data-state='focus'] {
-    background-color: var(--sto-overlay-background);
-    border-color: var(--sto-overlay-border);
-    color: var(--sto-overlay-foreground);
-    outline-color: var(--sto-focus-ring);
-    outline-style: solid;
-    outline-width: 2px;
-    outline-offset: 2px;
-  }
-
-  .sto-overlay[aria-disabled='true'],
-  .sto-overlay[data-state='disabled'] {
-    background-color: var(--sto-overlay-disabled-background);
-    border-color: var(--sto-overlay-disabled-border);
-    color: var(--sto-overlay-disabled-foreground);
-  }
-
-  .sto-overlay[data-state='loading'] {
-    background-color: var(--sto-loading-background);
-    border-color: var(--sto-loading-border);
-    color: var(--sto-loading-foreground);
-  }
-
-  .sto-overlay[aria-invalid='true'],
-  .sto-overlay[data-state='error'] {
-    background-color: var(--sto-feedback-error-background);
-    border-color: var(--sto-feedback-error-border);
-    color: var(--sto-feedback-error-foreground);
-  }
-
-  .sto-overlay--glass-border,
-  .sto-overlay-glass-border { border-color: var(--sto-overlay-glass-border); }
-
+  .sto-overlay--glass-border { border-color: var(--sto-overlay-glass-border); }
   .sto-overlay.glass { box-shadow: var(--sto-overlay-glass-shadow); }
-
   .sto-overlay-scrim { background-color: var(--sto-overlay-scrim); }
 
-  /* Feedback recipe and functional variants. */
-  .sto-feedback {
+  /* Feedback recipe: functional status is the only chromatic surface family. */
+  .sto-feedback,
+  .sto-feedback:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
     background-color: var(--sto-feedback-info-background);
     border-color: var(--sto-feedback-info-border);
     color: var(--sto-feedback-info-foreground);
   }
 
-  .sto-feedback:hover,
-  .sto-feedback[data-state='hover'] {
-    background-color: var(--sto-feedback-info-background);
-    border-color: var(--sto-feedback-info-border);
-    color: var(--sto-feedback-info-foreground);
-  }
-
-  .sto-feedback:active,
-  .sto-feedback[data-state='active'] {
-    background-color: var(--sto-feedback-info-background);
-    border-color: var(--sto-feedback-info-border);
-    color: var(--sto-feedback-info-foreground);
-  }
-
-  .sto-feedback:focus-visible,
-  .sto-feedback[data-state='focus'] {
-    background-color: var(--sto-feedback-info-background);
-    border-color: var(--sto-feedback-info-border);
-    color: var(--sto-feedback-info-foreground);
-    outline-color: var(--sto-focus-ring);
-    outline-style: solid;
-    outline-width: 2px;
+  .sto-feedback:is(:focus-visible, [data-sto-state='focus']) {
+    outline: 2px solid transparent;
     outline-offset: 2px;
-  }
-
-  .sto-feedback[aria-disabled='true'],
-  .sto-feedback[data-state='disabled'] {
-    background-color: var(--sto-feedback-disabled-background);
-    border-color: var(--sto-feedback-disabled-border);
-    color: var(--sto-feedback-disabled-foreground);
-  }
-
-  .sto-feedback[data-state='loading'] {
-    background-color: var(--sto-loading-background);
-    border-color: var(--sto-loading-border);
-    color: var(--sto-loading-foreground);
-  }
-
-  .sto-feedback[aria-invalid='true'],
-  .sto-feedback[data-state='error'],
-  .sto-feedback[data-variant='error'] {
-    background-color: var(--sto-feedback-error-background);
-    border-color: var(--sto-feedback-error-border);
-    color: var(--sto-feedback-error-foreground);
+    box-shadow: var(--sto-control-focus-shadow);
   }
 
   .sto-feedback[data-variant='success'] {
@@ -687,5 +361,46 @@
     background-color: var(--sto-feedback-warning-background);
     border-color: var(--sto-feedback-warning-border);
     color: var(--sto-feedback-warning-foreground);
+  }
+
+  /* Canonical async/error attributes never collide with Radix data-state. */
+  :is(.sto-card, .sto-control, .sto-navigation-item, .sto-segment-item, .sto-overlay, .sto-feedback)[aria-busy='true'] {
+    background-color: var(--sto-loading-background);
+    border-color: var(--sto-loading-border);
+    color: var(--sto-loading-foreground);
+  }
+
+  :is(.sto-card, .sto-control, .sto-navigation-item, .sto-segment-item, .sto-overlay, .sto-feedback)[aria-invalid='true'],
+  .sto-feedback[data-variant='error'] {
+    background-color: var(--sto-feedback-error-background);
+    border-color: var(--sto-feedback-error-border);
+    color: var(--sto-feedback-error-foreground);
+  }
+
+  /* Disabled is the terminal state and therefore follows every status rule. */
+  :is(.sto-control, .sto-navigation-item, .sto-segment-item) {
+    --sto-interactive-disabled-background: color-mix(in srgb, var(--sto-disabled-source-background) 50%, transparent);
+    --sto-interactive-disabled-border: color-mix(in srgb, var(--sto-disabled-source-border) 50%, transparent);
+    --sto-interactive-disabled-foreground: color-mix(in srgb, var(--sto-disabled-source-foreground) 50%, transparent);
+  }
+
+  :is(.sto-card, .sto-overlay, .sto-feedback):is([aria-disabled='true'], [data-disabled]) {
+    background-color: var(--sto-disabled-background);
+    border-color: var(--sto-disabled-border);
+    color: var(--sto-disabled-foreground);
+  }
+
+  :is(.sto-control, .sto-navigation-item, .sto-segment-item):is(:disabled, [aria-disabled='true'], [data-disabled]),
+  .sto-control:has(:disabled) {
+    background-color: var(--sto-interactive-disabled-background);
+    border-color: var(--sto-interactive-disabled-border);
+    color: var(--sto-interactive-disabled-foreground);
+  }
+
+  .sto-control:is(.sto-control--neutral-outline, .sto-control--neutral-outline-default, .sto-control--neutral-field):is(:disabled, [aria-disabled='true'], [data-disabled]),
+  .sto-control--neutral-field:has(:disabled) {
+    background-color: var(--sto-neutral-disabled-background);
+    border-color: var(--sto-neutral-disabled-border);
+    color: var(--sto-neutral-disabled-foreground);
   }
 }

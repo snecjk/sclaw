@@ -307,7 +307,7 @@ const requiredSemanticFragments: Record<(typeof taskSixFiles)[number], readonly 
     'sto-control sto-control--ghost',
   ],
   'src/components/ui/input.tsx': [
-    'sto-control-field',
+    'sto-control--field',
   ],
   'src/components/ui/tabs.tsx': [
     'sto-segment-track',
@@ -315,7 +315,7 @@ const requiredSemanticFragments: Record<(typeof taskSixFiles)[number], readonly 
   ],
   'src/components/ui/dropdown-menu.tsx': [
     'sto-overlay',
-    'sto-overlay-glass-border',
+    'sto-overlay--glass-border',
   ],
   'src/components/file-preview/SaveArtifactDialog.tsx': [
     'dark:bg-[var(--sto-surface-secondary)]',

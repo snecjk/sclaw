@@ -26,6 +26,22 @@ describe('neutral presentational controls', () => {
     expect(onValueChange).toHaveBeenCalledWith('pdf');
   });
 
+  it('lets the shared recipe detect a disabled input inside the search-field root', () => {
+    render(
+      <StoSearchField
+        value=""
+        onValueChange={() => undefined}
+        placeholder="Search"
+        disabled
+      />,
+    );
+
+    const shell = screen.getByRole('searchbox').closest('label');
+    expect(shell).not.toBeNull();
+    expect(shell).toHaveClass('sto-control');
+    expect(shell?.matches('.sto-control:has(:disabled)')).toBe(true);
+  });
+
   it('reports tab changes to its owner with accessible tab semantics', () => {
     const onValueChange = vi.fn();
 
