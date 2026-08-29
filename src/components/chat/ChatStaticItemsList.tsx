@@ -3,13 +3,14 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   type RefObject,
 } from 'react';
 import {
+  createOlderHistoryScrollController,
   measureChatScroll,
-  shouldArmOlderHistoryLoader,
-  shouldLoadOlderHistoryFromScroll,
+  restoreScrollAfterPrepend,
 } from '@/components/chat/chat-static-items-scroll';
 import type { RawMessage } from '@/stores/chat';
 import type { AttachedFileMeta } from '@/stores/chat';
@@ -131,34 +132,50 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
     const onReachStartRef = useRef(onReachStart);
     onReachStartRef.current = onReachStart;
     const tailKey = items[items.length - 1]?.key ?? '';
+    const firstKey = items[0]?.key ?? '';
     const enableOlderHistory = typeof onReachStart === 'function';
+    const prependAnchorRef = useRef({ firstKey, count: items.length, scrollHeight: 0 });
+
+    useLayoutEffect(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const previous = prependAnchorRef.current;
+      const prepended = Boolean(
+        firstKey
+        && previous.firstKey
+        && firstKey !== previous.firstKey
+        && items.length > previous.count,
+      );
+      if (prepended) {
+        restoreScrollAfterPrepend(el, previous.scrollHeight);
+      }
+      prependAnchorRef.current = {
+        firstKey,
+        count: items.length,
+        scrollHeight: el.scrollHeight,
+      };
+    }, [firstKey, items.length, scrollRef]);
 
     useEffect(() => {
       if (!enableOlderHistory) return;
       const el = scrollRef.current;
       if (!el) return;
 
-      let armed = false;
-      const syncArm = () => {
-        const metrics = measureChatScroll(el);
-        if (!armed && shouldArmOlderHistoryLoader(metrics)) {
-          armed = true;
-        }
-      };
+      const controller = createOlderHistoryScrollController();
       const onScroll = () => {
-        syncArm();
-        if (shouldLoadOlderHistoryFromScroll(armed, measureChatScroll(el))) {
+        if (controller.onMetrics(measureChatScroll(el)) === 'load') {
           onReachStartRef.current?.();
         }
       };
 
       el.addEventListener('scroll', onScroll, { passive: true });
-      const resizeObserver = new ResizeObserver(syncArm);
+      const resizeObserver = new ResizeObserver(onScroll);
       resizeObserver.observe(el);
-      syncArm();
+      onScroll();
       return () => {
         el.removeEventListener('scroll', onScroll);
         resizeObserver.disconnect();
+        controller.reset();
       };
     }, [scrollRef, tailKey, enableOlderHistory]);
 

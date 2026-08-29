@@ -329,8 +329,13 @@ export function createHistoryLoadActions(
 
     loadOlderHistory: async (requestedSessionKey?: string, options?: { drain?: boolean }) => {
       const targetSessionKey = requestedSessionKey ?? get().currentSessionKey;
-      if (_olderHistoryLoadInFlight.has(targetSessionKey) || _historyLoadInFlight.has(targetSessionKey)) {
+      if (_olderHistoryLoadInFlight.has(targetSessionKey)) {
         return _olderHistoryLoadInFlight.get(targetSessionKey);
+      }
+      const blockingHistory = _historyLoadInFlight.get(targetSessionKey);
+      if (blockingHistory) {
+        await blockingHistory;
+        return get().loadOlderHistory(targetSessionKey, options);
       }
       const engineType = resolveEngineTypeForSession(
         get().sessions,
@@ -363,7 +368,9 @@ export function createHistoryLoadActions(
           : [];
         const latest = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey]?.transcript ?? [];
         const merged = prependHistoryPage(latest, olderMessages);
-        const totalCount = readHistoryTotalCount(data.totalCount, merged.length);
+        const totalCount = olderMessages.length === 0
+          ? merged.length
+          : Math.max(readHistoryTotalCount(data.totalCount, merged.length), merged.length);
         if (get().currentSessionKey === targetSessionKey) {
           applyLoadedHistorySnapshot({
             get,

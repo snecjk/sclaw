@@ -37,3 +37,47 @@ export function shouldLoadOlderHistoryFromScroll(
 ): boolean {
   return armed && metrics.atTop && !metrics.atBottom;
 }
+
+export type OlderHistoryScrollDecision = 'load' | 'idle';
+
+/**
+ * One trigger per visit to the top. After firing, wait until the user leaves
+ * the top (or prepend restores them away from 0) so a single rest does not
+ * drain every remaining page.
+ */
+export function createOlderHistoryScrollController(): {
+  onMetrics: (metrics: ChatScrollMetrics) => OlderHistoryScrollDecision;
+  reset: () => void;
+} {
+  let armed = false;
+  let holdUntilLeaveTop = false;
+  return {
+    onMetrics(metrics) {
+      if (!armed && shouldArmOlderHistoryLoader(metrics)) {
+        armed = true;
+      }
+      if (holdUntilLeaveTop) {
+        if (!metrics.atTop) holdUntilLeaveTop = false;
+        return 'idle';
+      }
+      if (shouldLoadOlderHistoryFromScroll(armed, metrics)) {
+        holdUntilLeaveTop = true;
+        return 'load';
+      }
+      return 'idle';
+    },
+    reset() {
+      armed = false;
+      holdUntilLeaveTop = false;
+    },
+  };
+}
+
+export function restoreScrollAfterPrepend(
+  el: Pick<HTMLElement, 'scrollTop' | 'scrollHeight'>,
+  previousScrollHeight: number,
+): number {
+  const delta = el.scrollHeight - previousScrollHeight;
+  if (delta > 0) el.scrollTop += delta;
+  return el.scrollHeight;
+}
