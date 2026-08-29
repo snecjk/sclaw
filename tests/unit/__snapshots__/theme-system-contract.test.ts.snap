@@ -459,6 +459,21 @@ exports[`theme system contract > keeps renderer and preview theme mappings in to
 ]
 `;
 
+exports[`theme system contract > keeps renderer and preview theme mappings in tokens.css 2`] = `
+[
+  {
+    "file": "src/styles/globals.css",
+    "reason": "Migration debt: Task 4 moves this semantic theme mapping into the canonical tokens.css owner.",
+    "selector": ":root",
+  },
+  {
+    "file": "src/styles/globals.css",
+    "reason": "Migration debt: Task 4 moves this semantic theme mapping into the canonical tokens.css owner.",
+    "selector": ".dark",
+  },
+]
+`;
+
 exports[`theme system contract > reuses tokens.css in preview code instead of maintaining a second palette 1`] = `
 [
   {

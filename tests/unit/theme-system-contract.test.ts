@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { extname, relative, resolve } from 'node:path';
 import postcss from 'postcss';
+import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const themeTokensPath = resolve(process.cwd(), 'src/styles/theme/tokens.css');
@@ -27,6 +28,125 @@ function declarationsFor(source: string, selector: string): Record<string, strin
   return declarations;
 }
 
+function directDeclarations(rule: postcss.Rule): postcss.Declaration[] {
+  return (rule.nodes ?? []).filter((node): node is postcss.Declaration => node.type === 'decl');
+}
+
+function semanticMappingSelectors(source: string): Set<string> {
+  const selectors = new Set<string>();
+  if (!source) return selectors;
+
+  postcss.parse(source).walkRules((rule) => {
+    const hasSemanticMapping = directDeclarations(rule).some((declaration) =>
+      declaration.prop.startsWith('--sto-') && declaration.value.trim().length > 0,
+    );
+    if (!hasSemanticMapping) return;
+    for (const selector of rule.selectors) selectors.add(selector);
+  });
+  return selectors;
+}
+
+function missingSemanticMappings(source: string, requiredSelectors: readonly string[]): string[] {
+  const definedSelectors = semanticMappingSelectors(source);
+  return requiredSelectors.filter((selector) => !definedSelectors.has(selector));
+}
+
+function selectorContainsRecipe(selector: string, recipe: string): boolean {
+  const escapedRecipe = recipe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escapedRecipe}(?=[\\s:.[#>,+~]|$)`).test(selector);
+}
+
+function missingSemanticRecipes(source: string, requiredRecipes: readonly string[]): string[] {
+  const semanticRecipes = new Set<string>();
+  if (!source) return [...requiredRecipes];
+
+  postcss.parse(source).walkRules((rule) => {
+    const consumesSemanticVariable = directDeclarations(rule).some((declaration) =>
+      declaration.value.includes('var(--sto-'),
+    );
+    if (!consumesSemanticVariable) return;
+
+    for (const recipe of requiredRecipes) {
+      if (rule.selectors.some((selector) => selectorContainsRecipe(selector, recipe))) {
+        semanticRecipes.add(recipe);
+      }
+    }
+  });
+  return requiredRecipes.filter((recipe) => !semanticRecipes.has(recipe));
+}
+
+function templateUsesIdentifier(node: ts.Node, identifier: string): boolean {
+  let consumed = false;
+  const visit = (candidate: ts.Node): void => {
+    if (ts.isTemplateExpression(candidate)) {
+      for (const span of candidate.templateSpans) {
+        const inspectExpression = (expressionNode: ts.Node): void => {
+          if (ts.isIdentifier(expressionNode) && expressionNode.text === identifier) consumed = true;
+          expressionNode.forEachChild(inspectExpression);
+        };
+        inspectExpression(span.expression);
+      }
+    }
+    candidate.forEachChild(visit);
+  };
+  visit(node);
+  return consumed;
+}
+
+function returnedTemplateUsesIdentifier(
+  declaration: ts.FunctionDeclaration,
+  identifier: string,
+): boolean {
+  let consumed = false;
+  const visit = (node: ts.Node): void => {
+    if (ts.isReturnStatement(node) && node.expression) {
+      if (templateUsesIdentifier(node.expression, identifier)) consumed = true;
+      return;
+    }
+    if (node !== declaration && ts.isFunctionLike(node)) return;
+    node.forEachChild(visit);
+  };
+  declaration.body?.forEachChild(visit);
+  return consumed;
+}
+
+function previewTokenContractGaps(source: string): Array<{ requirement: string; reason: string }> {
+  const sourceFile = ts.createSourceFile('preview-srcdoc.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  let importedIdentifier: string | undefined;
+  let previewBuilder: ts.FunctionDeclaration | undefined;
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isImportDeclaration(statement)
+      && ts.isStringLiteral(statement.moduleSpecifier)
+      && statement.moduleSpecifier.text === '@/styles/theme/tokens.css?raw') {
+      importedIdentifier = statement.importClause?.name?.text;
+    }
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === 'buildPreviewThemeStyle') {
+      previewBuilder = statement;
+    }
+  }
+
+  const gaps: Array<{ requirement: string; reason: string }> = [];
+  if (!importedIdentifier) {
+    gaps.push({
+      requirement: 'import tokens.css?raw',
+      reason: 'Migration debt: Task 4 makes adaptive preview consume the canonical token stylesheet.',
+    });
+  } else if (!previewBuilder || !returnedTemplateUsesIdentifier(previewBuilder, importedIdentifier)) {
+    gaps.push({
+      requirement: `consume imported ${importedIdentifier} in returned preview style`,
+      reason: 'Contract violation: the canonical token import must be interpolated into buildPreviewThemeStyle output.',
+    });
+  }
+
+  const duplicatePalette = source.match(/--sto-preview-[\w-]+:\s*(?:#|rgba?\()/g) ?? [];
+  gaps.push(...duplicatePalette.map((value) => ({
+    requirement: `remove duplicate preview literal ${value}`,
+    reason: 'Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.',
+  })));
+  return gaps;
+}
+
 function sourceFiles(directory: string, extensions: readonly string[]): Array<{ file: string; source: string }> {
   return readdirSync(directory, { withFileTypes: true })
     .sort((left, right) => left.name.localeCompare(right.name))
@@ -42,6 +162,69 @@ function sourceFiles(directory: string, extensions: readonly string[]): Array<{ 
 }
 
 describe('theme system contract', () => {
+  it('does not accept empty or commented token mappings', () => {
+    const source = `
+      /* :root { --sto-text-primary: #111111; } */
+      :root {}
+      html[data-sto-theme='light'] { color-scheme: light; }
+    `;
+    expect(missingSemanticMappings(source, [
+      ':root',
+      "html[data-sto-theme='light']",
+    ])).toEqual([
+      ':root',
+      "html[data-sto-theme='light']",
+    ]);
+    expect(missingSemanticMappings(`
+      :root,
+      html[data-sto-theme='light'] { --sto-text-primary: #111111; }
+    `, [':root', "html[data-sto-theme='light']"])).toEqual([]);
+  });
+
+  it('does not accept recipe names in comments or empty recipe rules', () => {
+    const source = `
+      /* .sto-card { color: var(--sto-text-primary); } */
+      .sto-control {}
+      .sto-overlay { display: block; }
+    `;
+    const requiredRecipes = ['.sto-card', '.sto-control', '.sto-overlay'];
+    expect(missingSemanticRecipes(source, requiredRecipes)).toEqual(requiredRecipes);
+    expect(missingSemanticRecipes(`
+      .sto-card { color: var(--sto-text-primary); }
+      .sto-control:hover { background: var(--sto-control-hover-bg); }
+      .dark .sto-overlay { border-color: var(--sto-border-default); }
+    `, requiredRecipes)).toEqual([]);
+  });
+
+  it('does not accept an unused canonical token import in preview code', () => {
+    const source = `
+      import themeTokensCss from '@/styles/theme/tokens.css?raw';
+      function buildPreviewThemeStyle() {
+        return \`<style data-sto-preview-theme>body { color: red; }</style>\`;
+      }
+    `;
+    expect(previewTokenContractGaps(source)).toEqual([{
+      requirement: 'consume imported themeTokensCss in returned preview style',
+      reason: 'Contract violation: the canonical token import must be interpolated into buildPreviewThemeStyle output.',
+    }]);
+    expect(previewTokenContractGaps(`
+      import themeTokensCss from '@/styles/theme/tokens.css?raw';
+      function buildPreviewThemeStyle() {
+        const unused = \`\${themeTokensCss}\`;
+        return \`<style data-sto-preview-theme>body { color: red; }</style>\`;
+      }
+    `)).toEqual([{
+      requirement: 'consume imported themeTokensCss in returned preview style',
+      reason: 'Contract violation: the canonical token import must be interpolated into buildPreviewThemeStyle output.',
+    }]);
+    expect(previewTokenContractGaps(`
+      import themeTokensCss from '@/styles/theme/tokens.css?raw';
+      function buildPreviewThemeStyle() {
+        return \`<style data-sto-preview-theme>\${themeTokensCss}</style>\`;
+      }
+    `)).toEqual([]);
+  });
+
   it('keeps theme ownership in the two approved production CSS files', () => {
     expect(existsSync(themeTokensPath)).toBe(true);
     expect(existsSync(themeRecipesPath)).toBe(true);
@@ -99,25 +282,30 @@ describe('theme system contract', () => {
 
   it('keeps renderer and preview theme mappings in tokens.css', () => {
     const tokens = readIfPresent(themeTokensPath);
-    const selectors = new Set<string>();
-    postcss.parse(tokens).walkRules((rule) => {
-      for (const selector of rule.selectors) selectors.add(selector);
-    });
-
     const requiredSelectors = [
       ':root',
       "html[data-sto-theme='light']",
       '.dark',
       "html[data-sto-theme='dark']",
     ];
-    const missingSelectors = requiredSelectors
-      .filter((selector) => !selectors.has(selector))
+    const missingSelectors = missingSemanticMappings(tokens, requiredSelectors)
       .map((selector) => ({
         selector,
         reason: 'Migration debt: Task 4 adds the explicit data-sto-theme selector to the canonical token owner.',
       }));
 
     expect(missingSelectors).toMatchSnapshot();
+
+    const unexpectedOwners = sourceFiles(resolve(process.cwd(), 'src'), ['.css'])
+      .filter(({ file }) => file !== 'src/styles/theme/tokens.css')
+      .flatMap(({ file, source }) => [...semanticMappingSelectors(source)]
+        .filter((selector) => requiredSelectors.includes(selector))
+        .map((selector) => ({
+          file,
+          selector,
+          reason: 'Migration debt: Task 4 moves this semantic theme mapping into the canonical tokens.css owner.',
+        })));
+    expect(unexpectedOwners).toMatchSnapshot();
   });
 
   it('keeps all shared visual state families in recipes.css', () => {
@@ -130,8 +318,7 @@ describe('theme system contract', () => {
       '.sto-overlay',
       '.sto-feedback',
     ];
-    const missingRecipes = requiredRecipes
-      .filter((recipe) => !new RegExp(`${recipe.replace('.', '\\.')}(?:[\\s:{.#\\[])`).test(recipes))
+    const missingRecipes = missingSemanticRecipes(recipes, requiredRecipes)
       .map((recipe) => ({
         recipe,
         reason: 'Migration debt: Task 5 completes this shared state family in recipes.css.',
@@ -147,7 +334,7 @@ describe('theme system contract', () => {
       'src/styles/theme/recipes.css',
     ]);
     const darkSelectors = sourceFiles(srcRoot, ['.css']).flatMap(({ file, source }) =>
-      cssOwners.has(file) || !/^\s*\.dark\b/m.test(source) ? [] : [file],
+      cssOwners.has(file) || !/^[\t ]*\.dark\b/m.test(source) ? [] : [file],
     );
     const darkUtilities = sourceFiles(srcRoot, ['.tsx']).flatMap(({ file, source }) =>
       /dark:(?:bg|text|border|shadow|ring)-/.test(source) ? [file] : [],
@@ -167,18 +354,6 @@ describe('theme system contract', () => {
 
   it('reuses tokens.css in preview code instead of maintaining a second palette', () => {
     const previewSource = readFileSync(resolve(process.cwd(), 'src/lib/preview-srcdoc.ts'), 'utf8');
-    const importsCanonicalTokens = /import\s+\w+\s+from\s+['"]@\/styles\/theme\/tokens\.css\?raw['"]/.test(previewSource);
-    const duplicatePalette = previewSource.match(/--sto-preview-[\w-]+:\s*(?:#|rgba?\()/g) ?? [];
-
-    expect([
-      ...(!importsCanonicalTokens ? [{
-        requirement: 'import tokens.css?raw',
-        reason: 'Migration debt: Task 4 makes adaptive preview consume the canonical token stylesheet.',
-      }] : []),
-      ...duplicatePalette.map((value) => ({
-        requirement: `remove duplicate preview literal ${value}`,
-        reason: 'Migration debt: Task 4 removes this exact preview palette copy after adding the canonical import.',
-      })),
-    ]).toMatchSnapshot();
+    expect(previewTokenContractGaps(previewSource)).toMatchSnapshot();
   });
 });
