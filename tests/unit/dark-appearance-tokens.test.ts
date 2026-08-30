@@ -436,8 +436,10 @@ describe('dark appearance semantic tokens', () => {
     expect(parameterFormCardSource).toContain('text-[var(--sto-text-primary)]');
     expect(parameterFormFieldSource).toContain('bg-[var(--sto-form-inset-background)]');
     expect(parameterFormFieldSource).toContain('text-[var(--sto-text-tertiary)]');
-    expect(parameterOptionCardSource).toContain('bg-[var(--sto-form-disabled-background)]');
-    expect(parameterOptionCardSource).toContain('text-[var(--sto-text-secondary)]');
+    expect(parameterOptionCardSource).toContain('sto-card sto-card--parameter-option');
+    expect(parameterOptionCardSource).toContain('bg-[var(--sto-disabled-background)]');
+    expect(parameterOptionCardSource).toContain('text-[var(--sto-disabled-foreground)]');
+    expect(parameterOptionCardSource).not.toContain('opacity-60');
   });
 
   it('keeps the dark content canvas deeper than the sidebar and selection surfaces', () => {

@@ -48,7 +48,6 @@ const taskEightPairs = [
   ['--sto-control-fill-hover-background', '#d7dae0', 'var(--sto-border-heavy)'],
   ['--sto-border-interactive', '#d8dce4', 'var(--sto-border-heavy)'],
   ['--sto-border-hairline', '#f0f1f4', 'var(--sto-border-default)'],
-  ['--sto-surface-soft-neutral', '#f3f4f6', 'var(--sto-surface-elevated)'],
   ['--sto-feedback-favorite-foreground', '#f59e0b', '#f59e0b'],
   ['--sto-feedback-favorite-active-foreground', '#e11d48', '#fb7185'],
   ['--sto-control-showcase-foreground', '#1a73e8', 'var(--sto-link-foreground)'],

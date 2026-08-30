@@ -3395,43 +3395,15 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#1d2129::: rgba(189, 243, 207, 0.5); --sto-art-app-plaza-node-icon-foreground: #1d2129; --sto-art-app-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-t::1",
+    "key": "src/components/more-apps/more-apps.css::rawColor::#1d2129::: rgba(189, 243, 207, 0.5); --sto-art-app-plaza-node-icon-foreground: #1d2129; --sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#b0b7c3::za-node-icon-foreground: #1d2129; --sto-art-app-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-tag-official-bg: #eef4ff; --sto-art-app-plaza-::1",
+    "key": "src/components/more-apps/more-apps.css::rawColor::#d6e8ff::ground: #1d2129; --sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%); --sto-art-app-plaza-hero-border: rgba::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#eef4ff::p-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-tag-official-bg: #eef4ff; --sto-art-app-plaza-tag-official-fg: #3b6fd4; --sto-art-app-plaza-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#3b6fd4::-plaza-tag-official-bg: #eef4ff; --sto-art-app-plaza-tag-official-fg: #3b6fd4; --sto-art-app-plaza-tag-external-bg: #f5f3ff; --sto-art-app-plaza-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#f5f3ff::-plaza-tag-official-fg: #3b6fd4; --sto-art-app-plaza-tag-external-bg: #f5f3ff; --sto-art-app-plaza-tag-external-fg: #6d28d9; --sto-art-app-plaza-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#6d28d9::-plaza-tag-external-bg: #f5f3ff; --sto-art-app-plaza-tag-external-fg: #6d28d9; --sto-art-app-plaza-tag-hot-bg: #fff1e6; --sto-art-app-plaza-tag-h::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#fff1e6::t-app-plaza-tag-external-fg: #6d28d9; --sto-art-app-plaza-tag-hot-bg: #fff1e6; --sto-art-app-plaza-tag-hot-fg: #c56a00; --sto-art-app-plaza-hero-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#c56a00::to-art-app-plaza-tag-hot-bg: #fff1e6; --sto-art-app-plaza-tag-hot-fg: #c56a00; --sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#d6e8ff::hot-fg: #c56a00; --sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%); --sto-art-app-plaza-hero-border: rgba::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#c8ddff::a00; --sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%); --sto-art-app-plaza-hero-border: rgba(26, 115, 23::1",
+    "key": "src/components/more-apps/more-apps.css::rawColor::#c8ddff::129; --sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%); --sto-art-app-plaza-hero-border: rgba(26, 115, 23::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

@@ -558,10 +558,6 @@ describe('repository-wide theme source audit', () => {
       '.page-more-apps .app-market__hero-dot--active',
       '.page-more-apps .app-market__hero-banner',
       '.page-more-apps .app-market__hero-image-fallback-text',
-      '.page-more-apps .app-market__cat-count',
-      '.page-more-apps .more-apps-tag--official',
-      '.page-more-apps .more-apps-tag--external',
-      '.page-more-apps .more-apps-tag--hot',
     ]);
     const approvedWorkflowArtworkSelectors = new Set([
       '.wf-canvas-node-icon',
@@ -610,6 +606,28 @@ describe('repository-wide theme source audit', () => {
         background: var(--sto-art-workflow-parallel-background);
       }
     `)).toEqual(['.workflow-node-library-item']);
+  });
+
+  it('keeps App Plaza metadata out of the artwork namespace and page-owned state colors', () => {
+    const moreAppsSource = readFileSync(
+      resolve(process.cwd(), 'src/components/more-apps/more-apps.css'),
+      'utf8',
+    );
+    const appCardSource = readFileSync(
+      resolve(process.cwd(), 'src/components/more-apps/AppCard.tsx'),
+      'utf8',
+    );
+    const pageSource = readFileSync(
+      resolve(process.cwd(), 'src/components/more-apps/MoreAppsPage.tsx'),
+      'utf8',
+    );
+
+    expect(moreAppsSource).not.toMatch(/--sto-art-app-plaza-(?:metadata|tag)-/);
+    expect(moreAppsSource).not.toMatch(/\.more-apps-tag--(?:official|external|hot)/);
+    expect(moreAppsSource).not.toMatch(/\.more-apps-card__use:hover|\.more-apps-card__use\s*\{[^}]*cursor:/s);
+    expect(appCardSource).toContain('sto-feedback--badge');
+    expect(appCardSource).toContain('data-variant={tag.variant}');
+    expect(pageSource).toContain('sto-navigation-item__count--metadata');
   });
 
   it('keeps Task 8 UI roles consolidated below the reviewed one-off baseline', () => {

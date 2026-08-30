@@ -4,13 +4,6 @@
   /* Authored art data is fixed across appearances; ordinary UI uses theme roles directly. */
   --sto-art-app-plaza-node-icon-fill: rgba(189, 243, 207, 0.5);
   --sto-art-app-plaza-node-icon-foreground: #1d2129;
-  --sto-art-app-plaza-metadata-count: #b0b7c3;
-  --sto-art-app-plaza-tag-official-bg: #eef4ff;
-  --sto-art-app-plaza-tag-official-fg: #3b6fd4;
-  --sto-art-app-plaza-tag-external-bg: #f5f3ff;
-  --sto-art-app-plaza-tag-external-fg: #6d28d9;
-  --sto-art-app-plaza-tag-hot-bg: #fff1e6;
-  --sto-art-app-plaza-tag-hot-fg: #c56a00;
   --sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%);
   --sto-art-app-plaza-hero-border: rgba(26, 115, 232, 0.14);
   --sto-art-app-plaza-hero-shadow: 0 8px 24px rgba(26, 115, 232, 0.1);
@@ -644,7 +637,6 @@
 }
 
 .page-more-apps .app-market__cat-count {
-  color: var(--sto-art-app-plaza-metadata-count);
   font-variant-numeric: tabular-nums;
 }
 
@@ -925,25 +917,8 @@
 .page-more-apps .more-apps-tag {
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--sto-surface-soft-neutral);
   font-size: 11px;
   font-weight: 500;
-  color: var(--sto-text-tertiary);
-}
-
-.page-more-apps .more-apps-tag--official {
-  background: var(--sto-art-app-plaza-tag-official-bg);
-  color: var(--sto-art-app-plaza-tag-official-fg);
-}
-
-.page-more-apps .more-apps-tag--external {
-  background: var(--sto-art-app-plaza-tag-external-bg);
-  color: var(--sto-art-app-plaza-tag-external-fg);
-}
-
-.page-more-apps .more-apps-tag--hot {
-  background: var(--sto-art-app-plaza-tag-hot-bg);
-  color: var(--sto-art-app-plaza-tag-hot-fg);
 }
 
 .page-more-apps .more-apps-card__foot {
@@ -984,11 +959,6 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--sto-brand-primary);
-  cursor: pointer;
-}
-
-.page-more-apps .more-apps-card__use:hover {
-  text-decoration: underline;
 }
 
 .page-more-apps .more-apps-card__favorite {

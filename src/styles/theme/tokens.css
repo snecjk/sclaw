@@ -130,6 +130,10 @@
     --sto-feedback-error-foreground: var(--sto-toast-error-icon);
     --sto-feedback-error-background: var(--sto-toast-error-bg);
     --sto-feedback-error-border: var(--sto-toast-error-border);
+    --sto-metadata-count-foreground: #b0b7c3;
+    --sto-badge-official-background: #eef4ff; --sto-badge-official-foreground: #3b6fd4;
+    --sto-badge-external-background: #f5f3ff; --sto-badge-external-foreground: #6d28d9;
+    --sto-badge-hot-background: #fff1e6; --sto-badge-hot-foreground: #c56a00;
 
     /* Variant mappings preserve the approved light component values. */
     --sto-card-default-background: hsl(var(--glass-bg) / var(--glass-opacity));
@@ -391,7 +395,6 @@
     --sto-control-fill-hover-background: #d7dae0;
     --sto-border-interactive: #d8dce4;
     --sto-border-hairline: #f0f1f4;
-    --sto-surface-soft-neutral: #f3f4f6;
     --sto-feedback-favorite-foreground: #f59e0b;
     --sto-feedback-favorite-active-foreground: #e11d48;
     --sto-control-showcase-foreground: #1a73e8;
@@ -531,6 +534,10 @@
 
     --sto-disabled-background: var(--sto-surface-secondary);
     --sto-loading-background: var(--sto-surface-secondary);
+    --sto-metadata-count-foreground: var(--sto-text-tertiary);
+    --sto-badge-official-background: var(--sto-feedback-info-background); --sto-badge-official-foreground: var(--sto-feedback-info-foreground);
+    --sto-badge-external-background: hsl(265 35% 18%); --sto-badge-external-foreground: hsl(265 78% 72%);
+    --sto-badge-hot-background: var(--sto-toast-warning-bg); --sto-badge-hot-foreground: var(--sto-toast-warning-icon);
     --sto-card-default-background: var(--sto-card-panel-bg);
     --sto-card-default-border: var(--sto-border-default);
     --sto-card-default-shadow: none;
@@ -747,7 +754,6 @@
     --sto-control-fill-hover-background: var(--sto-border-heavy);
     --sto-border-interactive: var(--sto-border-heavy);
     --sto-border-hairline: var(--sto-border-default);
-    --sto-surface-soft-neutral: var(--sto-surface-elevated);
     --sto-feedback-favorite-foreground: #f59e0b;
     --sto-feedback-favorite-active-foreground: #fb7185;
     --sto-control-showcase-foreground: var(--sto-link-foreground);

@@ -76,6 +76,7 @@ export function OptionCardList({
               key={String(option.value)}
               type="button"
               disabled={!interactive}
+              aria-disabled={!interactive ? 'true' : undefined}
               onClick={() => {
                 if (!interactive) return;
                 if (mode === 'single') {
@@ -86,6 +87,7 @@ export function OptionCardList({
               }}
               className={cn(
                 'flex w-full items-start text-left transition-colors duration-fast',
+                !isDock && 'sto-card sto-card--parameter-option',
                 isDock
                   ? 'gap-3 rounded-[10px] p-2'
                   : 'gap-3 rounded-xl border px-4 py-3.5 transition-all',
@@ -97,12 +99,11 @@ export function OptionCardList({
                     : selected
                       ? parameterFormDockOptionSelectedClass
                       : parameterFormDockOptionHoverClass
-                  : isDisplay
-                    ? 'border-[var(--sto-border-default)] bg-[var(--sto-form-disabled-background)]'
+                  : !interactive
+                    ? 'border-[var(--sto-disabled-border)] bg-[var(--sto-disabled-background)] text-[var(--sto-disabled-foreground)]'
                     : selected
                       ? 'border-[var(--sto-form-selected-border)] bg-[var(--sto-form-selected-background)] shadow-[var(--sto-shadow-brand-subtle)]'
                       : 'border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] hover:border-[var(--sto-form-option-hover-border)]',
-                option.disabled && 'opacity-60',
               )}
             >
               <span
@@ -115,7 +116,12 @@ export function OptionCardList({
                           ? 'bg-muted text-muted-foreground'
                           : 'bg-primary text-primary-foreground',
                       )
-                    : 'mt-0.5 h-6 w-6 rounded-full bg-[var(--sto-brand-6)] text-[11px] font-bold text-white',
+                    : cn(
+                        'mt-0.5 h-6 w-6 rounded-full text-[11px] font-bold',
+                        interactive
+                          ? 'bg-[var(--sto-brand-6)] text-white'
+                          : 'bg-[var(--sto-disabled-background)] text-[var(--sto-disabled-foreground)]',
+                      ),
                 )}
               >
                 {index + 1}
@@ -125,7 +131,14 @@ export function OptionCardList({
                   <span
                     className={cn(
                       'font-medium leading-[18px] text-foreground',
-                      isDock ? 'text-sm' : 'text-[14px] font-semibold leading-snug text-[var(--sto-text-primary)]',
+                      isDock
+                        ? 'text-sm'
+                        : cn(
+                            'text-[14px] font-semibold leading-snug',
+                            interactive
+                              ? 'text-[var(--sto-text-primary)]'
+                              : 'text-[var(--sto-disabled-foreground)]',
+                          ),
                     )}
                   >
                     {option.label}
@@ -139,7 +152,12 @@ export function OptionCardList({
                     className={cn(
                       isDock
                         ? 'mt-0.5 text-xs leading-[14px] text-muted-foreground'
-                        : 'mt-1 text-[12.5px] leading-relaxed text-[var(--sto-text-tertiary)]',
+                        : cn(
+                            'mt-1 text-[12.5px] leading-relaxed',
+                            interactive
+                              ? 'text-[var(--sto-text-tertiary)]'
+                              : 'text-[var(--sto-disabled-foreground)]',
+                          ),
                     )}
                   >
                     {option.description}

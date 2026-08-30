@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Approved theme fixture</title>
     <style>
+      @layer base, fixture, components;
+      @layer fixture {
       @font-face {
         font-family: 'Fixture Sans';
         src: url('./LiberationSans-Regular.ttf') format('truetype');
@@ -21,68 +23,6 @@
         font-display: block;
       }
 
-      :root {
-        color-scheme: light;
-        --canvas: #f7f8fa;
-        --panel: #fafafa;
-        --sidebar: #ededed;
-        --elevated: #ffffff;
-        --text-primary: #1d2129;
-        --text-secondary: #4e5969;
-        --text-tertiary: #86909c;
-        --border: #e5e6eb;
-        --border-strong: #c9cdd4;
-        --hover: #f2f3f5;
-        --active: #e5e6eb;
-        --accent: #ff6f00;
-        --accent-soft: #fff3e0;
-        --error: #fa3c3c;
-        --error-soft: #fff2f0;
-        --error-border: #ffe4e0;
-        --success: #31af65;
-        --success-soft: #eaf6ee;
-        --success-border: #c8ead6;
-        --info: #4760fe;
-        --info-soft: #f0f4ff;
-        --info-border: #d6e1ff;
-        --warning: #f4aa17;
-        --warning-soft: #fffbe6;
-        --warning-border: #fff1b8;
-        --scrim: rgba(0, 0, 0, 0.4);
-        --shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-      }
-
-      html.dark {
-        color-scheme: dark;
-        --canvas: #0d0d0d;
-        --panel: #181818;
-        --sidebar: #212121;
-        --elevated: #282828;
-        --text-primary: #dfdfdf;
-        --text-secondary: rgba(255, 255, 255, 0.70);
-        --text-tertiary: rgba(255, 255, 255, 0.50);
-        --border: rgba(255, 255, 255, 0.08);
-        --border-strong: rgba(255, 255, 255, 0.16);
-        --hover: #282828;
-        --active: #282828;
-        --accent: #ff6f00;
-        --accent-soft: hsl(32 45% 14%);
-        --error: hsl(0 72% 56%);
-        --error-soft: hsl(0 40% 14%);
-        --error-border: hsl(0 45% 24%);
-        --success: hsl(130 60% 48%);
-        --success-soft: hsl(140 30% 14%);
-        --success-border: hsl(140 35% 24%);
-        --info: hsl(231 92% 72%);
-        --info-soft: hsl(231 35% 18%);
-        --info-border: hsl(231 40% 28%);
-        --warning: hsl(38 90% 52%);
-        --warning-soft: hsl(43 45% 14%);
-        --warning-border: hsl(43 50% 24%);
-        --scrim: rgba(0, 0, 0, 0.6);
-        --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-      }
-
       * {
         box-sizing: border-box;
       }
@@ -96,8 +36,8 @@
       }
 
       body {
-        background: var(--canvas);
-        color: var(--text-primary);
+        background: var(--sto-surface-canvas);
+        color: var(--sto-text-primary);
         font-family: 'Fixture Sans';
         font-size: 13px;
         -webkit-font-smoothing: antialiased;
@@ -127,15 +67,15 @@
       }
 
       .masthead p {
-        color: var(--text-secondary);
+        color: var(--sto-text-secondary);
         margin: 0;
       }
 
       .theme-chip {
-        background: var(--sidebar);
-        border: 1px solid var(--border);
+        background: var(--sto-sidebar);
+        border: 1px solid var(--sto-border);
         border-radius: 999px;
-        color: var(--text-secondary);
+        color: var(--sto-text-secondary);
         padding: 8px 12px;
       }
 
@@ -148,8 +88,8 @@
       }
 
       .recipe {
-        background: var(--panel);
-        border: 1px solid var(--border);
+        background: var(--sto-panel);
+        border: 1px solid var(--sto-border);
         border-radius: 14px;
         min-height: 0;
         padding: 14px;
@@ -168,7 +108,7 @@
       }
 
       .recipe-header span {
-        color: var(--text-tertiary);
+        color: var(--sto-text-tertiary);
         font-size: 11px;
         letter-spacing: 0.5px;
         text-transform: uppercase;
@@ -181,8 +121,8 @@
       }
 
       .state-cell {
-        background: var(--canvas);
-        border: 1px solid var(--border);
+        background: var(--sto-canvas);
+        border: 1px solid var(--sto-border);
         border-radius: 9px;
         height: 151px;
         min-width: 0;
@@ -190,7 +130,7 @@
       }
 
       .state-label {
-        color: var(--text-tertiary);
+        color: var(--sto-text-tertiary);
         display: block;
         font-size: 10px;
         letter-spacing: 0.4px;
@@ -203,10 +143,10 @@
 
       .sample {
         align-items: center;
-        background: var(--elevated);
-        border: 1px solid var(--border);
+        background: var(--sto-surface-elevated);
+        border: 1px solid var(--sto-border-default);
         border-radius: 8px;
-        color: var(--text-primary);
+        color: var(--sto-text-primary);
         display: flex;
         justify-content: center;
         min-height: 105px;
@@ -215,36 +155,10 @@
       }
 
       .sample .minor {
-        color: var(--text-secondary);
+        color: var(--sto-text-secondary);
         display: block;
         font-size: 11px;
         margin-top: 5px;
-      }
-
-      .is-hover {
-        background: var(--hover);
-        border-color: var(--border-strong);
-      }
-
-      .is-active {
-        background: var(--active);
-        border-color: var(--border-strong);
-      }
-
-      .is-focus {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
-      }
-
-      .is-disabled {
-        color: var(--text-tertiary);
-        opacity: 0.52;
-      }
-
-      .is-error {
-        background: var(--error-soft);
-        border-color: var(--error-border);
-        color: var(--error);
       }
 
       .loading-dots {
@@ -253,7 +167,7 @@
       }
 
       .loading-dots i {
-        background: var(--text-tertiary);
+        background: var(--sto-text-tertiary);
         border-radius: 50%;
         height: 6px;
         width: 6px;
@@ -268,7 +182,7 @@
       }
 
       .card-sample::before {
-        background: var(--accent-soft);
+        background: var(--sto-form-selected-background);
         border-radius: 6px;
         content: '';
         height: 28px;
@@ -277,7 +191,7 @@
       }
 
       .card-sample.is-loading::after {
-        background: color-mix(in srgb, var(--elevated) 72%, transparent);
+        background: color-mix(in srgb, var(--sto-surface-elevated) 72%, transparent);
         border-radius: inherit;
         content: '•••';
         inset: 0;
@@ -293,8 +207,8 @@
 
       .control-face {
         align-items: center;
-        background: var(--elevated);
-        border: 1px solid var(--border);
+        background: var(--sto-surface-elevated);
+        border: 1px solid var(--sto-border-default);
         border-radius: 7px;
         display: flex;
         height: 36px;
@@ -315,7 +229,7 @@
 
       .navigation-sample {
         align-items: stretch;
-        background: var(--sidebar);
+        background: var(--sto-sidebar);
         border: 0;
         flex-direction: column;
         gap: 5px;
@@ -326,7 +240,7 @@
         align-items: center;
         border: 1px solid transparent;
         border-radius: 6px;
-        color: var(--text-secondary);
+        color: var(--sto-text-secondary);
         display: flex;
         gap: 7px;
         height: 25px;
@@ -357,8 +271,8 @@
       }
 
       .segment-track {
-        background: var(--sidebar);
-        border: 1px solid var(--border);
+        background: var(--sto-sidebar);
+        border: 1px solid var(--sto-border-default);
         border-radius: 8px;
         display: flex;
         padding: 3px;
@@ -366,14 +280,14 @@
 
       .segment-item {
         border-radius: 5px;
-        color: var(--text-tertiary);
+        color: var(--sto-text-tertiary);
         padding: 7px 8px;
       }
 
       .segment-item.selected {
-        background: var(--elevated);
+        background: var(--sto-surface-elevated);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-        color: var(--text-primary);
+        color: var(--sto-text-primary);
       }
 
       .segment-sample.is-hover .selected,
@@ -387,17 +301,17 @@
       }
 
       .overlay-sample {
-        background: var(--scrim);
+        background: var(--sto-overlay-scrim);
         border: 0;
         padding: 12px;
       }
 
       .overlay-panel {
-        background: var(--elevated);
-        border: 1px solid var(--border);
+        background: var(--sto-surface-elevated);
+        border: 1px solid var(--sto-border-default);
         border-radius: 8px;
-        box-shadow: var(--shadow);
-        color: var(--text-primary);
+        box-shadow: var(--sto-overlay-shadow);
+        color: var(--sto-text-primary);
         padding: 12px 8px;
         width: 100%;
       }
@@ -407,48 +321,23 @@
       .overlay-sample.is-focus .overlay-panel,
       .overlay-sample.is-disabled .overlay-panel,
       .overlay-sample.is-error .overlay-panel {
-        background: var(--elevated);
+        background: var(--sto-surface-elevated);
         border-color: inherit;
         box-shadow: inherit;
         color: inherit;
       }
 
-      .feedback-sample {
-        align-items: flex-start;
-        background: var(--info-soft);
-        border-color: var(--info-border);
-        color: var(--info);
-        flex-direction: column;
-        padding: 12px;
-        text-align: left;
-      }
-
-      .feedback-sample.is-hover {
-        background: var(--success-soft);
-        border-color: var(--success-border);
-        color: var(--success);
-      }
-
-      .feedback-sample.is-active {
-        background: var(--warning-soft);
-        border-color: var(--warning-border);
-        color: var(--warning);
-      }
-
-      .feedback-sample.is-error {
-        background: var(--error-soft);
-        border-color: var(--error-border);
-        color: var(--error);
-      }
+      .feedback-sample { align-items: flex-start; flex-direction: column; padding: 12px; text-align: left; }
 
       .feedback-sample .minor {
-        color: var(--text-secondary);
+        color: var(--sto-text-secondary);
+      }
       }
     </style>
     <script>
       const theme = new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light'
       document.documentElement.className = theme
-      document.documentElement.dataset.theme = theme
+      document.documentElement.dataset.stoTheme = theme
     </script>
   </head>
   <body>
@@ -465,78 +354,78 @@
         <section class="recipe" data-testid="recipe-card">
           <header class="recipe-header"><h2>Card</h2><span>Surface</span></header>
           <div class="state-grid">
-            <div class="state-cell"><span class="state-label">Default</span><div class="sample card-sample" data-testid="card-default"><b>Agent card</b><span class="minor">Ready to run</span></div></div>
-            <div class="state-cell"><span class="state-label">Hover</span><div class="sample card-sample is-hover" data-testid="card-hover"><b>Agent card</b><span class="minor">Inspect details</span></div></div>
-            <div class="state-cell"><span class="state-label">Selected</span><div class="sample card-sample is-active" data-testid="card-selected"><b>Agent card</b><span class="minor">Selected</span></div></div>
-            <div class="state-cell"><span class="state-label">Focus</span><div class="sample card-sample is-focus" data-testid="card-focus"><b>Agent card</b><span class="minor">Keyboard focus</span></div></div>
-            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample card-sample is-disabled" data-testid="card-disabled"><b>Agent card</b><span class="minor">Unavailable</span></div></div>
-            <div class="state-cell"><span class="state-label">Loading</span><div class="sample card-sample is-loading" data-testid="card-loading"><b>Agent card</b><span class="minor">Loading</span></div></div>
-            <div class="state-cell"><span class="state-label">Error</span><div class="sample card-sample is-error" data-testid="card-error"><b>Agent card</b><span class="minor">Action failed</span></div></div>
+            <div class="state-cell"><span class="state-label">Default</span><div class="sample card-sample sto-card" data-testid="card-default"><b>Agent card</b><span class="minor">Ready to run</span></div></div>
+            <div class="state-cell"><span class="state-label">Hover</span><div class="sample card-sample sto-card" data-sto-state="hover" data-testid="card-hover"><b>Agent card</b><span class="minor">Inspect details</span></div></div>
+            <div class="state-cell"><span class="state-label">Selected</span><div class="sample card-sample sto-card" data-selected="true" data-testid="card-selected"><b>Agent card</b><span class="minor">Selected</span></div></div>
+            <div class="state-cell"><span class="state-label">Focus</span><div class="sample card-sample sto-card" data-sto-state="focus" data-testid="card-focus"><b>Agent card</b><span class="minor">Keyboard focus</span></div></div>
+            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample card-sample sto-card" aria-disabled="true" data-testid="card-disabled"><b>Agent card</b><span class="minor">Unavailable</span></div></div>
+            <div class="state-cell"><span class="state-label">Loading</span><div class="sample card-sample sto-card is-loading" aria-busy="true" data-testid="card-loading"><b>Agent card</b><span class="minor">Loading</span></div></div>
+            <div class="state-cell"><span class="state-label">Error</span><div class="sample card-sample sto-card" aria-invalid="true" data-testid="card-error"><b>Agent card</b><span class="minor">Action failed</span></div></div>
           </div>
         </section>
 
         <section class="recipe" data-testid="recipe-control">
           <header class="recipe-header"><h2>Control</h2><span>Input</span></header>
           <div class="state-grid">
-            <div class="state-cell"><span class="state-label">Default</span><div class="sample control-sample" data-testid="control-default"><div class="control-face">Continue</div></div></div>
-            <div class="state-cell"><span class="state-label">Hover</span><div class="sample control-sample is-hover" data-testid="control-hover"><div class="control-face">Continue</div></div></div>
-            <div class="state-cell"><span class="state-label">Active</span><div class="sample control-sample is-active" data-testid="control-active"><div class="control-face">Continue</div></div></div>
-            <div class="state-cell"><span class="state-label">Focus</span><div class="sample control-sample is-focus" data-testid="control-focus"><div class="control-face">Continue</div></div></div>
-            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample control-sample is-disabled" data-testid="control-disabled"><div class="control-face">Continue</div></div></div>
-            <div class="state-cell"><span class="state-label">Loading</span><div class="sample control-sample" data-testid="control-loading"><div class="control-face"><span class="loading-dots"><i></i><i></i><i></i></span></div></div></div>
-            <div class="state-cell"><span class="state-label">Error</span><div class="sample control-sample is-error" data-testid="control-error"><div class="control-face">Retry</div></div></div>
+            <div class="state-cell"><span class="state-label">Default</span><div class="sample control-sample sto-control sto-control--primary" data-testid="control-default"><div class="control-face">Continue</div></div></div>
+            <div class="state-cell"><span class="state-label">Hover</span><div class="sample control-sample sto-control sto-control--primary" data-sto-state="hover" data-testid="control-hover"><div class="control-face">Continue</div></div></div>
+            <div class="state-cell"><span class="state-label">Active</span><div class="sample control-sample sto-control sto-control--primary" data-sto-state="active" data-testid="control-active"><div class="control-face">Continue</div></div></div>
+            <div class="state-cell"><span class="state-label">Focus</span><div class="sample control-sample sto-control sto-control--primary" data-sto-state="focus" data-testid="control-focus"><div class="control-face">Continue</div></div></div>
+            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample control-sample sto-control sto-control--primary" aria-disabled="true" data-testid="control-disabled"><div class="control-face">Continue</div></div></div>
+            <div class="state-cell"><span class="state-label">Loading</span><div class="sample control-sample sto-control sto-control--primary" aria-busy="true" data-testid="control-loading"><div class="control-face"><span class="loading-dots"><i></i><i></i><i></i></span></div></div></div>
+            <div class="state-cell"><span class="state-label">Error</span><div class="sample control-sample sto-control sto-control--primary" aria-invalid="true" data-testid="control-error"><div class="control-face">Retry</div></div></div>
           </div>
         </section>
 
         <section class="recipe" data-testid="recipe-navigation">
           <header class="recipe-header"><h2>Navigation</h2><span>Sidebar</span></header>
           <div class="state-grid">
-            <div class="state-cell"><span class="state-label">Default</span><div class="sample navigation-sample" data-testid="navigation-default"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
-            <div class="state-cell"><span class="state-label">Hover</span><div class="sample navigation-sample is-hover" data-testid="navigation-hover"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
-            <div class="state-cell"><span class="state-label">Selected</span><div class="sample navigation-sample is-active" data-testid="navigation-selected"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
-            <div class="state-cell"><span class="state-label">Focus</span><div class="sample navigation-sample is-focus" data-testid="navigation-focus"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
-            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample navigation-sample is-disabled" data-testid="navigation-disabled"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
-            <div class="state-cell"><span class="state-label">Loading</span><div class="sample navigation-sample" data-testid="navigation-loading"><div class="nav-line"><span class="loading-dots"><i></i><i></i><i></i></span></div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
-            <div class="state-cell"><span class="state-label">Error</span><div class="sample navigation-sample is-error" data-testid="navigation-error"><div class="nav-line"><i class="nav-dot"></i>Reconnect</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
+            <div class="state-cell"><span class="state-label">Default</span><div class="sample navigation-sample sto-navigation-item sto-navigation-item--menu" data-testid="navigation-default"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
+            <div class="state-cell"><span class="state-label">Hover</span><div class="sample navigation-sample sto-navigation-item sto-navigation-item--menu" data-sto-state="hover" data-testid="navigation-hover"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
+            <div class="state-cell"><span class="state-label">Selected</span><div class="sample navigation-sample sto-navigation-item sto-navigation-item--menu" aria-selected="true" data-testid="navigation-selected"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
+            <div class="state-cell"><span class="state-label">Focus</span><div class="sample navigation-sample sto-navigation-item sto-navigation-item--menu" data-sto-state="focus" data-testid="navigation-focus"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
+            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample navigation-sample sto-navigation-item sto-navigation-item--menu" aria-disabled="true" data-testid="navigation-disabled"><div class="nav-line"><i class="nav-dot"></i>Home</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
+            <div class="state-cell"><span class="state-label">Loading</span><div class="sample navigation-sample sto-navigation-item sto-navigation-item--menu" aria-busy="true" data-testid="navigation-loading"><div class="nav-line"><span class="loading-dots"><i></i><i></i><i></i></span></div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
+            <div class="state-cell"><span class="state-label">Error</span><div class="sample navigation-sample sto-navigation-item sto-navigation-item--menu" aria-invalid="true" data-testid="navigation-error"><div class="nav-line"><i class="nav-dot"></i>Reconnect</div><div class="nav-line"><i class="nav-dot"></i>Tasks</div></div></div>
           </div>
         </section>
 
         <section class="recipe" data-testid="recipe-segment">
           <header class="recipe-header"><h2>Segment</h2><span>Selection</span></header>
           <div class="state-grid">
-            <div class="state-cell"><span class="state-label">Default</span><div class="sample segment-sample" data-testid="segment-default"><div class="segment-track"><span class="segment-item selected">List</span><span class="segment-item">Grid</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Hover</span><div class="sample segment-sample is-hover" data-testid="segment-hover"><div class="segment-track"><span class="segment-item selected">List</span><span class="segment-item">Grid</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Selected</span><div class="sample segment-sample is-active" data-testid="segment-selected"><div class="segment-track"><span class="segment-item">List</span><span class="segment-item selected">Grid</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Focus</span><div class="sample segment-sample is-focus" data-testid="segment-focus"><div class="segment-track"><span class="segment-item selected">List</span><span class="segment-item">Grid</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample segment-sample is-disabled" data-testid="segment-disabled"><div class="segment-track"><span class="segment-item selected">List</span><span class="segment-item">Grid</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Loading</span><div class="sample segment-sample" data-testid="segment-loading"><div class="segment-track"><span class="segment-item"><span class="loading-dots"><i></i><i></i><i></i></span></span></div></div></div>
-            <div class="state-cell"><span class="state-label">Error</span><div class="sample segment-sample is-error" data-testid="segment-error"><div class="segment-track"><span class="segment-item selected">Retry</span><span class="segment-item">Close</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Default</span><div class="sample segment-sample sto-segment-item" data-testid="segment-default"><div class="segment-track sto-segment-track"><span class="segment-item">List</span><span class="segment-item">Grid</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Hover</span><div class="sample segment-sample sto-segment-item" data-sto-state="hover" data-testid="segment-hover"><div class="segment-track sto-segment-track"><span class="segment-item">List</span><span class="segment-item">Grid</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Selected</span><div class="sample segment-sample sto-segment-item" data-state="active" data-testid="segment-selected"><div class="segment-track sto-segment-track"><span class="segment-item">List</span><span class="segment-item">Grid</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Focus</span><div class="sample segment-sample sto-segment-item" data-sto-state="focus" data-testid="segment-focus"><div class="segment-track sto-segment-track"><span class="segment-item">List</span><span class="segment-item">Grid</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample segment-sample sto-segment-item" aria-disabled="true" data-testid="segment-disabled"><div class="segment-track sto-segment-track"><span class="segment-item">List</span><span class="segment-item">Grid</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Loading</span><div class="sample segment-sample sto-segment-item" aria-busy="true" data-testid="segment-loading"><div class="segment-track sto-segment-track"><span class="segment-item"><span class="loading-dots"><i></i><i></i><i></i></span></span></div></div></div>
+            <div class="state-cell"><span class="state-label">Error</span><div class="sample segment-sample sto-segment-item" aria-invalid="true" data-testid="segment-error"><div class="segment-track sto-segment-track"><span class="segment-item">Retry</span><span class="segment-item">Close</span></div></div></div>
           </div>
         </section>
 
         <section class="recipe" data-testid="recipe-overlay">
           <header class="recipe-header"><h2>Overlay</h2><span>Elevation</span></header>
           <div class="state-grid">
-            <div class="state-cell"><span class="state-label">Default</span><div class="sample overlay-sample" data-testid="overlay-default"><div class="overlay-panel"><b>Details</b><span class="minor">Popover</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Hover</span><div class="sample overlay-sample is-hover" data-testid="overlay-hover"><div class="overlay-panel"><b>Details</b><span class="minor">Hovered</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Active</span><div class="sample overlay-sample is-active" data-testid="overlay-active"><div class="overlay-panel"><b>Details</b><span class="minor">Pressed</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Focus</span><div class="sample overlay-sample is-focus" data-testid="overlay-focus"><div class="overlay-panel"><b>Details</b><span class="minor">Focused</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample overlay-sample is-disabled" data-testid="overlay-disabled"><div class="overlay-panel"><b>Details</b><span class="minor">Disabled</span></div></div></div>
-            <div class="state-cell"><span class="state-label">Loading</span><div class="sample overlay-sample" data-testid="overlay-loading"><div class="overlay-panel"><span class="loading-dots"><i></i><i></i><i></i></span></div></div></div>
-            <div class="state-cell"><span class="state-label">Error</span><div class="sample overlay-sample is-error" data-testid="overlay-error"><div class="overlay-panel"><b>Error</b><span class="minor">Try again</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Default</span><div class="sample overlay-sample sto-overlay-scrim" data-testid="overlay-default"><div class="overlay-panel sto-overlay"><b>Details</b><span class="minor">Popover</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Hover</span><div class="sample overlay-sample sto-overlay-scrim" data-testid="overlay-hover"><div class="overlay-panel sto-overlay" data-sto-state="hover"><b>Details</b><span class="minor">Hovered</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Active</span><div class="sample overlay-sample sto-overlay-scrim" data-testid="overlay-active"><div class="overlay-panel sto-overlay" data-sto-state="active"><b>Details</b><span class="minor">Pressed</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Focus</span><div class="sample overlay-sample sto-overlay-scrim" data-testid="overlay-focus"><div class="overlay-panel sto-overlay" data-sto-state="focus"><b>Details</b><span class="minor">Focused</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample overlay-sample sto-overlay-scrim" data-testid="overlay-disabled"><div class="overlay-panel sto-overlay" aria-disabled="true"><b>Details</b><span class="minor">Disabled</span></div></div></div>
+            <div class="state-cell"><span class="state-label">Loading</span><div class="sample overlay-sample sto-overlay-scrim" data-testid="overlay-loading"><div class="overlay-panel sto-overlay" aria-busy="true"><span class="loading-dots"><i></i><i></i><i></i></span></div></div></div>
+            <div class="state-cell"><span class="state-label">Error</span><div class="sample overlay-sample sto-overlay-scrim" data-testid="overlay-error"><div class="overlay-panel sto-overlay" aria-invalid="true"><b>Error</b><span class="minor">Try again</span></div></div></div>
           </div>
         </section>
 
         <section class="recipe" data-testid="recipe-feedback">
           <header class="recipe-header"><h2>Feedback</h2><span>Status</span></header>
           <div class="state-grid">
-            <div class="state-cell"><span class="state-label">Default</span><div class="sample feedback-sample" data-testid="feedback-default"><b>Information</b><span class="minor">Connection ready</span></div></div>
-            <div class="state-cell"><span class="state-label">Hover</span><div class="sample feedback-sample is-hover" data-testid="feedback-hover"><b>Success</b><span class="minor">Changes saved</span></div></div>
-            <div class="state-cell"><span class="state-label">Active</span><div class="sample feedback-sample is-active" data-testid="feedback-active"><b>Warning</b><span class="minor">Review needed</span></div></div>
-            <div class="state-cell"><span class="state-label">Focus</span><div class="sample feedback-sample is-focus" data-testid="feedback-focus"><b>Information</b><span class="minor">Keyboard focus</span></div></div>
-            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample feedback-sample is-disabled" data-testid="feedback-disabled"><b>Notice</b><span class="minor">Dismissed</span></div></div>
-            <div class="state-cell"><span class="state-label">Loading</span><div class="sample feedback-sample" data-testid="feedback-loading"><b>Processing</b><span class="minor">Please wait</span></div></div>
-            <div class="state-cell"><span class="state-label">Error</span><div class="sample feedback-sample is-error" data-testid="feedback-error"><b>Failed</b><span class="minor">Try again</span></div></div>
+            <div class="state-cell"><span class="state-label">Default</span><div class="sample feedback-sample sto-feedback" data-testid="feedback-default"><b>Information</b><span class="minor">Connection ready</span></div></div>
+            <div class="state-cell"><span class="state-label">Success</span><div class="sample feedback-sample sto-feedback" data-variant="success" data-testid="feedback-hover"><b>Success</b><span class="minor">Changes saved</span></div></div>
+            <div class="state-cell"><span class="state-label">Warning</span><div class="sample feedback-sample sto-feedback" data-variant="warning" data-testid="feedback-active"><b>Warning</b><span class="minor">Review needed</span></div></div>
+            <div class="state-cell"><span class="state-label">Focus</span><div class="sample feedback-sample sto-feedback" data-sto-state="focus" data-testid="feedback-focus"><b>Information</b><span class="minor">Keyboard focus</span></div></div>
+            <div class="state-cell"><span class="state-label">Disabled</span><div class="sample feedback-sample sto-feedback" aria-disabled="true" data-testid="feedback-disabled"><b>Notice</b><span class="minor">Dismissed</span></div></div>
+            <div class="state-cell"><span class="state-label">Loading</span><div class="sample feedback-sample sto-feedback" aria-busy="true" data-testid="feedback-loading"><b>Processing</b><span class="minor">Please wait</span></div></div>
+            <div class="state-cell"><span class="state-label">Error</span><div class="sample feedback-sample sto-feedback" aria-invalid="true" data-variant="error" data-testid="feedback-error"><b>Failed</b><span class="minor">Try again</span></div></div>
           </div>
         </section>
       </div>

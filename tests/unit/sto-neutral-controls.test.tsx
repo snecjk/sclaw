@@ -26,7 +26,7 @@ describe('neutral presentational controls', () => {
     expect(onValueChange).toHaveBeenCalledWith('pdf');
   });
 
-  it('lets the shared recipe detect a disabled input inside the search-field root', () => {
+  it('marks only the neutral-field wrapper when its input is disabled', () => {
     render(
       <StoSearchField
         value=""
@@ -39,7 +39,9 @@ describe('neutral presentational controls', () => {
     const shell = screen.getByRole('searchbox').closest('label');
     expect(shell).not.toBeNull();
     expect(shell).toHaveClass('sto-control');
-    expect(shell?.matches('.sto-control:has(:disabled)')).toBe(true);
+    expect(shell).toHaveClass('sto-control--neutral-field');
+    expect(shell?.matches('.sto-control--neutral-field:has(:disabled)')).toBe(true);
+    expect(shell?.matches('.sto-control:not(.sto-control--neutral-field):has(:disabled)')).toBe(false);
   });
 
   it('reports tab changes to its owner with accessible tab semantics', () => {

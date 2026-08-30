@@ -47,15 +47,15 @@ function AppCardImpl({
       : t('moreApps.clickToInstall', { defaultValue: '点击安装后可用' });
 
   // Tags based on app properties
-  const tags: { label: string; className: string }[] = [];
+  const tags: { label: string; variant: 'official' | 'external' | 'hot' }[] = [];
   if (app.official) {
-    tags.push({ label: t('moreApps.tag.official', { defaultValue: '官方' }), className: 'more-apps-tag--official' });
+    tags.push({ label: t('moreApps.tag.official', { defaultValue: '官方' }), variant: 'official' });
   }
   if (isExternal) {
-    tags.push({ label: t('moreApps.tag.external', { defaultValue: '外部' }), className: 'more-apps-tag--external' });
+    tags.push({ label: t('moreApps.tag.external', { defaultValue: '外部' }), variant: 'external' });
   }
   if (app.badge) {
-    tags.push({ label: app.badge, className: 'more-apps-tag--hot' });
+    tags.push({ label: app.badge, variant: 'hot' });
   }
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
@@ -152,7 +152,7 @@ function AppCardImpl({
       {tags.length > 0 && (
         <div className="more-apps-card__tags">
           {tags.map((tag, idx) => (
-            <span key={idx} className={cn('more-apps-tag', tag.className)}>
+            <span key={idx} className="sto-feedback sto-feedback--badge more-apps-tag" data-variant={tag.variant}>
               {tag.label}
             </span>
           ))}

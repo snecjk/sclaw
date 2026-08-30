@@ -417,6 +417,7 @@
   .sto-navigation-item--feature-tab { background-color: transparent; border-color: transparent; color: var(--sto-text-tertiary); }
   .sto-navigation-item--feature-tab:is(:hover, [data-sto-state='hover'], [aria-selected='true']) { color: var(--sto-segment-plain-selected-foreground); }
   .sto-navigation-item--feature-filter { background-color: transparent; border-color: transparent; color: var(--sto-markdown-code-muted); }
+  .sto-navigation-item--feature-filter .sto-navigation-item__count { color: var(--sto-metadata-count-foreground); }
   .sto-navigation-item--feature-filter:is(:hover, [data-sto-state='hover'], [aria-pressed='true']) { background-color: var(--sto-control-active-bg); color: var(--sto-quick-input-content-foreground); }
   .sto-navigation-item--feature-filter:is([aria-pressed='true'], [data-sto-state='active']) .sto-navigation-item__count { color: var(--sto-markdown-code-muted); }
 
@@ -576,6 +577,10 @@
     color: var(--sto-toast-warning-icon);
   }
 
+  .sto-feedback.sto-feedback--badge[data-variant='official'] { background-color: var(--sto-badge-official-background); color: var(--sto-badge-official-foreground); }
+  .sto-feedback.sto-feedback--badge[data-variant='external'] { background-color: var(--sto-badge-external-background); color: var(--sto-badge-external-foreground); }
+  .sto-feedback.sto-feedback--badge[data-variant='hot'] { background-color: var(--sto-badge-hot-background); color: var(--sto-badge-hot-foreground); }
+
   /* Canonical async/error attributes never collide with Radix data-state. */
   :is(.sto-card, .sto-control, .sto-navigation-item, .sto-segment-item, .sto-overlay, .sto-feedback)[aria-busy='true'] {
     background-color: var(--sto-loading-background);
@@ -603,8 +608,7 @@
     color: var(--sto-disabled-foreground);
   }
 
-  :is(.sto-control, .sto-navigation-item, .sto-segment-item):is(:disabled, [aria-disabled='true'], [data-disabled]),
-  .sto-control:has(:disabled) {
+  :is(.sto-control, .sto-navigation-item, .sto-segment-item):is(:disabled, [aria-disabled='true'], [data-disabled]) {
     background-color: var(--sto-interactive-disabled-background);
     border-color: var(--sto-interactive-disabled-border);
     color: var(--sto-interactive-disabled-foreground);

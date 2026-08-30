@@ -1,4 +1,4 @@
-const { mkdir, mkdtemp, rm } = require('node:fs/promises')
+const { mkdir, mkdtemp, readFile, rm } = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 const { app, BrowserWindow } = require('electron')
@@ -6,6 +6,8 @@ const sharp = require('sharp')
 
 const THEMES = ['light', 'dark']
 const FIXTURE_PATH = path.join(__dirname, 'theme-fixture.html')
+const TOKENS_PATH = path.resolve(__dirname, '../../src/styles/theme/tokens.css')
+const RECIPES_PATH = path.resolve(__dirname, '../../src/styles/theme/recipes.css')
 const BASELINE_DIR = path.join(__dirname, 'baselines')
 const UPDATE = process.argv.includes('--update')
 
@@ -13,7 +15,7 @@ app.commandLine.appendSwitch('force-device-scale-factor', '1')
 app.commandLine.appendSwitch('disable-lcd-text')
 app.on('window-all-closed', () => undefined)
 
-async function capture(theme, outputPath) {
+async function capture(theme, outputPath, productionCss) {
   const win = new BrowserWindow({
     width: 1440,
     height: 1000,
@@ -26,6 +28,7 @@ async function capture(theme, outputPath) {
 
   try {
     await win.loadFile(FIXTURE_PATH, { query: { theme } })
+    const cssKey = await win.webContents.insertCSS(productionCss)
     await win.webContents.executeJavaScript(`
       document.fonts.ready.then(() => new Promise(resolve => {
         requestAnimationFrame(() => requestAnimationFrame(resolve))
@@ -33,6 +36,7 @@ async function capture(theme, outputPath) {
     `)
     const image = await win.webContents.capturePage()
     await sharp(image.toPNG()).resize(1440, 1000).png().toFile(outputPath)
+    await win.webContents.removeInsertedCSS(cssKey)
   } finally {
     if (!win.isDestroyed()) win.destroy()
   }
@@ -67,11 +71,15 @@ async function compare(theme, actualPath, baselinePath) {
 
 async function run() {
   await mkdir(BASELINE_DIR, { recursive: true })
+  const productionCss = (await Promise.all([
+    readFile(TOKENS_PATH, 'utf8'),
+    readFile(RECIPES_PATH, 'utf8'),
+  ])).join('\n')
 
   if (UPDATE) {
     for (const theme of THEMES) {
       const baselinePath = path.join(BASELINE_DIR, `theme-${theme}.png`)
-      await capture(theme, baselinePath)
+      await capture(theme, baselinePath, productionCss)
       const { info } = await readRaw(baselinePath)
       console.log(`${theme}: updated ${info.width}x${info.height}`)
     }
@@ -83,7 +91,7 @@ async function run() {
     for (const theme of THEMES) {
       const actualPath = path.join(tempDir, `theme-${theme}.png`)
       const baselinePath = path.join(BASELINE_DIR, `theme-${theme}.png`)
-      await capture(theme, actualPath)
+      await capture(theme, actualPath, productionCss)
       await compare(theme, actualPath, baselinePath)
     }
   } finally {

@@ -25,6 +25,8 @@ import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { InputComposerSendButton } from '@/components/input-composer/input-composer-send-button';
+import { InputComposerShell } from '@/components/input-composer/input-composer-shell';
+import { OptionCardList } from '@/components/parameter-form/OptionCardList';
 import {
   Tooltip,
   TooltipContent,
@@ -841,6 +843,46 @@ describe('card cascade combinations', () => {
     dispose();
   });
 
+  it.each(themes)('resolves App Plaza counts and status badges from semantic recipes in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
+    const result = render(
+      <div>
+        <button className="sto-navigation-item sto-navigation-item--feature-filter">
+          <span data-testid="metadata-count" className="sto-navigation-item__count sto-navigation-item__count--metadata">12</span>
+        </button>
+        <span data-testid="official" className="sto-feedback sto-feedback--badge more-apps-tag" data-variant="official">Official</span>
+        <span data-testid="external" className="sto-feedback sto-feedback--badge more-apps-tag" data-variant="external">External</span>
+        <span data-testid="hot" className="sto-feedback sto-feedback--badge more-apps-tag" data-variant="hot">Hot</span>
+      </div>,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('metadata-count')).color)
+      .toBe(colorMarker('--sto-metadata-count-foreground'));
+    for (const variant of ['official', 'external', 'hot'] as const) {
+      expect(getComputedStyle(result.getByTestId(variant)).backgroundColor)
+        .toBe(colorMarker(`--sto-badge-${variant}-background`));
+      expect(getComputedStyle(result.getByTestId(variant)).color)
+        .toBe(colorMarker(`--sto-badge-${variant}-foreground`));
+    }
+    if (theme === 'light') {
+      expect(resolveThemeToken('--sto-metadata-count-foreground', theme)).toBe('#b0b7c3');
+      expect(resolveThemeToken('--sto-badge-official-background', theme)).toBe('#eef4ff');
+      expect(resolveThemeToken('--sto-badge-official-foreground', theme)).toBe('#3b6fd4');
+      expect(resolveThemeToken('--sto-badge-external-background', theme)).toBe('#f5f3ff');
+      expect(resolveThemeToken('--sto-badge-external-foreground', theme)).toBe('#6d28d9');
+      expect(resolveThemeToken('--sto-badge-hot-background', theme)).toBe('#fff1e6');
+      expect(resolveThemeToken('--sto-badge-hot-foreground', theme)).toBe('#c56a00');
+    } else {
+      expect(new Set(['official', 'external', 'hot'].map((variant) =>
+        resolveThemeToken(`--sto-badge-${variant}-background`, theme),
+      )).size).toBe(3);
+    }
+
+    result.unmount();
+    dispose();
+  });
+
   it.each(themes)('resolves the active feature-filter count from the shared recipe in %s', (theme) => {
     const { container, dispose } = createFeatureCascadeRoot(theme, '', 'page-more-apps');
     const result = render(
@@ -1113,6 +1155,70 @@ describe('Radix state and cascade combinations', () => {
 });
 
 describe('disabled behavior', () => {
+  it.each(themes)('keeps a composer shell enabled when only its nested send action is disabled in %s', (theme) => {
+    const { container, dispose } = createIsolatedThemeRoot(theme);
+    const mounted = render(
+      <>
+        <InputComposerShell
+          layout="default"
+          editorOrOverlay={<textarea aria-label="Message" />}
+          toolbarRight={<button type="button" disabled>Send</button>}
+        />
+        <label data-testid="disabled-wrapper" className="sto-control sto-control--neutral-field">
+          <input disabled />
+        </label>
+        <button data-testid="disabled-control" className="sto-control" disabled>Disabled</button>
+      </>,
+      { container },
+    );
+
+    const shell = container.querySelector<HTMLElement>('.sto-control--composer');
+    expect(shell).not.toBeNull();
+    expectColors(shell!, normal(
+      '--sto-composer-default-background',
+      '--sto-composer-default-border',
+      '--sto-control-default-foreground',
+    ));
+    expectColors(mounted.getByTestId('disabled-wrapper'), normal(
+      '--sto-neutral-disabled-background',
+      '--sto-neutral-disabled-border',
+      '--sto-neutral-disabled-foreground',
+    ));
+    expectColors(mounted.getByTestId('disabled-control'), interactiveDisabled);
+
+    mounted.unmount();
+    dispose();
+  });
+
+  it.each(themes)('renders a disabled option card with semantic disabled roles and no whole-card opacity in %s', (theme) => {
+    const { container, dispose } = createIsolatedThemeRoot(theme);
+    const mounted = render(
+      <OptionCardList
+        options={[{ label: 'Unavailable option', value: 'disabled', disabled: true }]}
+        mode="single"
+        value=""
+        onChange={() => undefined}
+      />,
+      { container },
+    );
+    const option = mounted.getByRole('button', { name: /Unavailable option/ });
+
+    expect(option).toBeDisabled();
+    expect(option).toHaveAttribute('aria-disabled', 'true');
+    expect(option).toHaveClass('sto-card', 'sto-card--parameter-option', 'rounded-xl', 'px-4', 'py-3.5');
+    expect(option.className).not.toContain('opacity-60');
+    expect(getComputedStyle(option).opacity).not.toBe('0.6');
+    expectColors(option, sharedDisabled);
+    if (theme === 'light') {
+      expect(resolveThemeToken('--sto-disabled-background', theme)).toBe('#f5f6f7');
+      expect(resolveThemeToken('--sto-disabled-border', theme)).toBe('#e5e6eb');
+      expect(resolveThemeToken('--sto-disabled-foreground', theme)).toBe('#86909c');
+    }
+
+    mounted.unmount();
+    dispose();
+  });
+
   it.each([true, 'true'] as const)('prevents activation for an asChild Button disabled by %s', (disabledValue) => {
     const onClick = vi.fn();
     render(

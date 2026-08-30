@@ -620,7 +620,7 @@ export function MoreAppsPage() {
               onClick={() => handleSelectCategory(cat.id)}
             >
               <span>{cat.label}</span>
-              <span className="sto-navigation-item__count app-market__cat-count" aria-hidden="true">
+              <span className="sto-navigation-item__count sto-navigation-item__count--metadata app-market__cat-count" aria-hidden="true">
                 {cat.count}
               </span>
             </button>
