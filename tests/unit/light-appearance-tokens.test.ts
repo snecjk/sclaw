@@ -181,10 +181,12 @@ describe('light appearance color system', () => {
     const root = extractThemeBlock(':root {');
 
     expect(root).toContain('--sto-shadow-brand-action: 0 6px 16px rgba(255, 111, 0, 0.22)');
+    expect(root).toContain('--sto-composer-send-border: hsl(var(--primary) / 0.8)');
     expect(root).toContain('--sto-composer-stop-ink: #0f172a');
     expect(root).toContain('--sto-composer-stop-hover-background: #1e293b');
-    expect(root).toContain('--sto-composer-unavailable-background: color-mix(in srgb, black 5%, transparent)');
-    expect(root).toContain('--sto-composer-unavailable-border: color-mix(in srgb, black 8%, transparent)');
+    expect(root).toContain('--sto-composer-unavailable-background: rgb(0 0 0 / 5%)');
+    expect(root).toContain('--sto-composer-unavailable-border: rgb(0 0 0 / 8%)');
+    expect(root).toContain('--sto-composer-unavailable-foreground: hsl(var(--muted-foreground) / 0.55)');
     expect(inputComposerSendButtonSource).toContain('sto-control--composer-send-action');
     expect(inputComposerSendButtonSource).toContain('sto-control--composer-stop');
     expect(inputComposerSendButtonSource).toContain('sto-control--composer-unavailable');

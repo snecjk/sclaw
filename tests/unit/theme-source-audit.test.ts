@@ -166,8 +166,10 @@ function isTaskSevenSource(file: string): boolean {
 const coolShadowColor = /rgba?\(\s*(?:(?:2\s*(?:,\s*|\s+)8\s*(?:,\s*|\s+)23)|(?:15\s*(?:,\s*|\s+)23\s*(?:,\s*|\s+)42))\b/i;
 const brandShadowColor = /(?:rgba?\(\s*255\s*(?:,\s*|\s+)(?:111|140|141|183)\s*(?:,\s*|\s+)(?:0|42|140)\b|hsla?\(\s*(?:1[5-9]|[23]\d|4[0-2])(?:\.\d+)?(?:deg)?\s+(?:8\d|9\d|100)%)/i;
 const canonicalShadowProperty = /(?:shadow|ring|glow)/i;
-const functionalShadowSemantic = /(?:focus|interactive|invalid|error|drag|ring)/i;
-const explicitArtworkShadowSemantic = /voice/i;
+const functionalShadowProperty = /(?:^--ring$|(?:^|-)focus(?:-|$)|(?:^|-)(?:invalid|error)(?:-|$)|(?:^|-)drag-(?:ring|shadow)(?:-|$))/i;
+const functionalShadowSelector = /(?::focus(?:-visible|-within)?|:has\([^)]*:focus-visible|\[aria-invalid(?:=['"]true['"])?\]|\[data-variant=['"]error['"]\]|\[data-sto-state=['"](?:focus|drag-over)['"]\])/i;
+const explicitArtworkShadowProperty = /^--sto-shadow-voice-/i;
+const explicitArtworkShadowSelector = /\.stoclaw-voice(?:-|_)/i;
 
 type CustomPropertyDeclaration = {
   index: number;
@@ -226,8 +228,8 @@ function canonicalShadowViolations(
   for (const [property, declaration] of declarations) {
     if (!canonicalShadowProperty.test(property)) continue;
     if (
-      functionalShadowSemantic.test(property)
-      || explicitArtworkShadowSemantic.test(property)
+      functionalShadowProperty.test(property)
+      || explicitArtworkShadowProperty.test(property)
     ) continue;
     const resolved = resolveCustomProperties(declaration.value, declarations);
     const kind = shadowViolationKind(resolved);
@@ -243,8 +245,8 @@ function canonicalShadowViolations(
   for (const match of recipeSource.matchAll(/box-shadow\s*:\s*([^;]+);/gi)) {
     const selector = recipeSelectorAt(recipeSource, match.index);
     if (
-      functionalShadowSemantic.test(selector)
-      || explicitArtworkShadowSemantic.test(selector)
+      functionalShadowSelector.test(selector)
+      || explicitArtworkShadowSelector.test(selector)
     ) continue;
     const resolved = resolveCustomProperties(match[1], declarations);
     const kind = shadowViolationKind(resolved);
@@ -456,6 +458,55 @@ describe('repository-wide theme source audit', () => {
       `
         .sto-card { box-shadow: var(--sto-shadow-card); }
         .sto-control:focus-visible { box-shadow: var(--sto-shadow-focus); }
+      `,
+    );
+
+    expect(violations).toEqual({ coolDarkShadow: [], ordinaryBrandGlow: [] });
+  });
+
+  it('rejects brand shadows hidden behind interactive or ring names', () => {
+    const violations = canonicalShadowViolations(
+      `
+        :root {
+          --sto-shadow-focus: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-card-ring: 0 0 0 2px rgba(255, 111, 0, 0.2);
+        }
+        .dark {
+          --sto-shadow-focus: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-card-ring: 0 0 0 2px rgba(255, 111, 0, 0.2);
+        }
+      `,
+      `.sto-card--interactive { box-shadow: var(--sto-shadow-focus); }`,
+    );
+
+    expect(violations.coolDarkShadow).toEqual([]);
+    expect(violations.ordinaryBrandGlow).toEqual([
+      expect.objectContaining({
+        file: rawThemeOwner,
+        value: '--sto-shadow-card-ring: 0 0 0 2px rgba(255, 111, 0, 0.2)',
+      }),
+      expect.objectContaining({ file: 'src/styles/theme/recipes.css' }),
+    ]);
+  });
+
+  it('allows genuine focus, error, and explicit brand artwork shadows', () => {
+    const violations = canonicalShadowViolations(
+      `
+        :root {
+          --sto-shadow-focus: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-error: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-voice-line: 0 0 3px rgba(255, 111, 0, 0.2);
+        }
+        .dark {
+          --sto-shadow-focus: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-error: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-voice-line: 0 0 3px rgba(255, 111, 0, 0.2);
+        }
+      `,
+      `
+        .sto-control:focus-visible { box-shadow: var(--sto-shadow-focus); }
+        .sto-feedback[aria-invalid='true'] { box-shadow: var(--sto-shadow-error); }
+        .stoclaw-voice-art { box-shadow: var(--sto-shadow-voice-line); }
       `,
     );
 

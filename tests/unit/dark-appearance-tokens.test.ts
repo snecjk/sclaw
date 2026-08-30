@@ -345,10 +345,12 @@ describe('dark appearance semantic tokens', () => {
 
     const dark = extractThemeBlock('.dark {');
     expect(dark).toContain('--sto-shadow-brand-action: none');
-    expect(dark).toContain('--sto-composer-stop-background: color-mix(in srgb, white 80%, transparent)');
-    expect(dark).toContain('--sto-composer-stop-hover-background: color-mix(in srgb, white 90%, transparent)');
-    expect(dark).toContain('--sto-composer-unavailable-background: color-mix(in srgb, white 6%, transparent)');
-    expect(dark).toContain('--sto-composer-unavailable-border: color-mix(in srgb, white 10%, transparent)');
+    expect(dark).toContain('--sto-form-interactive-shadow: 0 0 0 3px rgb(255 255 255 / 8%)');
+    expect(dark).toContain('--sto-composer-stop-background: rgb(255 255 255 / 80%)');
+    expect(dark).toContain('--sto-composer-stop-hover-background: rgb(255 255 255 / 90%)');
+    expect(dark).toContain('--sto-composer-unavailable-background: rgb(255 255 255 / 6%)');
+    expect(dark).toContain('--sto-composer-unavailable-border: rgb(255 255 255 / 10%)');
+    expect(themeTokensCss).toContain('--sto-composer-unavailable-foreground: hsl(var(--muted-foreground) / 0.55)');
   });
 
   it('keeps workflow designer canvas, nodes and overlays neutral in dark appearance', () => {

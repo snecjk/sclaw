@@ -291,17 +291,17 @@
     --sto-composer-drag-border: #ffc17a;
     --sto-composer-drag-ring: rgb(255 193 122 / 35%);
     --sto-composer-send-background: var(--sto-brand-primary);
-    --sto-composer-send-border: color-mix(in srgb, var(--sto-brand-primary) 80%, transparent);
+    --sto-composer-send-border: hsl(var(--primary) / 0.8);
     --sto-composer-send-foreground: var(--sto-control-primary-foreground);
-    --sto-composer-send-hover-background: color-mix(in srgb, var(--sto-brand-primary) 90%, transparent);
+    --sto-composer-send-hover-background: hsl(var(--primary) / 0.9);
     --sto-composer-stop-ink: #0f172a;
     --sto-composer-stop-background: var(--sto-composer-stop-ink);
     --sto-composer-stop-border: var(--sto-composer-stop-ink);
     --sto-composer-stop-foreground: var(--sto-control-primary-foreground);
     --sto-composer-stop-hover-background: #1e293b;
-    --sto-composer-unavailable-background: color-mix(in srgb, black 5%, transparent);
-    --sto-composer-unavailable-border: color-mix(in srgb, black 8%, transparent);
-    --sto-composer-unavailable-foreground: color-mix(in srgb, var(--sto-control-placeholder) 55%, transparent);
+    --sto-composer-unavailable-background: rgb(0 0 0 / 5%);
+    --sto-composer-unavailable-border: rgb(0 0 0 / 8%);
+    --sto-composer-unavailable-foreground: hsl(var(--muted-foreground) / 0.55);
 
     /* Generated Markdown maps here so content CSS has no page-owned dark palette. */
     --sto-markdown-heading-muted: #666666;
@@ -586,7 +586,7 @@
     --sto-form-selected-background: hsl(var(--primary) / 0.1);
     --sto-form-option-hover-border: var(--sto-border-heavy);
     --sto-form-interactive-border: hsl(var(--primary) / 0.5);
-    --sto-form-interactive-shadow: 0 0 0 3px rgba(255, 111, 0, 0.15);
+    --sto-form-interactive-shadow: 0 0 0 3px rgb(255 255 255 / 8%);
     --sto-form-dock-header-border: var(--sto-border-default);
     --sto-form-dock-primary-background: var(--sto-brand-primary);
     --sto-form-dock-primary-hover-background: hsl(var(--primary) / 0.9);
@@ -628,12 +628,12 @@
     --sto-composer-focus-ring: rgb(255 111 0 / 28%);
     --sto-composer-focus-shadow: 0 0 0 1px rgba(255, 141, 42, 0.28), 0 4px 24px rgba(255, 111, 0, 0.14);
     --sto-composer-drag-ring: rgb(255 193 122 / 30%);
-    --sto-composer-stop-background: color-mix(in srgb, white 80%, transparent);
-    --sto-composer-stop-border: color-mix(in srgb, white 80%, transparent);
+    --sto-composer-stop-background: rgb(255 255 255 / 80%);
+    --sto-composer-stop-border: rgb(255 255 255 / 80%);
     --sto-composer-stop-foreground: var(--sto-composer-stop-ink);
-    --sto-composer-stop-hover-background: color-mix(in srgb, white 90%, transparent);
-    --sto-composer-unavailable-background: color-mix(in srgb, white 6%, transparent);
-    --sto-composer-unavailable-border: color-mix(in srgb, white 10%, transparent);
+    --sto-composer-stop-hover-background: rgb(255 255 255 / 90%);
+    --sto-composer-unavailable-background: rgb(255 255 255 / 6%);
+    --sto-composer-unavailable-border: rgb(255 255 255 / 10%);
     --sto-markdown-heading-muted: var(--sto-text-primary);
     --sto-markdown-quote-border: var(--sto-text-primary);
     --sto-markdown-quote-background: hsl(var(--muted) / 0.35);

@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { InputComposerSendButton } from '@/components/input-composer/input-composer-send-button';
 import {
   Tooltip,
   TooltipContent,
@@ -113,13 +114,13 @@ function resolveThemeToken(token: string, theme: Theme): string {
     const isBase = rule.selector.split(',').some((selector) => selector.trim() === ':root');
     const isDark = rule.selector.split(',').some((selector) => selector.trim() === '.dark');
     if (!isBase && !(theme === 'dark' && isDark)) return;
-    rule.walkDecls(/^--sto-/, (declaration) => declarations.set(declaration.prop, declaration.value));
+    rule.walkDecls(/^--/, (declaration) => declarations.set(declaration.prop, declaration.value));
   });
 
   let value = declarations.get(token);
   if (!value) throw new Error(`Missing ${theme} token ${token}`);
   for (let depth = 0; depth < 12 && value.includes('var('); depth += 1) {
-    value = value.replace(/var\((--sto-[\w-]+)\)/g, (_match, dependency: string) => {
+    value = value.replace(/var\((--[\w-]+)\)/g, (_match, dependency: string) => {
       const resolved = declarations.get(dependency);
       if (!resolved) throw new Error(`Missing dependency ${dependency} for ${token}`);
       return resolved;
@@ -132,6 +133,22 @@ function installExactThemeStylesForTheme(theme: Theme, targetDocument = document
   const tokens = [
     '--sto-overlay-menu-border',
     '--sto-overlay-content-border',
+    '--sto-overlay-background',
+    '--sto-overlay-border',
+    '--sto-overlay-foreground',
+    '--sto-composer-send-background',
+    '--sto-composer-send-border',
+    '--sto-composer-send-foreground',
+    '--sto-composer-send-hover-background',
+    '--sto-composer-stop-background',
+    '--sto-composer-stop-border',
+    '--sto-composer-stop-foreground',
+    '--sto-composer-stop-hover-background',
+    '--sto-composer-unavailable-background',
+    '--sto-composer-unavailable-border',
+    '--sto-composer-unavailable-foreground',
+    '--sto-shadow-brand-action',
+    '--sto-control-focus-shadow',
     '--sto-navigation-picker-hover-background',
     '--sto-navigation-selected-hover-background',
     '--sto-navigation-collapsed-background',
@@ -476,22 +493,102 @@ describe('mounted primitive theme recipe matrix', () => {
 });
 
 describe('overlay border variants', () => {
-  it('preserves the two approved light menu borders and maps both to a neutral dark border', () => {
-    for (const [theme, className, expected] of [
-      ['light', 'sto-overlay sto-overlay--menu-border', 'rgb(229, 230, 235)'],
-      ['light', 'sto-overlay sto-overlay--content-border', 'rgb(232, 234, 239)'],
-      ['dark', 'sto-overlay sto-overlay--menu-border', 'rgba(255, 255, 255, 0.08)'],
-      ['dark', 'sto-overlay sto-overlay--content-border', 'rgba(255, 255, 255, 0.08)'],
-    ] as const) {
+  it.each([
+    ['light', 'sto-overlay--menu-border', 'rgb(229, 230, 235)'],
+    ['light', 'sto-overlay--content-border', 'rgb(232, 234, 239)'],
+    ['dark', 'sto-overlay--menu-border', 'rgba(255, 255, 255, 0.08)'],
+    ['dark', 'sto-overlay--content-border', 'rgba(255, 255, 255, 0.08)'],
+  ] as const)('preserves the %s %s border across interactive states', (theme, modifier, expected) => {
+    for (const state of ['default', 'hover', 'active', 'focus'] as const) {
       const { container, dispose } = createExactThemeRoot(theme);
       const overlay = container.ownerDocument.createElement('div');
-      overlay.className = className;
+      overlay.className = `sto-overlay ${modifier}`;
+      if (state !== 'default') overlay.dataset.stoState = state;
       container.append(overlay);
-      expect(container.ownerDocument.defaultView?.getComputedStyle(overlay).borderColor)
-        .toBe(expected);
+      const reference = container.ownerDocument.createElement('div');
+      reference.className = 'sto-overlay';
+      if (state !== 'default') reference.dataset.stoState = state;
+      container.append(reference);
+      const computed = container.ownerDocument.defaultView!.getComputedStyle(overlay);
+      const shared = container.ownerDocument.defaultView!.getComputedStyle(reference);
+      expect(computed.borderColor).toBe(expected);
+      expect(computed.backgroundColor).toBe(shared.backgroundColor);
+      expect(computed.color).toBe(shared.color);
+      expect(computed.boxShadow).toBe(shared.boxShadow);
+      expect(computed.outlineStyle).toBe(shared.outlineStyle);
       dispose();
     }
   });
+});
+
+type ComposerActionState = 'send' | 'queued-send' | 'stop' | 'disabled-stop' | 'unavailable';
+
+function mountComposerAction(
+  theme: Theme,
+  state: ComposerActionState,
+  interaction: 'default' | 'hover' | 'focus',
+): {
+  action: HTMLButtonElement;
+  dispose: () => void;
+} {
+  const { container, dispose } = createExactThemeRoot(theme);
+  const mounted = render(
+    <InputComposerSendButton
+      sending={state === 'queued-send' || state === 'stop' || state === 'disabled-stop'}
+      canSend={state === 'send' || state === 'queued-send'}
+      canStop={state === 'stop'}
+      onSend={vi.fn()}
+      onStop={vi.fn()}
+      sendTitle="Send"
+      stopTitle="Stop"
+    />,
+    { container },
+  );
+  const action = mounted.getByRole('button');
+  if (interaction === 'hover') action.dataset.stoState = 'hover';
+  if (interaction === 'focus') action.dataset.stoState = 'focus';
+  return {
+    action,
+    dispose: () => {
+      mounted.unmount();
+      dispose();
+    },
+  };
+}
+
+describe('composer action recipe cascade', () => {
+  it.each([
+    ['light', 'send', 'default', 'rgb(255, 111, 0)', 'rgba(255, 111, 0, 0.8)', 'rgb(255, 255, 255)'],
+    ['light', 'queued-send', 'hover', 'rgba(255, 111, 0, 0.9)', 'rgba(255, 111, 0, 0.8)', 'rgb(255, 255, 255)'],
+    ['light', 'send', 'focus', 'rgb(255, 111, 0)', 'rgba(255, 111, 0, 0.8)', 'rgb(255, 255, 255)'],
+    ['light', 'stop', 'default', 'rgb(15, 23, 42)', 'rgb(15, 23, 42)', 'rgb(255, 255, 255)'],
+    ['light', 'stop', 'hover', 'rgb(30, 41, 59)', 'rgb(15, 23, 42)', 'rgb(255, 255, 255)'],
+    ['light', 'stop', 'focus', 'rgb(15, 23, 42)', 'rgb(15, 23, 42)', 'rgb(255, 255, 255)'],
+    ['light', 'disabled-stop', 'default', 'rgb(15, 23, 42)', 'rgb(15, 23, 42)', 'rgb(255, 255, 255)'],
+    ['light', 'unavailable', 'default', 'rgba(0, 0, 0, 0.05)', 'rgba(0, 0, 0, 0.08)', 'rgba(99, 112, 131, 0.55)'],
+    ['dark', 'send', 'default', 'rgb(255, 111, 0)', 'rgba(255, 111, 0, 0.8)', 'rgb(255, 255, 255)'],
+    ['dark', 'queued-send', 'hover', 'rgba(255, 111, 0, 0.9)', 'rgba(255, 111, 0, 0.8)', 'rgb(255, 255, 255)'],
+    ['dark', 'send', 'focus', 'rgb(255, 111, 0)', 'rgba(255, 111, 0, 0.8)', 'rgb(255, 255, 255)'],
+    ['dark', 'stop', 'default', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.8)', 'rgb(15, 23, 42)'],
+    ['dark', 'stop', 'hover', 'rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.8)', 'rgb(15, 23, 42)'],
+    ['dark', 'stop', 'focus', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.8)', 'rgb(15, 23, 42)'],
+    ['dark', 'disabled-stop', 'default', 'rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.8)', 'rgb(15, 23, 42)'],
+    ['dark', 'unavailable', 'default', 'rgba(255, 255, 255, 0.06)', 'rgba(255, 255, 255, 0.1)', 'rgba(179, 179, 179, 0.55)'],
+  ] as const)(
+    '%s %s %s keeps approved action pixels',
+    (theme, state, interaction, background, border, foreground) => {
+      const { action, dispose } = mountComposerAction(theme, state, interaction);
+      const computed = getComputedStyle(action);
+      expect(computed.backgroundColor).toBe(background);
+      expect(computed.borderColor).toBe(border);
+      expect(computed.color).toBe(foreground);
+      expect(getComputedStyle(action.querySelector('svg')!).color).toBe(foreground);
+      if (interaction === 'focus') {
+        expect(computed.boxShadow).toBe(resolveThemeToken('--sto-control-focus-shadow', theme));
+      }
+      dispose();
+    },
+  );
 });
 
 describe('card cascade combinations', () => {

@@ -159,7 +159,7 @@
     color: var(--sto-control-secondary-foreground);
   }
 
-  .sto-control:is(.sto-control--ghost, .sto-control--link) {
+  .sto-control:where(.sto-control--ghost, .sto-control--link) {
     --sto-disabled-source-background: var(--sto-control-ghost-background);
     --sto-disabled-source-border: var(--sto-control-ghost-background);
     background-color: var(--sto-control-ghost-background);
@@ -458,7 +458,7 @@
 
   /* Overlay states remain color-stable; containers gain no new focus outline. */
   .sto-overlay,
-  .sto-overlay:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
+  .sto-overlay:where(:hover, :active, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
     background-color: var(--sto-overlay-background);
     border-color: var(--sto-overlay-border);
     color: var(--sto-overlay-foreground);
@@ -549,10 +549,10 @@
     background-image: var(--sto-control-select-arrow-disabled-image);
   }
 
-  /* Composer actions have product-specific stop/unavailable pixels after generic disabled state. */
-  .sto-control--composer-send-action { background-color: var(--sto-composer-send-background); border-color: var(--sto-composer-send-border); color: var(--sto-composer-send-foreground); box-shadow: var(--sto-shadow-brand-action); }
-  .sto-control--composer-send-action:hover { background-color: var(--sto-composer-send-hover-background); }
-  .sto-control--composer-stop { background-color: var(--sto-composer-stop-background); border-color: var(--sto-composer-stop-border); color: var(--sto-composer-stop-foreground); }
-  .sto-control--composer-stop:hover { background-color: var(--sto-composer-stop-hover-background); }
+  .sto-control.sto-control--composer-send-action { background-color: var(--sto-composer-send-background); border-color: var(--sto-composer-send-border); color: var(--sto-composer-send-foreground); box-shadow: var(--sto-shadow-brand-action); }
+  .sto-control--composer-send-action:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-composer-send-hover-background); }
+  .sto-control.sto-control--composer-stop { background-color: var(--sto-composer-stop-background); border-color: var(--sto-composer-stop-border); color: var(--sto-composer-stop-foreground); }
+  .sto-control--composer-stop:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-composer-stop-hover-background); }
+  :is(.sto-control--composer-send-action, .sto-control--composer-stop):is(:focus-visible, [data-sto-state='focus']) { box-shadow: var(--sto-control-focus-shadow); }
   .sto-control--composer-unavailable:is(:disabled, [aria-disabled='true']) { background-color: var(--sto-composer-unavailable-background); border-color: var(--sto-composer-unavailable-border); color: var(--sto-composer-unavailable-foreground); }
 }
