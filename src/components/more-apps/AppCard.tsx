@@ -118,7 +118,7 @@ function AppCardImpl({
             <div className="more-apps-card__actions">
               <button
                 type="button"
-                className="more-apps-card__icon-btn"
+                className="sto-control sto-control--icon-muted more-apps-card__icon-btn"
                 onClick={handleEdit}
                 aria-label={t('moreApps.action.edit', { defaultValue: '编辑' })}
                 title={t('moreApps.action.edit', { defaultValue: '编辑' })}
@@ -127,7 +127,7 @@ function AppCardImpl({
               </button>
               <button
                 type="button"
-                className="more-apps-card__icon-btn more-apps-card__icon-btn--danger"
+                className="sto-control sto-control--icon-muted sto-control--icon-danger more-apps-card__icon-btn more-apps-card__icon-btn--danger"
                 onClick={handleDelete}
                 aria-label={t('moreApps.action.delete', { defaultValue: '删除' })}
                 title={t('moreApps.action.delete', { defaultValue: '删除' })}
@@ -168,9 +168,10 @@ function AppCardImpl({
           {!isExternal && onToggleFavorite && (
             <button
               type="button"
-              className={cn('more-apps-card__favorite', favorite && 'more-apps-card__favorite--active')}
+              className={cn('sto-control sto-control--favorite sto-control--favorite-subtle more-apps-card__favorite', favorite && 'more-apps-card__favorite--active')}
               onClick={handleToggleFavorite}
               aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
+              aria-pressed={favorite}
               title={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
             >
               <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
@@ -182,7 +183,7 @@ function AppCardImpl({
             </span>
           ) : (
             <button
-              className="more-apps-card__install"
+              className="sto-control sto-control--brand-solid more-apps-card__install"
               onClick={handleInstall}
             >
               {t('moreApps.action.install', { defaultValue: '打开' })}

@@ -62,18 +62,12 @@
     border-color: var(--sto-border-default);
   }
 
-  .sto-card--translucent,
-  .page-more-apps .app-plaza-featured__card {
-    --sto-disabled-source-background: var(--sto-card-translucent-background);
-    --sto-disabled-source-border: var(--sto-card-translucent-border);
-    background-color: var(--sto-card-translucent-background);
-    border-color: var(--sto-card-translucent-border);
-  }
-
   .sto-card--canvas-node { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-canvas-soft); box-shadow: 0 12px 30px color-mix(in srgb, var(--sto-shadow-tone) 7%, transparent); }
   .sto-card--canvas-node.selected { border-color: var(--sto-feature-selected-border); box-shadow: 0 18px 40px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent); }
   .sto-card--workflow-library { background-color: color-mix(in srgb, var(--sto-card-panel-bg) 95%, transparent); border-color: var(--sto-feature-muted-background); box-shadow: 0 16px 34px color-mix(in srgb, var(--sto-shadow-tone) 8%, transparent); }
   .sto-card--workflow-upload { background-color: color-mix(in srgb, var(--sto-card-panel-bg) 90%, transparent); border-color: color-mix(in srgb, var(--sto-feature-divider) 90%, transparent); box-shadow: 0 10px 22px color-mix(in srgb, var(--sto-shadow-tone) 4%, transparent); }
+  .sto-card--selection-option { background-color: var(--sto-card-panel-bg); border-color: var(--sto-feature-divider); color: var(--sto-feature-foreground-deep); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .sto-card--selection-option:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-warning-background); border-color: var(--sto-feature-brand-accent); }
 
   .sto-card:where(.sto-card--flat.sto-card--interactive):where(:hover, [data-sto-state='hover']),
   .sto-card-flat-interactive:hover {
@@ -222,16 +216,14 @@
     box-shadow: 0 0 0 2px var(--sto-composer-drag-ring);
   }
 
-  .sto-control--showcase,
-  .page-more-apps .app-market__hero-cta--view {
+  .sto-control--showcase {
     background-color: var(--sto-card-panel-bg);
     border-color: color-mix(in srgb, var(--sto-control-showcase-foreground) 18%, transparent);
     color: var(--sto-control-showcase-foreground);
     box-shadow: 0 2px 8px color-mix(in srgb, var(--sto-control-showcase-foreground) 10%, transparent);
   }
 
-  .sto-control--showcase:is(:hover, [data-sto-state='hover']),
-  .page-more-apps .app-market__hero:hover .app-market__hero-cta--view {
+  .sto-control--showcase:is(:hover, [data-sto-state='hover']) {
     background-color: var(--sto-control-showcase-hover-background);
     color: var(--sto-control-showcase-hover-foreground);
     box-shadow: 0 4px 12px color-mix(in srgb, var(--sto-control-showcase-foreground) 16%, transparent);
@@ -244,6 +236,13 @@
   .sto-control--quiet:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-quiet-hover-background); border-color: var(--sto-border-interactive); }
   .sto-control--canvas-icon { background-color: var(--sto-card-panel-bg); border-color: var(--sto-feature-control-border); color: var(--sto-feature-muted-foreground); }
   .sto-control--canvas-icon:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-hover-background); color: var(--sto-feature-hover-foreground); }
+  .sto-control--compact-action { background-color: var(--sto-control-bg); border-color: var(--sto-feature-control-border); color: var(--sto-feature-control-foreground); }
+  .sto-control--compact-action:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-hover-background); }
+  .sto-control--compact-field { background-color: var(--sto-control-bg); border-color: var(--sto-feature-control-border); color: var(--sto-feature-field-foreground); }
+  .sto-control.sto-control--compact-field:is(:focus, :focus-visible, [data-sto-state='focus']) { border-color: var(--sto-feature-brand-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-feature-brand-accent) 12%, transparent); outline: none; }
+  .sto-control--dismiss { background-color: transparent; border-color: transparent; color: var(--sto-feature-secondary-foreground); }
+  .sto-control--dismiss:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-muted-background); color: var(--sto-feature-foreground-deep); }
+  .sto-control--library-item { background-color: transparent; border-color: transparent; color: var(--sto-feature-foreground-strong); }
   .sto-control--floating-action { background-color: var(--sto-card-panel-bg); border-color: var(--sto-feature-soft-border); color: var(--sto-feature-secondary-foreground); box-shadow: 0 8px 18px color-mix(in srgb, var(--sto-shadow-tone) 14%, transparent); }
   .sto-control--floating-action:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-hover-background); border-color: var(--sto-feature-hover-border); color: var(--sto-feature-foreground-deep); }
 
@@ -255,6 +254,32 @@
   }
 
   .sto-control--floating-action-primary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-brand-hover); border-color: var(--sto-feature-brand-hover); }
+
+  .sto-control--artwork-link { background-color: transparent; border-color: transparent; color: inherit; }
+  .sto-control.sto-control--artwork-link:is(:focus-visible, [data-sto-state='focus']) { outline: 2px solid color-mix(in srgb, var(--sto-feature-brand-legacy) 65%, transparent); outline-offset: 2px; box-shadow: none; }
+  .sto-control--fill-action { background-color: var(--sto-control-active-bg); border-color: transparent; color: var(--sto-segment-plain-selected-foreground); }
+  .sto-control--fill-action:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-fill-hover-background); }
+  .sto-control.sto-control--fill-action:is(:focus-visible, [data-sto-state='focus']) { outline: 2px solid var(--sto-focus-ring); outline-offset: 2px; box-shadow: none; }
+  .sto-control--search-shell { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-text-tertiary); }
+  .sto-control--search-shell:is(:focus-within, [data-sto-state='focus']) { border-color: var(--sto-brand-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 16%, transparent); }
+  .sto-control--search-input { background-color: transparent; border-color: transparent; color: var(--sto-text-tertiary); }
+  .sto-control--search-input::placeholder { color: var(--sto-text-quaternary); }
+  .sto-control--search-input:is(:focus, [data-sto-state='focus']) { color: var(--sto-segment-plain-selected-foreground); outline: none; }
+  .sto-control--favorite { background-color: transparent; border-color: transparent; color: var(--sto-text-quaternary); }
+  .sto-control--favorite-subtle { color: var(--sto-icon-quaternary); }
+  .sto-control--favorite:is(:hover, [data-sto-state='hover']) { background-color: color-mix(in srgb, var(--sto-feedback-favorite-foreground) 12%, transparent); color: var(--sto-feedback-favorite-foreground); }
+  .sto-control--favorite:is([aria-pressed='true'], [data-sto-state='active']) { color: var(--sto-feedback-favorite-foreground); }
+  .sto-control--icon-muted { background-color: transparent; border-color: transparent; color: var(--sto-feature-muted-foreground); }
+  .sto-control--icon-muted:is(:hover, [data-sto-state='hover']) { background-color: color-mix(in srgb, var(--sto-feature-foreground-strong) 6%, transparent); color: var(--sto-feature-hover-foreground); }
+  .sto-control--icon-danger:is(:hover, [data-sto-state='hover']) { background-color: color-mix(in srgb, var(--sto-danger-primary) 8%, transparent); color: var(--sto-danger-primary); }
+  .sto-control--brand-solid { background-color: var(--sto-brand-primary); border-color: var(--sto-brand-primary); color: var(--sto-control-primary-foreground); }
+  .sto-control--brand-solid:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-brand-hover-background); border-color: var(--sto-control-brand-hover-background); }
+  .sto-control--dialog-field { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-segment-plain-selected-foreground); }
+  .sto-control.sto-control--dialog-field:is(:focus, :focus-visible, [data-sto-state='focus']) { border-color: var(--sto-brand-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 12%, transparent); outline: none; }
+  .sto-control--dialog-secondary { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-segment-plain-selected-foreground); }
+  .sto-control--dialog-secondary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-disabled-background); }
+  .sto-control--dialog-primary { background-color: var(--sto-brand-primary); border-color: transparent; color: var(--sto-control-primary-foreground); }
+  .sto-control--dialog-primary:is(:hover, [data-sto-state='hover']) { filter: brightness(1.05); }
 
   .sto-control:not([class*='sto-control--']):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-hover-bg);
@@ -402,6 +427,11 @@
     color: var(--sto-text-primary);
   }
 
+  .sto-navigation-item--feature-tab { background-color: transparent; border-color: transparent; color: var(--sto-text-tertiary); }
+  .sto-navigation-item--feature-tab:is(:hover, [data-sto-state='hover'], [aria-selected='true']) { color: var(--sto-segment-plain-selected-foreground); }
+  .sto-navigation-item--feature-filter { background-color: transparent; border-color: transparent; color: var(--sto-markdown-code-muted); }
+  .sto-navigation-item--feature-filter:is(:hover, [data-sto-state='hover'], [aria-pressed='true']) { background-color: var(--sto-control-active-bg); color: var(--sto-quick-input-content-foreground); }
+
   .sto-navigation-item--picker:is(:hover, :focus-visible, :has(:focus-visible), [data-sto-state='hover'], [data-sto-state='focus']) {
     background-color: var(--sto-navigation-picker-hover-background);
   }
@@ -519,6 +549,8 @@
   .sto-overlay--warm-dialog { background: var(--sto-overlay-warm-background); border-color: var(--sto-feature-divider); box-shadow: 0 20px 48px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent); }
   .sto-overlay--feature-menu { box-shadow: 0 8px 24px color-mix(in srgb, var(--sto-shadow-tone) 14%, transparent); }
   .sto-overlay--side-panel { box-shadow: -8px 0 24px color-mix(in srgb, var(--sto-shadow-tone) 6%, transparent); }
+  .sto-overlay--selection-popover { background-color: var(--sto-overlay-background); border-color: var(--sto-feature-soft-border); box-shadow: 0 18px 48px color-mix(in srgb, var(--sto-shadow-tone) 18%, transparent); }
+  .sto-overlay--raised-dialog { background-color: var(--sto-card-panel-bg); color: var(--sto-segment-plain-selected-foreground); box-shadow: 0 24px 48px color-mix(in srgb, var(--sto-shadow-tone) 16%, transparent); }
   .sto-overlay-scrim { background-color: var(--sto-overlay-scrim); }
   .sto-overlay-scrim--dialog { background-color: var(--sto-overlay-dialog-scrim); }
 
@@ -605,6 +637,12 @@
   .sto-control--select[aria-disabled='true'],
   .sto-control--select[data-disabled] {
     background-image: var(--sto-control-select-arrow-disabled-image);
+  }
+
+  .sto-control--quiet:is(:disabled, [aria-disabled='true'], [data-disabled], [data-sto-state='loading']) {
+    background-color: var(--sto-card-panel-bg);
+    border-color: var(--sto-border-default);
+    color: var(--sto-text-tertiary);
   }
 
   .sto-control.sto-control--composer-send-action { background-color: var(--sto-composer-send-background); border-color: var(--sto-composer-send-border); color: var(--sto-composer-send-foreground); box-shadow: var(--sto-shadow-brand-action); }

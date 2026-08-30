@@ -35,7 +35,7 @@ export function DesignerNodeLibrary({ onPick, className }: DesignerNodeLibraryPr
               event.dataTransfer.setData('application/reactflow', item.type);
               event.dataTransfer.effectAllowed = 'move';
             }}
-            className={cn('workflow-node-library-item', `tile-${item.accent}`)}
+            className={cn('sto-control sto-control--library-item workflow-node-library-item', `tile-${item.accent}`)}
           >
             <span className="workflow-node-library-icon">
               <Icon size={18} />

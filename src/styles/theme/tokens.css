@@ -440,6 +440,7 @@
 
     --sto-control-brand-hover-background: #e67a00;
     --sto-text-quaternary: #aeb4bd;
+    --sto-icon-quaternary: #c4c9d4;
     --sto-border-faint: #eceef2;
     --sto-control-fill-hover-background: #d7dae0;
     --sto-border-interactive: #d8dce4;
@@ -447,8 +448,6 @@
     --sto-surface-soft-neutral: #f3f4f6;
     --sto-feedback-favorite-foreground: #f59e0b;
     --sto-feedback-favorite-active-foreground: #e11d48;
-    --sto-card-translucent-background: rgba(255, 255, 255, 0.92);
-    --sto-card-translucent-border: rgba(255, 255, 255, 0.8);
     --sto-control-showcase-foreground: #1a73e8;
     --sto-control-showcase-hover-foreground: #0b57d0;
     --sto-control-showcase-hover-background: #f8fbff;
@@ -826,6 +825,7 @@
 
     --sto-control-brand-hover-background: var(--sto-brand-hover);
     --sto-text-quaternary: var(--sto-text-tertiary);
+    --sto-icon-quaternary: var(--sto-icon-tertiary);
     --sto-border-faint: var(--sto-border-default);
     --sto-control-fill-hover-background: var(--sto-border-heavy);
     --sto-border-interactive: var(--sto-border-heavy);
@@ -833,8 +833,6 @@
     --sto-surface-soft-neutral: var(--sto-surface-elevated);
     --sto-feedback-favorite-foreground: #f59e0b;
     --sto-feedback-favorite-active-foreground: #fb7185;
-    --sto-card-translucent-background: var(--sto-surface-primary);
-    --sto-card-translucent-border: var(--sto-border-default);
     --sto-control-showcase-foreground: var(--sto-link-foreground);
     --sto-control-showcase-hover-foreground: var(--sto-link-foreground);
     --sto-control-showcase-hover-background: var(--sto-surface-elevated);

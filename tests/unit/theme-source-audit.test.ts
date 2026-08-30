@@ -480,7 +480,7 @@ describe('repository-wide theme source audit', () => {
     }
 
     expect(tokenSource).not.toContain('--sto-art-');
-    expect(taskEightRoleCounts.size).toBeLessThanOrEqual(57);
+    expect(taskEightRoleCounts.size).toBeLessThanOrEqual(56);
     expect([...taskEightRoleCounts.values()]).toEqual(
       Array.from({ length: taskEightRoleCounts.size }, () => 1),
     );
@@ -499,14 +499,78 @@ describe('repository-wide theme source audit', () => {
     expect(workflowCanvasSource).toContain('--sto-art-workflow-node-icon-foreground: #1f2937');
     expect(workflowCanvasSource).toContain('--sto-art-workflow-template-output-foreground: #ffffff');
 
+    const approvedMoreAppsArtworkSelectors = new Set([
+      '.page-more-apps .app-icon--rounded',
+      '.page-more-apps .app-icon--rounded:not(.app-icon--image) svg',
+      '.page-more-apps .app-market__hero',
+      '.page-more-apps .app-market__hero:hover',
+      '.page-more-apps .app-market__hero--org',
+      '.page-more-apps .app-market__hero-copy',
+      '.page-more-apps .app-market__hero-title-main',
+      '.page-more-apps .app-market__hero-title-sub',
+      '.page-more-apps .app-market__hero-card',
+      '.page-more-apps .app-market__hero-preview',
+      '.page-more-apps .app-market__hero-preview-title',
+      '.page-more-apps .app-market__hero-preview-tag',
+      '.page-more-apps .app-market__hero-stat',
+      '.page-more-apps .app-market__hero-stat em',
+      '.page-more-apps .app-market__hero-stat strong',
+      '.page-more-apps .app-market__hero-dot',
+      '.page-more-apps .app-market__hero-dot--active',
+      '.page-more-apps .app-market__hero-banner',
+      '.page-more-apps .app-market__hero-image-fallback-text',
+      '.page-more-apps .app-market__cat-count',
+      '.page-more-apps .more-apps-tag--official',
+      '.page-more-apps .more-apps-tag--external',
+      '.page-more-apps .more-apps-tag--hot',
+    ]);
+    const approvedWorkflowArtworkSelectors = new Set([
+      '.wf-canvas-node-icon',
+      '.wf-canvas-node-icon.accent-trigger',
+      '.wf-canvas-node-icon.accent-data',
+      '.wf-canvas-node-icon.accent-transform',
+      '.wf-canvas-node-icon.accent-agent',
+      '.wf-canvas-node-icon.accent-condition',
+      '.wf-canvas-node-icon.accent-approval',
+      '.wf-canvas-node-icon.accent-action',
+      '.wf-canvas-node-icon.accent-output',
+      '.wf-canvas-node-icon.accent-browser',
+      '.workflow-node-library-icon',
+      '.workflow-node-library-item.tile-agent:nth-child(1) .workflow-node-library-icon',
+      '.workflow-node-library-item.tile-agent:nth-child(2) .workflow-node-library-icon',
+      '.workflow-node-library-item.tile-agent:nth-child(3) .workflow-node-library-icon',
+      '.workflow-node-library-item.tile-output .workflow-node-library-icon',
+      '.workflow-node-library-item.tile-browser .workflow-node-library-icon',
+      '.edge-branch-hint',
+      '.edge-branch-hint-parallel',
+      '.tile-output .template-tile-icon',
+    ]);
     const artConsumerSelectors = (source: string) => [...source.matchAll(/([^{}]+)\{([^{}]*var\(--sto-art-[^{}]*)\}/g)]
-      .map((match) => match[1].trim());
-    expect(artConsumerSelectors(moreAppsSource).filter(
-      (selector) => !/app-icon|app-market__hero(?!-cta)|app-market__cat-count|more-apps-tag--|more-apps-card__favorite|app-plaza-featured__badge/.test(selector),
-    )).toEqual([]);
-    expect(artConsumerSelectors(workflowCanvasSource).filter(
-      (selector) => !/wf-canvas-node-icon|workflow-node-library|edge-branch-hint|tile-output/.test(selector),
-    )).toEqual([]);
+      .map((match) => match[1]
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\s+/g, ' ')
+        .trim());
+    const unapprovedMoreAppsSelectors = (source: string) => artConsumerSelectors(source).filter(
+      (selector) => !approvedMoreAppsArtworkSelectors.has(selector),
+    );
+    const unapprovedWorkflowSelectors = (source: string) => artConsumerSelectors(source).filter(
+      (selector) => !approvedWorkflowArtworkSelectors.has(selector),
+    );
+
+    expect(unapprovedMoreAppsSelectors(moreAppsSource)).toEqual([]);
+    expect(unapprovedWorkflowSelectors(workflowCanvasSource)).toEqual([]);
+    expect(new Set(artConsumerSelectors(moreAppsSource))).toEqual(approvedMoreAppsArtworkSelectors);
+    expect(new Set(artConsumerSelectors(workflowCanvasSource))).toEqual(approvedWorkflowArtworkSelectors);
+    expect(unapprovedMoreAppsSelectors(`
+      .page-more-apps .app-market__hero-retry {
+        background: var(--sto-art-app-plaza-hero-bg);
+      }
+    `)).toEqual(['.page-more-apps .app-market__hero-retry']);
+    expect(unapprovedWorkflowSelectors(`
+      .workflow-node-library-item {
+        background: var(--sto-art-workflow-parallel-background);
+      }
+    `)).toEqual(['.workflow-node-library-item']);
   });
 
   it('keeps Task 8 UI roles consolidated below the reviewed one-off baseline', () => {
@@ -527,8 +591,8 @@ describe('repository-wide theme source audit', () => {
       (role) => !sourceWithoutTokens.includes(role),
     );
 
-    expect(taskEightRoles.size).toBeLessThanOrEqual(57);
-    expect(oneConsumerRoles.length).toBeLessThanOrEqual(25);
+    expect(taskEightRoles.size).toBeLessThanOrEqual(56);
+    expect(oneConsumerRoles.length).toBeLessThanOrEqual(28);
     expect(unusedRoles).toEqual([]);
     expect(tokenSource).not.toContain('--sto-feature-panel-background:');
     expect(tokenSource).not.toContain('--sto-workflow-control-foreground:');

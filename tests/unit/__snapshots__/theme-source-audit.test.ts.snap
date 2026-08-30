@@ -3395,19 +3395,15 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#1d2129::: rgba(189, 243, 207, 0.5); --sto-art-app-plaza-node-icon-foreground: #1d2129; --sto-art-app-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-i::1",
+    "key": "src/components/more-apps/more-apps.css::rawColor::#1d2129::: rgba(189, 243, 207, 0.5); --sto-art-app-plaza-node-icon-foreground: #1d2129; --sto-art-app-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-t::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#b0b7c3::za-node-icon-foreground: #1d2129; --sto-art-app-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-icon-detail-muted: #c4c9d4; --sto-art-app-plaz::1",
+    "key": "src/components/more-apps/more-apps.css::rawColor::#b0b7c3::za-node-icon-foreground: #1d2129; --sto-art-app-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-tag-official-bg: #eef4ff; --sto-art-app-plaza-::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#c4c9d4::plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-icon-detail-muted: #c4c9d4; --sto-art-app-plaza-tag-official-bg: #eef4ff; --sto-art-app-plaza-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#eef4ff::laza-icon-detail-muted: #c4c9d4; --sto-art-app-plaza-tag-official-bg: #eef4ff; --sto-art-app-plaza-tag-official-fg: #3b6fd4; --sto-art-app-plaza-::1",
+    "key": "src/components/more-apps/more-apps.css::rawColor::#eef4ff::p-plaza-metadata-count: #b0b7c3; --sto-art-app-plaza-tag-official-bg: #eef4ff; --sto-art-app-plaza-tag-official-fg: #3b6fd4; --sto-art-app-plaza-::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -3527,15 +3523,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::rgba(26, 26, 26, 0.55)::-dot-active: #1a73e8; --sto-art-app-plaza-banner-fallback-foreground: rgba(26, 26, 26, 0.55); --sto-art-app-plaza-featured-badge-bg: #fff1e6; --sto-art-app-plaz::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#fff1e6::round: rgba(26, 26, 26, 0.55); --sto-art-app-plaza-featured-badge-bg: #fff1e6; --sto-art-app-plaza-featured-badge-fg: #c56a00; --ma-scrollbar-gut::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#c56a00::za-featured-badge-bg: #fff1e6; --sto-art-app-plaza-featured-badge-fg: #c56a00; --ma-scrollbar-gutter: 12px; } /* ── Hero header ── */ .page-more-::1",
+    "key": "src/components/more-apps/more-apps.css::rawColor::rgba(26, 26, 26, 0.55)::-dot-active: #1a73e8; --sto-art-app-plaza-banner-fallback-foreground: rgba(26, 26, 26, 0.55); --ma-scrollbar-gutter: 12px; } /* ── Hero header ── */ .page-more-::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

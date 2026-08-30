@@ -708,7 +708,7 @@ describe('card cascade combinations', () => {
     }
   });
 
-  it.each(themes)('keeps App preview art internally fixed and featured content adaptive in %s', (theme) => {
+  it.each(themes)('keeps App preview art internally fixed in %s', (theme) => {
     const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
     const result = render(
       <div>
@@ -719,11 +719,6 @@ describe('card cascade combinations', () => {
             <strong data-testid="preview-value">Value</strong>
           </div>
         </div>
-        <article data-testid="featured" className="sto-card sto-card--translucent app-plaza-featured__card">
-          <h3 data-testid="featured-title" className="app-plaza-featured__title">Featured</h3>
-          <p data-testid="featured-description" className="app-plaza-featured__desc">Description</p>
-          <span data-testid="featured-status" className="app-plaza-featured__status">Ready</span>
-        </article>
       </div>,
       { container },
     );
@@ -734,17 +729,6 @@ describe('card cascade combinations', () => {
       .toBe(colorMarker('--sto-art-app-plaza-preview-muted-foreground'));
     expect(getComputedStyle(result.getByTestId('preview-value')).color)
       .toBe(colorMarker('--sto-art-app-plaza-preview-foreground'));
-    expect(getComputedStyle(result.getByTestId('featured')).backgroundColor)
-      .toBe(colorMarker('--sto-card-translucent-background'));
-    expect(getComputedStyle(result.getByTestId('featured')).borderColor)
-      .toBe(colorMarker('--sto-card-translucent-border'));
-    expect(getComputedStyle(result.getByTestId('featured-title')).color)
-      .toBe(colorMarker('--sto-segment-plain-selected-foreground'));
-    expect(getComputedStyle(result.getByTestId('featured-description')).color)
-      .toBe(colorMarker('--sto-text-tertiary'));
-    expect(getComputedStyle(result.getByTestId('featured-status')).color)
-      .toBe(colorMarker('--sto-text-quaternary'));
-
     result.unmount();
     dispose();
   });
@@ -772,6 +756,86 @@ describe('card cascade combinations', () => {
       .toBe(colorMarker('--sto-art-workflow-node-icon-foreground'));
     expect(getComputedStyle(result.getByTestId('output-icon')).color)
       .toBe(colorMarker('--sto-art-workflow-template-output-foreground'));
+
+    result.unmount();
+    dispose();
+  });
+
+  it.each(themes)('resolves Workflow shared interaction recipes in combined states in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(
+      theme,
+      workflowCanvasCss,
+      'workflow-designer-flow',
+    );
+    const result = render(
+      <div>
+        <button data-testid="prompt-hover" data-sto-state="hover" className="sto-control sto-control--compact-action wf-canvas-node-prompt-button" />
+        <input data-testid="field-focus" data-sto-state="focus" className="sto-control sto-control--compact-field" />
+        <div data-testid="popover" className="sto-overlay sto-overlay--selection-popover insert-node-popover" />
+        <button data-testid="dismiss-hover" data-sto-state="hover" className="sto-control sto-control--dismiss insert-node-popover-close" />
+        <button data-testid="option-hover" data-sto-state="hover" className="sto-card sto-card--selection-option template-tile" />
+        <button data-testid="library-item" className="sto-control sto-control--library-item workflow-node-library-item" />
+      </div>,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('prompt-hover')).backgroundColor)
+      .toBe(colorMarker('--sto-feature-hover-background'));
+    expect(getComputedStyle(result.getByTestId('field-focus')).borderColor)
+      .toBe(colorMarker('--sto-feature-brand-accent'));
+    expect(getComputedStyle(result.getByTestId('popover')).backgroundColor)
+      .toBe(colorMarker('--sto-overlay-background'));
+    expect(getComputedStyle(result.getByTestId('dismiss-hover')).color)
+      .toBe(colorMarker('--sto-feature-foreground-deep'));
+    expect(getComputedStyle(result.getByTestId('option-hover')).backgroundColor)
+      .toBe(colorMarker('--sto-feature-warning-background'));
+    expect(getComputedStyle(result.getByTestId('option-hover')).boxShadow).toBe('none');
+    expect(getComputedStyle(result.getByTestId('library-item')).color)
+      .toBe(colorMarker('--sto-feature-foreground-strong'));
+
+    result.unmount();
+    dispose();
+  });
+
+  it.each(themes)('resolves More Apps shared default hover focus and disabled states in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
+    const result = render(
+      <div>
+        <button data-testid="art-focus" data-sto-state="focus" className="sto-control sto-control--artwork-link app-market__hero-banner--clickable" />
+        <button data-testid="filter-active-hover" data-sto-state="hover" aria-pressed="true" className="sto-navigation-item sto-navigation-item--feature-filter app-market__cat" />
+        <button data-testid="icon-default" className="sto-control sto-control--icon-muted more-apps-card__icon-btn" />
+        <button data-testid="favorite-default" className="sto-control sto-control--favorite sto-control--favorite-subtle more-apps-card__favorite" />
+        <button data-testid="icon-hover" data-sto-state="hover" className="sto-control sto-control--icon-muted more-apps-card__icon-btn" />
+        <button data-testid="icon-danger-hover" data-sto-state="hover" className="sto-control sto-control--icon-muted sto-control--icon-danger more-apps-card__icon-btn" />
+        <input data-testid="dialog-field-focus" data-sto-state="focus" className="sto-control sto-control--dialog-field more-apps-modal__input" />
+        <button data-testid="dialog-secondary-hover" data-sto-state="hover" className="sto-control sto-control--dialog-secondary more-apps-modal__btn" />
+        <button data-testid="dialog-primary-hover" data-sto-state="hover" className="sto-control sto-control--dialog-primary more-apps-modal__btn" />
+        <button data-testid="quiet-disabled-hover" data-sto-state="hover" disabled className="sto-control sto-control--quiet app-market__load-more" />
+      </div>,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('art-focus')).outlineOffset).toBe('2px');
+    expect(getComputedStyle(result.getByTestId('filter-active-hover')).backgroundColor)
+      .toBe(colorMarker('--sto-control-active-bg'));
+    expect(getComputedStyle(result.getByTestId('filter-active-hover')).color)
+      .toBe(colorMarker('--sto-quick-input-content-foreground'));
+    expect(getComputedStyle(result.getByTestId('icon-default')).color)
+      .toBe(colorMarker('--sto-feature-muted-foreground'));
+    expect(getComputedStyle(result.getByTestId('favorite-default')).color)
+      .toBe(colorMarker('--sto-icon-quaternary'));
+    expect(getComputedStyle(result.getByTestId('icon-hover')).color)
+      .toBe(colorMarker('--sto-feature-hover-foreground'));
+    expect(getComputedStyle(result.getByTestId('icon-danger-hover')).color)
+      .toBe(colorMarker('--sto-danger-primary'));
+    expect(getComputedStyle(result.getByTestId('dialog-field-focus')).borderColor)
+      .toBe(colorMarker('--sto-brand-primary'));
+    expect(getComputedStyle(result.getByTestId('dialog-secondary-hover')).backgroundColor)
+      .toBe(colorMarker('--sto-disabled-background'));
+    expect(getComputedStyle(result.getByTestId('dialog-primary-hover')).filter)
+      .toBe('brightness(1.05)');
+    expect(getComputedStyle(result.getByTestId('quiet-disabled-hover')).color)
+      .toBe(colorMarker('--sto-text-tertiary'));
 
     result.unmount();
     dispose();

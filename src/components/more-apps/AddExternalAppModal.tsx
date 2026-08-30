@@ -91,7 +91,7 @@ export function AddExternalAppModal() {
   return createPortal(
     <div className="page-more-apps more-apps-modal" hidden={!addModalOpen}>
       <div
-        className="more-apps-modal__backdrop"
+        className="sto-overlay-scrim sto-overlay-scrim--dialog more-apps-modal__backdrop"
         onClick={closeAddModal}
         aria-hidden
       />
@@ -99,7 +99,7 @@ export function AddExternalAppModal() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="more-apps-add-modal-title"
-        className="more-apps-modal__panel"
+        className="sto-overlay sto-overlay--raised-dialog more-apps-modal__panel"
       >
         <div className="more-apps-modal__head">
           <h2 id="more-apps-add-modal-title" className="more-apps-modal__title">
@@ -110,7 +110,7 @@ export function AddExternalAppModal() {
           <button
             type="button"
             onClick={closeAddModal}
-            className="more-apps-modal__close"
+            className="sto-control sto-control--dismiss more-apps-modal__close"
             aria-label={t('common.close', { defaultValue: '关闭' })}
             data-more-apps-modal-close
           >
@@ -126,7 +126,7 @@ export function AddExternalAppModal() {
             </span>
             <input
               type="text"
-              className="more-apps-modal__input"
+              className="sto-control sto-control--dialog-field more-apps-modal__input"
               placeholder={t('moreApps.addModal.namePlaceholder', { defaultValue: '例如：网点 OA 系统' })}
               maxLength={40}
               required
@@ -140,7 +140,7 @@ export function AddExternalAppModal() {
             </span>
             <input
               type="url"
-              className="more-apps-modal__input"
+              className="sto-control sto-control--dialog-field more-apps-modal__input"
               placeholder="https://example.com/app"
               required
               value={url}
@@ -152,7 +152,7 @@ export function AddExternalAppModal() {
               {t('moreApps.addModal.descLabel', { defaultValue: '应用说明（选填）' })}
             </span>
             <textarea
-              className="more-apps-modal__textarea"
+              className="sto-control sto-control--dialog-field more-apps-modal__textarea"
               rows={3}
               maxLength={120}
               placeholder={t('moreApps.addModal.descPlaceholder', { defaultValue: '简要说明该外部应用的用途' })}
@@ -170,13 +170,13 @@ export function AddExternalAppModal() {
             <button
               type="button"
               onClick={closeAddModal}
-              className={cn('more-apps-modal__btn', 'more-apps-modal__btn--ghost')}
+              className={cn('sto-control sto-control--dialog-secondary', 'more-apps-modal__btn', 'more-apps-modal__btn--ghost')}
             >
               {t('common.cancel', { defaultValue: '取消' })}
             </button>
             <button
               type="submit"
-              className={cn('more-apps-modal__btn', 'more-apps-modal__btn--primary')}
+              className={cn('sto-control sto-control--dialog-primary', 'more-apps-modal__btn', 'more-apps-modal__btn--primary')}
             >
               {isEditing
                 ? t('moreApps.editModal.save', { defaultValue: '保存' })

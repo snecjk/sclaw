@@ -8,6 +8,13 @@ const recipesCss = read('src/styles/theme/recipes.css');
 const moreAppsCss = read('src/components/more-apps/more-apps.css');
 const appPlazaShellCss = read('src/components/more-apps/app-plaza-shell.css');
 const workflowSource = read('src/pages/WorkflowDesigner/workflow-designer.tsx');
+const workflowCanvasNodeSource = read('src/pages/WorkflowDesigner/components/workflow-canvas-node.tsx');
+const workflowEdgeSource = read('src/pages/WorkflowDesigner/components/designer-edge.tsx');
+const workflowLibrarySource = read('src/pages/WorkflowDesigner/components/designer-node-library.tsx');
+const workflowCanvasCss = read('src/pages/WorkflowDesigner/workflow-designer-canvas.css');
+const moreAppsPageSource = read('src/components/more-apps/MoreAppsPage.tsx');
+const appCardSource = read('src/components/more-apps/AppCard.tsx');
+const addExternalAppModalSource = read('src/components/more-apps/AddExternalAppModal.tsx');
 
 const taskEightPairs = [
   ['--sto-feature-foreground-strongest', '#020617', 'var(--sto-text-primary)'],
@@ -36,6 +43,7 @@ const taskEightPairs = [
   ['--sto-shadow-tone', '#0f172a', '#000000'],
   ['--sto-control-brand-hover-background', '#e67a00', 'var(--sto-brand-hover)'],
   ['--sto-text-quaternary', '#aeb4bd', 'var(--sto-text-tertiary)'],
+  ['--sto-icon-quaternary', '#c4c9d4', 'var(--sto-icon-tertiary)'],
   ['--sto-border-faint', '#eceef2', 'var(--sto-border-default)'],
   ['--sto-control-fill-hover-background', '#d7dae0', 'var(--sto-border-heavy)'],
   ['--sto-border-interactive', '#d8dce4', 'var(--sto-border-heavy)'],
@@ -43,8 +51,6 @@ const taskEightPairs = [
   ['--sto-surface-soft-neutral', '#f3f4f6', 'var(--sto-surface-elevated)'],
   ['--sto-feedback-favorite-foreground', '#f59e0b', '#f59e0b'],
   ['--sto-feedback-favorite-active-foreground', '#e11d48', '#fb7185'],
-  ['--sto-card-translucent-background', 'rgba(255, 255, 255, 0.92)', 'var(--sto-surface-primary)'],
-  ['--sto-card-translucent-border', 'rgba(255, 255, 255, 0.8)', 'var(--sto-border-default)'],
   ['--sto-control-showcase-foreground', '#1a73e8', 'var(--sto-link-foreground)'],
   ['--sto-control-showcase-hover-foreground', '#0b57d0', 'var(--sto-link-foreground)'],
   ['--sto-control-showcase-hover-background', '#f8fbff', 'var(--sto-surface-elevated)'],
@@ -79,6 +85,14 @@ function declarations(source: string): Map<string, string> {
     .map((match) => [match[1], match[2]]));
 }
 
+function colorBearingInteractionSelectors(source: string): string[] {
+  return [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, selector, body]) =>
+      /:(?:hover|focus(?:-visible|-within)?|disabled)\b/.test(selector)
+      && /(?:background(?:-color)?|border-color|color|box-shadow|outline)\s*:\s*(?:var\(|color-mix|hsl|rgb|#)/.test(body))
+    .map(([, selector]) => selector.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim());
+}
+
 describe('Task 8 feature theme contracts', () => {
   it('preserves every migrated light value and its reviewed dark owner exactly', () => {
     const lightBlock = taskBlock();
@@ -111,8 +125,35 @@ describe('Task 8 feature theme contracts', () => {
       '-8px 0 24px color-mix(in srgb, var(--sto-shadow-tone) 6%, transparent)',
       '0 18px 42px color-mix(in srgb, var(--sto-shadow-tone) 10%, transparent)',
     ]) expect(recipesCss).toContain(shadow);
-    expect(moreAppsCss).toContain('0 4px 14px color-mix(in srgb, var(--sto-shadow-tone) 6%, transparent)');
-    expect(moreAppsCss).toContain('0 24px 48px color-mix(in srgb, var(--sto-shadow-tone) 16%, transparent)');
+    expect(moreAppsCss).not.toContain('app-plaza-featured__');
+    expect(moreAppsCss).not.toContain('more-apps-drill__');
+    expect(recipesCss).toContain('outline: 2px solid color-mix(in srgb, var(--sto-feature-brand-legacy) 65%, transparent)');
     expect(moreAppsCss).not.toMatch(/background:\s*#f7f7f8|border-color:\s*#d8dce4|rgba\(255, 111, 0, 0\.12\)/);
+  });
+
+  it('keeps Workflow interaction colors in shared recipes with semantic classes on consumers', () => {
+    expect(workflowCanvasNodeSource).toContain('sto-control--compact-action');
+    expect(workflowCanvasNodeSource).toContain('sto-control--compact-field');
+    expect(workflowEdgeSource).toContain('sto-overlay--selection-popover');
+    expect(workflowEdgeSource).toContain('sto-control--dismiss');
+    expect(workflowEdgeSource).toContain('sto-card--selection-option');
+    expect(workflowLibrarySource).toContain('sto-control--library-item');
+    expect(workflowCanvasCss).not.toMatch(
+      /(?:wf-canvas-node-prompt-button:hover|wf-canvas-node-field\s+(?:textarea|input):focus|insert-node-popover-close:hover|template-tile:hover)\s*\{[^}]*\b(?:background|border-color|color|box-shadow)\s*:/s,
+    );
+  });
+
+  it('keeps More Apps interaction colors in shared recipes with semantic classes on consumers', () => {
+    expect(moreAppsPageSource).toContain('sto-control--artwork-link');
+    expect(moreAppsPageSource).toContain('sto-navigation-item--feature-filter');
+    expect(appCardSource).toContain('sto-control--icon-muted');
+    expect(appCardSource).toContain('sto-control--brand-solid');
+    expect(addExternalAppModalSource).toContain('sto-overlay--raised-dialog');
+    expect(addExternalAppModalSource).toContain('sto-control--dialog-field');
+    expect(addExternalAppModalSource).toContain('sto-control--dialog-secondary');
+    expect(addExternalAppModalSource).toContain('sto-control--dialog-primary');
+    expect(colorBearingInteractionSelectors(moreAppsCss)).toEqual([
+      '.page-more-apps .app-market__hero:hover',
+    ]);
   });
 });
