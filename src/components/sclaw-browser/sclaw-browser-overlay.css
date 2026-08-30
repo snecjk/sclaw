@@ -76,7 +76,7 @@ html[data-sclaw-browser-open] .drag-region {
   flex-direction: column;
   overflow: hidden;
   background: var(--sto-surface-canvas);
-  box-shadow: var(--sto-browser-drawer-shadow);
+  box-shadow: -8px 0 32px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent);
   /* clip-path — avoid transform; transform breaks Electron iframe sizing */
   animation: sclaw-browser-drawer-in var(--sclaw-browser-drawer-duration) var(--sclaw-browser-drawer-ease) both;
 }

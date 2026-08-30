@@ -385,7 +385,11 @@ export function MoreAppsPage() {
             <span className="app-market__hero-error-text">
               {t('moreApps.bannerError', { defaultValue: '横幅加载失败' })}
             </span>
-            <button type="button" className="app-market__hero-retry" onClick={() => fetchBanners()}>
+            <button
+              type="button"
+              className="sto-control sto-control--showcase sto-control--showcase-retry app-market__hero-retry"
+              onClick={() => fetchBanners()}
+            >
               {t('moreApps.bannerRetry', { defaultValue: '重试' })}
             </button>
           </div>
@@ -498,7 +502,7 @@ export function MoreAppsPage() {
           </span>
           <button
             type="button"
-            className="app-market__list-retry"
+            className="sto-control sto-control--brand-retry app-market__list-retry"
             onClick={() => fetchApps({ reset: true })}
           >
             {t('moreApps.retry', { defaultValue: '重试' })}
@@ -578,7 +582,10 @@ export function MoreAppsPage() {
           <div className="app-market__load-more-wrap">
             <button
               type="button"
-              className={cn('app-market__load-more', loadingMore && 'app-market__load-more--loading')}
+              className={cn(
+                'sto-control sto-control--quiet app-market__load-more',
+                loadingMore && 'app-market__load-more--loading',
+              )}
               onClick={() => loadMoreApps()}
               disabled={loadingMore}
             >

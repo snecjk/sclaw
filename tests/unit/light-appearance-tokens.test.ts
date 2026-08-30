@@ -130,25 +130,20 @@ describe('light appearance color system', () => {
     expect(root).toContain('--sto-feature-foreground-strongest: #020617');
     expect(root).toContain('--sto-feature-success-foreground: #059669');
     expect(root).toContain('--sto-feature-secondary-foreground: #64748b');
-    expect(root).toContain('--sto-app-plaza-brand-hover: #e67a00');
+    expect(root).toContain('--sto-control-brand-hover-background: #e67a00');
     expect(root).toContain('--sto-workflow-canvas-grid: #dfe6ee');
     expect(root).toContain('--sto-workflow-canvas-background: #f7fbff');
-    expect(root).toContain('--sto-workflow-control-background: #fefefe');
-    expect(root).toContain('--sto-workflow-control-border: #eeeeee');
-    expect(root).toContain('--sto-workflow-control-hover-background: #f4f4f4');
-    expect(root).toContain('--sto-workflow-minimap-mask: rgba(240, 240, 240, 0.6)');
-    expect(root).toContain('--sto-workflow-minimap-node: #e2e2e2');
-    expect(root).toContain('--sto-workflow-node-border: #eef2f7');
-    expect(root).toContain('--sto-workflow-node-shadow: 0 12px 30px rgb(15 23 42 / 7%)');
-    expect(root).toContain('--sto-workflow-node-selected-shadow: 0 18px 40px rgb(15 23 42 / 12%)');
-    expect(root).toContain('--sto-workflow-ai-border: #fed7aa');
-    expect(root).toContain('--sto-workflow-ai-background: rgb(255 247 237 / 80%)');
-    expect(root).toContain('--sto-workflow-library-background: rgb(255 255 255 / 95%)');
-    expect(root).toContain('--sto-workflow-dialog-scrim: rgb(15 23 42 / 30%)');
-    expect(root).toContain('--sto-workflow-upload-background: rgb(255 255 255 / 90%)');
-    expect(root).toContain('--sto-workflow-upload-border: rgb(226 232 240 / 90%)');
-    expect(root).toContain('--sto-workflow-status-warning-foreground: #b45309');
-    expect(root).toContain('--sto-workflow-status-warning-background: #fffbeb');
+    expect(root).toContain('--sto-control-toolbar-background: #fefefe');
+    expect(root).toContain('--sto-control-toolbar-border: #eeeeee');
+    expect(root).toContain('--sto-control-toolbar-hover-background: #f4f4f4');
+    expect(root).toContain('--sto-card-map-mask: rgba(240, 240, 240, 0.6)');
+    expect(root).toContain('--sto-border-canvas-soft: #eef2f7');
+    expect(root).toContain('--sto-shadow-tone: #0f172a');
+    expect(root).toContain('--sto-border-handle: #e5edf5');
+    expect(root).toContain('--sto-feedback-accent-border: #fed7aa');
+    expect(root).toContain('--sto-overlay-warm-scrim: rgb(15 23 42 / 30%)');
+    expect(root).toContain('--sto-feedback-caution-foreground: #b45309');
+    expect(root).toContain('--sto-chat-engine-hint-background: #fffbeb');
 
     expect(moreAppsCss).not.toMatch(/--ma-(?!scrollbar-gutter)/);
     expect(moreAppsCss).toContain('color: var(--sto-segment-plain-selected-foreground)');
@@ -156,12 +151,10 @@ describe('light appearance color system', () => {
     expect(moreAppsCss).toContain('--sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%)');
 
     expect(workflowCanvasCss).toContain('var(--sto-workflow-canvas-background)');
-    expect(workflowCanvasCss).toMatch(
-      /\.wf-canvas-node\s*\{[\s\S]*border: 1px solid var\(--sto-workflow-node-border\);[\s\S]*background: var\(--sto-card-panel-bg\);[\s\S]*box-shadow: var\(--sto-workflow-node-shadow\);/,
-    );
-    expect(workflowCanvasCss).toMatch(
-      /\.wf-canvas-node\.selected\s*\{[\s\S]*border-color: var\(--sto-feature-selected-border\);[\s\S]*box-shadow: var\(--sto-workflow-node-selected-shadow\);/,
-    );
+    expect(recipesCss).toContain('.sto-card--canvas-node');
+    expect(recipesCss).toContain('border-color: var(--sto-border-canvas-soft)');
+    expect(recipesCss).toContain('box-shadow: 0 18px 40px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent)');
+    expect(recipesCss).toContain('background-color: color-mix(in srgb, var(--sto-card-panel-bg) 90%, transparent)');
   });
 
   it('keeps component-local destructive light colors exact while dark stays semantic', () => {

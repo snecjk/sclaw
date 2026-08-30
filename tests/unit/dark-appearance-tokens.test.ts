@@ -359,12 +359,12 @@ describe('dark appearance semantic tokens', () => {
     expect(workflowDesignerCanvasCss).not.toContain('.dark');
     expect(workflowDesignerCanvasCss).toContain('var(--sto-workflow-canvas-background)');
     expect(dark).toContain('--sto-workflow-canvas-background: var(--sto-surface-under)');
-    expect(dark).toContain('--sto-workflow-node-border: var(--sto-border-default)');
+    expect(dark).toContain('--sto-border-canvas-soft: var(--sto-border-default)');
     expect(dark).toContain('--sto-feature-foreground-strong: var(--sto-text-primary)');
-    expect(workflowDesignerSource).toContain('bg-[var(--sto-workflow-library-background)]');
-    expect(workflowHistoryDrawerSource).toContain('bg-[var(--sto-feature-panel-background)]');
-    expect(workflowStartupDialogSource).toContain('bg-[var(--sto-workflow-dialog-scrim)]');
-    expect(workflowStartupDialogSource).toContain('bg-[var(--sto-workflow-dialog-background)]');
+    expect(workflowDesignerSource).toContain('sto-card--workflow-library');
+    expect(workflowHistoryDrawerSource).toContain('bg-[var(--sto-panel-bg)]');
+    expect(workflowStartupDialogSource).toContain('bg-[var(--sto-overlay-warm-scrim)]');
+    expect(workflowStartupDialogSource).toContain('sto-overlay--warm-dialog');
   });
 
   it('replaces remaining bright chat fallback surfaces in dark appearance', () => {
@@ -406,9 +406,9 @@ describe('dark appearance semantic tokens', () => {
   it('keeps workflow trial and local history status surfaces readable in dark appearance', () => {
     expect(trialRunViewSource).not.toContain('dark:');
     expect(trialRunViewSource).toContain('sto-card sto-card--flat');
-    expect(trialRunViewSource).toContain('border-[var(--sto-workflow-notice-border)]');
+    expect(trialRunViewSource).toContain('border-[var(--sto-feedback-notice-border)]');
     expect(localRunHistorySource).not.toContain('dark:');
-    expect(localRunHistorySource).toContain('var(--sto-workflow-status-warning-background)');
+    expect(localRunHistorySource).toContain('var(--sto-chat-engine-hint-background)');
   });
 
   it('maps quick input management weak copy and icons to dark semantic roles', () => {
@@ -422,7 +422,7 @@ describe('dark appearance semantic tokens', () => {
     expect(moreAppsCss).not.toContain('.dark');
     expect(moreAppsCss).not.toMatch(/--ma-(?!scrollbar-gutter)/);
     expect(moreAppsCss).toContain('background: var(--sto-card-panel-bg)');
-    expect(moreAppsCss).toContain('box-shadow: var(--sto-app-plaza-dialog-shadow)');
+    expect(moreAppsCss).toContain('box-shadow: 0 24px 48px color-mix(in srgb, var(--sto-shadow-tone) 16%, transparent)');
   });
 
   it('maps the in-app browser chrome to neutral dark surfaces and text roles', () => {

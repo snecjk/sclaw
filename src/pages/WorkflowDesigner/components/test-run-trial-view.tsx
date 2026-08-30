@@ -36,8 +36,8 @@ interface TrialRunDrawerViewProps extends TestRunDrawerProps {
 
 const STATUS_STYLE: Record<TrialRunView, string> = {
   running: 'text-[var(--sto-feature-brand-legacy)]',
-  cancelled: 'text-[var(--sto-workflow-trial-warning)]',
-  failed: 'text-[var(--sto-workflow-trial-danger)]',
+  cancelled: 'text-[var(--sto-chat-error-icon)]',
+  failed: 'text-[var(--sto-feedback-error-foreground)]',
   completed: 'text-[var(--sto-workflow-trial-success)]',
 };
 
@@ -306,7 +306,7 @@ export function TrialRunDrawerView(props: TrialRunDrawerViewProps) {
           {showRunningNotice ? (
             <div
               data-testid="trial-run-notice"
-              className="flex min-h-[52px] shrink-0 items-start gap-2 rounded-[10px] border border-[var(--sto-workflow-notice-border)] bg-[var(--sto-workflow-notice-background)] px-3 py-2 text-xs leading-4 text-[var(--sto-text-primary)]"
+              className="flex min-h-[52px] shrink-0 items-start gap-2 rounded-[10px] border border-[var(--sto-feedback-notice-border)] bg-[var(--sto-feedback-notice-background)] px-3 py-2 text-xs leading-4 text-[var(--sto-text-primary)]"
             >
               <Volume2 data-testid="trial-run-notice-icon" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--sto-feature-brand-legacy)]" aria-hidden />
               <p className="min-w-0 flex-1">{t('run.runningNotice')}</p>

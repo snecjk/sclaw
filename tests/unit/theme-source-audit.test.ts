@@ -165,11 +165,14 @@ const taskEightFeatureStylesheets = [
 ] as const;
 
 const taskEightFeatureComponents = [
+  'src/components/more-apps/MoreAppsPage.tsx',
   'src/pages/WorkflowDesigner/workflow-designer.tsx',
   'src/pages/WorkflowDesigner/components/history-versions-drawer.tsx',
   'src/pages/WorkflowDesigner/components/local-run-history-dialog.tsx',
   'src/pages/WorkflowDesigner/components/startup-run-dialog.tsx',
   'src/pages/WorkflowDesigner/components/test-run-trial-view.tsx',
+  'src/pages/WorkflowDesigner/components/designer-edge.tsx',
+  'src/pages/WorkflowDesigner/components/workflow-canvas-node.tsx',
   'src/pages/MyTask/components/TaskCreateModal.tsx',
   'src/components/workflow/WorkflowPicker.tsx',
 ] as const;
@@ -466,18 +469,20 @@ describe('repository-wide theme source audit', () => {
       'utf8',
     );
     const tokenSource = readFileSync(resolve(process.cwd(), rawThemeOwner), 'utf8');
-    const taskEightRoleNames = tokenSource.match(
-      /--sto-(?:feature|app-plaza|workflow|browser)-[a-z0-9-]+(?=:)/g,
-    ) ?? [];
+    const lightTaskBlock = tokenSource.slice(
+      tokenSource.indexOf('    --sto-feature-foreground-strongest:'),
+      tokenSource.indexOf('    /* Card roles keep'),
+    );
+    const taskEightRoleNames = lightTaskBlock.match(/--sto-[a-z0-9-]+(?=:)/g) ?? [];
     const taskEightRoleCounts = new Map<string, number>();
     for (const role of taskEightRoleNames) {
       taskEightRoleCounts.set(role, (taskEightRoleCounts.get(role) ?? 0) + 1);
     }
 
     expect(tokenSource).not.toContain('--sto-art-');
-    expect(taskEightRoleCounts.size).toBeLessThanOrEqual(76);
+    expect(taskEightRoleCounts.size).toBeLessThanOrEqual(57);
     expect([...taskEightRoleCounts.values()]).toEqual(
-      Array.from({ length: taskEightRoleCounts.size }, () => 2),
+      Array.from({ length: taskEightRoleCounts.size }, () => 1),
     );
     expect((moreAppsSource.match(/--sto-art-[a-z0-9-]+/g) ?? [])
       .every((token) => token.startsWith('--sto-art-app-plaza-'))).toBe(true);
@@ -485,6 +490,59 @@ describe('repository-wide theme source audit', () => {
       .every((token) => token.startsWith('--sto-art-workflow-'))).toBe(true);
     expect(`${moreAppsSource}\n${workflowCanvasSource}`).not.toMatch(
       /--sto-art-[a-z0-9-]*(?:surface|control|overlay|feedback)[a-z0-9-]*/,
+    );
+    expect(moreAppsSource).not.toMatch(
+      /--sto-art-app-plaza-(?:hero-cta-view|featured-card|recommended|more-border)/,
+    );
+    expect(moreAppsSource).toContain('--sto-art-app-plaza-preview-foreground: #111827');
+    expect(moreAppsSource).toContain('--sto-art-app-plaza-preview-muted-foreground: #6b7280');
+    expect(workflowCanvasSource).toContain('--sto-art-workflow-node-icon-foreground: #1f2937');
+    expect(workflowCanvasSource).toContain('--sto-art-workflow-template-output-foreground: #ffffff');
+
+    const artConsumerSelectors = (source: string) => [...source.matchAll(/([^{}]+)\{([^{}]*var\(--sto-art-[^{}]*)\}/g)]
+      .map((match) => match[1].trim());
+    expect(artConsumerSelectors(moreAppsSource).filter(
+      (selector) => !/app-icon|app-market__hero(?!-cta)|app-market__cat-count|more-apps-tag--|more-apps-card__favorite|app-plaza-featured__badge/.test(selector),
+    )).toEqual([]);
+    expect(artConsumerSelectors(workflowCanvasSource).filter(
+      (selector) => !/wf-canvas-node-icon|workflow-node-library|edge-branch-hint|tile-output/.test(selector),
+    )).toEqual([]);
+  });
+
+  it('keeps Task 8 UI roles consolidated below the reviewed one-off baseline', () => {
+    const tokenSource = readFileSync(resolve(process.cwd(), rawThemeOwner), 'utf8');
+    const taskBlock = tokenSource.slice(
+      tokenSource.indexOf('    --sto-feature-foreground-strongest:'),
+      tokenSource.indexOf('    /* Card roles keep'),
+    );
+    const taskEightRoles = new Set(taskBlock.match(/--sto-[a-z0-9-]+(?=:)/g) ?? []);
+    const sourceWithoutTokens = productionSources(sourceRoot)
+      .filter(({ file }) => file !== rawThemeOwner)
+      .map(({ source }) => source)
+      .join('\n');
+    const oneConsumerRoles = [...taskEightRoles].filter(
+      (role) => sourceWithoutTokens.split(role).length - 1 === 1,
+    );
+    const unusedRoles = [...taskEightRoles].filter(
+      (role) => !sourceWithoutTokens.includes(role),
+    );
+
+    expect(taskEightRoles.size).toBeLessThanOrEqual(57);
+    expect(oneConsumerRoles.length).toBeLessThanOrEqual(25);
+    expect(unusedRoles).toEqual([]);
+    expect(tokenSource).not.toContain('--sto-feature-panel-background:');
+    expect(tokenSource).not.toContain('--sto-workflow-control-foreground:');
+    expect(tokenSource).not.toContain('--sto-workflow-minimap-node-stroke:');
+    expect(tokenSource).not.toContain('--sto-workflow-branch-shadow:');
+    expect(tokenSource).not.toContain('--sto-workflow-ai-background:');
+    expect(tokenSource).not.toContain('--sto-workflow-library-background:');
+    expect(tokenSource).not.toContain('--sto-workflow-upload-background:');
+    expect(tokenSource).not.toContain('--sto-workflow-upload-border:');
+    expect(taskBlock).not.toMatch(
+      /--sto-(?:feature-shadow|overlay-(?:dialog-raised|toolbar|popover-strong|warm)-shadow|card-(?:showcase|map|canvas|canvas-selected|upload)-shadow|control-handle-shadow|browser-drawer-shadow|workflow-trial-(?:warning|danger)):/,
+    );
+    expect(taskBlock).not.toMatch(
+      /--sto-(?:app-plaza|workflow)-(?:control|minimap|dialog|upload|node-close|edge-button|library|branch)-(?:background|foreground|border|shadow|hover(?:-background|-foreground|-border)?):/,
     );
   });
 

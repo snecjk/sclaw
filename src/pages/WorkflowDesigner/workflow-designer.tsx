@@ -371,12 +371,12 @@ export function WorkflowDesigner({
           <button
             type="button"
             onClick={handleAiBuild}
-            className="pointer-events-auto inline-flex h-12 w-fit items-center gap-2.5 rounded-[18px] border border-[var(--sto-workflow-ai-border)] bg-[var(--sto-workflow-ai-background)] px-5 text-base font-bold text-[var(--sto-feature-brand-accent)] shadow-sm hover:bg-[var(--sto-feature-warning-background)]"
+            className="pointer-events-auto inline-flex h-12 w-fit items-center gap-2.5 rounded-[18px] border border-[var(--sto-feedback-accent-border)] bg-[color-mix(in_srgb,var(--sto-feature-warning-background)_80%,transparent)] px-5 text-base font-bold text-[var(--sto-feature-brand-accent)] shadow-sm hover:bg-[var(--sto-feature-warning-background)]"
           >
             <Sparkles className="h-5 w-5" />
             AI 帮我建
           </button>
-          <div className="pointer-events-auto max-h-[440px] overflow-hidden rounded-[20px] border border-[var(--sto-feature-muted-background)] bg-[var(--sto-workflow-library-background)] p-5 shadow-[var(--sto-feature-shadow-panel)]">
+          <div className="sto-card sto-card--workflow-library pointer-events-auto max-h-[440px] overflow-hidden rounded-[20px] border p-5">
             <DesignerNodeLibrary onPick={handleAddNode} className="max-h-[400px] overflow-auto" />
           </div>
         </div>

@@ -98,8 +98,8 @@ describe('TestRunDrawer trial mode', () => {
 
     expect(screen.getByTestId('trial-run-header')).not.toHaveClass('border-b');
     expect(screen.getByTestId('trial-run-notice')).toHaveClass(
-      'border-[var(--sto-workflow-notice-border)]',
-      'bg-[var(--sto-workflow-notice-background)]',
+      'border-[var(--sto-feedback-notice-border)]',
+      'bg-[var(--sto-feedback-notice-background)]',
     );
     expect(screen.getByTestId('trial-run-notice-icon')).toHaveClass('text-[var(--sto-feature-brand-legacy)]');
     fireEvent.click(screen.getByRole('button', { name: '关闭运行提示' }));
@@ -109,8 +109,8 @@ describe('TestRunDrawer trial mode', () => {
 
   it.each([
     ['running', 'text-[var(--sto-feature-brand-legacy)]'],
-    ['cancelled', 'text-[var(--sto-workflow-trial-warning)]'],
-    ['failed', 'text-[var(--sto-workflow-trial-danger)]'],
+    ['cancelled', 'text-[var(--sto-chat-error-icon)]'],
+    ['failed', 'text-[var(--sto-feedback-error-foreground)]'],
     ['completed', 'text-[var(--sto-workflow-trial-success)]'],
   ] as const)('uses the approved semantic color for %s', (status, colorClass) => {
     renderDrawer(status);

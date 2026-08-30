@@ -99,7 +99,7 @@ export function HistoryVersionsDrawer({
   if (!open) return null;
 
   return (
-    <section className="absolute inset-y-0 right-0 z-[40] flex min-w-[620px] flex-col border-l border-[var(--sto-feature-divider)] bg-[var(--sto-feature-panel-background)] shadow-[var(--sto-feature-shadow-drawer)] sm:left-[96px]">
+    <section className="sto-overlay sto-overlay--side-panel absolute inset-y-0 right-0 z-[40] flex min-w-[620px] flex-col border-l border-[var(--sto-feature-divider)] bg-[var(--sto-panel-bg)] sm:left-[96px]">
       <header className="flex h-[108px] shrink-0 items-center justify-between border-b border-[var(--sto-feature-divider)] px-9">
         <div className="flex items-center gap-3">
           <History className="h-6 w-6 text-[var(--sto-feature-foreground-strongest)]" />

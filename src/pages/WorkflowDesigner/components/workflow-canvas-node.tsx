@@ -24,7 +24,7 @@ export function WorkflowCanvasNode({ data, selected }: NodeProps<Node<CanvasNode
   return (
     <div
       className={cn(
-        'wf-canvas-node',
+        'sto-card sto-card--canvas-node wf-canvas-node',
         template?.accent ? `shell-${template.accent}` : 'shell-trigger',
         isCondition && 'wf-canvas-node-diamond',
         selected && 'selected',
@@ -36,7 +36,7 @@ export function WorkflowCanvasNode({ data, selected }: NodeProps<Node<CanvasNode
           {canDelete ? (
             <button
               type="button"
-              className="wf-canvas-node-close nodrag nopan"
+              className="sto-control sto-control--canvas-icon wf-canvas-node-close nodrag nopan"
               aria-label="删除节点"
               onClick={(event) => {
                 event.stopPropagation();

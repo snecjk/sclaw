@@ -10,11 +10,14 @@
   --sto-art-workflow-node-approval: #fef2f2;
   --sto-art-workflow-node-action: #ecfeff;
   --sto-art-workflow-node-output: #f8fafc;
+  --sto-art-workflow-node-icon-foreground: #1f2937;
   --sto-art-workflow-library-output: #eef6ff;
   --sto-art-workflow-template-output: #4f46e5;
+  --sto-art-workflow-template-output-foreground: #ffffff;
   --sto-art-workflow-branch-border: rgb(249 115 22 / 16%);
   --sto-art-workflow-branch-foreground: #9a3412;
   --sto-art-workflow-branch-background: rgb(255 247 237 / 96%);
+  --sto-art-workflow-branch-shadow: 0 6px 14px rgb(15 23 42 / 8%);
   --sto-art-workflow-parallel-border: rgb(15 92 83 / 18%);
   --sto-art-workflow-parallel-foreground: #355f58;
   --sto-art-workflow-parallel-background: rgb(240 253 250 / 96%);
@@ -28,37 +31,21 @@
 }
 
 .workflow-designer-flow .react-flow__controls {
-  box-shadow: var(--sto-workflow-control-shadow);
-  border: 1px solid var(--sto-overlay-border);
+  border-style: solid;
+  border-width: 1px;
   border-radius: 8px;
   overflow: hidden;
 }
 
 .workflow-designer-flow .react-flow__minimap {
-  border: 1px solid var(--sto-overlay-border);
+  border-style: solid;
+  border-width: 1px;
   border-radius: 22px;
   overflow: hidden;
-  box-shadow: var(--sto-workflow-minimap-shadow);
-  background: var(--sto-feature-panel-background);
 }
 
 .workflow-designer-flow .react-flow__controls-button {
-  border-color: var(--sto-workflow-control-border);
-  background: var(--sto-workflow-control-background);
-  color: var(--sto-workflow-control-foreground);
   fill: currentColor;
-}
-
-.workflow-designer-flow .react-flow__controls-button:hover {
-  background: var(--sto-workflow-control-hover-background);
-  color: var(--sto-workflow-control-foreground);
-}
-
-.workflow-designer-flow .react-flow__minimap-mask { fill: var(--sto-workflow-minimap-mask); }
-
-.workflow-designer-flow .react-flow__minimap-node {
-  fill: var(--sto-workflow-minimap-node);
-  stroke: var(--sto-workflow-minimap-node-stroke);
 }
 
 .wf-canvas-node {
@@ -68,15 +55,9 @@
   max-width: 300px;
   padding: 12px;
   overflow: visible;
-  border: 1px solid var(--sto-workflow-node-border);
+  border-style: solid;
+  border-width: 1px;
   border-radius: 14px;
-  background: var(--sto-card-panel-bg);
-  box-shadow: var(--sto-workflow-node-shadow);
-}
-
-.wf-canvas-node.selected {
-  border-color: var(--sto-feature-selected-border);
-  box-shadow: var(--sto-workflow-node-selected-shadow);
 }
 
 .wf-canvas-node-header {
@@ -92,16 +73,10 @@
   height: 22px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--sto-feature-control-border);
+  border-style: solid;
+  border-width: 1px;
   border-radius: 999px;
-  color: var(--sto-feature-muted-foreground);
-  background: var(--sto-card-panel-bg);
   cursor: pointer;
-}
-
-.wf-canvas-node-close:hover {
-  color: var(--sto-feature-hover-foreground);
-  background: var(--sto-feature-hover-background);
 }
 
 .wf-canvas-node-head {
@@ -118,7 +93,7 @@
   height: 32px;
   border-radius: 10px;
   flex-shrink: 0;
-  color: var(--sto-markdown-code-foreground);
+  color: var(--sto-art-workflow-node-icon-foreground);
 }
 
 .wf-canvas-node-icon.accent-trigger { background: var(--sto-art-workflow-node-trigger); }
@@ -175,9 +150,11 @@
 .wf-flow-handle {
   width: 14px !important;
   height: 14px !important;
-  border: 2px solid var(--sto-feature-panel-background) !important;
-  background: var(--sto-feature-panel-background) !important;
-  box-shadow: var(--sto-workflow-handle-shadow);
+  border: 2px solid var(--sto-panel-bg) !important;
+  background: var(--sto-panel-bg) !important;
+  box-shadow:
+    0 0 0 1px var(--sto-border-handle),
+    0 5px 12px color-mix(in srgb, var(--sto-shadow-tone) 10%, transparent);
 }
 
 .wf-flow-handle::after {
@@ -301,7 +278,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 13px;
-  color: var(--sto-markdown-code-foreground);
+  color: var(--sto-art-workflow-node-icon-foreground);
   background: var(--sto-art-workflow-node-agent);
 }
 
@@ -355,30 +332,10 @@
   height: 24px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--sto-feature-soft-border);
+  border-style: solid;
+  border-width: 1px;
   border-radius: 999px;
-  color: var(--sto-feature-secondary-foreground);
-  background: var(--sto-card-panel-bg);
-  box-shadow: var(--sto-feature-shadow-raised);
   cursor: pointer;
-}
-
-.edge-action-button:hover {
-  color: var(--sto-feature-foreground-deep);
-  border-color: var(--sto-feature-hover-border);
-  background: var(--sto-feature-hover-background);
-}
-
-.edge-action-button-primary {
-  color: var(--sto-control-primary-foreground);
-  border-color: var(--sto-feature-brand-accent);
-  background: var(--sto-feature-brand-accent);
-}
-
-.edge-action-button-primary:hover {
-  color: var(--sto-control-primary-foreground);
-  border-color: var(--sto-feature-brand-hover);
-  background: var(--sto-feature-brand-hover);
 }
 
 .edge-branch-hint {
@@ -390,7 +347,7 @@
   border-radius: 999px;
   color: var(--sto-art-workflow-branch-foreground);
   background: var(--sto-art-workflow-branch-background);
-  box-shadow: var(--sto-workflow-branch-shadow);
+  box-shadow: var(--sto-art-workflow-branch-shadow);
   font-size: 11px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -413,7 +370,7 @@
   border: 1px solid var(--sto-feature-soft-border);
   border-radius: 16px;
   background: var(--sto-overlay-background);
-  box-shadow: var(--sto-workflow-popover-shadow);
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--sto-shadow-tone) 18%, transparent);
   padding: 12px;
 }
 
@@ -493,6 +450,7 @@
 
 .tile-output .template-tile-icon {
   background: var(--sto-art-workflow-template-output);
+  color: var(--sto-art-workflow-template-output-foreground);
 }
 
 .template-tile-copy {

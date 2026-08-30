@@ -25,7 +25,7 @@ const STATUS_META: Record<LocalRunHistoryStatus, { label: string; className: str
   success: { label: '成功', className: 'bg-[var(--sto-feature-success-background)] text-[var(--sto-feature-success-foreground)]', Icon: CheckCircle2 },
   failed: { label: '失败', className: 'bg-destructive/10 text-[var(--sto-danger-primary)]', Icon: XCircle },
   cancelled: { label: '已取消', className: 'bg-[var(--sto-feature-muted-background)] text-[var(--sto-feature-secondary-foreground)]', Icon: Circle },
-  interrupted: { label: '已中断', className: 'bg-[var(--sto-workflow-status-warning-background)] text-[var(--sto-workflow-status-warning-foreground)]', Icon: AlertCircle },
+  interrupted: { label: '已中断', className: 'bg-[var(--sto-chat-engine-hint-background)] text-[var(--sto-feedback-caution-foreground)]', Icon: AlertCircle },
   running: { label: '进行中', className: 'bg-primary/10 text-[var(--sto-brand-primary)]', Icon: CircleDot },
 };
 

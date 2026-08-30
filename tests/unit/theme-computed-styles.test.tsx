@@ -36,6 +36,7 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8'
 const tokensCss = read('src/styles/theme/tokens.css');
 const recipesCss = read('src/styles/theme/recipes.css');
 const moreAppsCss = read('src/components/more-apps/more-apps.css');
+const workflowCanvasCss = read('src/pages/WorkflowDesigner/workflow-designer-canvas.css');
 const inputSource = read('src/components/ui/input.tsx');
 const textareaSource = read('src/components/ui/textarea.tsx');
 const states = ['default', 'hover', 'active', 'focus', 'disabled', 'loading', 'error'] as const;
@@ -195,6 +196,24 @@ function createAppCardCascadeRoot(theme: Theme): {
   setTheme(theme, frameDocument);
   const container = frameDocument.createElement('div');
   container.className = 'page-more-apps';
+  frameDocument.body.append(container);
+  return { container, dispose: () => frame.remove() };
+}
+
+function createFeatureCascadeRoot(theme: Theme, featureCss: string, rootClass: string): {
+  container: HTMLElement;
+  dispose: () => void;
+} {
+  const frame = document.createElement('iframe');
+  document.body.append(frame);
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) throw new Error('Expected iframe document for feature cascade test');
+  const style = frameDocument.createElement('style');
+  style.textContent = `${markerRecipes(flattenLayer(recipesCss))}\n${markerRecipes(featureCss)}`;
+  frameDocument.head.append(style);
+  setTheme(theme, frameDocument);
+  const container = frameDocument.createElement('div');
+  container.className = rootClass;
   frameDocument.body.append(container);
   return { container, dispose: () => frame.remove() };
 }
@@ -687,6 +706,75 @@ describe('card cascade combinations', () => {
         dispose();
       }
     }
+  });
+
+  it.each(themes)('keeps App preview art internally fixed and featured content adaptive in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
+    const result = render(
+      <div>
+        <div data-testid="preview" className="app-market__hero-preview">
+          <strong data-testid="preview-title" className="app-market__hero-preview-title">Preview</strong>
+          <div className="app-market__hero-stat">
+            <em data-testid="preview-caption">Caption</em>
+            <strong data-testid="preview-value">Value</strong>
+          </div>
+        </div>
+        <article data-testid="featured" className="sto-card sto-card--translucent app-plaza-featured__card">
+          <h3 data-testid="featured-title" className="app-plaza-featured__title">Featured</h3>
+          <p data-testid="featured-description" className="app-plaza-featured__desc">Description</p>
+          <span data-testid="featured-status" className="app-plaza-featured__status">Ready</span>
+        </article>
+      </div>,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('preview-title')).color)
+      .toBe(colorMarker('--sto-art-app-plaza-preview-foreground'));
+    expect(getComputedStyle(result.getByTestId('preview-caption')).color)
+      .toBe(colorMarker('--sto-art-app-plaza-preview-muted-foreground'));
+    expect(getComputedStyle(result.getByTestId('preview-value')).color)
+      .toBe(colorMarker('--sto-art-app-plaza-preview-foreground'));
+    expect(getComputedStyle(result.getByTestId('featured')).backgroundColor)
+      .toBe(colorMarker('--sto-card-translucent-background'));
+    expect(getComputedStyle(result.getByTestId('featured')).borderColor)
+      .toBe(colorMarker('--sto-card-translucent-border'));
+    expect(getComputedStyle(result.getByTestId('featured-title')).color)
+      .toBe(colorMarker('--sto-segment-plain-selected-foreground'));
+    expect(getComputedStyle(result.getByTestId('featured-description')).color)
+      .toBe(colorMarker('--sto-text-tertiary'));
+    expect(getComputedStyle(result.getByTestId('featured-status')).color)
+      .toBe(colorMarker('--sto-text-quaternary'));
+
+    result.unmount();
+    dispose();
+  });
+
+  it.each(themes)('keeps Workflow node swatches paired with fixed authored foregrounds in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(
+      theme,
+      workflowCanvasCss,
+      'workflow-designer-flow',
+    );
+    const result = render(
+      <div>
+        <span data-testid="node-icon" className="wf-canvas-node-icon accent-trigger" />
+        <span data-testid="library-icon" className="workflow-node-library-icon" />
+        <span className="tile-output">
+          <span data-testid="output-icon" className="template-tile-icon" />
+        </span>
+      </div>,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('node-icon')).color)
+      .toBe(colorMarker('--sto-art-workflow-node-icon-foreground'));
+    expect(getComputedStyle(result.getByTestId('library-icon')).color)
+      .toBe(colorMarker('--sto-art-workflow-node-icon-foreground'));
+    expect(getComputedStyle(result.getByTestId('output-icon')).color)
+      .toBe(colorMarker('--sto-art-workflow-template-output-foreground'));
+
+    result.unmount();
+    dispose();
   });
 });
 

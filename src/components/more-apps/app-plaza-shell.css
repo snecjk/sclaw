@@ -11,7 +11,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--sto-app-plaza-shell-background);
+  background: hsl(var(--background));
 }
 
 .app-plaza-shell--visible {
@@ -70,10 +70,10 @@
 }
 
 .app-plaza-tab--active {
-  background: var(--sto-app-plaza-shell-background);
+  background: hsl(var(--background));
   border-color: var(--sto-overlay-border);
   color: var(--sto-control-default-foreground);
-  box-shadow: 0 -1px 0 var(--sto-app-plaza-shell-background);
+  box-shadow: 0 -1px 0 hsl(var(--background));
 }
 
 .app-plaza-tab--suspended {
@@ -151,7 +151,7 @@
   z-index: 2;
   pointer-events: auto;
   /* Opaque fill — prevents “ghost” layers / click-through to browser-stack. */
-  background: var(--sto-app-plaza-shell-background);
+  background: hsl(var(--background));
 }
 
 .app-plaza-shell__home-scroll {
@@ -226,7 +226,7 @@
   height: 44px;
   padding: 0 12px;
   border-bottom: 1px solid var(--sto-overlay-border);
-  background: var(--sto-app-plaza-shell-background);
+  background: hsl(var(--background));
 }
 
 .app-plaza-browser-toolbar__nav {
@@ -320,7 +320,7 @@
 }
 
 .app-plaza-browser-toolbar__fav--on {
-  color: var(--sto-app-plaza-favorite-icon);
+  color: var(--sto-feedback-favorite-active-foreground);
 }
 
 .app-plaza-browser-toolbar__btn {
@@ -332,7 +332,7 @@
   padding: 0 10px;
   border-radius: 8px;
   border: 1px solid var(--sto-overlay-border);
-  background: var(--sto-app-plaza-shell-background);
+  background: hsl(var(--background));
   color: var(--sto-control-default-foreground);
   font-size: 12px;
   white-space: nowrap;
@@ -361,7 +361,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--sto-app-plaza-shell-background);
+  background: hsl(var(--background));
 }
 
 .app-plaza-blank__form {
@@ -399,5 +399,5 @@
   justify-content: center;
   color: var(--sto-segment-default-foreground);
   font-size: 13px;
-  background: var(--sto-app-plaza-shell-background);
+  background: hsl(var(--background));
 }

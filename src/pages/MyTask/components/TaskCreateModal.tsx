@@ -643,7 +643,7 @@ function FolderPickerDialog({
 
       {contextMenu ? (
         <div
-          className="fixed z-[10080] min-w-[128px] rounded-[10px] border border-[var(--sto-border-default)] bg-[var(--sto-card-elevated-bg)] p-2 text-[var(--sto-text-primary)] shadow-[var(--sto-feature-shadow-menu)]"
+          className="sto-overlay sto-overlay--feature-menu fixed z-[10080] min-w-[128px] rounded-[10px] border border-[var(--sto-border-default)] bg-[var(--sto-card-elevated-bg)] p-2 text-[var(--sto-text-primary)]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}

@@ -111,7 +111,7 @@ export function DesignerEdge({
               type="button"
               aria-label="插入节点"
               title="插入节点"
-              className="edge-action-button edge-action-button-primary"
+              className="sto-control sto-control--floating-action sto-control--floating-action-primary edge-action-button edge-action-button-primary"
               onClick={(event) => {
                 event.stopPropagation();
                 data?.onOpenInsertMenu?.(id);
@@ -123,7 +123,7 @@ export function DesignerEdge({
               type="button"
               aria-label="删除连线"
               title="删除连线"
-              className="edge-action-button"
+              className="sto-control sto-control--floating-action edge-action-button"
               onClick={(event) => {
                 event.stopPropagation();
                 void deleteElements({ edges: [{ id }] });

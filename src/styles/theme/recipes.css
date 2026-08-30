@@ -62,6 +62,19 @@
     border-color: var(--sto-border-default);
   }
 
+  .sto-card--translucent,
+  .page-more-apps .app-plaza-featured__card {
+    --sto-disabled-source-background: var(--sto-card-translucent-background);
+    --sto-disabled-source-border: var(--sto-card-translucent-border);
+    background-color: var(--sto-card-translucent-background);
+    border-color: var(--sto-card-translucent-border);
+  }
+
+  .sto-card--canvas-node { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-canvas-soft); box-shadow: 0 12px 30px color-mix(in srgb, var(--sto-shadow-tone) 7%, transparent); }
+  .sto-card--canvas-node.selected { border-color: var(--sto-feature-selected-border); box-shadow: 0 18px 40px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent); }
+  .sto-card--workflow-library { background-color: color-mix(in srgb, var(--sto-card-panel-bg) 95%, transparent); border-color: var(--sto-feature-muted-background); box-shadow: 0 16px 34px color-mix(in srgb, var(--sto-shadow-tone) 8%, transparent); }
+  .sto-card--workflow-upload { background-color: color-mix(in srgb, var(--sto-card-panel-bg) 90%, transparent); border-color: color-mix(in srgb, var(--sto-feature-divider) 90%, transparent); box-shadow: 0 10px 22px color-mix(in srgb, var(--sto-shadow-tone) 4%, transparent); }
+
   .sto-card:where(.sto-card--flat.sto-card--interactive):where(:hover, [data-sto-state='hover']),
   .sto-card-flat-interactive:hover {
     --sto-disabled-source-background: var(--sto-card-flat-hover-bg);
@@ -208,6 +221,40 @@
     border-color: var(--sto-composer-drag-border);
     box-shadow: 0 0 0 2px var(--sto-composer-drag-ring);
   }
+
+  .sto-control--showcase,
+  .page-more-apps .app-market__hero-cta--view {
+    background-color: var(--sto-card-panel-bg);
+    border-color: color-mix(in srgb, var(--sto-control-showcase-foreground) 18%, transparent);
+    color: var(--sto-control-showcase-foreground);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--sto-control-showcase-foreground) 10%, transparent);
+  }
+
+  .sto-control--showcase:is(:hover, [data-sto-state='hover']),
+  .page-more-apps .app-market__hero:hover .app-market__hero-cta--view {
+    background-color: var(--sto-control-showcase-hover-background);
+    color: var(--sto-control-showcase-hover-foreground);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--sto-control-showcase-foreground) 16%, transparent);
+  }
+
+  .sto-control--showcase-retry:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-showcase-retry-hover-background); box-shadow: 0 2px 8px color-mix(in srgb, var(--sto-control-showcase-foreground) 12%, transparent); }
+  .sto-control--brand-retry { background-color: var(--sto-card-panel-bg); border-color: color-mix(in srgb, var(--sto-brand-primary) 35%, transparent); color: var(--sto-brand-primary); }
+  .sto-control--brand-retry:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-form-selected-background); box-shadow: var(--sto-shadow-brand-soft-raised); }
+  .sto-control--quiet { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-segment-plain-selected-foreground); }
+  .sto-control--quiet:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-quiet-hover-background); border-color: var(--sto-border-interactive); }
+  .sto-control--canvas-icon { background-color: var(--sto-card-panel-bg); border-color: var(--sto-feature-control-border); color: var(--sto-feature-muted-foreground); }
+  .sto-control--canvas-icon:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-hover-background); color: var(--sto-feature-hover-foreground); }
+  .sto-control--floating-action { background-color: var(--sto-card-panel-bg); border-color: var(--sto-feature-soft-border); color: var(--sto-feature-secondary-foreground); box-shadow: 0 8px 18px color-mix(in srgb, var(--sto-shadow-tone) 14%, transparent); }
+  .sto-control--floating-action:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-hover-background); border-color: var(--sto-feature-hover-border); color: var(--sto-feature-foreground-deep); }
+
+  .sto-control--floating-action-primary,
+  .sto-control--floating-action-primary:is(:hover, [data-sto-state='hover']) {
+    background-color: var(--sto-feature-brand-accent);
+    border-color: var(--sto-feature-brand-accent);
+    color: var(--sto-control-primary-foreground);
+  }
+
+  .sto-control--floating-action-primary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-feature-brand-hover); border-color: var(--sto-feature-brand-hover); }
 
   .sto-control:not([class*='sto-control--']):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-hover-bg);
@@ -469,8 +516,19 @@
   .sto-overlay--content-border { border-color: var(--sto-overlay-content-border); }
   .sto-overlay--glass { background-color: var(--sto-glass-background); }
   .sto-overlay.glass { box-shadow: var(--sto-overlay-glass-shadow); }
+  .sto-overlay--warm-dialog { background: var(--sto-overlay-warm-background); border-color: var(--sto-feature-divider); box-shadow: 0 20px 48px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent); }
+  .sto-overlay--feature-menu { box-shadow: 0 8px 24px color-mix(in srgb, var(--sto-shadow-tone) 14%, transparent); }
+  .sto-overlay--side-panel { box-shadow: -8px 0 24px color-mix(in srgb, var(--sto-shadow-tone) 6%, transparent); }
   .sto-overlay-scrim { background-color: var(--sto-overlay-scrim); }
   .sto-overlay-scrim--dialog { background-color: var(--sto-overlay-dialog-scrim); }
+
+  /* Third-party canvas chrome cannot carry recipe classes; this bridge keeps state ownership here. */
+  .workflow-designer-flow .react-flow__controls { background-color: var(--sto-control-toolbar-background); border-color: var(--sto-overlay-border); box-shadow: 0 1px 3px color-mix(in srgb, var(--sto-overlay-scrim) 20%, transparent); }
+  .workflow-designer-flow .react-flow__controls-button { background-color: var(--sto-control-toolbar-background); border-color: var(--sto-control-toolbar-border); color: inherit; }
+  .workflow-designer-flow .react-flow__controls-button:hover { background-color: var(--sto-control-toolbar-hover-background); color: inherit; }
+  .workflow-designer-flow .react-flow__minimap { background-color: var(--sto-panel-bg); border-color: var(--sto-overlay-border); box-shadow: 0 18px 42px color-mix(in srgb, var(--sto-shadow-tone) 10%, transparent); }
+  .workflow-designer-flow .react-flow__minimap-mask { fill: var(--sto-card-map-mask); }
+  .workflow-designer-flow .react-flow__minimap-node { fill: var(--sto-feature-divider); stroke: var(--sto-form-dock-header-border); }
 
   /* Feedback recipe: functional status is the only chromatic surface family. */
   .sto-feedback,
