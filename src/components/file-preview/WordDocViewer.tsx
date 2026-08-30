@@ -66,7 +66,7 @@ function AdaptiveWordFallbackPreview({ html, fileName, className }: {
 <style>${WORD_FALLBACK_SHELL_STYLE}</style>
 </head>
 <body>${html}</body>
-</html>`, { appearance, mode: 'adaptive' }));
+</html>`, { appearance, mode: 'fidelity' }));
 
   useEffect(() => {
     const target = iframeRef.current?.contentWindow;

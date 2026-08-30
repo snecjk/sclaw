@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { render, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { WordDocViewer } from '@/components/file-preview/WordDocViewer';
 import {
   documentBaseUrl,
   injectSrcDocBaseHref,
@@ -14,6 +17,14 @@ const previewSource = readFileSync(
   resolve(process.cwd(), 'src/lib/preview-srcdoc.ts'),
   'utf8',
 );
+
+const mammothState = vi.hoisted(() => ({
+  convertToHtml: vi.fn(),
+}));
+
+vi.mock('mammoth', () => ({
+  convertToHtml: mammothState.convertToHtml,
+}));
 
 describe('preview-srcdoc', () => {
   const sourceUrl = 'https://cdn.example.com/reports/总部结算对账分析.html';
@@ -62,6 +73,26 @@ describe('preview-srcdoc', () => {
     expect(out).toContain('sto:appearance-change');
   });
 
+  it('injects semantic tokens into adaptive HTML', () => {
+    const out = prepareInlinePreviewSrcDoc('<table><tr><td>A</td></tr></table>', {
+      appearance: 'dark',
+      mode: 'adaptive',
+    });
+
+    expect(out).toContain('data-sto-preview-theme');
+    expect(out).toContain('var(--sto-text-primary)');
+  });
+
+  it('does not recolor fidelity content', () => {
+    const out = prepareInlinePreviewSrcDoc('<main style="background:#fff">Paper</main>', {
+      appearance: 'dark',
+      mode: 'fidelity',
+    });
+
+    expect(out).toContain('data-sto-preview-mode="fidelity"');
+    expect(out).not.toContain('data-sto-preview-mode="adaptive"');
+  });
+
   it('does not add adaptive element overrides in fidelity mode', () => {
     const out = prepareInlinePreviewSrcDoc('<html><head></head><body>paper</body></html>', {
       appearance: 'dark',
@@ -69,6 +100,29 @@ describe('preview-srcdoc', () => {
     });
     expect(out).toContain('data-sto-preview-mode="fidelity"');
     expect(out).not.toContain('html[data-sto-preview-mode="adaptive"');
+  });
+
+  it('keeps the Word HTML fallback in fidelity mode', async () => {
+    const OriginalFunction = globalThis.Function;
+    globalThis.Function = function () {
+      return async () => null;
+    } as typeof Function;
+    mammothState.convertToHtml.mockResolvedValue({ value: '<main style="background:#fff">Paper</main>' });
+
+    const { container, unmount } = render(
+      createElement(WordDocViewer, { buffer: new Uint8Array([1]), fileName: 'paper.docx' }),
+    );
+
+    try {
+      await waitFor(() => {
+        const frame = container.querySelector('iframe');
+        expect(frame).not.toBeNull();
+        expect(frame?.srcdoc).toContain('data-sto-preview-mode="fidelity"');
+      });
+    } finally {
+      unmount();
+      globalThis.Function = OriginalFunction;
+    }
   });
 
   it('accepts appearance messages only from the parent with the expected payload', () => {

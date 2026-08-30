@@ -303,6 +303,29 @@ describe('native appearance', () => {
     expect(appearanceState.destroyedContentsWindow.webContents.on).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [false, 'light'],
+    [true, 'dark'],
+  ] as const)('resolves the System preference to %s for every live window', (shouldUseDarkColors, appearance) => {
+    appearanceState.nativeTheme.shouldUseDarkColors = shouldUseDarkColors;
+
+    applyNativeAppearancePreference('system');
+
+    const payload = { preference: 'system', appearance };
+    expect(appearanceState.mainWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      payload,
+    );
+    expect(appearanceState.spriteWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      payload,
+    );
+    expect(appearanceState.floatIconWindow.webContents.send).toHaveBeenCalledWith(
+      'sto:appearance-state',
+      payload,
+    );
+  });
+
   it('replays the current state once after every renderer load', () => {
     const contents = appearanceState.mainWindow.webContents;
 
