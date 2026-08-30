@@ -88,7 +88,7 @@ function declarations(source: string): Map<string, string> {
 function colorBearingInteractionSelectors(source: string): string[] {
   return [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
     .filter(([, selector, body]) =>
-      /:(?:hover|focus(?:-visible|-within)?|disabled)\b/.test(selector)
+      /(?::(?:hover|focus(?:-visible|-within)?|disabled)\b|--(?:active|selected|disabled|loading|open|checked|pressed)\b)/.test(selector)
       && /(?:background(?:-color)?|border-color|color|box-shadow|outline)\s*:\s*(?:var\(|color-mix|hsl|rgb|#)/.test(body))
     .map(([, selector]) => selector.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim());
 }
@@ -146,6 +146,7 @@ describe('Task 8 feature theme contracts', () => {
   it('keeps More Apps interaction colors in shared recipes with semantic classes on consumers', () => {
     expect(moreAppsPageSource).toContain('sto-control--artwork-link');
     expect(moreAppsPageSource).toContain('sto-navigation-item--feature-filter');
+    expect(moreAppsPageSource).toContain('sto-navigation-item__count');
     expect(appCardSource).toContain('sto-control--icon-muted');
     expect(appCardSource).toContain('sto-control--brand-solid');
     expect(addExternalAppModalSource).toContain('sto-overlay--raised-dialog');
@@ -154,6 +155,7 @@ describe('Task 8 feature theme contracts', () => {
     expect(addExternalAppModalSource).toContain('sto-control--dialog-primary');
     expect(colorBearingInteractionSelectors(moreAppsCss)).toEqual([
       '.page-more-apps .app-market__hero:hover',
+      '.page-more-apps .app-market__hero-dot--active',
     ]);
   });
 });

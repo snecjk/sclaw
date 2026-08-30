@@ -840,6 +840,22 @@ describe('card cascade combinations', () => {
     result.unmount();
     dispose();
   });
+
+  it.each(themes)('resolves the active feature-filter count from the shared recipe in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(theme, '', 'page-more-apps');
+    const result = render(
+      <button aria-pressed="true" className="sto-navigation-item sto-navigation-item--feature-filter">
+        <span data-testid="active-filter-count" className="sto-navigation-item__count">1</span>
+      </button>,
+      { container },
+    );
+
+    expect(getComputedStyle(result.getByTestId('active-filter-count')).color)
+      .toBe(colorMarker('--sto-markdown-code-muted'));
+
+    result.unmount();
+    dispose();
+  });
 });
 
 describe('Navigation consumer pixel modifiers', () => {

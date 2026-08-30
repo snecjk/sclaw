@@ -431,6 +431,7 @@
   .sto-navigation-item--feature-tab:is(:hover, [data-sto-state='hover'], [aria-selected='true']) { color: var(--sto-segment-plain-selected-foreground); }
   .sto-navigation-item--feature-filter { background-color: transparent; border-color: transparent; color: var(--sto-markdown-code-muted); }
   .sto-navigation-item--feature-filter:is(:hover, [data-sto-state='hover'], [aria-pressed='true']) { background-color: var(--sto-control-active-bg); color: var(--sto-quick-input-content-foreground); }
+  .sto-navigation-item--feature-filter:is([aria-pressed='true'], [data-sto-state='active']) .sto-navigation-item__count { color: var(--sto-markdown-code-muted); }
 
   .sto-navigation-item--picker:is(:hover, :focus-visible, :has(:focus-visible), [data-sto-state='hover'], [data-sto-state='focus']) {
     background-color: var(--sto-navigation-picker-hover-background);

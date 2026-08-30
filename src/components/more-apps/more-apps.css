@@ -648,10 +648,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.page-more-apps .app-market__cat--active .app-market__cat-count {
-  color: var(--sto-markdown-code-muted);
-}
-
 .page-more-apps .app-market__cat--active {
   font-weight: 600;
 }
