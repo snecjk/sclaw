@@ -2,6 +2,8 @@
 
 This checklist records future manual visual observations against the approved appearance. An unchecked cell means that appearance has not yet been manually observed; the automated component fixture is not treated as evidence for a real page.
 
+Task 10's single Electron runner attempt exited with `SIGABRT` before capture. No manual Light, Dark, or System observation was performed, so all 30 real-page cells remain intentionally unchecked.
+
 | Page or surface | Light | Dark | System | Evidence |
 | --- | --- | --- | --- | --- |
 | Home / Chat | ☐ | ☐ | ☐ | Task 7 source/computed guards passed and the unchanged Electron fixture matched Light/Dark at 1440×1000; real-page manual observation remains for Task 10. |

@@ -6,19 +6,7 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
 {
   "darkSelectors": [
     {
-      "file": "src/components/more-apps/more-apps.css",
-      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
-    },
-    {
-      "file": "src/components/sclaw-browser/sclaw-browser-overlay.css",
-      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
-    },
-    {
       "file": "src/pages/LearningCenter/LearningCenterPage.css",
-      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
-    },
-    {
-      "file": "src/pages/WorkflowDesigner/workflow-designer-canvas.css",
       "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
     },
     {
@@ -196,10 +184,6 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
-      "file": "src/components/workflow/WorkflowPicker.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
       "file": "src/components/workflow/WorkflowPreviewPanel.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
@@ -280,10 +264,6 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
-      "file": "src/pages/MyTask/components/TaskCreateModal.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
       "file": "src/pages/Settings/index.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
@@ -305,26 +285,6 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
     },
     {
       "file": "src/pages/Workflow/components/workflow-composer-input.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
-      "file": "src/pages/WorkflowDesigner/components/history-versions-drawer.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
-      "file": "src/pages/WorkflowDesigner/components/local-run-history-dialog.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
-      "file": "src/pages/WorkflowDesigner/components/startup-run-dialog.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
-      "file": "src/pages/WorkflowDesigner/components/test-run-trial-view.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
-      "file": "src/pages/WorkflowDesigner/workflow-designer.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
   ],

@@ -426,6 +426,42 @@ function reasonFor(match: SourceMatch): string {
 }
 
 describe('repository-wide theme source audit', () => {
+  it('removes reviewed zero-consumer aliases from the canonical token owner', () => {
+    const tokenSource = readFileSync(resolve(process.cwd(), rawThemeOwner), 'utf8');
+    const deadAliases = [
+      '--sto-accent-soft',
+      '--sto-border-strong',
+      '--sto-color-brand-soft-hsl',
+      '--sto-color-brand-strong-hsl',
+      '--sto-color-info-soft-hsl',
+      '--sto-color-neutral-1-hsl',
+      '--sto-color-neutral-10-hsl',
+      '--sto-color-neutral-2-hsl',
+      '--sto-color-neutral-3-hsl',
+      '--sto-color-neutral-4-hsl',
+      '--sto-color-neutral-6-hsl',
+      '--sto-color-neutral-8-hsl',
+      '--sto-color-neutral-9-hsl',
+      '--sto-color-surface-page-hsl',
+      '--sto-elevated',
+      '--sto-info-primary',
+      '--sto-warning-primary',
+      '--sto-wf-cover-coral-accent',
+      '--sto-wf-cover-coral-bg',
+      '--sto-wf-cover-coral-icon',
+      '--sto-wf-cover-pink-accent',
+      '--sto-wf-cover-pink-bg',
+      '--sto-wf-cover-pink-icon',
+      '--sto-wf-cover-teal-accent',
+      '--sto-wf-cover-teal-bg',
+      '--sto-wf-cover-teal-icon',
+      '--sto-wf-hero-input-border',
+      '--sto-wf-hero-input-ring',
+    ];
+
+    expect(deadAliases.filter((alias) => tokenSource.includes(`${alias}:`))).toEqual([]);
+  });
+
   it('keeps Task 8 feature stylesheets free of page-owned dark palettes', () => {
     const violations = taskEightFeatureStylesheets.flatMap((file) => {
       const source = readFileSync(resolve(process.cwd(), file), 'utf8');

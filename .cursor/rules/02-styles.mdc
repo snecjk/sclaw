@@ -8,9 +8,10 @@ alwaysApply: true
 
 ## 1. 唯一主题入口
 
-- `src/styles/theme/tokens.css`：只存放原始色板、浅色/深色语义映射和兼容变量。
-- `src/styles/theme/recipes.css`：只存放跨组件复用的颜色、边框、阴影和状态配方。
-- `src/styles/globals.css`：保留布局、尺寸、动画、页面特有效果，不再定义第二套核心颜色。
+- `src/styles/theme/tokens.css`：浅色、深色与 System 解析后的唯一映射所有者；只存放原始色板、语义映射和仍有消费者的兼容变量。
+- `src/styles/theme/recipes.css`：唯一共享交互状态颜色所有者；跨组件复用的颜色、边框、阴影和状态配方只能在此定义。
+- `src/styles/globals.css`：只保留 reset、布局、尺寸、排版和动画，不定义主题映射或共享交互状态颜色。
+- 页面只能定义布局，不得拥有 `.dark` 调色板、颜色型 `dark:` 工具类或共享状态颜色分支。
 - 组件不得新增主题 Context、Hook、包装组件或 JavaScript 颜色分支。
 - `light | dark | system` 均由已解析的根节点 `.light/.dark`、`data-theme` 和 `color-scheme` 同步驱动。
 
@@ -52,7 +53,7 @@ alwaysApply: true
 
 ## 5. 卡片选择
 
-- 应用、技能、连接器、工作流等集合卡片统一使用 `collectionCardShellClass`，不得在页面重复组合背景、边框、圆角、过渡和 Focus。
+- 应用、技能、连接器、工作流等同类集合卡片统一使用 `collectionCardShellClass`，并使用兄弟层 `CollectionCardAction` 提供键盘安全的整卡操作；不得在页面重复组合背景、边框、过渡和 Focus。
 - 其他普通列表、任务和首页推荐：`.sto-card-flat`；可交互时再加 `.sto-card-flat-interactive`。
 - 有明确容器层级的内容面板：`.sto-card-panel`。
 - 面板内部的输入、分组和嵌套区域：使用 inset 语义。
@@ -64,13 +65,13 @@ alwaysApply: true
 - 输入类控件使用 `.sto-control-field`。
 - 描边、次级、幽灵按钮分别使用 `.sto-control-outline`、`.sto-control-secondary`、`.sto-control-ghost`。
 - 分段控件使用 `.sto-segment-track` 与 `.sto-segment-item`。
-- 所有默认、hover、active/selected、focus、disabled、loading、empty、error 状态必须在浅色和深色下可读。
+- 每个新增交互组件必须实现完整状态链 `default → hover → active/selected → focus → disabled → loading → empty → error`，所有状态在浅色和深色下均须可读。
 - 页面组件不得复制共享控件的 `dark:bg-*`、`dark:border-*`、`dark:text-*` 组合。
 
 ## 7. 预览与独立窗口
 
-- 应用生成、允许适配的 HTML 使用 Adaptive 策略；表格的 `table/th/td`、表单、代码块和引用块必须显式映射。
-- 用户文档、图片、PPT、Word 纸张等要求颜色保真的内容使用 Fidelity 策略，不得反色或改写内容颜色。
+- 应用生成、允许适配的 HTML 使用 Adaptive 策略并继承语义 token；表格的 `table/th/td`、表单、代码块和引用块必须显式映射。
+- 用户文档、图片、PPT、Word 纸张等 Fidelity 内容保留作者外观，不得反色或改写内容颜色。
 - iframe 初始主题必须写入文档根节点，运行时通过统一 appearance 消息更新，不能仅依赖 `prefers-color-scheme`。
 - 主窗口、Sprite、Float 和后创建窗口必须接收同一已解析 appearance；系统主题变化需要实时同步。
 

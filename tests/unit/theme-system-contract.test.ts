@@ -295,6 +295,11 @@ describe('theme system contract', () => {
     const rules = readFileSync(styleRulesPath, 'utf8');
     expect(rules).toContain('src/styles/theme/tokens.css');
     expect(rules).toContain('src/styles/theme/recipes.css');
+    expect(rules).toContain('唯一映射所有者');
+    expect(rules).toContain('唯一共享交互状态颜色所有者');
+    expect(rules).toContain('页面只能定义布局');
+    expect(rules).toContain('CollectionCardAction');
+    expect(rules).toContain('default → hover → active/selected → focus → disabled → loading → empty → error');
     expect(rules).toContain('浅色是当前视觉基线');
     expect(rules).toContain('Adaptive');
     expect(rules).toContain('Fidelity');

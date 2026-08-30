@@ -10,26 +10,11 @@
     --sto-color-danger-hsl: 0 95% 60.7843%; /* #FA3C3C */
     --sto-color-warning-hsl: 39.913 95.8333% 52.9412%; /* #FAAD14 */
     --sto-color-white-hsl: 0 0% 100%; /* #FFFFFF */
-    --sto-color-surface-page-hsl: 0 0% 98.0392%; /* #FAFAFA */
-    --sto-color-neutral-1-hsl: 210 25% 98.4314%; /* #FAFBFC */
-    --sto-color-neutral-2-hsl: 210 11.1111% 96.4706%; /* #F5F6F7 */
-    --sto-color-neutral-3-hsl: 220 13.0435% 95.4902%; /* #F2F3F5 */
-    --sto-color-neutral-4-hsl: 230 13.0435% 90.9804%; /* #E5E6EB */
-    --sto-color-neutral-6-hsl: 218.1818 11.3402% 80.9804%; /* #C9CDD4 */
-    --sto-color-neutral-8-hsl: 212.7273 10% 56.8627%; /* #86909C */
-    --sto-color-neutral-9-hsl: 215.5556 14.7541% 35.8824%; /* #4E5969 */
-    --sto-color-neutral-10-hsl: 220 17.1429% 13.7255%; /* #1D2129 */
-    --sto-color-brand-soft-hsl: 36 100% 95.098%; /* #FFF5E6 */
-    --sto-color-brand-strong-hsl: 21.7877 100% 35.098%; /* #B34100 */
-    --sto-color-info-soft-hsl: 222.8571 100% 97.0588%; /* #F0F4FF */
-
     /* Canonical neutral hierarchy shared by Renderer and adaptive previews. */
     --sto-canvas: #f7f8fa;
     --sto-panel: #fafafa;
     --sto-sidebar: #ededed;
-    --sto-elevated: #ffffff;
     --sto-border: #e5e6eb;
-    --sto-border-strong: #c9cdd4;
 
     /* Tailwind / shadcn compatibility aliases. */
     --background: 220 14% 97%;
@@ -98,12 +83,10 @@
     --sto-surface-subtle: #f2f3f5;
     --sto-brand-primary: hsl(var(--primary));
     --sto-brand-hover: #d95700;
-    --sto-info-primary: hsl(var(--link));
     --sto-link-foreground: hsl(var(--link));
     --sto-link-hover-foreground: #ff6a00;
     --sto-success-primary: hsl(var(--success));
     --sto-danger-primary: hsl(var(--destructive));
-    --sto-warning-primary: hsl(var(--warning));
     --sto-control-bg: var(--sto-panel-bg);
     --sto-control-hover-bg: #f2f3f5;
     --sto-control-active-bg: #e5e6eb;
@@ -125,7 +108,6 @@
     --sto-sidebar-bg: var(--sto-shell-bg);
     --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff8c00;
-    --sto-accent-soft: #fff3e0;
     --sto-brand-6: #ff6f00;
 
     /* Shared component state semantics. */
@@ -145,12 +127,6 @@
     --sto-feedback-info-foreground: var(--sto-toast-info-icon);
     --sto-feedback-info-background: var(--sto-toast-info-bg);
     --sto-feedback-info-border: var(--sto-toast-info-border);
-    --sto-feedback-success-foreground: var(--sto-toast-success-icon);
-    --sto-feedback-success-background: var(--sto-toast-success-bg);
-    --sto-feedback-success-border: var(--sto-toast-success-border);
-    --sto-feedback-warning-foreground: var(--sto-toast-warning-icon);
-    --sto-feedback-warning-background: var(--sto-toast-warning-bg);
-    --sto-feedback-warning-border: var(--sto-toast-warning-border);
     --sto-feedback-error-foreground: var(--sto-toast-error-icon);
     --sto-feedback-error-background: var(--sto-toast-error-bg);
     --sto-feedback-error-border: var(--sto-toast-error-border);
@@ -160,10 +136,6 @@
     --sto-card-default-border: hsl(var(--glass-border));
     --sto-card-default-foreground: hsl(var(--card-foreground));
     --sto-card-default-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight));
-    --sto-card-backdrop-filter: blur(var(--glass-blur));
-    --sto-card-loading-overlay: color-mix(in srgb, var(--sto-card-panel-bg) 70%, transparent);
-    --sto-card-loading-spinner-border: color-mix(in srgb, var(--sto-text-primary) 20%, transparent);
-    --sto-card-loading-spinner-foreground: var(--sto-text-primary);
     --sto-glass-background: hsl(var(--glass-bg) / var(--glass-opacity));
     --sto-glass-border: hsl(var(--glass-border));
     --sto-glass-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight));
@@ -171,12 +143,8 @@
     --sto-control-primary-foreground: hsl(var(--primary-foreground));
     --sto-control-default-foreground: hsl(var(--foreground));
     --sto-control-neutral-foreground: var(--sto-text-primary);
-    --sto-control-neutral-edge-border: var(--sto-surface-edge);
     --sto-control-primary-hover-background: hsl(var(--primary) / 0.9);
-    --sto-control-destructive-foreground: hsl(var(--destructive-foreground));
-    --sto-control-destructive-hover-background: hsl(var(--destructive) / 0.9);
     --sto-control-outline-background: hsl(var(--glass-bg) / 0.5);
-    --sto-control-outline-border: hsl(var(--glass-border));
     --sto-control-outline-hover-background: rgba(0, 0, 0, 0.06);
     --sto-control-secondary-background: rgba(255, 255, 255, 0.15);
     --sto-control-secondary-hover-background: rgba(255, 255, 255, 0.25);
@@ -188,17 +156,13 @@
     --sto-control-field-foreground: hsl(var(--foreground));
     --sto-control-field-backdrop-filter: blur(var(--glass-blur));
     --sto-segment-track-background: rgba(255, 255, 255, 0.2);
-    --sto-segment-track-border: hsl(var(--glass-border));
-    --sto-segment-track-backdrop-filter: blur(var(--glass-blur));
     --sto-segment-default-foreground: hsl(var(--muted-foreground));
     --sto-segment-hover-background: transparent;
     --sto-segment-selected-background: rgba(255, 255, 255, 0.6);
     --sto-segment-selected-foreground: hsl(var(--foreground));
     --sto-segment-selected-shadow: var(--glass-shadow);
     --sto-segment-plain-background: #ffffff;
-    --sto-segment-plain-foreground: #4e5969;
     --sto-segment-plain-hover-background: rgba(0, 0, 0, 0.04);
-    --sto-segment-plain-track-background: #ededed;
     --sto-segment-plain-selected-foreground: #1a1a1a;
     --sto-navigation-menu-background: transparent;
     --sto-navigation-menu-foreground: hsl(var(--popover-foreground));
@@ -211,7 +175,6 @@
     --sto-navigation-collapsed-hover-background: rgba(0, 0, 0, 0.06);
     --sto-navigation-collapsed-selected-background: var(--sto-brand-6);
     --sto-navigation-collapsed-selected-foreground: #ffffff;
-    --sto-navigation-collapsed-selected-hover-background: #ff8d2a;
     --sto-navigation-collapsed-selected-active-background: #d95700;
     --sto-navigation-collapsed-selected-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
     --sto-overlay-background: hsl(var(--card));
@@ -219,7 +182,6 @@
     --sto-overlay-menu-border: var(--sto-border-default);
     --sto-overlay-content-border: var(--sto-surface-edge);
     --sto-overlay-foreground: hsl(var(--popover-foreground));
-    --sto-overlay-glass-border: hsl(var(--glass-border));
     --sto-overlay-glass-shadow: var(--sto-glass-shadow);
     --sto-overlay-scrim: rgba(0, 0, 0, 0.4);
     --sto-overlay-dialog-scrim: rgba(15, 23, 42, 0.42);
@@ -283,7 +245,6 @@
     --sto-composer-default-background: #ffffff;
     --sto-composer-default-border: #e5e6eb;
     --sto-composer-default-shadow: 0 4px 14px rgba(29, 33, 41, 0.05);
-    --sto-composer-hover-border: #ffc17a;
     --sto-composer-hover-shadow: 0 4px 20px rgba(255, 183, 140, 0.14);
     --sto-composer-focus-border: #ff8d2a;
     --sto-composer-focus-ring: rgb(255 111 0 / 22%);
@@ -305,7 +266,6 @@
 
     /* Generated Markdown maps here so content CSS has no page-owned dark palette. */
     --sto-markdown-heading-muted: #666666;
-    --sto-markdown-quote-border: #1d2129;
     --sto-markdown-quote-background: #f3f4f6;
     --sto-markdown-quote-foreground: #555555;
     --sto-markdown-inline-code-background: #f0f0f0;
@@ -323,7 +283,6 @@
     --sto-markdown-syntax-title: #0a3069;
     --sto-markdown-syntax-comment: #6e7781;
     --sto-markdown-syntax-string: #a31515;
-    --sto-markdown-divider: #e8e8e8;
     --sto-markdown-link: #ff6700;
     --sto-markdown-table-border: #e8e8e8;
     --sto-markdown-table-foreground: hsl(var(--foreground));
@@ -387,20 +346,9 @@
 
     /* Workflow semantic colors. */
     --sto-wf-hero-input-bg: #ffffff;
-    --sto-wf-hero-input-border: #e5e6eb;
-    --sto-wf-hero-input-ring: 255 140 0;
-    --sto-wf-cover-teal-bg: #e1f5ee;
-    --sto-wf-cover-teal-accent: #9fe1cb;
-    --sto-wf-cover-teal-icon: #0f6e56;
-    --sto-wf-cover-coral-bg: #faece7;
-    --sto-wf-cover-coral-accent: #f5c4b3;
-    --sto-wf-cover-coral-icon: #993c1d;
     --sto-wf-cover-purple-bg: #eeedfe;
     --sto-wf-cover-purple-accent: #cecbf6;
     --sto-wf-cover-purple-icon: #3c3489;
-    --sto-wf-cover-pink-bg: #fbeaf0;
-    --sto-wf-cover-pink-accent: #f4c0d1;
-    --sto-wf-cover-pink-icon: #993556;
     --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
     --sto-wf-detail-cover-bg: #f0f1f5;
     --sto-wf-detail-category-bg: #fff6f0;
@@ -478,7 +426,6 @@
     --sto-card-flat-hover-bg: #ffffff;
     --sto-card-flat-border: var(--sto-border-default);
     --sto-card-flat-hover-border: var(--sto-border-heavy);
-    --sto-card-flat-shadow: none;
     --sto-card-flat-hover-shadow: 0 0 16px rgba(0, 0, 0, 0.12);
     --sto-card-panel-bg: #ffffff;
     --sto-card-inset-bg: #fafbfc;
@@ -492,9 +439,7 @@
     --sto-canvas: #0d0d0d;
     --sto-panel: #181818;
     --sto-sidebar: #212121;
-    --sto-elevated: #282828;
     --sto-border: rgb(255 255 255 / 8%);
-    --sto-border-strong: rgb(255 255 255 / 16%);
     --background: 0 0% 5.1%;
     --foreground: 0 0% 87.5%;
     --card: 0 0% 12.9%;
@@ -533,12 +478,10 @@
     --link-muted: 231 35% 18%;
 
     --sto-brand-primary: hsl(var(--sto-color-brand-hsl));
-    --sto-info-primary: hsl(var(--sto-color-info-hsl));
     --sto-link-foreground: hsl(var(--sto-color-info-hsl));
     --sto-link-hover-foreground: #ff6a00;
     --sto-success-primary: hsl(var(--sto-color-success-hsl));
     --sto-danger-primary: hsl(var(--sto-color-danger-hsl));
-    --sto-warning-primary: hsl(var(--sto-color-warning-hsl));
 
     --sto-toast-info-bg: hsl(231 35% 18%);
     --sto-toast-info-border: hsl(231 40% 28%);
@@ -587,7 +530,6 @@
     --sto-sidebar-bg: var(--sto-surface-secondary);
     --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff9f2e;
-    --sto-accent-soft: hsl(32 45% 14%);
     --sto-brand-6: var(--sto-brand-primary);
 
     --sto-disabled-background: var(--sto-surface-secondary);
@@ -595,9 +537,7 @@
     --sto-card-default-background: var(--sto-card-panel-bg);
     --sto-card-default-border: var(--sto-border-default);
     --sto-card-default-shadow: none;
-    --sto-card-backdrop-filter: none;
     --sto-control-outline-background: var(--sto-control-bg);
-    --sto-control-outline-border: var(--sto-border-default);
     --sto-control-outline-hover-background: var(--sto-control-hover-bg);
     --sto-control-secondary-background: var(--sto-control-bg);
     --sto-control-secondary-hover-background: var(--sto-control-hover-bg);
@@ -608,14 +548,10 @@
     --sto-control-field-foreground: var(--sto-text-primary);
     --sto-control-field-backdrop-filter: none;
     --sto-segment-track-background: var(--sto-control-bg);
-    --sto-segment-track-border: var(--sto-border-default);
-    --sto-segment-track-backdrop-filter: none;
     --sto-segment-selected-background: var(--sto-control-active-bg);
     --sto-segment-selected-shadow: none;
     --sto-segment-plain-background: var(--sto-control-active-bg);
-    --sto-segment-plain-foreground: var(--sto-text-secondary);
     --sto-segment-plain-hover-background: var(--sto-control-hover-bg);
-    --sto-segment-plain-track-background: var(--sto-surface-secondary);
     --sto-segment-plain-selected-foreground: var(--sto-text-primary);
     --sto-navigation-picker-hover-background: rgb(255 255 255 / 6%);
     --sto-navigation-collapsed-hover-background: rgb(255 255 255 / 8%);
@@ -624,7 +560,6 @@
     --sto-overlay-menu-border: var(--sto-border-default);
     --sto-overlay-content-border: var(--sto-border-default);
     --sto-overlay-foreground: var(--sto-text-primary);
-    --sto-overlay-glass-border: var(--sto-border-default);
     --sto-overlay-glass-shadow: var(--sto-overlay-shadow);
     --sto-overlay-scrim: rgba(0, 0, 0, 0.6);
     --sto-overlay-dialog-scrim: rgba(0, 0, 0, 0.6);
@@ -695,7 +630,6 @@
     --sto-composer-unavailable-background: rgb(255 255 255 / 6%);
     --sto-composer-unavailable-border: rgb(255 255 255 / 10%);
     --sto-markdown-heading-muted: var(--sto-text-primary);
-    --sto-markdown-quote-border: var(--sto-text-primary);
     --sto-markdown-quote-background: hsl(var(--muted) / 0.35);
     --sto-markdown-quote-foreground: hsl(var(--muted-foreground));
     --sto-markdown-inline-code-background: hsl(var(--muted));
@@ -713,7 +647,6 @@
     --sto-markdown-syntax-title: #79b8ff;
     --sto-markdown-syntax-comment: #8b949e;
     --sto-markdown-syntax-string: #a5d6ff;
-    --sto-markdown-divider: hsl(var(--border));
     --sto-markdown-table-border: hsl(var(--border));
     --sto-markdown-table-foreground: var(--sto-text-primary);
     --sto-markdown-table-heading-background: var(--sto-surface-secondary);
@@ -772,20 +705,9 @@
     --sto-sidebar-footer-meta: var(--sto-text-tertiary);
 
     --sto-wf-hero-input-bg: var(--sto-surface-primary);
-    --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
-    --sto-wf-hero-input-ring: 255 111 0;
-    --sto-wf-cover-teal-bg: hsl(160 28% 14%);
-    --sto-wf-cover-teal-accent: hsl(160 32% 22%);
-    --sto-wf-cover-teal-icon: #6ee7b7;
-    --sto-wf-cover-coral-bg: hsl(18 32% 14%);
-    --sto-wf-cover-coral-accent: hsl(18 36% 22%);
-    --sto-wf-cover-coral-icon: #fca58a;
     --sto-wf-cover-purple-bg: hsl(248 28% 16%);
     --sto-wf-cover-purple-accent: hsl(248 32% 24%);
     --sto-wf-cover-purple-icon: #a5b4fc;
-    --sto-wf-cover-pink-bg: hsl(330 28% 14%);
-    --sto-wf-cover-pink-accent: hsl(330 32% 22%);
-    --sto-wf-cover-pink-icon: #f9a8d4;
     --sto-wf-detail-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
     --sto-wf-detail-cover-bg: var(--sto-surface-elevated);
     --sto-wf-detail-category-bg: hsl(32 45% 14%);
@@ -862,7 +784,6 @@
     --sto-card-flat-hover-bg: #181818;
     --sto-card-flat-border: var(--sto-border-default);
     --sto-card-flat-hover-border: var(--sto-border-heavy);
-    --sto-card-flat-shadow: none;
     --sto-card-flat-hover-shadow: none;
     --sto-card-panel-bg: #181818;
     --sto-card-inset-bg: #212121;

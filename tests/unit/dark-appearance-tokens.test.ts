@@ -422,7 +422,7 @@ describe('dark appearance semantic tokens', () => {
     expect(moreAppsCss).not.toContain('.dark');
     expect(moreAppsCss).not.toMatch(/--ma-(?!scrollbar-gutter)/);
     expect(moreAppsCss).toContain('background: var(--sto-card-panel-bg)');
-    expect(moreAppsCss).toContain('box-shadow: 0 24px 48px color-mix(in srgb, var(--sto-shadow-tone) 16%, transparent)');
+    expect(recipesCss).toContain('box-shadow: 0 24px 48px color-mix(in srgb, var(--sto-shadow-tone) 16%, transparent)');
   });
 
   it('maps the in-app browser chrome to neutral dark surfaces and text roles', () => {

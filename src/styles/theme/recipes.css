@@ -1,23 +1,23 @@
 @layer components {
-  .glass {
-    background-color: var(--sto-glass-background);
-    border-color: var(--sto-glass-border);
-    box-shadow: var(--sto-glass-shadow);
+  :is(.glass, .glass-chrome, .glass-panel, .glass-subtle) { border-color: var(--sto-glass-border); }
+
+  :is(.glass, .glass-chrome, .glass-subtle) {
     backdrop-filter: var(--sto-glass-backdrop-filter);
     -webkit-backdrop-filter: var(--sto-glass-backdrop-filter);
+  }
+
+  .glass {
+    background-color: var(--sto-glass-background);
+    box-shadow: var(--sto-glass-shadow);
   }
 
   .glass-chrome {
     background: var(--sto-glass-background);
-    border-color: var(--sto-glass-border);
     box-shadow: none;
-    backdrop-filter: var(--sto-glass-backdrop-filter);
-    -webkit-backdrop-filter: var(--sto-glass-backdrop-filter);
   }
 
   .glass-panel {
     background: var(--sto-glass-panel-background);
-    border-color: var(--sto-glass-border);
     box-shadow: var(--sto-glass-panel-shadow);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
@@ -25,32 +25,24 @@
 
   .glass-subtle {
     background: var(--sto-glass-subtle-background);
-    border-color: var(--sto-glass-border);
     box-shadow: var(--sto-glass-shadow);
-    backdrop-filter: var(--sto-glass-backdrop-filter);
-    -webkit-backdrop-filter: var(--sto-glass-backdrop-filter);
   }
 
   /* Card recipe: consumers retain geometry; recipes own color and state. */
   .sto-card {
-    --sto-disabled-source-background: var(--sto-card-default-background);
-    --sto-disabled-source-border: var(--sto-card-default-border);
-    --sto-disabled-source-foreground: var(--sto-card-default-foreground);
     background-color: var(--sto-card-default-background);
     border-color: var(--sto-card-default-border);
     color: var(--sto-card-default-foreground);
     box-shadow: var(--sto-card-default-shadow);
-    backdrop-filter: var(--sto-card-backdrop-filter);
-    -webkit-backdrop-filter: var(--sto-card-backdrop-filter);
+    backdrop-filter: var(--sto-control-field-backdrop-filter);
+    -webkit-backdrop-filter: var(--sto-control-field-backdrop-filter);
   }
 
   .sto-card--flat,
   .sto-card-flat {
-    --sto-disabled-source-background: var(--sto-card-flat-bg);
-    --sto-disabled-source-border: var(--sto-card-flat-border);
     background-color: var(--sto-card-flat-bg);
     border-color: var(--sto-card-flat-border);
-    box-shadow: var(--sto-card-flat-shadow);
+    box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
@@ -71,17 +63,12 @@
 
   .sto-card:where(.sto-card--flat.sto-card--interactive):where(:hover, [data-sto-state='hover']),
   .sto-card-flat-interactive:hover {
-    --sto-disabled-source-background: var(--sto-card-flat-hover-bg);
-    --sto-disabled-source-border: var(--sto-card-flat-hover-border);
     background-color: var(--sto-card-flat-hover-bg);
     border-color: var(--sto-card-flat-hover-border);
     box-shadow: var(--sto-card-flat-hover-shadow);
   }
 
   .sto-card:where([data-selected='true'], [data-sto-state='active']) {
-    --sto-disabled-source-background: var(--sto-control-active-bg);
-    --sto-disabled-source-border: var(--sto-border-heavy);
-    --sto-disabled-source-foreground: var(--sto-text-primary);
     background-color: var(--sto-control-active-bg);
     border-color: var(--sto-border-heavy);
     color: var(--sto-text-primary);
@@ -93,11 +80,11 @@
     box-shadow: var(--sto-card-focus-shadow);
   }
 
-  .sto-card-busy-overlay { background-color: var(--sto-card-loading-overlay); }
+  .sto-card-busy-overlay { background-color: color-mix(in srgb, var(--sto-card-panel-bg) 70%, transparent); }
 
   .sto-card-busy-spinner {
-    border-color: var(--sto-card-loading-spinner-border);
-    border-top-color: var(--sto-card-loading-spinner-foreground);
+    border-color: color-mix(in srgb, var(--sto-text-primary) 20%, transparent);
+    border-top-color: var(--sto-control-neutral-foreground);
   }
 
   /* Clickable collection cards keep content and secondary controls as siblings. */
@@ -144,17 +131,17 @@
   .sto-control--destructive {
     --sto-disabled-source-background: var(--sto-danger-primary);
     --sto-disabled-source-border: var(--sto-danger-primary);
-    --sto-disabled-source-foreground: var(--sto-control-destructive-foreground);
+    --sto-disabled-source-foreground: hsl(var(--destructive-foreground));
     background-color: var(--sto-danger-primary);
     border-color: var(--sto-danger-primary);
-    color: var(--sto-control-destructive-foreground);
+    color: hsl(var(--destructive-foreground));
   }
 
   .sto-control--outline {
     --sto-disabled-source-background: var(--sto-control-outline-background);
-    --sto-disabled-source-border: var(--sto-control-outline-border);
+    --sto-disabled-source-border: var(--sto-control-field-border);
     background-color: var(--sto-control-outline-background);
-    border-color: var(--sto-control-outline-border);
+    border-color: var(--sto-control-field-border);
     backdrop-filter: var(--sto-control-field-backdrop-filter);
     -webkit-backdrop-filter: var(--sto-control-field-backdrop-filter);
   }
@@ -201,7 +188,7 @@
   }
 
   .sto-control--composer:is(:hover, [data-sto-state='hover']) {
-    border-color: var(--sto-composer-hover-border);
+    border-color: var(--sto-composer-drag-border);
     box-shadow: var(--sto-composer-hover-shadow);
   }
 
@@ -293,8 +280,8 @@
   }
 
   .sto-control--destructive:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
-    background-color: var(--sto-control-destructive-hover-background);
-    border-color: var(--sto-control-destructive-hover-background);
+    background-color: hsl(var(--destructive) / 0.9);
+    border-color: hsl(var(--destructive) / 0.9);
   }
 
   .sto-control--outline:is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
@@ -338,8 +325,8 @@
   }
 
   .sto-control--neutral-outline {
-    --sto-disabled-source-border: var(--sto-control-neutral-edge-border);
-    border-color: var(--sto-control-neutral-edge-border);
+    --sto-disabled-source-border: var(--sto-surface-edge);
+    border-color: var(--sto-surface-edge);
   }
 
   .sto-control:is(.sto-control--neutral-outline, .sto-control--neutral-outline-default):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
@@ -464,7 +451,7 @@
   }
 
   .sto-navigation-item--collapsed:is([aria-current='page'], [data-selected='true']):is(:hover, [data-sto-state='hover']) {
-    background-color: var(--sto-navigation-collapsed-selected-hover-background);
+    background-color: var(--sto-composer-focus-border);
   }
 
   .sto-navigation-item--collapsed:is([aria-current='page'], [data-selected='true']):active {
@@ -478,12 +465,12 @@
   /* Segment track is a surface; items preserve Radix active/inactive. */
   .sto-segment-track {
     background-color: var(--sto-segment-track-background);
-    border-color: var(--sto-segment-track-border);
-    backdrop-filter: var(--sto-segment-track-backdrop-filter);
-    -webkit-backdrop-filter: var(--sto-segment-track-backdrop-filter);
+    border-color: var(--sto-control-field-border);
+    backdrop-filter: var(--sto-control-field-backdrop-filter);
+    -webkit-backdrop-filter: var(--sto-control-field-backdrop-filter);
   }
 
-  .sto-segment-track--plain { background-color: var(--sto-segment-plain-track-background); }
+  .sto-segment-track--plain { background-color: var(--sto-shell-bg); }
 
   .sto-segment-item {
     --sto-disabled-source-background: var(--sto-control-ghost-background);
@@ -495,8 +482,8 @@
   }
 
   .sto-segment-item--plain {
-    --sto-disabled-source-foreground: var(--sto-segment-plain-foreground);
-    color: var(--sto-segment-plain-foreground);
+    --sto-disabled-source-foreground: var(--sto-grey-9);
+    color: var(--sto-grey-9);
   }
 
   .sto-segment-item:is(:hover, [data-sto-state='hover']) {
@@ -542,7 +529,7 @@
     color: var(--sto-overlay-foreground);
   }
 
-  .sto-overlay--glass-border { border-color: var(--sto-overlay-glass-border); }
+  .sto-overlay--glass-border { border-color: var(--sto-control-field-border); }
   .sto-overlay--menu-border { border-color: var(--sto-overlay-menu-border); }
   .sto-overlay--content-border { border-color: var(--sto-overlay-content-border); }
   .sto-overlay--glass { background-color: var(--sto-glass-background); }
@@ -578,15 +565,15 @@
   }
 
   .sto-feedback[data-variant='success'] {
-    background-color: var(--sto-feedback-success-background);
-    border-color: var(--sto-feedback-success-border);
-    color: var(--sto-feedback-success-foreground);
+    background-color: var(--sto-toast-success-bg);
+    border-color: var(--sto-toast-success-border);
+    color: var(--sto-toast-success-icon);
   }
 
   .sto-feedback[data-variant='warning'] {
-    background-color: var(--sto-feedback-warning-background);
-    border-color: var(--sto-feedback-warning-border);
-    color: var(--sto-feedback-warning-foreground);
+    background-color: var(--sto-toast-warning-bg);
+    border-color: var(--sto-toast-warning-border);
+    color: var(--sto-toast-warning-icon);
   }
 
   /* Canonical async/error attributes never collide with Radix data-state. */

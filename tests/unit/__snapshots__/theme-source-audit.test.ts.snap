@@ -9135,7 +9135,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/styles/globals.css::pageDarkSelector::.dark::f-page-shading-h: 330px; --sto-wf-page-shading-tile-w: 1152px; } .dark { --sto-header-h: 52px; --sto-content-header-h: 44px; --s::1",
+    "key": "src/styles/globals.css::pageDarkSelector::.dark::f-page-shading-h: 330px; --sto-wf-page-shading-tile-w: 1152px; } .dark { --sto-header-h: 52px; } } @layer base { * { @apply bo::1",
     "reason": "Migration debt: ordinary CSS dark selector must move to semantic tokens or recipes in Tasks 7-8.",
   },
   {
@@ -9531,6 +9531,22 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
+    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--destructive-foreground))::order: var(--sto-danger-primary); --sto-disabled-source-foreground: hsl(var(--destructive-foreground)); background-color: var(--sto-danger-primary); border-color: var::1",
+    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
+  },
+  {
+    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--destructive-foreground))::anger-primary); border-color: var(--sto-danger-primary); color: hsl(var(--destructive-foreground)); } .sto-control--outline { --sto-disabled-source-background: v::1",
+    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
+  },
+  {
+    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--destructive) / 0.9)::-sto-state='hover'], [data-sto-state='active']) { background-color: hsl(var(--destructive) / 0.9); border-color: hsl(var(--destructive) / 0.9); } .sto-control--::1",
+    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
+  },
+  {
+    "key": "src/styles/theme/recipes.css::rawColor::hsl(var(--destructive) / 0.9)::background-color: hsl(var(--destructive) / 0.9); border-color: hsl(var(--destructive) / 0.9); } .sto-control--outline:is(:hover, :active, [data-sto-state='hove::1",
+    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
+  },
+  {
     "key": "src/styles/theme/tokens.css::coolDarkShadow::rgba(15, 23, 42::--glass-border: 220 12% 78% / 0.4; --glass-shadow: 0 18px 48px rgba(15, 23, 42, 0.08); --glass-highlight: 0 0% 100% / 0.82; --canvas-from: #f7::1",
     "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
   },
@@ -9575,7 +9591,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
   },
   {
-    "key": "src/styles/theme/tokens.css::coolDarkShadow::rgba(15, 23, 42::cover-pink-icon: #993556; --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18); --sto-wf-detail-cover-bg: #f0f1f5; --sto-wf-detail-cate::1",
+    "key": "src/styles/theme/tokens.css::coolDarkShadow::rgba(15, 23, 42::ver-purple-icon: #3c3489; --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18); --sto-wf-detail-cover-bg: #f0f1f5; --sto-wf-detail-cate::1",
     "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
   },
   {

@@ -35,7 +35,6 @@
     --sto-sidebar-effective-w: 260px;
     /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影 */
     --sto-main-card-radius: 18px;
-    --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px） */
     --sto-sidebar-collapsed-nav-item-w: 59px;
@@ -45,11 +44,7 @@
     --sto-content-pad-x: 20px;
     --sto-chat-max-w-home: 780px;
     --sto-chat-max-w-page: 862px;
-    --sto-main-inner-max: var(--sto-chat-max-w-page);
     --sto-hero-input-max-w: 780px;
-    --sto-split-min-chat: 30%;
-    --sto-split-max-preview: 70%;
-    --sto-split-default-preview: 50%;
     --sto-main-pad-y-total: 2.5rem;
     /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */
     --sto-sidebar-section-sticky-h: 32px;
@@ -64,37 +59,6 @@
 
   .dark {
     --sto-header-h: 52px;
-    --sto-content-header-h: 44px;
-    --sto-split-header-to-surface-gap: 0px;
-    --sto-workbench-surface-bottom-inset: 8px;
-    --sto-preview-expanded-header-to-surface-gap: 0px;
-    --sto-expanded-preview-inset-x: 12px;
-    --sto-split-preview-surface-inset-end: 12px;
-    --sto-workspace-frame-start: 0px;
-    --sto-chrome-toggle-inset-top: 12px;
-    --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
-    --sto-sidebar-chrome-toggle-inset-top: 16px;
-    --sto-sidebar-chrome-toggle-size: 28px;
-    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + var(--sto-sidebar-chrome-toggle-size));
-    --sto-shell-card-gap: 8px;
-    /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
-    --sto-sidebar-effective-w: 260px;
-    --sto-main-card-radius: 18px;
-    --sto-sidebar-w-expanded: 260px;
-    --sto-sidebar-w-collapsed: 72px;
-    --sto-sidebar-collapsed-nav-item-w: 59px;
-    --sto-sidebar-collapsed-nav-item-h: 28px;
-    --sto-sidebar-collapsed-nav-py: 5px;
-    --sto-sidebar-collapsed-nav-px: 10px;
-    --sto-content-pad-x: 20px;
-    --sto-chat-max-w-home: 780px;
-    --sto-chat-max-w-page: 862px;
-    --sto-main-inner-max: var(--sto-chat-max-w-page);
-    --sto-hero-input-max-w: 780px;
-    --sto-split-min-chat: 30%;
-    --sto-split-max-preview: 70%;
-    --sto-split-default-preview: 50%;
-    --sto-main-pad-y-total: 2.5rem;
   }
 }
 
@@ -614,7 +578,7 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 .prose-chat-reply blockquote {
   margin: 12px 0;
   padding: 8px 16px;
-  border-left: 3px solid var(--sto-markdown-quote-border);
+  border-left: 3px solid var(--sto-sidebar-text-active);
   background: var(--sto-markdown-quote-background);
   color: var(--sto-markdown-quote-foreground);
 }
@@ -777,7 +741,7 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 .prose-chat-reply hr {
   margin: 20px 0;
   border: none;
-  border-top: 1px solid var(--sto-markdown-divider);
+  border-top: 1px solid var(--sto-markdown-table-border);
 }
 
 .prose-chat-reply a,
