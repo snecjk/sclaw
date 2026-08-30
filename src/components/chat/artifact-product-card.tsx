@@ -29,7 +29,7 @@ const artifactActionPillClass =
   'shrink-0 rounded-md bg-[var(--sto-form-disabled-background)] px-3 py-1.5 text-sm leading-[18px] text-foreground';
 
 const artifactMenuContentClass =
-  'sto-overlay min-w-[11rem] rounded-lg border p-1 shadow-[var(--sto-shadow-content-popover)]';
+  'sto-overlay sto-overlay--content-border min-w-[11rem] rounded-lg border p-1 shadow-[var(--sto-shadow-content-popover)]';
 
 const artifactMenuItemClass =
   'gap-2 rounded-md px-2.5 py-2 text-sm text-foreground';

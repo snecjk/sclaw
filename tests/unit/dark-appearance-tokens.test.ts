@@ -77,6 +77,14 @@ const artifactProductCardSource = readFileSync(
   resolve(process.cwd(), 'src/components/chat/artifact-product-card.tsx'),
   'utf8',
 );
+const composerAttachMenuSource = readFileSync(
+  resolve(process.cwd(), 'src/components/attachments/ComposerAttachMenu.tsx'),
+  'utf8',
+);
+const inputComposerSendButtonSource = readFileSync(
+  resolve(process.cwd(), 'src/components/input-composer/input-composer-send-button.tsx'),
+  'utf8',
+);
 const chatSearchBarSource = readFileSync(
   resolve(process.cwd(), 'src/pages/Chat/ChatSearchBar.tsx'),
   'utf8',
@@ -318,6 +326,29 @@ describe('dark appearance semantic tokens', () => {
     expect(dark).toContain('--sto-shadow-search-overlay: 0 12px 32px rgba(0, 0, 0, 0.35)');
     expect(dark).toContain('--sto-shadow-selector: 0 4px 12px rgba(0, 0, 0, 0.28)');
     expect(dark).toContain('--sto-shadow-image-preview: 0 10px 24px rgba(0, 0, 0, 0.35)');
+  });
+
+  it('maps exact light overlay border variants to one neutral dark border', () => {
+    expect(composerAttachMenuSource).toContain('sto-overlay--menu-border');
+    expect(artifactProductCardSource).toContain('sto-overlay--content-border');
+
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-overlay-menu-border: var(--sto-border-default)');
+    expect(dark).toContain('--sto-overlay-content-border: var(--sto-border-default)');
+  });
+
+  it('maps every composer action state without local dark color branches', () => {
+    expect(inputComposerSendButtonSource).not.toContain('dark:');
+    expect(inputComposerSendButtonSource).toContain('sto-control--composer-send-action');
+    expect(inputComposerSendButtonSource).toContain('sto-control--composer-stop');
+    expect(inputComposerSendButtonSource).toContain('sto-control--composer-unavailable');
+
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-shadow-brand-action: none');
+    expect(dark).toContain('--sto-composer-stop-background: color-mix(in srgb, white 80%, transparent)');
+    expect(dark).toContain('--sto-composer-stop-hover-background: color-mix(in srgb, white 90%, transparent)');
+    expect(dark).toContain('--sto-composer-unavailable-background: color-mix(in srgb, white 6%, transparent)');
+    expect(dark).toContain('--sto-composer-unavailable-border: color-mix(in srgb, white 10%, transparent)');
   });
 
   it('keeps workflow designer canvas, nodes and overlays neutral in dark appearance', () => {

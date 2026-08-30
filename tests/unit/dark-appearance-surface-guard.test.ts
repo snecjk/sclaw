@@ -29,6 +29,7 @@ const taskSevenFiles = [
   'src/components/chat/chat-tool-call-card.tsx',
   'src/components/input-composer/input-composer-shell.tsx',
   'src/components/input-composer/input-composer-agent-picker.tsx',
+  'src/components/input-composer/input-composer-send-button.tsx',
   'src/components/jsbridge/JsBridgeHostPortal.tsx',
   'src/components/layout/SidebarMobileConnectTooltip.tsx',
   'src/components/parameter-form/FormFieldRenderer.tsx',

@@ -103,7 +103,7 @@ export function ComposerAttachMenu({
       ref={menuRef}
       role="menu"
       className={cn(
-        'sto-overlay fixed z-[100001] min-w-[180px] overflow-hidden rounded-[10px] border',
+        'sto-overlay sto-overlay--menu-border fixed z-[100001] min-w-[180px] overflow-hidden rounded-[10px] border',
         'p-1 shadow-[var(--sto-shadow-dropdown-strong)]',
       )}
       style={{ bottom: pos.bottom, left: pos.left }}

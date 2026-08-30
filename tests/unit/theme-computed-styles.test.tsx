@@ -130,6 +130,8 @@ function resolveThemeToken(token: string, theme: Theme): string {
 
 function installExactThemeStylesForTheme(theme: Theme, targetDocument = document): void {
   const tokens = [
+    '--sto-overlay-menu-border',
+    '--sto-overlay-content-border',
     '--sto-navigation-picker-hover-background',
     '--sto-navigation-selected-hover-background',
     '--sto-navigation-collapsed-background',
@@ -469,6 +471,25 @@ describe('mounted primitive theme recipe matrix', () => {
           .toContain(colorMarker('--sto-control-focus-shadow'));
       }
       unmount();
+    }
+  });
+});
+
+describe('overlay border variants', () => {
+  it('preserves the two approved light menu borders and maps both to a neutral dark border', () => {
+    for (const [theme, className, expected] of [
+      ['light', 'sto-overlay sto-overlay--menu-border', 'rgb(229, 230, 235)'],
+      ['light', 'sto-overlay sto-overlay--content-border', 'rgb(232, 234, 239)'],
+      ['dark', 'sto-overlay sto-overlay--menu-border', 'rgba(255, 255, 255, 0.08)'],
+      ['dark', 'sto-overlay sto-overlay--content-border', 'rgba(255, 255, 255, 0.08)'],
+    ] as const) {
+      const { container, dispose } = createExactThemeRoot(theme);
+      const overlay = container.ownerDocument.createElement('div');
+      overlay.className = className;
+      container.append(overlay);
+      expect(container.ownerDocument.defaultView?.getComputedStyle(overlay).borderColor)
+        .toBe(expected);
+      dispose();
     }
   });
 });

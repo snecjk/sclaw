@@ -106,27 +106,30 @@ function sourceMatches(): SourceMatch[] {
   return productionSources(sourceRoot).flatMap(({ file, source }) => matchesInSource(file, source));
 }
 
-const taskSevenSourcePrefixes = [
-  'src/components/chat/',
-  'src/components/input-composer/',
-  'src/components/parameter-form/',
-  'src/components/quick-input/',
-  'src/pages/Chat/',
-] as const;
-
 const taskSevenSourceFiles = new Set([
   'src/lib/surfaces.ts',
   'src/styles/globals.css',
   'src/components/attachments/ComposerAttachMenu.tsx',
+  'src/components/chat/artifact-product-card.tsx',
+  'src/components/chat/chat-process-block.tsx',
+  'src/components/chat/chat-tool-call-card.tsx',
   'src/components/channels/ChannelConfigModal.tsx',
   'src/components/channels/DingTalkHubBindModal.tsx',
   'src/components/channels/MobileAppConfigModal.tsx',
   'src/components/file-preview/ArtifactShareDialog.tsx',
   'src/components/file-preview/SaveArtifactDialog.tsx',
+  'src/components/input-composer/input-composer-agent-picker.tsx',
+  'src/components/input-composer/input-composer-shell.tsx',
   'src/components/jsbridge/JsBridgeHostPortal.tsx',
   'src/components/layout/SidebarMobileConnectTooltip.tsx',
   'src/components/layout/TitleBar.tsx',
   'src/components/layout/sidebar-update-notice.tsx',
+  'src/components/parameter-form/FormFieldRenderer.tsx',
+  'src/components/parameter-form/OptionCardList.tsx',
+  'src/components/parameter-form/ParameterFormCard.tsx',
+  'src/components/quick-input/QuickInputManageListItem.tsx',
+  'src/components/quick-input/QuickInputManageModal.tsx',
+  'src/components/quick-input/QuickInputPicker.tsx',
   'src/components/settings/DwsCliSettings.tsx',
   'src/components/settings/ProvidersSettings.tsx',
   'src/components/skill-plaza/SkillIcon.tsx',
@@ -135,6 +138,11 @@ const taskSevenSourceFiles = new Set([
   'src/components/ui/tooltip.tsx',
   'src/pages/Agents/AgentDetailPage.tsx',
   'src/pages/Agents/index.tsx',
+  'src/pages/Chat/ChatEngineModelSelectors.tsx',
+  'src/pages/Chat/ChatMessage.tsx',
+  'src/pages/Chat/ChatSearchBar.tsx',
+  'src/pages/Chat/index.tsx',
+  'src/pages/Chat/thinking/thinking-turn-process.tsx',
   'src/pages/DataCenter/components/entries.tsx',
   'src/pages/DataCenter/components/modals.tsx',
   'src/pages/Login/index.tsx',
@@ -152,8 +160,104 @@ const taskSevenSourceFiles = new Set([
 type TaskSevenViolation = Pick<SourceMatch, 'file' | 'line' | 'value'>;
 
 function isTaskSevenSource(file: string): boolean {
-  return taskSevenSourceFiles.has(file)
-    || taskSevenSourcePrefixes.some((prefix) => file.startsWith(prefix));
+  return taskSevenSourceFiles.has(file);
+}
+
+const coolShadowColor = /rgba?\(\s*(?:(?:2\s*(?:,\s*|\s+)8\s*(?:,\s*|\s+)23)|(?:15\s*(?:,\s*|\s+)23\s*(?:,\s*|\s+)42))\b/i;
+const brandShadowColor = /(?:rgba?\(\s*255\s*(?:,\s*|\s+)(?:111|140|141|183)\s*(?:,\s*|\s+)(?:0|42|140)\b|hsla?\(\s*(?:1[5-9]|[23]\d|4[0-2])(?:\.\d+)?(?:deg)?\s+(?:8\d|9\d|100)%)/i;
+const canonicalShadowProperty = /(?:shadow|ring|glow)/i;
+const functionalShadowSemantic = /(?:focus|interactive|invalid|error|drag|ring)/i;
+const explicitArtworkShadowSemantic = /voice/i;
+
+type CustomPropertyDeclaration = {
+  index: number;
+  value: string;
+};
+
+function customPropertyDeclarations(source: string): Map<string, CustomPropertyDeclaration> {
+  const declarations = new Map<string, CustomPropertyDeclaration>();
+  for (const match of source.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+    declarations.set(match[1], { index: match.index, value: match[2].trim() });
+  }
+  return declarations;
+}
+
+function resolveCustomProperties(
+  value: string,
+  declarations: ReadonlyMap<string, CustomPropertyDeclaration>,
+  seen = new Set<string>(),
+): string {
+  return value.replace(/var\((--[\w-]+)(?:,[^)]+)?\)/g, (reference, property: string) => {
+    if (seen.has(property)) return reference;
+    const declaration = declarations.get(property);
+    if (!declaration) return reference;
+    return resolveCustomProperties(
+      declaration.value,
+      declarations,
+      new Set([...seen, property]),
+    );
+  });
+}
+
+function shadowViolationKind(value: string): 'coolDarkShadow' | 'ordinaryBrandGlow' | null {
+  if (coolShadowColor.test(value)) return 'coolDarkShadow';
+  if (brandShadowColor.test(value)) return 'ordinaryBrandGlow';
+  return null;
+}
+
+function recipeSelectorAt(source: string, index: number): string {
+  const openBrace = source.lastIndexOf('{', index);
+  if (openBrace < 0) return '';
+  const previousClose = source.lastIndexOf('}', openBrace);
+  return source.slice(previousClose + 1, openBrace).replace(/\/\*[\s\S]*?\*\//g, '').trim();
+}
+
+function canonicalShadowViolations(
+  tokenSource: string,
+  recipeSource: string,
+): {
+  coolDarkShadow: TaskSevenViolation[];
+  ordinaryBrandGlow: TaskSevenViolation[];
+} {
+  const coolDarkShadow: TaskSevenViolation[] = [];
+  const ordinaryBrandGlow: TaskSevenViolation[] = [];
+  const declarations = customPropertyDeclarations(tokenSource);
+
+  for (const [property, declaration] of declarations) {
+    if (!canonicalShadowProperty.test(property)) continue;
+    if (
+      functionalShadowSemantic.test(property)
+      || explicitArtworkShadowSemantic.test(property)
+    ) continue;
+    const resolved = resolveCustomProperties(declaration.value, declarations);
+    const kind = shadowViolationKind(resolved);
+    if (!kind) continue;
+    const violation = {
+      file: rawThemeOwner,
+      line: lineNumberAt(tokenSource, declaration.index),
+      value: `${property}: ${declaration.value}`,
+    };
+    (kind === 'coolDarkShadow' ? coolDarkShadow : ordinaryBrandGlow).push(violation);
+  }
+
+  for (const match of recipeSource.matchAll(/box-shadow\s*:\s*([^;]+);/gi)) {
+    const selector = recipeSelectorAt(recipeSource, match.index);
+    if (
+      functionalShadowSemantic.test(selector)
+      || explicitArtworkShadowSemantic.test(selector)
+    ) continue;
+    const resolved = resolveCustomProperties(match[1], declarations);
+    const kind = shadowViolationKind(resolved);
+    if (!kind) continue;
+    const violation = {
+      file: 'src/styles/theme/recipes.css',
+      line: lineNumberAt(recipeSource, match.index),
+      value: match[0],
+    };
+    (kind === 'coolDarkShadow' ? coolDarkShadow : ordinaryBrandGlow).push(violation);
+  }
+
+  return { coolDarkShadow, ordinaryBrandGlow };
 }
 
 function taskSevenShadowViolations(): {
@@ -165,8 +269,16 @@ function taskSevenShadowViolations(): {
   const coolDark = /rgba\(\s*2\s*,\s*8\s*,\s*23\s*,[^)]*\)/gi;
   const brandGlow = /(?:box-shadow\s*:|shadow-\[[^\]\n]*)(?:[^;\n]*?)(?:rgba\(\s*255\s*,\s*(?:111|140|141|183)\s*,\s*(?:0|42|140)\s*,[^)]*\)|hsl\(var\(--primary\)\s*\/[^)]*\))/gi;
 
-  for (const { file, source } of productionSources(sourceRoot)) {
-    if (!isTaskSevenSource(file) || file === rawThemeOwner) continue;
+  const sources = productionSources(sourceRoot);
+  const tokenSource = sources.find(({ file }) => file === rawThemeOwner)?.source;
+  const recipeSource = sources.find(({ file }) => file === 'src/styles/theme/recipes.css')?.source;
+  if (!tokenSource || !recipeSource) throw new Error('Expected canonical theme shadow owners');
+  const canonical = canonicalShadowViolations(tokenSource, recipeSource);
+  coolDarkShadow.push(...canonical.coolDarkShadow);
+  ordinaryBrandGlow.push(...canonical.ordinaryBrandGlow);
+
+  for (const { file, source } of sources) {
+    if (!isTaskSevenSource(file)) continue;
 
     for (const match of source.matchAll(coolDark)) {
       coolDarkShadow.push({
@@ -297,6 +409,57 @@ describe('repository-wide theme source audit', () => {
 
     expect(violations.coolDarkShadow).toEqual([]);
     expect(violations.ordinaryBrandGlow).toEqual([]);
+  });
+
+  it('resolves semantic shadows at canonical token and recipe ownership boundaries', () => {
+    const violations = canonicalShadowViolations(
+      `
+        :root {
+          --sto-shadow-card: 0 4px 12px rgba(15, 23, 42, 0.12);
+          --sto-shadow-brand-card: 0 4px 12px rgba(255, 111, 0, 0.2);
+        }
+        .dark {
+          --sto-shadow-card: 0 4px 12px rgba(2, 8, 23, 0.5);
+          --sto-shadow-brand-card: 0 4px 12px rgba(255, 111, 0, 0.2);
+        }
+      `,
+      `
+        .sto-card { box-shadow: var(--sto-shadow-card); }
+        .sto-overlay { box-shadow: rgba(255, 111, 0, 0.2); }
+      `,
+    );
+
+    expect(violations.coolDarkShadow).toEqual([
+      expect.objectContaining({ file: rawThemeOwner }),
+      expect.objectContaining({ file: 'src/styles/theme/recipes.css' }),
+    ]);
+    expect(violations.ordinaryBrandGlow).toEqual([
+      expect.objectContaining({ file: rawThemeOwner }),
+      expect.objectContaining({ file: 'src/styles/theme/recipes.css' }),
+    ]);
+  });
+
+  it('allows light-only semantic shadows and functional or artwork dark feedback', () => {
+    const violations = canonicalShadowViolations(
+      `
+        :root {
+          --sto-shadow-card: 0 4px 12px rgba(15, 23, 42, 0.12);
+          --sto-shadow-focus: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-voice-line: 0 0 3px rgba(255, 111, 0, 0.2);
+        }
+        .dark {
+          --sto-shadow-card: 0 4px 12px rgba(0, 0, 0, 0.4);
+          --sto-shadow-focus: 0 0 0 2px rgba(255, 111, 0, 0.2);
+          --sto-shadow-voice-line: 0 0 3px rgba(255, 111, 0, 0.2);
+        }
+      `,
+      `
+        .sto-card { box-shadow: var(--sto-shadow-card); }
+        .sto-control:focus-visible { box-shadow: var(--sto-shadow-focus); }
+      `,
+    );
+
+    expect(violations).toEqual({ coolDarkShadow: [], ordinaryBrandGlow: [] });
   });
 
   it('classifies exceptions from the matched value and exact reviewed source', () => {

@@ -2847,26 +2847,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/input-composer/input-composer-send-button.tsx::pageDarkUtility::dark:border-::? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white/80 dark:bg-white/80 dark:text-slate-900 dark:hover:bg-white/90'::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/input-composer/input-composer-send-button.tsx::pageDarkUtility::dark:bg-::ate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white/80 dark:bg-white/80 dark:text-slate-900 dark:hover:bg-white/90' : canSend::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/input-composer/input-composer-send-button.tsx::pageDarkUtility::dark:text-::900 text-white hover:bg-slate-800 dark:border-white/80 dark:bg-white/80 dark:text-slate-900 dark:hover:bg-white/90' : canSend ? 'bor::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/input-composer/input-composer-send-button.tsx::pageDarkUtility::dark:border-::y/90' : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]', )} variant="ghost" tit::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/input-composer/input-composer-send-button.tsx::pageDarkUtility::dark:bg-::border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]', )} variant="ghost" title={sending ? sto::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/components/input-composer/input-composer-toolbar-icon-tooltip.tsx::rawColor::#1D2129::ltip'; const toolbarTooltipClass = 'overflow-visible border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white shadow-none'; export fun::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },

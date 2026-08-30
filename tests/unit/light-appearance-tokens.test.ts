@@ -30,6 +30,22 @@ const confirmDialogSource = readFileSync(
   resolve(process.cwd(), 'src/components/ui/confirm-dialog.tsx'),
   'utf8',
 );
+const recipesCss = readFileSync(
+  resolve(process.cwd(), 'src/styles/theme/recipes.css'),
+  'utf8',
+);
+const composerAttachMenuSource = readFileSync(
+  resolve(process.cwd(), 'src/components/attachments/ComposerAttachMenu.tsx'),
+  'utf8',
+);
+const artifactProductCardSource = readFileSync(
+  resolve(process.cwd(), 'src/components/chat/artifact-product-card.tsx'),
+  'utf8',
+);
+const inputComposerSendButtonSource = readFileSync(
+  resolve(process.cwd(), 'src/components/input-composer/input-composer-send-button.tsx'),
+  'utf8',
+);
 
 function extractBlock(source: string, marker: string): string {
   const start = source.indexOf(marker);
@@ -144,6 +160,34 @@ describe('light appearance color system', () => {
     expect(root).toContain('--sto-dialog-destructive-hover-background: #e23b3b');
     expect(dark).toContain('--sto-dialog-destructive-background: hsl(var(--destructive))');
     expect(dark).toContain('--sto-dialog-destructive-hover-background: hsl(var(--destructive) / 0.9)');
+  });
+
+  it('preserves the exact approved light borders for attachment and artifact menus', () => {
+    const root = extractThemeBlock(':root {');
+
+    expect(root).toContain('--sto-overlay-menu-border: var(--sto-border-default)');
+    expect(root).toContain('--sto-overlay-content-border: var(--sto-surface-edge)');
+    expect(recipesCss).toContain(
+      '.sto-overlay--menu-border { border-color: var(--sto-overlay-menu-border); }',
+    );
+    expect(recipesCss).toContain(
+      '.sto-overlay--content-border { border-color: var(--sto-overlay-content-border); }',
+    );
+    expect(composerAttachMenuSource).toContain('sto-overlay--menu-border');
+    expect(artifactProductCardSource).toContain('sto-overlay--content-border');
+  });
+
+  it('preserves composer send, stop, and unavailable light states through recipes', () => {
+    const root = extractThemeBlock(':root {');
+
+    expect(root).toContain('--sto-shadow-brand-action: 0 6px 16px rgba(255, 111, 0, 0.22)');
+    expect(root).toContain('--sto-composer-stop-ink: #0f172a');
+    expect(root).toContain('--sto-composer-stop-hover-background: #1e293b');
+    expect(root).toContain('--sto-composer-unavailable-background: color-mix(in srgb, black 5%, transparent)');
+    expect(root).toContain('--sto-composer-unavailable-border: color-mix(in srgb, black 8%, transparent)');
+    expect(inputComposerSendButtonSource).toContain('sto-control--composer-send-action');
+    expect(inputComposerSendButtonSource).toContain('sto-control--composer-stop');
+    expect(inputComposerSendButtonSource).toContain('sto-control--composer-unavailable');
   });
 
 });
