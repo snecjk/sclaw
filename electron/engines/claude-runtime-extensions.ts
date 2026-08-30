@@ -8,11 +8,6 @@ import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
 import {
-  buildWorkflowHooks,
-  WORKFLOW_SYSTEM_PROMPT,
-} from '../../sto-plugin/claude/sto-workflow-tool/hooks';
-import { createWorkflowMcpServer } from '../../sto-plugin/claude/sto-workflow-tool/tools';
-import {
   createUserSkillMcpServer,
   USER_SKILL_SYSTEM_PROMPT,
 } from '../../sto-plugin/claude/sto-user-skill-tool/tools';
@@ -23,7 +18,7 @@ import {
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
-import { getAuthState, getStoToken } from '../utils/auth-store';
+import { getAuthState } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { PORTS } from '../utils/config';
 import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
@@ -93,32 +88,6 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
   id: 'sto-dingtalk-send-guard',
   build: ({ sessionKey, userPrompt }) =>
     buildStoDingTalkSendGuardClaudeRuntimeOptions(sessionKey, userPrompt),
-};
-
-const workflowToolExtension: ClaudeRuntimeExtension = {
-  id: 'sto-workflow-tool',
-  async build({ sessionKey }) {
-    const stoToken = await getStoToken();
-    if (!stoToken) {
-      logger.warn('[claude-workflow] STO token is unavailable; workflow tools will not be registered');
-      return {};
-    }
-
-    const baseUrl = `http://127.0.0.1:${PORTS.CLAWX_HOST_API}`;
-    logger.info(`[claude-workflow] registering workflow tools baseUrl=${baseUrl}`);
-
-    return {
-      hooks: buildWorkflowHooks(),
-      systemPromptAppend: WORKFLOW_SYSTEM_PROMPT,
-      mcpServers: {
-        'sto-workflow-tool': createWorkflowMcpServer({
-          baseUrl,
-          stoToken,
-          sessionKey,
-        }),
-      },
-    };
-  },
 };
 
 const userSkillToolExtension: ClaudeRuntimeExtension = {
@@ -208,7 +177,6 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   connectorBashGateExtension,
   browserToolExtension,
   dingTalkSendGuardExtension,
-  workflowToolExtension,
   userSkillToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,

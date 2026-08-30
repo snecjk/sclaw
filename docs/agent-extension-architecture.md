@@ -10,7 +10,9 @@ SClaw business extensions are compiled into the desktop application and register
 4. The Claude adapter compiles common tools to an in-process MCP server and policies to Claude hooks.
 5. The Pi adapter compiles the same definitions to `InlineExtension`, `registerTool`, and Pi lifecycle events.
 
-The production common allowlist is `SCLAW_AGENT_EXTENSIONS` in `electron/agent-extensions/registry.ts`. Each adapter materializes its own engine registry and attaches only its native contributions, preventing Claude native code from entering the PI worker bundle and vice versa. Migrated entries currently include the PI-only `claw-scheduled-path-guard` and the common `sto-scheduled-task-tool`. The scheduled-task extension uses a typed capability/Port backed by the local Host API, so Claude Main and the PI Utility Process share one business implementation without sharing process-local service singletons.
+The production common allowlist is `SCLAW_AGENT_EXTENSIONS` in `electron/agent-extensions/registry.ts`. Each adapter materializes its own engine registry and attaches only its native contributions, preventing Claude native code from entering the PI worker bundle and vice versa. Migrated entries currently include the PI-only `claw-scheduled-path-guard`, the cross-engine `sto-scheduled-task-tool`, and the currently Claude-enabled `sto-workflow-tool`. Host-owned operations are exposed through typed capabilities backed by the local Host API, keeping authentication and process-local services outside extension business code.
+
+`sto-workflow-tool` is implemented entirely with common definitions, TypeBox schemas, policies, prompts, and a `StoWorkflowPort`; it no longer depends on Claude SDK types. Its definition remains filtered to Claude because the local workflow execution bridge does not yet support PI. Enabling PI later requires adding PI runtime support and then widening the engine selector, rather than copying the workflow implementation.
 
 ## On-demand activation
 
@@ -21,6 +23,8 @@ Activation is contribution-level rather than extension-level. Policies remain al
 Claude evaluates activation before compiling common tools, so an inactive tool does not create an MCP server or contribute its schema. Pi registers lazy tools in its tool registry but omits them from the initial `createAgentSession.tools` allowlist. On a matching `before_agent_start`, the adapter additively enables the group through `setActiveTools()`. This preserves follow-up availability while avoiding inactive tool schemas in ordinary model requests.
 
 The common helper `createKeywordActivationMatcher` covers simple keyword and regular-expression routing. Business extensions should keep domain-specific intent matching in their own `activation.ts` when false positives or exclusions require semantic rules.
+
+The workflow extension uses session-scoped activation for prompts containing `工作流` or `workflow`. It checks the Host API authentication state only after an intent match; an unavailable login leaves tools and prompt out of the request. Once matched, the activation remains available for follow-up turns in that session. Its shell-bypass and same-turn schema/create policies remain active independently of tool activation.
 
 ## Common-first rule
 

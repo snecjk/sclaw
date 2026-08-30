@@ -4,11 +4,7 @@ import {
   resolveWorkflowStartModel,
 } from '../../electron/api/routes/workflows';
 import { createEngine } from '../../electron/services/workflow-runtime/engine';
-import { createWorkflowTools } from '../../sto-plugin/claude/sto-workflow-tool/tools';
-import {
-  buildClaudeWorkflowStartBody,
-  requireClaudeWorkflowSessionKey,
-} from '../../sto-plugin/claude/sto-workflow-tool/workflow-start';
+import { createHostApiWorkflowPort } from '../../electron/agent-extensions/extensions/sto-workflow-tool/host-api-capability';
 
 const workflowRouteMocks = vi.hoisted(() => ({
   getEngineSessionRegistryEntry: vi.fn(),
@@ -25,6 +21,7 @@ vi.mock('../../electron/utils/openclaw-auth', () => ({
 
 describe('workflow chat-card start metadata', () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     workflowRouteMocks.getEngineSessionRegistryEntry.mockReset();
     workflowRouteMocks.getOpenClawProvidersConfig.mockReset();
   });
@@ -46,34 +43,32 @@ describe('workflow chat-card start metadata', () => {
     });
   });
 
-  it('includes Claude launch metadata in the host start request', () => {
-    const body = JSON.parse(buildClaudeWorkflowStartBody(
-      { city: '北京' },
-      'idem-1',
-      'session-1',
-      '天气笑话',
-    ));
+  it('includes engine-neutral launch metadata in the Host API request', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { runId: 'run-1', workflowId: 'wf_weather', status: 'running' },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
 
-    expect(body).toMatchObject({
+    await createHostApiWorkflowPort().startWorkflow({
+      workflowId: 'wf_weather',
+      inputs: { city: '北京' },
+      idempotencyKey: 'idem-1',
+      sessionKey: 'session-1',
+      templateName: '天气笑话',
+      engineType: 'claude',
+    });
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
       sessionKey: 'session-1',
       engineType: 'claude',
       chatCardTitle: '天气笑话',
       chatParamsSummary: '{"city":"北京"}',
     });
-  });
-
-  it('allows Claude workflow tools to initialize before a chat session is available', () => {
-    expect(() => createWorkflowTools({
-      baseUrl: 'http://127.0.0.1:3210',
-      stoToken: 'test-token',
-    })).not.toThrow();
-  });
-
-  it('requires the Claude chat session only when execute_workflow starts', () => {
-    expect(() => requireClaudeWorkflowSessionKey()).toThrow(
-      'Claude execute_workflow requires a chat sessionKey',
-    );
-    expect(requireClaudeWorkflowSessionKey('  session-1  ')).toBe('session-1');
   });
 
   it('resolves the Claude workflow model from the originating chat session', async () => {

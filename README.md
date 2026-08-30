@@ -136,7 +136,7 @@ Notes:
 
 StoClaw employs a **dual-process architecture** with a unified host API layer. The renderer talks to a single client abstraction, while Electron Main owns protocol selection and process lifecycle:
 
-Internal business tools shared by Claude Agent and Pi Agent use the static, common-first [Agent Extension Architecture](docs/agent-extension-architecture.md). Common tools and prompts can opt into engine-neutral turn/session activation so inactive tool schemas stay out of ordinary requests while safety policies remain active. Engine-native contributions remain available as an explicit escape hatch; arbitrary project extensions are not auto-loaded.
+Internal business tools shared by Claude Agent and Pi Agent use the static, common-first [Agent Extension Architecture](docs/agent-extension-architecture.md). Common tools and prompts can opt into engine-neutral turn/session activation so inactive tool schemas stay out of ordinary requests while safety policies remain active. The migrated STO workflow tools use the same common contracts and typed Host API capability, but stay Claude-enabled until PI workflow execution is supported. Engine-native contributions remain available as an explicit escape hatch; arbitrary project extensions are not auto-loaded.
 
 ```┌─────────────────────────────────────────────────────────────────┐
 │                        StoClaw Desktop App                         │
