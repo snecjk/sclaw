@@ -331,7 +331,6 @@
     --sto-sidebar-collapsed-nav-icon-idle: #7a8494;
     --sto-grey-9: #4e5969;
     --sto-grey-8: #86909c;
-    --sto-grey-10: #1d2129;
     --sto-sidebar-text-default: #393e47;
     --sto-sidebar-text-active: #1d2129;
     --sto-sidebar-text-icon: var(--sto-grey-9);
@@ -345,7 +344,6 @@
     --sto-sidebar-footer-meta: #8b9099;
 
     /* Workflow semantic colors. */
-    --sto-wf-hero-input-bg: #ffffff;
     --sto-wf-cover-purple-bg: #eeedfe;
     --sto-wf-cover-purple-accent: #cecbf6;
     --sto-wf-cover-purple-icon: #3c3489;
@@ -428,7 +426,6 @@
     --sto-card-flat-hover-border: var(--sto-border-heavy);
     --sto-card-flat-hover-shadow: 0 0 16px rgba(0, 0, 0, 0.12);
     --sto-card-panel-bg: #ffffff;
-    --sto-card-inset-bg: #fafbfc;
     --sto-card-elevated-bg: #ffffff;
     --sto-overlay-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
   }
@@ -690,7 +687,6 @@
     --sto-chat-image-background: rgba(255, 255, 255, 0.08);
 
     --sto-sidebar-collapsed-nav-icon-idle: var(--sto-text-tertiary);
-    --sto-grey-10: var(--sto-text-primary);
     --sto-grey-9: var(--sto-text-secondary);
     --sto-grey-8: var(--sto-text-tertiary);
     --sto-sidebar-text-default: var(--sto-text-secondary);
@@ -704,7 +700,6 @@
     --sto-sidebar-footer-name: var(--sto-text-primary);
     --sto-sidebar-footer-meta: var(--sto-text-tertiary);
 
-    --sto-wf-hero-input-bg: var(--sto-surface-primary);
     --sto-wf-cover-purple-bg: hsl(248 28% 16%);
     --sto-wf-cover-purple-accent: hsl(248 32% 24%);
     --sto-wf-cover-purple-icon: #a5b4fc;
@@ -786,7 +781,6 @@
     --sto-card-flat-hover-border: var(--sto-border-heavy);
     --sto-card-flat-hover-shadow: none;
     --sto-card-panel-bg: #181818;
-    --sto-card-inset-bg: #212121;
     --sto-card-elevated-bg: #282828;
     --sto-overlay-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }

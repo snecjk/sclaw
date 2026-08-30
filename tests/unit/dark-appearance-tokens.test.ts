@@ -218,7 +218,6 @@ describe('dark appearance semantic tokens', () => {
     expect(dark).toContain('--canvas-via: #181818');
     expect(dark).toContain('--canvas-to: #212121');
     expect(dark).toContain('--sto-sidebar-collapsed-nav-icon-idle: var(--sto-text-tertiary)');
-    expect(dark).toContain('--sto-grey-10: var(--sto-text-primary)');
     expect(dark).toContain('--sto-grey-9: var(--sto-text-secondary)');
     expect(dark).toContain('--sto-grey-8: var(--sto-text-tertiary)');
     expect(dark).toContain('--sto-sidebar-row-hover-bg: var(--sto-control-hover-bg)');
@@ -378,7 +377,6 @@ describe('dark appearance semantic tokens', () => {
   it('keeps neutral workflow and picker surfaces free of blue-black dark fills', () => {
     const dark = extractThemeBlock('.dark {');
 
-    expect(dark).toContain('--sto-wf-hero-input-bg: var(--sto-surface-primary)');
     expect(dark).toContain('--sto-wf-detail-cover-bg: var(--sto-surface-elevated)');
     expect(dark).toContain('--sto-wf-flow-block-bg: var(--sto-surface-primary)');
     expect(dark).toContain('--sto-wf-flow-block-border: var(--sto-border-default)');

@@ -9135,7 +9135,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/styles/globals.css::pageDarkSelector::.dark::f-page-shading-h: 330px; --sto-wf-page-shading-tile-w: 1152px; } .dark { --sto-header-h: 52px; } } @layer base { * { @apply bo::1",
+    "key": "src/styles/globals.css::pageDarkSelector::.dark::f-page-shading-h: 330px; --sto-wf-page-shading-tile-w: 1152px; } .dark { --sto-header-h: 52px; } } @layer base { * { @apply bor::1",
     "reason": "Migration debt: ordinary CSS dark selector must move to semantic tokens or recipes in Tasks 7-8.",
   },
   {

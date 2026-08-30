@@ -431,6 +431,7 @@ describe('repository-wide theme source audit', () => {
     const deadAliases = [
       '--sto-accent-soft',
       '--sto-border-strong',
+      '--sto-card-inset-bg',
       '--sto-color-brand-soft-hsl',
       '--sto-color-brand-strong-hsl',
       '--sto-color-info-soft-hsl',
@@ -444,6 +445,7 @@ describe('repository-wide theme source audit', () => {
       '--sto-color-neutral-9-hsl',
       '--sto-color-surface-page-hsl',
       '--sto-elevated',
+      '--sto-grey-10',
       '--sto-info-primary',
       '--sto-warning-primary',
       '--sto-wf-cover-coral-accent',
@@ -456,6 +458,7 @@ describe('repository-wide theme source audit', () => {
       '--sto-wf-cover-teal-bg',
       '--sto-wf-cover-teal-icon',
       '--sto-wf-hero-input-border',
+      '--sto-wf-hero-input-bg',
       '--sto-wf-hero-input-ring',
     ];
 

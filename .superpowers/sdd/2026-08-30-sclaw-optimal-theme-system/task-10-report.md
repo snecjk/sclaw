@@ -38,3 +38,11 @@ An exact source search for every removed alias returned no production consumer. 
 Staged paths are limited to the three production stylesheets, the style rule, the two audit/contract tests and snapshots, the authorized dark-token assertion repair, the evidence matrix, and this report.
 
 Concerns remaining for the controller: the Electron runner abort prevented screenshot evidence; all 30 manual matrix cells remain open; and the exact migration-debt counts above remain intentionally preserved for later scoped work. No broad suite, full typecheck, build, package, or repeated screenshot run was performed under the lean override.
+
+## Review fix round 1
+
+- Supersedes the earlier retention note: exact searches proved `--sto-grey-10`, `--sto-wf-hero-input-bg`, and `--sto-card-inset-bg` had zero production consumers outside their six light/dark definitions. All six definitions and the three stale presence assertions were deleted; the source audit now enforces their absence.
+- RED named the three live definitions and rejected the missing ledger language. GREEN passed 60/60 assertions across the directly affected source, system, dark-token, light-token, and approved-baseline tests. The source snapshot update is one context character only and does not change the migration-debt inventory.
+- The style rule now makes the target mandatory for every new or modified line while grandfathering existing violations only through the exact non-growth snapshot. The ledger cannot expand, and new exceptions must be migrated or removed instead of added to the snapshot.
+- Changed-test ESLint and `git diff --check` passed. Fix-round production delta: **0 added / 6 deleted / net -6**. Final cumulative production delta: **2030 added / 2038 deleted / net -8**.
+- The previously reported screenshot, manual-matrix, and migration-debt concerns remain unchanged; this round intentionally did not rerun them.

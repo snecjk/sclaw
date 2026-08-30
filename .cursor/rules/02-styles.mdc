@@ -12,6 +12,7 @@ alwaysApply: true
 - `src/styles/theme/recipes.css`：唯一共享交互状态颜色所有者；跨组件复用的颜色、边框、阴影和状态配方只能在此定义。
 - `src/styles/globals.css`：只保留 reset、布局、尺寸、排版和动画，不定义主题映射或共享交互状态颜色。
 - 页面只能定义布局，不得拥有 `.dark` 调色板、颜色型 `dark:` 工具类或共享状态颜色分支。
+- 上述页面暗色调色板禁令对所有新增或修改的代码强制生效。当前存量违规仅由源审计中的精确非增长快照临时保留；任何变更不得扩大该账本，新增例外必须改为迁移或删除，不得写入快照。
 - 组件不得新增主题 Context、Hook、包装组件或 JavaScript 颜色分支。
 - `light | dark | system` 均由已解析的根节点 `.light/.dark`、`data-theme` 和 `color-scheme` 同步驱动。
 

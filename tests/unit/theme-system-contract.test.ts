@@ -272,7 +272,6 @@ describe('theme system contract', () => {
     expect(dark['--sto-card-flat-bg']).toBe('transparent');
     expect(dark['--sto-card-flat-hover-bg']).toBe('#181818');
     expect(dark['--sto-card-panel-bg']).toBe('#181818');
-    expect(dark['--sto-card-inset-bg']).toBe('#212121');
     expect(dark['--sto-card-elevated-bg']).toBe('#282828');
     expect(dark['--sto-text-primary']).toBe('#dfdfdf');
     expect(dark['--sto-border-default']).toBe('rgba(255, 255, 255, 0.08)');
@@ -298,6 +297,9 @@ describe('theme system contract', () => {
     expect(rules).toContain('唯一映射所有者');
     expect(rules).toContain('唯一共享交互状态颜色所有者');
     expect(rules).toContain('页面只能定义布局');
+    expect(rules).toContain('所有新增或修改的代码');
+    expect(rules).toContain('精确非增长快照');
+    expect(rules).toContain('新增例外');
     expect(rules).toContain('CollectionCardAction');
     expect(rules).toContain('default → hover → active/selected → focus → disabled → loading → empty → error');
     expect(rules).toContain('浅色是当前视觉基线');
