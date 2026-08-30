@@ -364,3 +364,77 @@ describe('Pi agent extension adapter', () => {
     });
   });
 });
+
+describe('agent extension lazy activation', () => {
+  const lazyDefinition: SclawAgentExtensionDefinition = {
+    id: 'lazy-synthetic-extension',
+    version: '1.0.0',
+    activations: [{
+      id: 'lazy-domain',
+      scope: 'session',
+      match: (context) => context.userPrompt?.includes('lazy') ?? false,
+    }],
+    tools: [{
+      name: 'lazy_synthetic_tool',
+      label: 'Lazy synthetic tool',
+      description: 'Only active after matching synthetic intent',
+      activation: 'lazy-domain',
+      parameters: Type.Object({}),
+      async execute() {
+        return { success: true, type: 'ok', domain: 'synthetic', data: null };
+      },
+    }],
+    prompts: [{
+      id: 'lazy-prompt',
+      activation: 'lazy-domain',
+      text: 'lazy synthetic prompt',
+    }],
+  };
+
+  it('omits and then session-activates common Claude contributions', async () => {
+    const deps = dependencies();
+    const entries = [{ common: lazyDefinition }];
+    const unmatched = await buildClaudeAgentExtensions({
+      sessionKey: 'lazy-claude', mode: 'interactive', userPrompt: 'ordinary', entries, ...deps,
+    });
+    expect(unmatched.options).toEqual({});
+
+    const matched = await buildClaudeAgentExtensions({
+      sessionKey: 'lazy-claude', mode: 'interactive', userPrompt: 'use lazy tools', entries, ...deps,
+    });
+    expect(matched.options.mcpServers?.['lazy-synthetic-extension']).toBeDefined();
+    expect(matched.options.systemPromptAppend).toBe('lazy synthetic prompt');
+
+    const followUp = await buildClaudeAgentExtensions({
+      sessionKey: 'lazy-claude', mode: 'interactive', userPrompt: 'continue', entries, ...deps,
+    });
+    expect(followUp.options.mcpServers?.['lazy-synthetic-extension']).toBeDefined();
+  });
+
+  it('registers lazy PI tools without initially exposing them, then activates them', async () => {
+    const result = await buildPiAgentExtensions({
+      sessionKey: 'lazy-pi', mode: 'interactive', entries: [{ common: lazyDefinition }], ...dependencies(),
+    });
+    expect(result.registeredToolNames).toEqual(['lazy_synthetic_tool']);
+    expect(result.toolNames).toEqual([]);
+
+    const handlers = new Map<string, (event: Record<string, unknown>) => Promise<unknown>>();
+    let activeTools = ['read', 'bash'];
+    const extension = result.extensions.find(
+      (item) => typeof item !== 'function' && item.name === 'lazy-synthetic-extension',
+    );
+    if (!extension || typeof extension === 'function') throw new Error('missing lazy PI extension');
+    await extension.factory({
+      registerTool() {},
+      on(event, handler) { handlers.set(event, handler as never); },
+      getActiveTools() { return activeTools; },
+      setActiveTools(names) { activeTools = names; },
+    } as never);
+
+    const prompt = await handlers.get('before_agent_start')?.({
+      prompt: 'use lazy tools', systemPrompt: 'base', systemPromptOptions: {},
+    }) as { systemPrompt?: string } | undefined;
+    expect(activeTools).toEqual(['read', 'bash', 'lazy_synthetic_tool']);
+    expect(prompt?.systemPrompt).toBe('base\n\nlazy synthetic prompt');
+  });
+});

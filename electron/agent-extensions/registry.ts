@@ -64,6 +64,37 @@ export function validateAgentExtensionRegistry(
     }
     extensionIds.add(common.id);
 
+    const activationIds = new Set<string>();
+    for (const activation of common.activations ?? []) {
+      if (!isValidAgentExtensionResourceName(activation.id)) {
+        diagnostics.push({
+          extensionId: common.id,
+          contributionId: activation.id,
+          code: 'INVALID_ACTIVATION_ID',
+          message: `Invalid activation id: ${activation.id}`,
+        });
+      }
+      if (activationIds.has(activation.id)) {
+        diagnostics.push({
+          extensionId: common.id,
+          contributionId: activation.id,
+          code: 'DUPLICATE_ACTIVATION_ID',
+          message: `Duplicate activation id: ${activation.id}`,
+        });
+      }
+      activationIds.add(activation.id);
+    }
+    for (const contribution of [...(common.tools ?? []), ...(common.prompts ?? [])]) {
+      if (contribution.activation && !activationIds.has(contribution.activation)) {
+        diagnostics.push({
+          extensionId: common.id,
+          contributionId: contribution.activation,
+          code: 'UNKNOWN_ACTIVATION_REFERENCE',
+          message: `Unknown activation reference: ${contribution.activation}`,
+        });
+      }
+    }
+
     for (const [engine, native] of [
       ['claude', entry.native?.claude],
       ['pi', entry.native?.pi],

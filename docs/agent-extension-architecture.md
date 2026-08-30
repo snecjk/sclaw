@@ -12,6 +12,16 @@ SClaw business extensions are compiled into the desktop application and register
 
 The production common allowlist is `SCLAW_AGENT_EXTENSIONS` in `electron/agent-extensions/registry.ts`. Each adapter materializes its own engine registry and attaches only its native contributions, preventing Claude native code from entering the PI worker bundle and vice versa. Migrated entries currently include the PI-only `claw-scheduled-path-guard` and the common `sto-scheduled-task-tool`. The scheduled-task extension uses a typed capability/Port backed by the local Host API, so Claude Main and the PI Utility Process share one business implementation without sharing process-local service singletons.
 
+## On-demand activation
+
+Common tools and prompts may reference an activation declared by their owning extension. Contributions without an activation remain enabled by default, preserving compatibility. An activation matcher receives only the engine-neutral build context and may use either `turn` scope or sticky `session` scope. Session matches are stored in the framework state manager, so follow-up prompts do not need to repeat the original keywords; deleting or shutting down the engine session clears that state.
+
+Activation is contribution-level rather than extension-level. Policies remain always active, and scheduled execution prompts can remain unconditional while interactive management tools are lazy. Matcher failures fail closed for the affected tool or prompt and emit `ACTIVATION_MATCH_FAILED` without logging the user prompt.
+
+Claude evaluates activation before compiling common tools, so an inactive tool does not create an MCP server or contribute its schema. Pi registers lazy tools in its tool registry but omits them from the initial `createAgentSession.tools` allowlist. On a matching `before_agent_start`, the adapter additively enables the group through `setActiveTools()`. This preserves follow-up availability while avoiding inactive tool schemas in ordinary model requests.
+
+The common helper `createKeywordActivationMatcher` covers simple keyword and regular-expression routing. Business extensions should keep domain-specific intent matching in their own `activation.ts` when false positives or exclusions require semantic rules.
+
 ## Common-first rule
 
 Business operations, validation, prompts, policies, and result envelopes belong in the common definition. Tool parameters use `typebox@1.3.7` as their single source; the Claude adapter converts the supported TypeBox subset to Zod while Pi consumes TypeBox directly.
@@ -33,6 +43,7 @@ Recommended layout:
 ```text
 extensions/<extension-id>/
 ├─ definition.ts            # common tools, policies, and prompts
+├─ activation.ts            # optional engine-neutral intent matcher
 ├─ operations.ts            # engine-independent orchestration
 ├─ capability.ts            # typed business Port token, when needed
 ├─ host-api-capability.ts    # bundled host-side Port implementation, when needed
@@ -45,9 +56,11 @@ extensions/<extension-id>/
 - Only compile-time registry entries are loaded.
 - Missing capabilities disable the affected extension and emit a diagnostic.
 - Before-tool policy exceptions fail closed; after-tool observers and prompt contributors fail independently and are logged.
+- Activation matcher exceptions fail closed for the affected tools/prompts; policies are never implicitly disabled.
+- Activation ids are unique within an extension and every contribution reference is validated at registry build time.
 - Tool names are unique across the enabled common and native contributions for each engine.
 - OpenClaw remains on its legacy plugin path and is not part of this abstraction.
 
 ## Runtime diagnostics
 
-Framework logs use the stable `[agent-extension]` prefix and structured fields. Important events include `build.start`, `build.completed`, `registry.diagnostic`, `native.build.*`, `tool.execute.*`, `policy.before.denied`, and `prompt.build.completed`. Inputs and prompt bodies are deliberately excluded; logs contain identifiers, outcome codes, counts, and durations only.
+Framework logs use the stable `[agent-extension]` prefix and structured fields. Important events include `build.start`, `build.completed`, `registry.diagnostic`, `activation.evaluated`, `activation.restored`, `activation.failed`, `tools.activated`, `native.build.*`, `tool.execute.*`, `policy.before.denied`, and `prompt.build.completed`. Inputs and prompt bodies are deliberately excluded; logs contain identifiers, reason codes, character counts, outcome codes, counts, and durations only.

@@ -3,6 +3,7 @@ import type { Static, TObject } from 'typebox';
 export type SclawAgentEngine = 'claude' | 'pi';
 export type SclawAgentSessionMode = 'interactive' | 'scheduled';
 export type SclawNativeContributionMode = 'augment' | 'replace';
+export type SclawActivationScope = 'turn' | 'session';
 
 export interface SclawExtensionLogger {
   debug(message: string, details?: Record<string, unknown>): void;
@@ -67,6 +68,28 @@ export interface SclawContributionSelector {
   modes?: readonly SclawAgentSessionMode[];
 }
 
+export interface SclawActivatableContributionSelector extends SclawContributionSelector {
+  /** References an activation declared by the owning extension. Omit for always active. */
+  activation?: string;
+}
+
+export interface SclawActivationResult {
+  active: boolean;
+  /** Stable, non-sensitive reason code suitable for diagnostics and metrics. */
+  reason?: string;
+}
+
+export interface SclawActivationDefinition {
+  id: string;
+  scope: SclawActivationScope;
+  match(
+    context: SclawExtensionBuildContext,
+  ):
+    | boolean
+    | SclawActivationResult
+    | Promise<boolean | SclawActivationResult>;
+}
+
 export interface SclawToolSuccess<T = unknown> {
   success: true;
   type: string;
@@ -91,7 +114,7 @@ export type SclawToolOutcome<T = unknown> = SclawToolSuccess<T> | SclawToolFailu
 export interface SclawToolDefinition<
   TParameters extends TObject = TObject,
   TOutput = unknown,
-> extends SclawContributionSelector {
+> extends SclawActivatableContributionSelector {
   name: string;
   label: string;
   description: string;
@@ -133,7 +156,7 @@ export interface SclawToolPolicy extends SclawContributionSelector {
   ): Promise<void> | void;
 }
 
-export interface SclawPromptContribution extends SclawContributionSelector {
+export interface SclawPromptContribution extends SclawActivatableContributionSelector {
   id: string;
   text?: string;
   build?(
@@ -144,6 +167,7 @@ export interface SclawPromptContribution extends SclawContributionSelector {
 export interface SclawAgentExtensionDefinition extends SclawContributionSelector {
   id: string;
   version: string;
+  activations?: readonly SclawActivationDefinition[];
   requiredCapabilities?: readonly SclawCapabilityToken<unknown>[];
   tools?: readonly SclawToolDefinition[];
   policies?: readonly SclawToolPolicy[];

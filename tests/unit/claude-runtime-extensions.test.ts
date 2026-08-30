@@ -46,15 +46,24 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(runtime.mcpServers?.['sto-scheduled-task-tool']).toBeUndefined();
   });
 
-  it('keeps management prompt and MCP for ordinary chat sessions', async () => {
+  it('keeps scheduled-task management prompt and MCP out of unrelated chat turns', async () => {
     readDingTalkMentionPending.mockResolvedValue(null);
 
-    const runtime = await buildClaudeRuntimeOptions('agent:main:main');
+    const runtime = await buildClaudeRuntimeOptions('agent:main:ordinary', '帮我分析这个项目');
+
+    expect(runtime.systemPromptAppend).not.toContain(STO_SCHEDULED_TASK_SYSTEM_PROMPT);
+    expect(runtime.mcpServers?.['sto-scheduled-task-tool']).toBeUndefined();
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain('bridge_click');
+  });
+
+  it('activates scheduled-task management prompt and MCP for a matching chat turn', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('agent:main:scheduled-management', '列出我的定时任务');
 
     expect(runtime.systemPromptAppend).toContain(STO_SCHEDULED_TASK_SYSTEM_PROMPT);
     expect(runtime.mcpServers?.['sto-scheduled-task-tool']).toBeDefined();
-    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
-    expect(runtime.systemPromptAppend).toContain('bridge_click');
   });
 
   it('registers embed bridge prompt for app plaza embed sessions', async () => {

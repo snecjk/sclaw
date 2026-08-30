@@ -4,6 +4,7 @@ import {
   SclawExtensionStateManager,
   SclawToolExecutionError,
   buildSclawPrompt,
+  createSclawActivationEvaluator,
   normalizeSclawToolName,
   runSclawAfterToolPolicies,
   runSclawBeforeToolPolicies,
@@ -55,7 +56,9 @@ export interface BuildPiAgentExtensionsInput {
 
 export interface BuildPiAgentExtensionsResult {
   extensions: InlineExtension[];
-  /** Exact tool names that must be included in Pi's createAgentSession tools allowlist. */
+  /** Every common/native tool registered in Pi's tool registry. */
+  registeredToolNames: string[];
+  /** Exact initially-active extension tool names for createAgentSession.tools. */
   toolNames: string[];
   diagnostics: SclawExtensionDiagnostic[];
 }
@@ -84,7 +87,8 @@ export async function buildPiAgentExtensions(
   const extensions: InlineExtension[] = [];
   const usedExtensionIds = new Set<string>();
   const usedToolNames = new Set<string>();
-  const enabledToolNames: string[] = [];
+  const registeredToolNames: string[] = [];
+  const initiallyActiveToolNames: string[] = [];
   const buildStartedAt = Date.now();
 
   extensionLogger.info('[agent-extension] build.start', {
@@ -158,7 +162,8 @@ export async function buildPiAgentExtensions(
         if (usedToolNames.has(normalizedName)) continue;
         tools.push(tool);
         usedToolNames.add(normalizedName);
-        enabledToolNames.push(tool.name);
+        registeredToolNames.push(tool.name);
+        if (!tool.activation) initiallyActiveToolNames.push(tool.name);
       }
       const policies = (definition.policies ?? []).filter(
         (item) => supportsEngine(item, 'pi') && supportsSessionMode(item, input.mode),
@@ -269,12 +274,47 @@ export async function buildPiAgentExtensions(
               }
             });
           }
-          if (prompts.length > 0) {
+          if (prompts.length > 0 || tools.some((tool) => Boolean(tool.activation))) {
             pi.on('before_agent_start', async (event) => {
+              const context = contextFor(event.prompt);
+              const evaluateActivation = createSclawActivationEvaluator({
+                extensionId: definition.id,
+                activations: definition.activations,
+                context,
+                diagnostics,
+              });
+              const toolsToActivate: string[] = [];
+              for (const toolDefinition of tools) {
+                if (
+                  toolDefinition.activation
+                  && (await evaluateActivation(toolDefinition.activation)).active
+                ) {
+                  toolsToActivate.push(toolDefinition.name);
+                }
+              }
+              if (toolsToActivate.length > 0) {
+                const activeTools = pi.getActiveTools();
+                const nextActiveTools = [...new Set([...activeTools, ...toolsToActivate])];
+                if (nextActiveTools.length !== activeTools.length) {
+                  pi.setActiveTools(nextActiveTools);
+                  extensionLogger.info('[agent-extension] tools.activated', {
+                    engine: 'pi',
+                    extensionId: definition.id,
+                    activationToolCount: toolsToActivate.length,
+                    activeToolCount: nextActiveTools.length,
+                  });
+                }
+              }
+              const activePrompts = [];
+              for (const promptContribution of prompts) {
+                if ((await evaluateActivation(promptContribution.activation)).active) {
+                  activePrompts.push(promptContribution);
+                }
+              }
               const prompt = await buildSclawPrompt(
                 definition.id,
-                prompts,
-                contextFor(event.prompt),
+                activePrompts,
+                context,
                 diagnostics,
               );
               return prompt ? { systemPrompt: `${event.systemPrompt}\n\n${prompt}` } : undefined;
@@ -315,7 +355,8 @@ export async function buildPiAgentExtensions(
       extensions.push(...nativeExtensions);
       for (const name of native.claims?.tools ?? []) {
         usedToolNames.add(name.trim().toLowerCase());
-        enabledToolNames.push(name);
+        registeredToolNames.push(name);
+        initiallyActiveToolNames.push(name);
       }
       // extensionLogger.info('[agent-extension] native.build.completed', {
       //   engine: 'pi',
@@ -362,5 +403,10 @@ export async function buildPiAgentExtensions(
     diagnostics: diagnostics.length,
     durationMs: Date.now() - buildStartedAt,
   });
-  return { extensions, toolNames: enabledToolNames, diagnostics };
+  return {
+    extensions,
+    registeredToolNames,
+    toolNames: initiallyActiveToolNames,
+    diagnostics,
+  };
 }

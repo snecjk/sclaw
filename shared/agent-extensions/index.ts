@@ -1,3 +1,4 @@
+export * from './activation';
 export * from './capabilities';
 export * from './errors';
 export * from './runtime';

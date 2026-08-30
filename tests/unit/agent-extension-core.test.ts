@@ -4,6 +4,7 @@ import {
   SclawCapabilityRegistry,
   SclawExtensionStateManager,
   createSclawCapabilityToken,
+  createSclawActivationEvaluator,
   buildSclawPrompt,
   runSclawAfterToolPolicies,
   runSclawBeforeToolPolicies,
@@ -129,6 +130,55 @@ describe('agent extension core', () => {
       .resolves.toBe('healthy prompt');
     expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'PROMPT_BUILD_FAILED' }));
   });
+
+  it('evaluates activation once and keeps session matches isolated by session', async () => {
+    const stateManager = new SclawExtensionStateManager();
+    const diagnostics: SclawExtensionDiagnostic[] = [];
+    const match = vi.fn((buildContext: SclawExtensionBuildContext) => ({
+      active: buildContext.userPrompt === 'activate',
+      reason: 'test-match',
+    }));
+    const activation = { id: 'lazy-tools', scope: 'session' as const, match };
+
+    const firstContext = { ...context(stateManager), userPrompt: 'activate' };
+    const first = createSclawActivationEvaluator({
+      extensionId: 'test-extension', activations: [activation], context: firstContext, diagnostics,
+    });
+    expect((await first('lazy-tools')).active).toBe(true);
+    expect((await first('lazy-tools')).active).toBe(true);
+    expect(match).toHaveBeenCalledOnce();
+
+    const followUp = createSclawActivationEvaluator({
+      extensionId: 'test-extension',
+      activations: [activation],
+      context: { ...context(stateManager), userPrompt: 'follow-up' },
+      diagnostics,
+    });
+    expect(await followUp('lazy-tools')).toMatchObject({ active: true, source: 'session-cache' });
+    expect(match).toHaveBeenCalledOnce();
+
+    const separateManager = new SclawExtensionStateManager();
+    const separate = createSclawActivationEvaluator({
+      extensionId: 'test-extension',
+      activations: [activation],
+      context: { ...context(separateManager), userPrompt: 'follow-up' },
+      diagnostics,
+    });
+    expect((await separate('lazy-tools')).active).toBe(false);
+  });
+
+  it('fails activation closed and records a diagnostic once', async () => {
+    const diagnostics: SclawExtensionDiagnostic[] = [];
+    const evaluate = createSclawActivationEvaluator({
+      extensionId: 'test-extension',
+      activations: [{ id: 'broken', scope: 'turn', match: () => { throw new Error('broken matcher'); } }],
+      context: context(new SclawExtensionStateManager()),
+      diagnostics,
+    });
+    expect(await evaluate('broken')).toMatchObject({ active: false, source: 'error' });
+    expect(await evaluate('broken')).toMatchObject({ active: false, source: 'error' });
+    expect(diagnostics.filter((item) => item.code === 'ACTIVATION_MATCH_FAILED')).toHaveLength(1);
+  });
 });
 
 describe('TypeBox to Zod conversion', () => {
@@ -218,6 +268,25 @@ describe('agent extension registry validation', () => {
       'INVALID_EXTENSION_ID',
       'INVALID_TOOL_NAME',
       'INVALID_NATIVE_RESOURCE_NAME',
+    ]));
+  });
+
+  it('rejects duplicate activations and unknown contribution references', () => {
+    const match = () => false;
+    const diagnostics = validateAgentExtensionRegistry([{
+      common: {
+        id: 'activation-validation',
+        version: '1.0.0',
+        activations: [
+          { id: 'lazy', scope: 'session', match },
+          { id: 'lazy', scope: 'turn', match },
+        ],
+        prompts: [{ id: 'prompt', activation: 'missing', text: 'prompt' }],
+      },
+    }]);
+    expect(diagnostics.map((item) => item.code)).toEqual(expect.arrayContaining([
+      'DUPLICATE_ACTIVATION_ID',
+      'UNKNOWN_ACTIVATION_REFERENCE',
     ]));
   });
 });

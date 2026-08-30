@@ -9,6 +9,7 @@ import {
   type SclawToolOutcome,
 } from '../../../../shared/agent-extensions';
 import { STO_SCHEDULED_TASK_CAPABILITY, type StoScheduledTaskPort } from './capability';
+import { STO_SCHEDULED_TASK_MANAGEMENT_ACTIVATION } from './activation';
 
 type Defaults = {
   accountId?: string;
@@ -163,7 +164,11 @@ const updateSchema = Type.Object({
 });
 
 function tool<T extends TObject>(definition: SclawToolDefinition<T>): SclawToolDefinition<T> {
-  return { ...definition, modes: ['interactive'] };
+  return {
+    ...definition,
+    modes: ['interactive'],
+    activation: STO_SCHEDULED_TASK_MANAGEMENT_ACTIVATION,
+  };
 }
 
 export const stoScheduledTaskTools = [

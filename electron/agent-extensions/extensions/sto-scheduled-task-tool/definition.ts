@@ -7,6 +7,10 @@ import {
 import type { SclawAgentExtensionDefinition } from '../../../../shared/agent-extensions';
 import { STO_SCHEDULED_TASK_CAPABILITY } from './capability';
 import { isScheduledTaskShellCommand, stoScheduledTaskTools } from './operations';
+import {
+  matchesStoScheduledTaskManagementIntent,
+  STO_SCHEDULED_TASK_MANAGEMENT_ACTIVATION,
+} from './activation';
 
 export const STO_SCHEDULED_TASK_SYSTEM_PROMPT = [
   'SClaw 本地定时任务工具使用规则：',
@@ -43,6 +47,11 @@ export const stoScheduledTaskToolDefinition: SclawAgentExtensionDefinition = {
   id: 'sto-scheduled-task-tool',
   version: '1.0.0',
   requiredCapabilities: [STO_SCHEDULED_TASK_CAPABILITY],
+  activations: [{
+    id: STO_SCHEDULED_TASK_MANAGEMENT_ACTIVATION,
+    scope: 'session',
+    match: matchesStoScheduledTaskManagementIntent,
+  }],
   tools: stoScheduledTaskTools,
   policies: [{
     id: 'scheduled-task-management-guard',
@@ -74,12 +83,17 @@ export const stoScheduledTaskToolDefinition: SclawAgentExtensionDefinition = {
       return { action: 'allow' };
     },
   }],
-  prompts: [{
-    id: 'scheduled-task-guidance',
-    build(context) {
-      return context.mode === 'scheduled'
-        ? SCHEDULED_TASK_CORE_PROMPT
-        : STO_SCHEDULED_TASK_SYSTEM_PROMPT;
+  prompts: [
+    {
+      id: 'scheduled-task-management-guidance',
+      modes: ['interactive'],
+      activation: STO_SCHEDULED_TASK_MANAGEMENT_ACTIVATION,
+      text: STO_SCHEDULED_TASK_SYSTEM_PROMPT,
     },
-  }],
+    {
+      id: 'scheduled-task-execution-guidance',
+      modes: ['scheduled'],
+      text: SCHEDULED_TASK_CORE_PROMPT,
+    },
+  ],
 };

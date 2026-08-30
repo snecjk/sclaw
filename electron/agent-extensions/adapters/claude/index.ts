@@ -9,6 +9,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
 import {
   buildSclawPrompt,
+  createSclawActivationEvaluator,
   normalizeSclawToolName,
   runSclawAfterToolPolicies,
   runSclawBeforeToolPolicies,
@@ -254,10 +255,30 @@ export async function buildClaudeAgentExtensions(
     const replaceCommon = native?.mode === 'replace';
 
     if (!replaceCommon) {
+      const evaluateActivation = createSclawActivationEvaluator({
+        extensionId: definition.id,
+        activations: definition.activations,
+        context,
+        diagnostics,
+      });
       const sdkTools = [];
-      for (const toolDefinition of (definition.tools ?? []).filter(
-        (item) => supportsEngine(item, 'claude') && supportsSessionMode(item, input.mode),
-      )) {
+      for (const toolDefinition of definition.tools ?? []) {
+        if (
+          !supportsEngine(toolDefinition, 'claude')
+          || !supportsSessionMode(toolDefinition, input.mode)
+        ) continue;
+        const activation = await evaluateActivation(toolDefinition.activation);
+        if (!activation.active) {
+          extensionLogger.debug('[agent-extension] contribution.skipped', {
+            engine: 'claude',
+            extensionId: definition.id,
+            contributionType: 'tool',
+            contributionId: toolDefinition.name,
+            activationId: toolDefinition.activation,
+            reason: activation.reason ?? activation.source,
+          });
+          continue;
+        }
         if (!isValidAgentExtensionResourceName(toolDefinition.name)) continue;
         const normalizedName = toolDefinition.name.trim().toLowerCase();
         if (usedToolNames.has(normalizedName)) continue;
@@ -347,9 +368,25 @@ export async function buildClaudeAgentExtensions(
         (item) => supportsEngine(item, 'claude') && supportsSessionMode(item, input.mode),
       );
       if (policies.length > 0) mergeOptions(options, { hooks: policyHooks(definition.id, policies, context, stateManager) });
-      const prompts = (definition.prompts ?? []).filter(
-        (item) => supportsEngine(item, 'claude') && supportsSessionMode(item, input.mode),
-      );
+      const prompts = [];
+      for (const promptContribution of definition.prompts ?? []) {
+        if (
+          !supportsEngine(promptContribution, 'claude')
+          || !supportsSessionMode(promptContribution, input.mode)
+        ) continue;
+        const activation = await evaluateActivation(promptContribution.activation);
+        if (activation.active) prompts.push(promptContribution);
+        else {
+          extensionLogger.debug('[agent-extension] contribution.skipped', {
+            engine: 'claude',
+            extensionId: definition.id,
+            contributionType: 'prompt',
+            contributionId: promptContribution.id,
+            activationId: promptContribution.activation,
+            reason: activation.reason ?? activation.source,
+          });
+        }
+      }
       const prompt = await buildSclawPrompt(definition.id, prompts, context, diagnostics);
       if (prompt) mergeOptions(options, { systemPromptAppend: prompt });
     }
