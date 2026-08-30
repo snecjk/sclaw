@@ -75,6 +75,7 @@ describe('session Skill router discovery setting', () => {
   });
 
   it('loads every enabled installed Skill without remote routing or lease updates when disabled', async () => {
+    const onProgress = vi.fn();
     const result = await routeSessionSkills({
       sessionKey: 'pi:main:session-1',
       runId: 'run-1',
@@ -82,6 +83,7 @@ describe('session Skill router discovery setting', () => {
       engine: 'pi',
       mode: 'interactive',
       query: 'create a report',
+      onProgress,
     });
 
     expect(result.selected.map((skill) => skill.slug)).toEqual(['spreadsheets', 'pdf']);
@@ -92,10 +94,32 @@ describe('session Skill router discovery setting', () => {
     expect(mocks.reconcileSessionSkillState).not.toHaveBeenCalled();
     expect(mocks.getSessionSkillState).not.toHaveBeenCalled();
     expect(mocks.beginSkillTurn).not.toHaveBeenCalled();
+    expect(onProgress).not.toHaveBeenCalled();
   });
 
   it('keeps the existing remote routing and lease flow when enabled', async () => {
     mocks.getSetting.mockResolvedValue(true);
+    mocks.listDesiredPackages.mockResolvedValue([
+      {
+        slug: 'sai-cli',
+        name: 'SAI CLI',
+        sourceDir: 'D:/skills/sai-cli',
+        version: '1.0.0',
+        enabled: true,
+        scope: 'user',
+        userCode: '1200287',
+        source: 'stoclaw-preinstalled',
+      },
+      {
+        slug: 'spreadsheets',
+        sourceDir: 'D:/skills/spreadsheets',
+        version: '1.0.0',
+        enabled: true,
+        scope: 'user',
+        userCode: '1200287',
+        source: 'local',
+      },
+    ]);
     mocks.getSessionSkillState.mockResolvedValue({
       sessionKey: 'claude:main:session-2',
       turnNo: 0,
@@ -110,6 +134,7 @@ describe('session Skill router discovery setting', () => {
     });
     mocks.beginSkillTurn.mockResolvedValue(undefined);
 
+    const onProgress = vi.fn();
     const result = await routeSessionSkills({
       sessionKey: 'claude:main:session-2',
       runId: 'run-2',
@@ -117,13 +142,24 @@ describe('session Skill router discovery setting', () => {
       engine: 'claude',
       mode: 'interactive',
       query: 'create a report',
+      onProgress,
     });
 
     expect(result.selected.map((skill) => skill.slug)).toContain('spreadsheets');
+    expect(result.selected.map((skill) => skill.slug)).toContain('sai-cli');
     expect(result.remoteSearched).toBe(true);
     expect(mocks.upsertCards).toHaveBeenCalled();
     expect(mocks.search).toHaveBeenCalled();
     expect(mocks.reconcileSessionSkillState).toHaveBeenCalled();
     expect(mocks.beginSkillTurn).toHaveBeenCalled();
+    expect(mocks.beginSkillTurn).toHaveBeenCalledWith(expect.objectContaining({
+      selected: expect.arrayContaining([
+        expect.objectContaining({ slug: 'sai-cli', state: 'pinned', reasons: ['builtin-pinned'] }),
+      ]),
+    }));
+    expect(onProgress.mock.calls.map(([message]) => message)).toEqual([
+      '正在匹配技能…',
+      '已匹配技能：SAI CLI、spreadsheets',
+    ]);
   });
 });

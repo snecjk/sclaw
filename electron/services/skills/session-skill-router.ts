@@ -20,6 +20,7 @@ const SCHEDULED_LIMIT = 4;
 const PINNED_LIMIT = 4;
 const ROUTE_REFRESH_TURNS = 5;
 const ROUTING_CARD_SYNC_BATCH_SIZE = 10;
+const BUILTIN_PINNED_SKILL_SLUGS = ['sai-cli'] as const;
 const TOPIC_CHANGE_RE = /(?:换个问题|另一个问题|另外(?:一件事|一个)|现在(?:帮我|处理|检查)|unrelated|new topic)/i;
 const FOLLOW_UP_RE = /(?:继续|再加|再改|按刚才|这个也|然后|颜色换|同样|基于上面|接着|also|continue|same way|then)/i;
 const packageHashCache = new Map<string, { signature: string; hash: string }>();
@@ -114,7 +115,10 @@ export async function routeSessionSkills(input: {
   rawMessage?: string;
   attachmentNames?: string[];
   explicitSlugs?: string[];
+  onProgress?: (message: string) => void;
 }): Promise<SessionSkillRouteDecision> {
+  const skillDiscoveryEnabled = await getSetting('skillDiscoveryEnabled');
+  if (skillDiscoveryEnabled) input.onProgress?.('正在匹配技能…');
   const userCode = await getCurrentActiveUserCode();
   const desired = (await listDesiredPackages({ userCode, agentId: input.agentId })).filter((pkg) => pkg.enabled);
   const packageHashes = new Map<string, string>();
@@ -129,7 +133,6 @@ export async function routeSessionSkills(input: {
       })
       .join('\n'))
     .digest('hex');
-  const skillDiscoveryEnabled = await getSetting('skillDiscoveryEnabled');
   if (!skillDiscoveryEnabled) {
     const selected = desired.map((pkg) => ({
       slug: normalize(pkg.slug),
@@ -162,6 +165,9 @@ export async function routeSessionSkills(input: {
   const markerSlugs = parseSkillTranscriptMarkers(input.rawMessage ?? '').map((item) => item.slug);
   const commandSlugs = [...(input.rawMessage ?? '').matchAll(/(?:^|\s)\/skill:([a-z0-9._-]+)/gi)].map((match) => match[1]);
   const explicitSlugs = [...new Set([...(input.explicitSlugs ?? []), ...markerSlugs, ...commandSlugs].map(normalize).filter(Boolean))];
+  const builtinPinnedSlugs = BUILTIN_PINNED_SKILL_SLUGS
+    .map(normalize)
+    .filter((slug) => validSkills.has(slug));
   const configuredPinned = desired.filter((pkg) => pkg.scope === 'agent');
   if (configuredPinned.length > PINNED_LIMIT) {
     logger.warn('[skill-router] agent pinned Skill limit exceeded', {
@@ -173,6 +179,7 @@ export async function routeSessionSkills(input: {
   }
   const pinnedSlugs = configuredPinned.slice(0, PINNED_LIMIT).map((pkg) => normalize(pkg.slug));
   const active = orderSessionSkillLeases(previous.skills).filter((lease) => validSkills.has(lease.slug));
+  const reusableActive = active.filter((lease) => !lease.reasons.includes('builtin-pinned'));
   const topicChangedByText = TOPIC_CHANGE_RE.test(input.query);
   const confirmedFollowUp = FOLLOW_UP_RE.test(input.query) && extensions.length === 0 && explicitSlugs.length === 0;
   const manifestChanged = previous.manifestRevision !== manifestRevision;
@@ -205,7 +212,7 @@ export async function routeSessionSkills(input: {
     || previous.turnNo + 1 - previous.lastRemoteRouteTurn >= ROUTE_REFRESH_TURNS;
   const explicitIsNew = explicitSlugs.some((slug) => !active.some((lease) => lease.slug === slug));
   const shouldSearchRemote = previous.turnNo === 0
-    || active.length === 0
+    || reusableActive.length === 0
     || manifestChanged
     || refreshDue
     || explicitIsNew
@@ -267,6 +274,7 @@ export async function routeSessionSkills(input: {
     });
   };
   explicitSlugs.forEach((slug, index) => add(slug, 'selected', 5_000_000 - index, ['explicit']));
+  builtinPinnedSlugs.forEach((slug, index) => add(slug, 'pinned', 4_500_000 - index, ['builtin-pinned']));
   pinnedSlugs.forEach((slug, index) => add(slug, 'pinned', 4_000_000 - index, ['agent-pinned']));
   if (!topicChanged) {
     active.filter((lease) => lease.state === 'used').forEach((lease) => add(
@@ -305,6 +313,7 @@ export async function routeSessionSkills(input: {
   if (topicChanged) {
     selectedInputs = selectedInputs.filter((item) => item.reasons?.some((reason) => (
       reason === 'explicit'
+      || reason === 'builtin-pinned'
       || reason === 'agent-pinned'
       || reason === 'remote-hybrid'
       || reason === 'local-match'
@@ -335,6 +344,10 @@ export async function routeSessionSkills(input: {
   const skillSetHash = createHash('sha256')
     .update(selected.map((item) => `${item.slug}@${item.sourceHash}`).sort().join('\n'))
     .digest('hex');
+  const matchedNames = selected.map((item) => packageBySlug.get(item.slug)?.name?.trim() || item.slug);
+  input.onProgress?.(matchedNames.length > 0
+    ? `已匹配技能：${matchedNames.join('、')}`
+    : '未匹配到相关技能，正在直接处理…');
   return {
     selected,
     skillSetHash,

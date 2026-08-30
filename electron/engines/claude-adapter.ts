@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
 import { routeSessionSkills } from '../services/skills/session-skill-router';
+import { emitSkillRoutingProgress } from '../services/skills/skill-routing-progress';
 import { extractClaudeSkillSlugs } from '../services/skills/session-skill-usage';
 import {
   completeSkillTurn,
@@ -1229,6 +1230,9 @@ async function startClaudeQuery(
       mode: options?.permissionProfile === undefined ? 'interactive' : 'scheduled',
       query: options?.userPrompt ?? (typeof prompt === 'string' ? prompt : ''),
       rawMessage: typeof prompt === 'string' ? prompt : options?.userPrompt,
+      onProgress: options?.permissionProfile === undefined
+        ? (message) => emitSkillRoutingProgress(options?.eventSink, sessionKey, runId, message)
+        : undefined,
     });
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);

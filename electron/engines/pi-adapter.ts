@@ -14,6 +14,7 @@ import { logger } from '../utils/logger';
 import { getPiRuntimeService } from '../services/pi-runtime-service';
 import { getSkillManager } from '../services/skills/skill-manager';
 import { routeSessionSkills, type RoutedSessionSkill } from '../services/skills/session-skill-router';
+import { emitSkillRoutingProgress, type SkillRoutingProgressSink } from '../services/skills/skill-routing-progress';
 import { extractPiReadPaths, resolvePiReadSkillSlug } from '../services/skills/session-skill-usage';
 import {
   completeSkillTurn,
@@ -127,6 +128,7 @@ async function buildPiSessionConfig(
   sessionKey: string,
   runId?: string,
   params?: EngineSendWithMediaParams,
+  progressSink?: SkillRoutingProgressSink | null,
 ): Promise<{ config: PiSessionConfig; entry: EngineSessionRegistryEntry }> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
   const agentId = existing?.agentId || await resolveAgentIdForSessionKey(sessionKey);
@@ -148,6 +150,9 @@ async function buildPiSessionConfig(
         query: params.message,
         rawMessage: params.message,
         attachmentNames: params.media?.map((item) => item.fileName),
+        onProgress: params.allowedRoots?.length
+          ? undefined
+          : (message) => emitSkillRoutingProgress(progressSink, sessionKey, runId, message),
       })).selected
     : routedPiSkills.get(sessionKey) ?? [];
   if (runId) routedPiSkills.set(sessionKey, selectedSkills);
@@ -197,7 +202,12 @@ async function sendPiMessage(
   const runId = randomUUID();
   try {
     attachEventSink(ctx);
-    const { config, entry } = await buildPiSessionConfig(params.sessionKey, runId, params);
+    const { config, entry } = await buildPiSessionConfig(
+      params.sessionKey,
+      runId,
+      params,
+      ctx.eventSink ?? ctx.gatewayManager,
+    );
     for (const match of params.message.matchAll(/(?:^|\s)\/skill:([a-z0-9._-]+)/gi)) {
       await markSkillUsed(params.sessionKey, runId, match[1]);
     }
