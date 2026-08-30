@@ -170,7 +170,7 @@ interface ChatMessageProps {
 const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover:opacity-100';
 
 const MESSAGE_META_ICON_BUTTON_CLASS =
-  'h-auto w-auto min-h-0 min-w-0 shrink-0 rounded-none border-0 bg-transparent p-0.5 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground dark:text-[var(--sto-icon-tertiary)] dark:hover:text-[var(--sto-icon-secondary)]';
+  'h-auto w-auto min-h-0 min-w-0 shrink-0 rounded-none border-0 bg-transparent p-0.5 text-[var(--sto-chat-action-icon)] shadow-none hover:bg-transparent hover:text-[var(--sto-chat-action-icon-hover)]';
 
 const MESSAGE_META_SHARE_ICON_CLASS = 'h-3.5 w-3.5';
 
@@ -649,20 +649,20 @@ export const ChatMessage = memo(function ChatMessage({
         className={cn(
           'mx-auto w-full max-w-4xl rounded-2xl transition-all duration-200',
           isSearchMatch && 'ring-1 ring-amber-300/70 ring-offset-2 ring-offset-background',
-          isSearchActive && 'ring-2 ring-primary/55 shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
+          isSearchActive && 'ring-2 ring-primary/55 shadow-[var(--sto-shadow-search-focus)]',
         )}
       >
-        <div className="rounded-xl border border-amber-200/55 bg-amber-50/72 px-3 py-2 text-[13px] text-amber-900/90 shadow-[0_4px_14px_rgba(245,158,11,0.06)] dark:border-amber-500/15 dark:bg-amber-950/12 dark:text-amber-100/80">
+        <div className="rounded-xl border border-[var(--sto-chat-warning-border)] bg-[var(--sto-chat-warning-background)] px-3 py-2 text-[13px] text-[var(--sto-chat-warning-foreground)] shadow-[0_4px_14px_rgba(245,158,11,0.06)]">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600/80 dark:text-amber-300/70" />
-            <span className="shrink-0 text-[11px] font-medium text-amber-700/85 dark:text-amber-200/75">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-[var(--sto-chat-warning-icon)]" />
+            <span className="shrink-0 text-[11px] font-medium text-[var(--sto-chat-warning-label)]">
               {t('systemNotice.label')}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[12px] text-amber-900/75 dark:text-amber-100/70">
+            <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--sto-chat-warning-detail)]">
               {summary}
             </span>
             {message.timestamp ? (
-              <span className="shrink-0 text-[11px] text-amber-700/60 dark:text-amber-200/55">
+              <span className="shrink-0 text-[11px] text-[var(--sto-chat-warning-meta)]">
                 {formatTimestamp(message.timestamp)}
               </span>
             ) : null}
@@ -670,7 +670,7 @@ export const ChatMessage = memo(function ChatMessage({
               <button
                 type="button"
                 onClick={() => setSystemExpanded((value) => !value)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-amber-700/80 transition-colors hover:bg-amber-100/70 hover:text-amber-900 dark:text-amber-200/75 dark:hover:bg-amber-900/25 dark:hover:text-amber-100"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-[var(--sto-chat-warning-action)] transition-colors hover:bg-[var(--sto-chat-warning-action-hover-background)] hover:text-[var(--sto-chat-warning-action-hover-foreground)]"
                 aria-expanded={systemExpanded}
               >
                 {systemExpanded ? (
@@ -683,7 +683,7 @@ export const ChatMessage = memo(function ChatMessage({
             ) : null}
           </div>
           {systemExpanded && hasText ? (
-            <div className="mt-2 border-t border-amber-200/45 pt-2 dark:border-amber-500/10">
+            <div className="mt-2 border-t border-[var(--sto-chat-warning-divider)] pt-2">
               <p className="whitespace-pre-wrap break-words break-all leading-6">{text}</p>
             </div>
           ) : null}
@@ -703,7 +703,7 @@ export const ChatMessage = memo(function ChatMessage({
       className={cn(
         'rounded-[1.6rem] transition-all duration-200',
         isSearchMatch && 'ring-1 ring-primary/25 ring-offset-2 ring-offset-background',
-        isSearchActive && 'ring-2 ring-primary/55 bg-primary/[0.04] shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
+        isSearchActive && 'ring-2 ring-primary/55 bg-primary/[0.04] shadow-[var(--sto-shadow-search-focus)]',
         thinkingOutsideAvatar
           ? 'flex w-full flex-col gap-2'
           : isUser && showUserParamsFold
@@ -796,7 +796,7 @@ export const ChatMessage = memo(function ChatMessage({
                 ) : (
                   <div
                     key={`local-${i}`}
-                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground dark:bg-[linear-gradient(180deg,var(--sto-surface-secondary),var(--sto-surface-primary))] dark:text-[var(--sto-icon-tertiary)]"
+                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[image:var(--sto-chat-attachment-background)] text-[var(--sto-chat-attachment-foreground)]"
                   >
                     <File className="h-8 w-8" />
                   </div>
@@ -909,7 +909,7 @@ export const ChatMessage = memo(function ChatMessage({
               }
               if (isImage && !file.preview) {
                 return (
-                  <div key={`preview-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground dark:bg-[linear-gradient(180deg,var(--sto-surface-secondary),var(--sto-surface-primary))] dark:text-[var(--sto-icon-tertiary)]">
+                  <div key={`preview-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[image:var(--sto-chat-attachment-background)] text-[var(--sto-chat-attachment-foreground)]">
                     <File className="h-8 w-8" />
                   </div>
                 );
@@ -1007,7 +1007,7 @@ function ToolStatusBar({
             key={tool.toolCallId || tool.id || tool.name}
             className={cn(
               'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs transition-all duration-300',
-              isRunning && 'border-[hsl(var(--primary)/0.35)] bg-[linear-gradient(135deg,rgba(255,245,230,0.95),rgba(255,232,204,0.75))] text-foreground shadow-[0_8px_18px_rgba(255,111,0,0.08)] dark:border-[hsl(var(--primary)/0.25)] dark:bg-[linear-gradient(135deg,hsl(var(--primary)/0.10),var(--sto-surface-primary))] dark:shadow-[0_8px_18px_rgba(0,0,0,0.28)]',
+              isRunning && 'border-[var(--sto-chat-running-border)] bg-[image:var(--sto-chat-running-background)] text-foreground shadow-[var(--sto-shadow-message-running)]',
               !isRunning && !isError && cn('border-border text-muted-foreground', assistantChatCardBg),
               isError && 'border-destructive/30 bg-destructive/5 text-destructive',
             )}
@@ -1352,7 +1352,6 @@ function MessageBubble({
                 : assistantVariant === 'workflowOverview'
                   ? cn(
                       'w-full border border-border bg-card px-4 py-3 text-foreground shadow-soft',
-                      'dark:border-border dark:bg-card',
                     )
                   : cn(
                       'w-full text-foreground',
@@ -1423,7 +1422,7 @@ function MessageBubble({
                   );
                 }
                 return (
-                  <pre className="overflow-x-auto rounded-lg border border-border bg-[#F4F5F7] p-4 dark:bg-muted/40">
+                  <pre className="overflow-x-auto rounded-lg border border-border bg-[var(--sto-chat-code-background)] p-4">
                     <code className={cn('text-[13px] leading-5 font-mono text-foreground', className)} {...props}>
                       {children}
                     </code>
@@ -1740,7 +1739,7 @@ function ImageThumbnail({
   void filePath; void base64; void mimeType;
   return (
     <div
-      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08] dark:shadow-[0_10px_24px_rgba(0,0,0,0.35)]"
+      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-[var(--sto-chat-image-background)] shadow-[var(--sto-shadow-image-preview)]"
       onClick={onPreview}
     >
       <img src={src} alt={fileName} className="w-full h-full object-cover" />
@@ -1772,7 +1771,7 @@ function ImagePreviewCard({
   return (
     <div
       className={cn(
-        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-border shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:shadow-[0_10px_24px_rgba(0,0,0,0.35)]',
+        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-border shadow-[var(--sto-shadow-image-preview)]',
         assistantChatCardBg,
       )}
       onClick={onPreview}

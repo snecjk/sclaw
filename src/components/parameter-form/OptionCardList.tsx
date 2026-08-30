@@ -98,10 +98,10 @@ export function OptionCardList({
                       ? parameterFormDockOptionSelectedClass
                       : parameterFormDockOptionHoverClass
                   : isDisplay
-                    ? 'border-[#E5E6EB] bg-[#F5F6F7] dark:border-border dark:bg-[var(--sto-surface-elevated)]'
+                    ? 'border-[var(--sto-border-default)] bg-[var(--sto-form-disabled-background)]'
                     : selected
-                      ? 'border-[var(--sto-brand-6)] bg-[#FFF5E6] shadow-[0_1px_2px_rgba(255,111,0,0.08)] dark:bg-[hsl(var(--primary)/0.10)]'
-                      : 'border-[#E5E6EB] bg-white hover:border-[#FFD7A3] dark:border-border dark:bg-[var(--sto-surface-primary)] dark:hover:border-[var(--sto-border-heavy)]',
+                      ? 'border-[var(--sto-form-selected-border)] bg-[var(--sto-form-selected-background)] shadow-[var(--sto-shadow-brand-subtle)]'
+                      : 'border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] hover:border-[var(--sto-form-option-hover-border)]',
                 option.disabled && 'opacity-60',
               )}
             >
@@ -125,7 +125,7 @@ export function OptionCardList({
                   <span
                     className={cn(
                       'font-medium leading-[18px] text-foreground',
-                      isDock ? 'text-sm' : 'text-[14px] font-semibold leading-snug text-[#1D2129] dark:text-[var(--sto-text-primary)]',
+                      isDock ? 'text-sm' : 'text-[14px] font-semibold leading-snug text-[var(--sto-text-primary)]',
                     )}
                   >
                     {option.label}
@@ -139,7 +139,7 @@ export function OptionCardList({
                     className={cn(
                       isDock
                         ? 'mt-0.5 text-xs leading-[14px] text-muted-foreground'
-                        : 'mt-1 text-[12.5px] leading-relaxed text-[#86909C] dark:text-[var(--sto-text-tertiary)]',
+                        : 'mt-1 text-[12.5px] leading-relaxed text-[var(--sto-text-tertiary)]',
                     )}
                   >
                     {option.description}
@@ -152,9 +152,9 @@ export function OptionCardList({
       </div>
 
       {mode === 'multi' && selectedLabels.length > 0 && !isDock && (
-        <p className="text-[12.5px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
+        <p className="text-[12.5px] text-[var(--sto-text-tertiary)]">
           {selectionLabel}：
-          <span className="font-medium text-[#4E5969] dark:text-[var(--sto-text-secondary)]">{selectedLabels.join('、')}</span>
+          <span className="font-medium text-[var(--sto-text-secondary)]">{selectedLabels.join('、')}</span>
         </p>
       )}
     </div>

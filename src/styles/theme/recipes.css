@@ -7,6 +7,30 @@
     -webkit-backdrop-filter: var(--sto-glass-backdrop-filter);
   }
 
+  .glass-chrome {
+    background: var(--sto-glass-background);
+    border-color: var(--sto-glass-border);
+    box-shadow: none;
+    backdrop-filter: var(--sto-glass-backdrop-filter);
+    -webkit-backdrop-filter: var(--sto-glass-backdrop-filter);
+  }
+
+  .glass-panel {
+    background: var(--sto-glass-panel-background);
+    border-color: var(--sto-glass-border);
+    box-shadow: var(--sto-glass-panel-shadow);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .glass-subtle {
+    background: var(--sto-glass-subtle-background);
+    border-color: var(--sto-glass-border);
+    box-shadow: var(--sto-glass-shadow);
+    backdrop-filter: var(--sto-glass-backdrop-filter);
+    -webkit-backdrop-filter: var(--sto-glass-backdrop-filter);
+  }
+
   /* Card recipe: consumers retain geometry; recipes own color and state. */
   .sto-card {
     --sto-disabled-source-background: var(--sto-card-default-background);
@@ -143,8 +167,8 @@
   }
 
   .sto-control--link {
-    --sto-disabled-source-foreground: var(--sto-info-primary);
-    color: var(--sto-info-primary);
+    --sto-disabled-source-foreground: var(--sto-link-foreground);
+    color: var(--sto-link-foreground);
   }
 
   .sto-control--field {
@@ -160,6 +184,30 @@
 
   .sto-control--field::placeholder { color: var(--sto-control-placeholder); }
   .sto-control--select { background-image: var(--sto-control-select-arrow-image); }
+
+  .sto-control--composer {
+    --sto-disabled-source-background: var(--sto-composer-default-background);
+    --sto-disabled-source-border: var(--sto-composer-default-border);
+    background-color: var(--sto-composer-default-background);
+    border-color: var(--sto-composer-default-border);
+    box-shadow: var(--sto-composer-default-shadow);
+  }
+
+  .sto-control--composer:is(:hover, [data-sto-state='hover']) {
+    border-color: var(--sto-composer-hover-border);
+    box-shadow: var(--sto-composer-hover-shadow);
+  }
+
+  .sto-control--composer:is(:focus-within, [data-sto-state='focus']) {
+    border-color: var(--sto-composer-focus-border);
+    box-shadow: 0 0 0 2px var(--sto-composer-focus-ring), var(--sto-composer-focus-shadow);
+    outline: none;
+  }
+
+  .sto-control--composer[data-sto-state='drag-over'] {
+    border-color: var(--sto-composer-drag-border);
+    box-shadow: 0 0 0 2px var(--sto-composer-drag-ring);
+  }
 
   .sto-control:not([class*='sto-control--']):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-hover-bg);
@@ -417,8 +465,10 @@
   }
 
   .sto-overlay--glass-border { border-color: var(--sto-overlay-glass-border); }
+  .sto-overlay--glass { background-color: var(--sto-glass-background); }
   .sto-overlay.glass { box-shadow: var(--sto-overlay-glass-shadow); }
   .sto-overlay-scrim { background-color: var(--sto-overlay-scrim); }
+  .sto-overlay-scrim--dialog { background-color: var(--sto-overlay-dialog-scrim); }
 
   /* Feedback recipe: functional status is the only chromatic surface family. */
   .sto-feedback,

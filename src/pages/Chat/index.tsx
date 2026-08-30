@@ -652,7 +652,7 @@ export function Chat() {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
-        <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px] dark:bg-white/[0.025]" />
+        <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-[var(--sto-chat-ambient-cyan)] blur-[90px]" />
         <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
       </div>
 
@@ -776,7 +776,7 @@ export function Chat() {
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
-            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
+            className="sto-control sto-control--neutral-outline pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--sto-chat-jump-border)] bg-[var(--sto-chat-jump-background)] px-2.5 text-[11px] font-medium leading-none text-[var(--sto-chat-jump-foreground)] shadow-none backdrop-blur-sm transition-colors hover:bg-[var(--sto-chat-jump-hover-background)] sm:h-8 sm:px-3 sm:text-xs"
             initial={false}
             animate={{
               opacity: showJumpToLatest ? 1 : 0,
@@ -828,7 +828,7 @@ export function Chat() {
 
       {/* Transparent loading overlay */}
       {minLoading && !sending && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-[2px] rounded-xl pointer-events-auto">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--sto-chat-loading-scrim)] backdrop-blur-[2px] rounded-xl pointer-events-auto">
           <div className="glass shadow-glass rounded-full p-2.5 border border-glass-border">
             <LoadingSpinner size="md" />
           </div>
@@ -912,7 +912,7 @@ function WelcomeScreen() {
   return (
     <div className="relative flex h-[68vh] flex-col items-center justify-center overflow-hidden text-center">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-[18%] h-40 w-40 -translate-x-1/2 rounded-full bg-cyan-300/10 blur-[90px] dark:bg-white/[0.025]" />
+        <div className="absolute left-1/2 top-[18%] h-40 w-40 -translate-x-1/2 rounded-full bg-[var(--sto-chat-ambient-cyan-soft)] blur-[90px]" />
       </div>
 
       <div className="relative z-10 flex max-w-4xl flex-col items-center justify-center">

@@ -103,9 +103,8 @@ export function ComposerAttachMenu({
       ref={menuRef}
       role="menu"
       className={cn(
-        'fixed z-[100001] min-w-[180px] overflow-hidden rounded-[10px] border border-[#E5E6EB]',
-        'bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]',
-        'dark:border-border dark:bg-popover',
+        'sto-overlay fixed z-[100001] min-w-[180px] overflow-hidden rounded-[10px] border',
+        'p-1 shadow-[var(--sto-shadow-dropdown-strong)]',
       )}
       style={{ bottom: pos.bottom, left: pos.left }}
     >
@@ -116,8 +115,7 @@ export function ComposerAttachMenu({
           role="menuitem"
           className={cn(
             'flex w-full items-center rounded-[6px] px-3 py-2 text-left text-[13px] leading-5',
-            'text-[#1D2129] hover:bg-[#F2F3F5]',
-            'dark:text-foreground dark:hover:bg-muted',
+            'text-[var(--sto-text-primary)] hover:bg-[var(--sto-control-hover-bg)]',
           )}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {

@@ -20,10 +20,10 @@ import { cn } from '@/lib/utils';
 import { contentHeaderActionBtnClass } from '@/lib/surfaces';
 
 /** 会话面板顶部 action 图标的功能气泡：深色 Grey-10 底 + 白字 + 同色箭头。 */
-const HEADER_TOOLTIP_BG = '#1D2129';
+const HEADER_TOOLTIP_BG = 'var(--sto-content-tooltip-background)';
 const headerTooltipContentClass = cn(
   // overflow-visible: base TooltipContent sets overflow-hidden, which clips the arrow.
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'overflow-visible rounded-lg border-0 bg-[var(--sto-content-tooltip-background)] px-2.5 py-1.5 text-xs font-medium text-[var(--sto-content-tooltip-foreground)]',
   'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
 );
 
@@ -31,7 +31,7 @@ function HeaderActionTooltip({ label }: { label: string }) {
   return (
     <TooltipContent className={headerTooltipContentClass}>
       <p>{label}</p>
-      <TooltipArrow className="fill-[#1D2129]" style={{ fill: HEADER_TOOLTIP_BG }} />
+      <TooltipArrow className="fill-[var(--sto-content-tooltip-background)]" style={{ fill: HEADER_TOOLTIP_BG }} />
     </TooltipContent>
   );
 }
@@ -121,9 +121,8 @@ export function ChatSearchBar({
     >
       <div
         className={cn(
-          'flex h-[var(--sto-content-header-control-h,28px)] w-[16.5rem] items-center gap-1 rounded-[10px] border border-border/80 px-1.5',
-          'bg-white/88 shadow-[0_12px_32px_rgba(15,23,42,0.07)] backdrop-blur-md',
-          'dark:bg-white/[0.08] dark:shadow-[0_12px_32px_rgba(0,0,0,0.35)]',
+          'sto-overlay flex h-[var(--sto-content-header-control-h,28px)] w-[16.5rem] items-center gap-1 rounded-[10px] border border-border/80 px-1.5',
+          'bg-[var(--sto-search-overlay-background)] shadow-[var(--sto-shadow-search-overlay)] backdrop-blur-md',
         )}
       >
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">

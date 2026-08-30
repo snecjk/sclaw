@@ -126,6 +126,9 @@ describe('light appearance color system', () => {
   });
 
   it('keeps component-local destructive light colors exact while dark stays semantic', () => {
+    const root = extractThemeBlock(':root {');
+    const dark = extractThemeBlock('.dark {');
+
     expect(saveArtifactDialogSource).toContain('text-[#F53F3F]');
     expect(saveArtifactDialogSource).toContain(
       'bg-[#F53F3F] px-4 text-[12px] font-normal text-white hover:bg-[#E23B3B] dark:bg-destructive',
@@ -135,8 +138,12 @@ describe('light appearance color system', () => {
       'bg-[#F53F3F] px-4 text-sm text-white hover:bg-[#E23B3B] dark:bg-destructive',
     );
     expect(confirmDialogSource).toContain(
-      "variant === 'destructive' && 'bg-[#F53F3F] hover:bg-[#E23B3B] dark:bg-destructive dark:hover:bg-destructive/90'",
+      "variant === 'destructive' && 'bg-[var(--sto-dialog-destructive-background)] hover:bg-[var(--sto-dialog-destructive-hover-background)]'",
     );
+    expect(root).toContain('--sto-dialog-destructive-background: #f53f3f');
+    expect(root).toContain('--sto-dialog-destructive-hover-background: #e23b3b');
+    expect(dark).toContain('--sto-dialog-destructive-background: hsl(var(--destructive))');
+    expect(dark).toContain('--sto-dialog-destructive-hover-background: hsl(var(--destructive) / 0.9)');
   });
 
 });

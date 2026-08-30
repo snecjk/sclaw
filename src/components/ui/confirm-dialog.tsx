@@ -82,7 +82,7 @@ export function ConfirmDialog({
   return createPortal(
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4',
+        'sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center p-4',
         overlayClassName,
       )}
       role="dialog"
@@ -97,20 +97,19 @@ export function ConfirmDialog({
     >
       <div
         className={cn(
-          'w-full max-w-[400px] overflow-hidden rounded-[12px] border border-[#E5E6EB] bg-white p-5',
-          'shadow-[0_12px_40px_rgba(15,23,42,0.12)] focus:outline-none',
-          'dark:border-border dark:bg-card',
+          'sto-overlay w-full max-w-[400px] overflow-hidden rounded-[12px] border p-5',
+          'shadow-[var(--sto-shadow-dialog)] focus:outline-none',
         )}
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2
           id="confirm-dialog-title"
-          className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"
+          className="text-[16px] font-semibold leading-tight text-[var(--sto-text-primary)]"
         >
           {title}
         </h2>
-        <p className="mt-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
+        <p className="mt-2 text-[13px] leading-relaxed text-[var(--sto-text-tertiary)]">
           {message}
         </p>
         <div className="mt-5 flex justify-end gap-2">
@@ -119,7 +118,7 @@ export function ConfirmDialog({
             variant="outline"
             onClick={onCancel}
             disabled={confirming}
-            className="h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"
+            className="h-8 rounded-md border-[var(--sto-border-default)] bg-[var(--sto-panel-bg)] px-3 text-[13px] font-medium text-[var(--sto-text-primary)] shadow-none hover:bg-[var(--sto-control-subtle-hover-background)]"
           >
             {cancelLabel}
           </Button>
@@ -129,7 +128,7 @@ export function ConfirmDialog({
             disabled={confirming}
             className={cn(
               'h-8 rounded-md px-3 text-[13px] font-medium shadow-none',
-              variant === 'destructive' && 'bg-[#F53F3F] hover:bg-[#E23B3B] dark:bg-destructive dark:hover:bg-destructive/90',
+              variant === 'destructive' && 'bg-[var(--sto-dialog-destructive-background)] hover:bg-[var(--sto-dialog-destructive-hover-background)]',
             )}
           >
             {confirming ? (

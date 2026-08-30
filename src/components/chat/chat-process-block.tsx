@@ -117,7 +117,7 @@ export function ChatProcessBlock({
       aria-expanded={expanded}
     >
       <Icon
-        className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+        className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
         aria-hidden
       />
       {titleWithChevron}
@@ -126,12 +126,12 @@ export function ChatProcessBlock({
     <div className={chatProcessTitleRowClass}>
       {isRunning ? (
         <Loader2
-          className="h-4 w-4 shrink-0 animate-spin opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+          className="h-4 w-4 shrink-0 animate-spin text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
           aria-hidden
         />
       ) : null}
       <Icon
-        className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+        className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
         aria-hidden
       />
       {titleWithChevron}

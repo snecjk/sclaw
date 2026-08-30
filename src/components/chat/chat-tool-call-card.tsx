@@ -220,7 +220,7 @@ export function ChatToolCallCard({
           aria-expanded={thinkingExpanded}
         >
           <ToolIcon
-            className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
             aria-hidden
           />
           <span className="flex min-w-0 items-center gap-1">
@@ -247,7 +247,7 @@ export function ChatToolCallCard({
       <div className={cn(chatToolCallShellClass, className)}>
         <div className={chatProcessTitleRowClass}>
           <ToolIcon
-            className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
             aria-hidden
           />
           <span className="min-w-0 truncate">{label}</span>
@@ -267,22 +267,22 @@ export function ChatToolCallCard({
       >
         {open ? (
           <ChevronDown
-            className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
             aria-hidden
           />
         ) : (
           <ChevronRight
-            className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
             aria-hidden
           />
         )}
         <ToolIcon
-          className="h-4 w-4 shrink-0 opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+          className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
           aria-hidden
         />
         {isRunning ? (
           <Loader2
-            className="h-4 w-4 shrink-0 animate-spin opacity-70 dark:text-[var(--sto-icon-secondary)] dark:opacity-100"
+            className="h-4 w-4 shrink-0 animate-spin text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
             aria-hidden
           />
         ) : null}

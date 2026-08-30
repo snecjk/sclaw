@@ -106,6 +106,92 @@ function sourceMatches(): SourceMatch[] {
   return productionSources(sourceRoot).flatMap(({ file, source }) => matchesInSource(file, source));
 }
 
+const taskSevenSourcePrefixes = [
+  'src/components/chat/',
+  'src/components/input-composer/',
+  'src/components/parameter-form/',
+  'src/components/quick-input/',
+  'src/pages/Chat/',
+] as const;
+
+const taskSevenSourceFiles = new Set([
+  'src/lib/surfaces.ts',
+  'src/styles/globals.css',
+  'src/components/attachments/ComposerAttachMenu.tsx',
+  'src/components/channels/ChannelConfigModal.tsx',
+  'src/components/channels/DingTalkHubBindModal.tsx',
+  'src/components/channels/MobileAppConfigModal.tsx',
+  'src/components/file-preview/ArtifactShareDialog.tsx',
+  'src/components/file-preview/SaveArtifactDialog.tsx',
+  'src/components/jsbridge/JsBridgeHostPortal.tsx',
+  'src/components/layout/SidebarMobileConnectTooltip.tsx',
+  'src/components/layout/TitleBar.tsx',
+  'src/components/layout/sidebar-update-notice.tsx',
+  'src/components/settings/DwsCliSettings.tsx',
+  'src/components/settings/ProvidersSettings.tsx',
+  'src/components/skill-plaza/SkillIcon.tsx',
+  'src/components/ui/confirm-dialog.tsx',
+  'src/components/ui/sheet.tsx',
+  'src/components/ui/tooltip.tsx',
+  'src/pages/Agents/AgentDetailPage.tsx',
+  'src/pages/Agents/index.tsx',
+  'src/pages/DataCenter/components/entries.tsx',
+  'src/pages/DataCenter/components/modals.tsx',
+  'src/pages/Login/index.tsx',
+  'src/pages/Models/TokenQuotaDialog.tsx',
+  'src/pages/Models/index.tsx',
+  'src/pages/Settings/index.tsx',
+  'src/pages/Setup/index.tsx',
+  'src/pages/Skills/index.tsx',
+  'src/pages/Sprite/QuickActions.tsx',
+  'src/pages/Sprite/SpriteInput.tsx',
+  'src/pages/Sprite/index.tsx',
+  'src/pages/Subscriptions/index.tsx',
+]);
+
+type TaskSevenViolation = Pick<SourceMatch, 'file' | 'line' | 'value'>;
+
+function isTaskSevenSource(file: string): boolean {
+  return taskSevenSourceFiles.has(file)
+    || taskSevenSourcePrefixes.some((prefix) => file.startsWith(prefix));
+}
+
+function taskSevenShadowViolations(): {
+  coolDarkShadow: TaskSevenViolation[];
+  ordinaryBrandGlow: TaskSevenViolation[];
+} {
+  const coolDarkShadow: TaskSevenViolation[] = [];
+  const ordinaryBrandGlow: TaskSevenViolation[] = [];
+  const coolDark = /rgba\(\s*2\s*,\s*8\s*,\s*23\s*,[^)]*\)/gi;
+  const brandGlow = /(?:box-shadow\s*:|shadow-\[[^\]\n]*)(?:[^;\n]*?)(?:rgba\(\s*255\s*,\s*(?:111|140|141|183)\s*,\s*(?:0|42|140)\s*,[^)]*\)|hsl\(var\(--primary\)\s*\/[^)]*\))/gi;
+
+  for (const { file, source } of productionSources(sourceRoot)) {
+    if (!isTaskSevenSource(file) || file === rawThemeOwner) continue;
+
+    for (const match of source.matchAll(coolDark)) {
+      coolDarkShadow.push({
+        file,
+        line: lineNumberAt(source, match.index),
+        value: match[0],
+      });
+    }
+
+    for (const match of source.matchAll(brandGlow)) {
+      const context = exactContext(source, match.index, match[0].length);
+      const isFunctionalFeedback = /(?:focus(?:-within|-visible)?|isSearchActive|aria-invalid|error)/i.test(context);
+      const isExplicitBrandArtwork = /stoclaw-voice-(?:edge|soundline)-bar/i.test(context);
+      if (isFunctionalFeedback || isExplicitBrandArtwork) continue;
+      ordinaryBrandGlow.push({
+        file,
+        line: lineNumberAt(source, match.index),
+        value: match[0],
+      });
+    }
+  }
+
+  return { coolDarkShadow, ordinaryBrandGlow };
+}
+
 function formatMatches(matches: readonly SourceMatch[]): string {
   const counts = Object.fromEntries(
     Object.keys(forbiddenPatterns).map((rule) => [
@@ -206,6 +292,13 @@ function reasonFor(match: SourceMatch): string {
 }
 
 describe('repository-wide theme source audit', () => {
+  it('rejects cool dark shadows and ordinary brand glows in Task 7 surfaces', () => {
+    const violations = taskSevenShadowViolations();
+
+    expect(violations.coolDarkShadow).toEqual([]);
+    expect(violations.ordinaryBrandGlow).toEqual([]);
+  });
+
   it('classifies exceptions from the matched value and exact reviewed source', () => {
     const rawMatch = (file: string, value: string, context: string): SourceMatch => ({
       file,

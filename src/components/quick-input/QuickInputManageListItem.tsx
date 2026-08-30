@@ -41,9 +41,8 @@ export function QuickInputManageListItem({
       }}
       className={cn(
         'box-border flex h-10 w-full items-center justify-between self-stretch rounded-lg',
-        'border border-[#E5E6EB] bg-white px-2 py-3',
-        'transition-colors hover:bg-[#F0F2F5]',
-        'dark:border-border dark:bg-background dark:hover:bg-muted',
+        'border border-[var(--sto-border-default)] bg-[var(--sto-quick-input-row-background)] px-2 py-3',
+        'transition-colors hover:bg-[var(--sto-control-picker-hover-background)]',
         isDragging && 'z-10 opacity-50 shadow-sm',
       )}
     >
@@ -51,7 +50,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           className={cn(
-            'inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#86909C] dark:text-[var(--sto-icon-tertiary)]',
+            'inline-flex h-4 w-4 shrink-0 items-center justify-center text-[var(--sto-icon-tertiary)]',
             sortable ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-not-allowed opacity-40',
           )}
           aria-label={t('composer.quickInputManageDragAria')}
@@ -64,7 +63,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           onClick={() => onEdit(item)}
-          className="min-w-0 flex-1 truncate text-left text-xs font-normal leading-4 text-[#111827] dark:text-foreground"
+          className="min-w-0 flex-1 truncate text-left text-xs font-normal leading-4 text-[var(--sto-quick-input-content-foreground)]"
         >
           {item.content}
         </button>
@@ -74,7 +73,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           onClick={() => onEdit(item)}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-background dark:hover:text-[var(--sto-icon-secondary)]"
+          className="sto-control sto-control--ghost inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--sto-icon-tertiary)] transition-colors hover:bg-[var(--sto-control-icon-hover-background)] hover:text-[var(--sto-quick-input-icon-hover-foreground)]"
           aria-label={t('composer.quickInputManageEditAria')}
         >
           <Pencil className="h-3.5 w-3.5" aria-hidden />
@@ -82,7 +81,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           onClick={() => onShare(item)}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-background dark:hover:text-[var(--sto-icon-secondary)]"
+          className="sto-control sto-control--ghost inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--sto-icon-tertiary)] transition-colors hover:bg-[var(--sto-control-icon-hover-background)] hover:text-[var(--sto-quick-input-icon-hover-foreground)]"
           aria-label={t('composer.quickInputManageShareAria')}
         >
           <ShareMessageIcon className="h-3.5 w-3.5" />
@@ -90,7 +89,7 @@ export function QuickInputManageListItem({
         <button
           type="button"
           onClick={() => onDelete(item)}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-background dark:hover:text-[var(--sto-icon-secondary)]"
+          className="sto-control sto-control--ghost inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--sto-icon-tertiary)] transition-colors hover:bg-[var(--sto-control-icon-hover-background)] hover:text-[var(--sto-quick-input-icon-hover-foreground)]"
           aria-label={t('composer.quickInputManageDeleteAria')}
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />

@@ -286,31 +286,27 @@ export function myTaskCardMenuItemClass(isDestructive = false): string {
 /** 表单字段 focus（input / select / textarea） */
 export const formFieldFocusClass = cn(
   'focus:outline-none focus:ring-0',
-  'focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:focus:border-primary/50 dark:focus:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'focus:border-[var(--sto-form-interactive-border)] focus:shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 表单字段 focus-within（焦点在内部编辑器时画在外壳上） */
 export const formFieldFocusWithinClass = cn(
   'focus-within:outline-none focus-within:ring-0',
-  'focus-within:border-[#c5cad3] focus-within:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:focus-within:border-primary/50 dark:focus-within:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'focus-within:border-[var(--sto-form-interactive-border)] focus-within:shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 表单触发器 focus-visible（button 类下拉） */
 export const formFieldFocusVisibleClass = cn(
   'focus-visible:outline-none focus-visible:ring-0',
-  'focus-visible:border-[#c5cad3] focus-visible:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:focus-visible:border-primary/50 dark:focus-visible:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'focus-visible:border-[var(--sto-form-interactive-border)] focus-visible:shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 表单触发器 hover 描边 */
-export const formFieldHoverBorderClass = 'hover:border-[#c5cad3] dark:hover:border-primary/40';
+export const formFieldHoverBorderClass = 'hover:border-[var(--sto-form-interactive-border)]';
 
 /** 表单触发器展开态 */
 export const formFieldOpenClass = cn(
-  'border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:border-primary/50 dark:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'border-[var(--sto-form-interactive-border)] shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 定时任务弹窗：表单 label */
@@ -641,22 +637,21 @@ export function stoParameterFormDockLayout(variant: StoChatColumnVariant): 'home
 
 /** ParameterForm chat-dock 顶部条（浅灰底；暗色 secondary，避免白条） */
 export const parameterFormDockHeaderClass =
-  'shrink-0 rounded-t-[18px] bg-[#FAFBFC] px-3.5 pb-2 pt-3 dark:border-b dark:border-border dark:bg-secondary';
+  'shrink-0 rounded-t-[18px] border-b border-[var(--sto-form-dock-header-border)] bg-[var(--sto-form-panel-background)] px-3.5 pb-2 pt-3';
 
 /** ParameterForm chat-dock 继续 / 确认主按钮（暗色用品牌主色，避免整颗白钮） */
 export const parameterFormDockPrimaryButtonClass = cn(
   'inline-flex h-6 items-center gap-1 rounded-[7px] px-3 text-xs font-medium transition-colors disabled:opacity-50',
-  'bg-foreground text-primary-foreground hover:bg-foreground/90',
-  'dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90',
+  'bg-[var(--sto-form-dock-primary-background)] text-[var(--sto-form-dock-primary-foreground)] hover:bg-[var(--sto-form-dock-primary-hover-background)]',
 );
 
 /** ParameterForm chat-dock 可选项 hover（暗色不用 #FAFAFA 白底） */
 export const parameterFormDockOptionHoverClass =
-  'bg-transparent hover:bg-muted/40 dark:hover:bg-muted/60';
+  'bg-transparent hover:bg-[var(--sto-form-dock-option-hover-background)]';
 
 /** ParameterForm chat-dock 可选项选中底 */
 export const parameterFormDockOptionSelectedClass =
-  'bg-muted/30 dark:bg-muted/50';
+  'bg-[var(--sto-form-dock-option-selected-background)]';
 
 /** ParameterForm chat-dock 规则行 / 数字字段卡片外框 */
 export const parameterFormDockFieldRowClass =
@@ -1334,8 +1329,8 @@ export const skillMessageTagClass = skillComposerTagClass;
 
 /** Composer 技能 Picker 浮层容器 */
 export const skillPickerShellClass = cn(
-  'absolute left-0 bottom-full z-[100001] mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2',
-  'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
+  'sto-overlay absolute left-0 bottom-full z-[100001] mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border p-2',
+  'shadow-[var(--sto-shadow-control-popover)]',
 );
 
 /** 技能 Picker 列表区 */
@@ -1482,7 +1477,7 @@ export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
 /** 工具调用标题行（13px #86909C，图标 16px，标题行 gap 4px） */
 export const chatToolCallHeaderBtnClass = cn(
   'flex w-full items-center gap-1 text-left',
-  'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground dark:text-[var(--sto-text-secondary)]',
+  'text-[13px] leading-5 font-normal text-[var(--sto-content-heading-secondary)] transition-colors duration-150 hover:text-[var(--sto-text-primary)]',
 );
 
 /** 工具/思考内容区：16px icon 列 + 竖线固定在 icon 中线 */
@@ -1504,14 +1499,14 @@ export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
 /** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
   'sto-chat-content-scrollbar m-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
-  'text-[13px] leading-5 font-normal text-[#86909C] dark:text-[var(--sto-text-tertiary)]',
+  'text-[13px] leading-5 font-normal text-[var(--sto-text-tertiary)]',
 );
 
 /** 思考/工具汇总条标题（MasterGo 4:2177：13/20 #86909C，chevron gap 4px） */
 export const chatThinkingSummaryHeaderClass = cn(
   'flex w-full items-center gap-1 py-1 text-left',
-  'text-[13px] leading-5 font-normal text-[#86909C] dark:text-[var(--sto-text-secondary)]',
-  'transition-colors duration-150 hover:text-foreground',
+  'text-[13px] leading-5 font-normal text-[var(--sto-content-heading-secondary)]',
+  'transition-colors duration-150 hover:text-[var(--sto-text-primary)]',
 );
 
 /** 分段思考栈内一级摘要：与 phase-text 间距由外层 gap-3（12px）控制，去掉 py-1 避免视觉超出 12px */
@@ -1522,11 +1517,11 @@ export const chatThinkingSegmentSummaryHeaderClass = cn(
 
 /** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
 export const chatProcessSecondaryTextClass =
-  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[#86909C] dark:text-[var(--sto-text-tertiary)]';
+  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[var(--sto-text-tertiary)]';
 
 /** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
 export const chatProcessLoadingTextClass =
-  'text-[13px] leading-[18px] font-normal text-[#6B737D] dark:text-[var(--sto-text-tertiary)]';
+  'text-[13px] leading-[18px] font-normal text-[var(--sto-content-loading-foreground)]';
 
 /** 过程块标题行（MasterGo 4:2177：icon 16px + 文案，gap 4px） */
 export const chatProcessTitleRowClass = cn(

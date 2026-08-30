@@ -200,7 +200,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
   return createPortal(
     <>
       <motion.div
-        className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
+        className="sto-overlay-scrim fixed inset-0 z-[10050] flex items-center justify-center px-4 backdrop-blur-sm"
         onClick={() => {
           if (!saving && !shareDialogOpen) onClose();
         }}
@@ -213,17 +213,17 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="quick-input-manage-title"
-          className="flex h-[496px] w-[640px] flex-col overflow-hidden rounded-[18px] bg-white p-0 dark:bg-background"
+          className="sto-overlay flex h-[496px] w-[640px] flex-col overflow-hidden rounded-[18px] p-0 shadow-[var(--sto-overlay-shadow)]"
           onClick={(e) => e.stopPropagation()}
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
         >
-          <div className="flex h-[52px] w-full shrink-0 items-center justify-between bg-white p-4 dark:bg-background">
+          <div className="flex h-[52px] w-full shrink-0 items-center justify-between p-4">
             <h2
               id="quick-input-manage-title"
-              className="text-base font-semibold leading-6 text-[#1D2129] dark:text-foreground"
+              className="text-base font-semibold leading-6 text-[var(--sto-text-primary)]"
             >
               {t('composer.quickInputManageModalTitle')}
             </h2>
@@ -231,7 +231,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#86909C] transition-colors hover:bg-[#F2F3F5] hover:text-[#1D2129] disabled:opacity-50 dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-muted dark:hover:text-[var(--sto-icon-secondary)]"
+              className="sto-control sto-control--ghost inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--sto-icon-tertiary)] transition-colors hover:text-[var(--sto-icon-secondary)] disabled:opacity-50"
               aria-label={t('composer.quickInputCreateCloseAria')}
             >
               <X className="h-4 w-4" />
@@ -240,32 +240,32 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 self-stretch px-4 py-2">
             {hasData ? (
-              <div className="box-border flex h-[34px] w-full shrink-0 items-center gap-2 rounded-lg border border-[#E8EAEF] bg-white p-2 dark:border-border dark:bg-background">
-                <Search className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" aria-hidden />
+              <div className="sto-control sto-control--neutral-field box-border flex h-[34px] w-full shrink-0 items-center gap-2 rounded-lg border p-2">
+                <Search className="h-3.5 w-3.5 shrink-0 text-[var(--sto-icon-tertiary)]" aria-hidden />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={t('composer.quickInputManageSearchPlaceholder')}
-                  className="min-w-0 flex-1 bg-transparent text-xs text-[#1D2129] outline-none placeholder:text-[#86909C] dark:text-foreground"
+                  className="min-w-0 flex-1 bg-transparent text-xs text-[var(--sto-text-primary)] outline-none placeholder:text-[var(--sto-text-tertiary)]"
                 />
               </div>
             ) : null}
 
             <div className="sto-hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {loading ? (
-                <div className="flex h-full items-center justify-center gap-2 px-3 py-10 text-xs text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
+                <div className="flex h-full items-center justify-center gap-2 px-3 py-10 text-xs text-[var(--sto-text-tertiary)]">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   {t('composer.quickInputLoading')}
                 </div>
               ) : !hasData ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 px-2 py-6">
                   <img src={quickInputEmptyIcon} alt="" width={40} height={40} aria-hidden />
-                  <p className="text-center text-xs font-normal leading-4 text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
+                  <p className="text-center text-xs font-normal leading-4 text-[var(--sto-text-tertiary)]">
                     {t('composer.quickInputEmpty')}
                   </p>
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="px-3 py-10 text-center text-xs text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
+                <div className="px-3 py-10 text-center text-xs text-[var(--sto-text-tertiary)]">
                   {t('composer.quickInputNoResults')}
                 </div>
               ) : (
@@ -291,7 +291,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
                         />
                       ))}
                       {capped ? (
-                        <p className="mt-1 px-2 py-2 text-center text-[12px] text-[#86909C] dark:text-muted-foreground">
+                        <p className="mt-1 px-2 py-2 text-center text-[12px] text-[var(--sto-text-tertiary)]">
                           {t('composer.quickInputCappedHint')}
                         </p>
                       ) : null}
@@ -302,13 +302,13 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <div className="flex h-16 w-full items-center justify-end gap-4 bg-white p-4 dark:bg-background">
+          <div className="flex h-16 w-full items-center justify-end gap-4 p-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={saving}
-              className="box-border flex h-[34px] w-[60px] flex-col items-center justify-center rounded-xl border border-[#E5E6EB] bg-white px-4 py-2 text-sm font-medium text-[#1D2129] hover:bg-white dark:border-border dark:bg-background dark:text-foreground"
+              className="box-border flex h-[34px] w-[60px] flex-col items-center justify-center rounded-xl px-4 py-2 text-sm font-medium"
             >
               {t('composer.quickInputCreateCancel')}
             </Button>
@@ -316,7 +316,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
               type="button"
               onClick={() => void handleSave()}
               disabled={saving || loading}
-              className="box-border flex h-[34px] min-w-[60px] flex-col items-center justify-center rounded-xl border-none bg-[#1D2129] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D2129]/90 dark:bg-foreground dark:text-background"
+              className="box-border flex h-[34px] min-w-[60px] flex-col items-center justify-center rounded-xl border-none bg-[var(--sto-content-inverted-background)] px-4 py-2 text-sm font-medium text-[var(--sto-content-inverted-foreground)] hover:bg-[var(--sto-content-inverted-hover-background)]"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

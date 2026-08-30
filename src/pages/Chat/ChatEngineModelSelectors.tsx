@@ -42,15 +42,12 @@ import { toast } from 'sonner';
 const remappedDelistedSessionKeys = new Set<string>();
 const pillBase = cn(
   'flex min-w-0 max-w-[min(100vw-11rem,260px)] items-stretch rounded-xl border border-border/70',
-  'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
-  'shadow-[0_4px_12px_rgba(15,23,42,0.05)]',
-  'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.28)]',
+  '[background:var(--sto-selector-pill-background)] shadow-[var(--sto-shadow-selector)]',
 );
 
 const pillBtn = cn(
   'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg py-0 pl-2.5 pr-2 text-left outline-none',
-  'transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
-  'dark:hover:bg-white/[0.06]',
+  'transition-colors hover:bg-[var(--sto-content-hover-background)] focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
   'disabled:pointer-events-none disabled:opacity-60',
 );
 
@@ -60,10 +57,10 @@ const pillStatic = cn(
 
 /** 首页 HomeComposer 内联引擎/模型：灰底 pill；模型选中态按内容宽度完整展示。 */
 const inlinePillTrigger = cn(
-  'flex h-[30px] min-w-0 items-center gap-1 rounded-[20px] bg-[#F5F6F7] px-3 outline-none',
-  'text-sm font-normal text-foreground transition-colors hover:bg-black/[0.04]',
+  'flex h-[30px] min-w-0 items-center gap-1 rounded-[20px] bg-[var(--sto-form-disabled-background)] px-3 outline-none',
+  'text-sm font-normal text-foreground transition-colors hover:bg-[var(--sto-content-hover-background)]',
   'focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
-  'disabled:pointer-events-none disabled:opacity-60 dark:bg-muted dark:hover:bg-white/[0.06]',
+  'disabled:pointer-events-none disabled:opacity-60',
 );
 
 const inlineModelPillTrigger = cn(inlinePillTrigger, 'w-max max-w-none shrink-0');
@@ -430,8 +427,7 @@ export function ChatEngineSelector({
             <div
               className={cn(
                 'inline-flex h-8 max-w-[min(36vw,280px)] items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium',
-                'border-amber-200 bg-amber-50 text-amber-800 shadow-[0_6px_14px_rgba(180,83,9,0.08)]',
-                'dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200',
+                'border-[var(--sto-chat-engine-hint-border)] bg-[var(--sto-chat-engine-hint-background)] text-[var(--sto-chat-engine-hint-foreground)] shadow-[0_6px_14px_rgba(180,83,9,0.08)]',
               )}
             >
               <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -781,8 +777,8 @@ export function ChatModelSelector({
       <span className={cn(
         'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
         option.isBuiltin
-          ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
-          : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
+          ? 'bg-link-muted text-link'
+          : 'bg-[var(--sto-model-custom-tag-background)] text-[var(--sto-model-custom-tag-foreground)]',
       )}>
         {option.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
       </span>
@@ -829,8 +825,8 @@ export function ChatModelSelector({
             <span className={cn(
               'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
               selectedModel.isBuiltin
-                ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
-                : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
+                ? 'bg-link-muted text-link'
+                : 'bg-[var(--sto-model-custom-tag-background)] text-[var(--sto-model-custom-tag-foreground)]',
             )}>
               {selectedModel.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
             </span>
@@ -849,7 +845,7 @@ export function ChatEngineModelSelectors({ className }: { className?: string }) 
     <div
       className={cn(
         'flex min-w-0 flex-nowrap items-center gap-2 rounded-xl border border-border/60 px-2 py-1',
-        'bg-[hsl(var(--glass-bg)/0.55)] backdrop-blur-sm shadow-[0_6px_14px_rgba(15,23,42,0.05)] dark:shadow-[0_6px_14px_rgba(0,0,0,0.28)]',
+        'bg-[hsl(var(--glass-bg)/0.55)] backdrop-blur-sm shadow-[var(--sto-shadow-selector-raised)]',
         className,
       )}
     >

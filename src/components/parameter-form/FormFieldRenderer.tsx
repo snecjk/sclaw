@@ -327,7 +327,7 @@ function renderSelectField(
           variant={variant}
         />
         {isDisplay && field.description && (
-          <p className="mt-2.5 text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{field.description}</p>
+          <p className="mt-2.5 text-[12px] text-[var(--sto-text-tertiary)]">{field.description}</p>
         )}
         {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
       </div>
@@ -622,25 +622,25 @@ function renderTitledGroupField(
           return (
             <div
               key={item.fieldKey}
-              className="rounded-xl border border-[#E5E6EB] bg-[#FAFBFC] px-4 py-3.5 dark:border-border dark:bg-[var(--sto-surface-elevated)]"
+              className="rounded-xl border border-[var(--sto-border-default)] bg-[var(--sto-form-inset-background)] px-4 py-3.5"
             >
-              <h4 className="text-[14px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{item.label}</h4>
+              <h4 className="text-[14px] font-semibold text-[var(--sto-text-primary)]">{item.label}</h4>
               {item.description && (
-                <p className="mt-0.5 text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{item.description}</p>
+                <p className="mt-0.5 text-[12px] text-[var(--sto-text-tertiary)]">{item.description}</p>
               )}
               {tags.length > 0 ? (
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   {tags.map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex rounded-lg border border-[#E5E6EB] bg-white px-2.5 py-1 text-[12px] leading-snug text-[#4E5969] dark:border-border dark:bg-[var(--sto-surface-primary)] dark:text-[var(--sto-text-secondary)]"
+                      className="inline-flex rounded-lg border border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] px-2.5 py-1 text-[12px] leading-snug text-[var(--sto-text-secondary)]"
                     >
                       {tag}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="mt-1.5 text-[13px] text-[#4E5969] dark:text-[var(--sto-text-secondary)]">{String(itemValue)}</p>
+                <p className="mt-1.5 text-[13px] text-[var(--sto-text-secondary)]">{String(itemValue)}</p>
               )}
             </div>
           );
@@ -662,7 +662,7 @@ function renderTitledGroupField(
         className={cn(
           isDock
             ? 'flex flex-wrap gap-3'
-            : 'space-y-3 rounded-xl border border-[#E5E6EB] bg-white p-4 dark:border-border dark:bg-[var(--sto-surface-primary)]',
+            : 'space-y-3 rounded-xl border border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] p-4',
         )}
       >
         {items.map((item, index) => {
@@ -690,11 +690,11 @@ function renderTitledGroupField(
                 {index + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <label className={cn('font-medium text-foreground', isDock ? 'text-sm leading-[18px]' : 'text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]')}>
+                <label className={cn('font-medium text-foreground', isDock ? 'text-sm leading-[18px]' : 'text-[13px] font-semibold text-[var(--sto-text-primary)]')}>
                   {item.label}
                 </label>
                 {item.description && (
-                  <p className={cn(isDock ? 'text-xs leading-[14px] text-muted-foreground' : 'text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]')}>
+                  <p className={cn(isDock ? 'text-xs leading-[14px] text-muted-foreground' : 'text-[12px] text-[var(--sto-text-tertiary)]')}>
                     {item.description}
                   </p>
                 )}
@@ -717,7 +717,7 @@ function renderTitledGroupField(
                       }}
                       className={cn(
                         parameterFormDockStepperButtonClass,
-                        isDock ? 'h-[26px] w-[26px] rounded-md border border-border' : 'h-8 w-8 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA]',
+                        isDock ? 'h-[26px] w-[26px] rounded-md border border-border' : 'h-8 w-8 rounded-lg border border-[var(--sto-form-control-border)] bg-[var(--sto-form-control-background)]',
                       )}
                     >
                       <Minus className="h-4 w-4" />
@@ -728,7 +728,7 @@ function renderTitledGroupField(
                       onChange={(e) => updateField(item.fieldKey, e.target.value)}
                       className={cn(
                         parameterFormDockStepperInputClass,
-                        isDock ? 'h-[26px] w-10 rounded-md border' : 'w-16 rounded-lg border border-[#E5E7EB] px-2 py-1.5',
+                        isDock ? 'h-[26px] w-10 rounded-md border' : 'w-16 rounded-lg border border-[var(--sto-form-control-border)] px-2 py-1.5',
                       )}
                     />
                     <button
@@ -740,7 +740,7 @@ function renderTitledGroupField(
                       }}
                       className={cn(
                         parameterFormDockStepperButtonClass,
-                        isDock ? 'h-[26px] w-[26px] rounded-md border border-border' : 'h-8 w-8 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA]',
+                        isDock ? 'h-[26px] w-[26px] rounded-md border border-border' : 'h-8 w-8 rounded-lg border border-[var(--sto-form-control-border)] bg-[var(--sto-form-control-background)]',
                       )}
                     >
                       <Plus className="h-4 w-4" />
@@ -803,9 +803,9 @@ function RangeInlineInputs({
 function FieldLabel({ label, description }: { label: string; description?: string }) {
   return (
     <div className="mb-2.5">
-      <label className="block text-[14px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{label}</label>
+      <label className="block text-[14px] font-semibold text-[var(--sto-text-primary)]">{label}</label>
       {description && (
-        <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{description}</p>
+        <p className="mt-0.5 text-[12.5px] leading-relaxed text-[var(--sto-text-tertiary)]">{description}</p>
       )}
     </div>
   );
@@ -826,14 +826,14 @@ function renderDisplayField(field: FormField, value: unknown, error?: string, va
         className={cn(
           isDock
             ? cn('rounded-[10px] border border-border bg-muted/30 px-3 py-2')
-            : 'rounded-xl border border-[#E5E6EB] bg-[#FAFBFC] px-4 py-3.5 dark:border-border dark:bg-[var(--sto-surface-elevated)]',
+            : 'rounded-xl border border-[var(--sto-border-default)] bg-[var(--sto-form-inset-background)] px-4 py-3.5',
         )}
       >
-        <div className={cn('text-[14px] font-semibold', isDock ? 'text-foreground' : 'text-[#1D2129] dark:text-[var(--sto-text-primary)]')}>{field.label}</div>
-        <div className={cn('mt-1 text-[13px]', isDock ? 'text-muted-foreground' : 'text-[#4E5969] dark:text-[var(--sto-text-secondary)]')}>{displayValue}</div>
+        <div className={cn('text-[14px] font-semibold', isDock ? 'text-foreground' : 'text-[var(--sto-text-primary)]')}>{field.label}</div>
+        <div className={cn('mt-1 text-[13px]', isDock ? 'text-muted-foreground' : 'text-[var(--sto-text-secondary)]')}>{displayValue}</div>
       </div>
       {field.description && (
-        <p className="mt-2 text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{field.description}</p>
+        <p className="mt-2 text-[12px] text-[var(--sto-text-tertiary)]">{field.description}</p>
       )}
       {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
     </div>

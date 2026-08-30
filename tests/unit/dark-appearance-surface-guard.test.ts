@@ -22,6 +22,31 @@ const guardedFiles = [
 
 const taskSixFiles = guardedFiles.slice(5);
 
+const taskSevenFiles = [
+  'src/components/attachments/ComposerAttachMenu.tsx',
+  'src/components/chat/artifact-product-card.tsx',
+  'src/components/chat/chat-process-block.tsx',
+  'src/components/chat/chat-tool-call-card.tsx',
+  'src/components/input-composer/input-composer-shell.tsx',
+  'src/components/input-composer/input-composer-agent-picker.tsx',
+  'src/components/jsbridge/JsBridgeHostPortal.tsx',
+  'src/components/layout/SidebarMobileConnectTooltip.tsx',
+  'src/components/parameter-form/FormFieldRenderer.tsx',
+  'src/components/parameter-form/OptionCardList.tsx',
+  'src/components/parameter-form/ParameterFormCard.tsx',
+  'src/components/quick-input/QuickInputManageListItem.tsx',
+  'src/components/quick-input/QuickInputManageModal.tsx',
+  'src/components/quick-input/QuickInputPicker.tsx',
+  'src/components/ui/confirm-dialog.tsx',
+  'src/components/ui/sheet.tsx',
+  'src/components/ui/tooltip.tsx',
+  'src/pages/Chat/ChatEngineModelSelectors.tsx',
+  'src/pages/Chat/ChatMessage.tsx',
+  'src/pages/Chat/ChatSearchBar.tsx',
+  'src/pages/Chat/index.tsx',
+  'src/pages/Chat/thinking/thinking-turn-process.tsx',
+] as const;
+
 function readSource(file: string): string {
   return readFileSync(resolve(process.cwd(), file), 'utf8');
 }
@@ -287,6 +312,8 @@ const legacyDarkSurfacePatterns = [
   /dark:bg-\[hsl\(var\(--(?:card|popover|glass-bg)\)/,
 ] as const;
 
+const taskSevenLocalThemeBranch = /dark:(?:bg|text|border|shadow|ring|fill|hover:bg|hover:border|hover:text|focus:bg|focus:border|focus:ring|focus:shadow|focus-within:bg|focus-within:border|focus-within:ring|focus-within:shadow)-/g;
+
 const requiredSemanticFragments: Record<(typeof taskSixFiles)[number], readonly string[]> = {
   'src/components/skill-plaza/SkillUploadModal.tsx': [
     'dark:bg-[var(--sto-control-bg)]',
@@ -404,6 +431,14 @@ describe('dark appearance application surface guard', () => {
         && source.includes(fragment);
       expect(mapsVariantRecipe || classGroups.some((group) => group.includes(fragment))).toBe(true);
     }
+  });
+
+  it.each(taskSevenFiles)('%s owns no local dark color branch', (file) => {
+    const failures = extractClassExpressionGroups(readSource(file)).flatMap((group) =>
+      Array.from(group.matchAll(taskSevenLocalThemeBranch), (match) => match[0]),
+    );
+
+    expect(failures).toEqual([]);
   });
 
   it('keeps exact Word and slide fidelity canvases outside the application surface guard', () => {

@@ -240,38 +240,44 @@ describe('dark appearance semantic tokens', () => {
 
   it('maps dark thinking summaries and details to separate semantic text roles', () => {
     for (const titleClass of [chatToolCallHeaderBtnClass, chatThinkingSummaryHeaderClass]) {
-      expect(titleClass).toContain('dark:text-[var(--sto-text-secondary)]');
+      expect(titleClass).toContain('text-[var(--sto-content-heading-secondary)]');
     }
 
-    for (const detailClass of [
-      chatToolCallInputPreClass,
-      chatProcessSecondaryTextClass,
-      chatProcessLoadingTextClass,
-    ]) {
-      expect(detailClass).toContain('dark:text-[var(--sto-text-tertiary)]');
+    for (const detailClass of [chatToolCallInputPreClass, chatProcessSecondaryTextClass]) {
+      expect(detailClass).toContain('text-[var(--sto-text-tertiary)]');
     }
+    expect(chatProcessLoadingTextClass).toContain('text-[var(--sto-content-loading-foreground)]');
+
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-content-heading-secondary: var(--sto-text-secondary)');
+    expect(dark).toContain('--sto-content-loading-foreground: var(--sto-text-tertiary)');
   });
 
   it('pins dark assistant headings, body and shimmer to semantic text roles', () => {
     expect(globalsCss).toMatch(
-      /\.dark \.prose-chat-reply\s*\{[^}]*color:\s*var\(--sto-text-primary\)/s,
+      /\.prose-chat-reply\s*\{[^}]*color:\s*hsl\(var\(--foreground\)\)/s,
     );
     expect(globalsCss).toMatch(
-      /\.dark \.prose-chat-reply h1,[\s\S]*?\.dark \.prose-chat-reply h6\s*\{[^}]*color:\s*var\(--sto-text-primary\)/s,
+      /\.chat-interaction-shimmer-text\s*\{[^}]*color:\s*var\(--sto-content-loading-foreground\)/s,
     );
-    expect(globalsCss).toMatch(
-      /\.dark \.chat-interaction-shimmer-text\s*\{[^}]*color:\s*var\(--sto-text-tertiary\)/s,
-    );
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-markdown-heading-muted: var(--sto-text-primary)');
+    expect(dark).toContain('--sto-content-loading-foreground: var(--sto-text-tertiary)');
+    expect(globalsCss).not.toContain('.dark .prose-chat-reply');
   });
 
   it('uses one explicit dark icon role instead of stacking gray and opacity', () => {
     for (const source of [chatProcessBlockSource, chatToolCallCardSource]) {
-      expect(source).toContain('dark:text-[var(--sto-icon-secondary)]');
-      expect(source).toContain('dark:opacity-100');
+      expect(source).toContain('opacity-[var(--sto-content-process-icon-opacity)]');
+      expect(source).toContain('text-[var(--sto-content-process-icon-foreground)]');
+      expect(source).not.toContain('dark:opacity-100');
     }
 
-    expect(thinkingTurnProcessSource).toContain('dark:text-[var(--sto-icon-secondary)]');
-    expect(thinkingTurnProcessSource).toContain('dark:opacity-100');
+    expect(thinkingTurnProcessSource).toContain('opacity-[var(--sto-content-process-icon-opacity)]');
+    expect(thinkingTurnProcessSource).toContain('text-[var(--sto-content-process-icon-foreground)]');
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-content-process-icon-opacity: 1');
+    expect(dark).toContain('--sto-content-process-icon-foreground: var(--sto-icon-secondary)');
   });
 
   it('maps dark shell chevrons, weak actions and tertiary copy to explicit roles', () => {
@@ -282,8 +288,9 @@ describe('dark appearance semantic tokens', () => {
     expect(sidebarProjectsSource).toContain('text-[var(--sto-text-tertiary)]');
     expect(sidebarUpdateNoticeSource).toContain('dark:text-[var(--sto-text-tertiary)]');
     expect(updateContentModalSource).toContain('dark:text-[var(--sto-text-tertiary)]');
-    expect(chatMessageSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
-    expect(chatMessageSource).toContain('dark:hover:text-[var(--sto-icon-secondary)]');
+    expect(chatMessageSource).toContain('text-[var(--sto-chat-action-icon)]');
+    expect(chatMessageSource).toContain('hover:text-[var(--sto-chat-action-icon-hover)]');
+    expect(extractThemeBlock('.dark {')).toContain('--sto-chat-action-icon: var(--sto-icon-tertiary)');
   });
 
   it('keeps dark ambient fades neutral instead of introducing a cool hue', () => {
@@ -293,25 +300,24 @@ describe('dark appearance semantic tokens', () => {
     expect(homeMainConversationSource).not.toContain('hsl(220_22%_11%');
     expect(darkBody).toContain('rgba(255, 255, 255, 0.035)');
     expect(darkBody).not.toContain('hsl(220 ');
-    expect(chatPageSource).toContain('dark:bg-white/[0.025]');
-    expect(chatPageSource).toContain(
-      'bg-cyan-300/10 blur-[90px] dark:bg-white/[0.025]',
-    );
+    expect(chatPageSource).toContain('bg-[var(--sto-chat-ambient-cyan)]');
+    expect(chatPageSource).toContain('bg-[var(--sto-chat-ambient-cyan-soft)]');
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-chat-ambient-cyan: rgba(255, 255, 255, 0.025)');
+    expect(dark).toContain('--sto-chat-ambient-cyan-soft: rgba(255, 255, 255, 0.025)');
   });
 
   it('replaces blue-black light shadows with neutral black shadows in dark chat surfaces', () => {
-    expect(artifactProductCardSource).toContain(
-      'dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]',
-    );
-    expect(chatSearchBarSource).toContain(
-      'dark:shadow-[0_12px_32px_rgba(0,0,0,0.35)]',
-    );
-    expect(chatEngineModelSelectorsSource).toContain(
-      'dark:shadow-[0_4px_12px_rgba(0,0,0,0.28)]',
-    );
-    expect(chatMessageSource).toContain(
-      'dark:shadow-[0_10px_24px_rgba(0,0,0,0.35)]',
-    );
+    expect(artifactProductCardSource).toContain('shadow-[var(--sto-shadow-content-popover)]');
+    expect(chatSearchBarSource).toContain('shadow-[var(--sto-shadow-search-overlay)]');
+    expect(chatEngineModelSelectorsSource).toContain('shadow-[var(--sto-shadow-selector)]');
+    expect(chatMessageSource).toContain('shadow-[var(--sto-shadow-image-preview)]');
+
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-shadow-content-popover: 0 4px 16px rgba(0, 0, 0, 0.35)');
+    expect(dark).toContain('--sto-shadow-search-overlay: 0 12px 32px rgba(0, 0, 0, 0.35)');
+    expect(dark).toContain('--sto-shadow-selector: 0 4px 12px rgba(0, 0, 0, 0.28)');
+    expect(dark).toContain('--sto-shadow-image-preview: 0 10px 24px rgba(0, 0, 0, 0.35)');
   });
 
   it('keeps workflow designer canvas, nodes and overlays neutral in dark appearance', () => {
@@ -325,12 +331,11 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('replaces remaining bright chat fallback surfaces in dark appearance', () => {
-    expect(chatMessageSource).toContain(
-      'dark:bg-[linear-gradient(180deg,var(--sto-surface-secondary),var(--sto-surface-primary))]',
-    );
-    expect(chatMessageSource).toContain(
-      'dark:bg-[linear-gradient(135deg,hsl(var(--primary)/0.10),var(--sto-surface-primary))]',
-    );
+    expect(chatMessageSource).toContain('bg-[image:var(--sto-chat-attachment-background)]');
+    expect(chatMessageSource).toContain('bg-[image:var(--sto-chat-running-background)]');
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-chat-attachment-background: linear-gradient(180deg, var(--sto-surface-secondary), var(--sto-surface-primary))');
+    expect(dark).toContain('--sto-chat-running-background: linear-gradient(135deg, hsl(var(--primary) / 0.1), var(--sto-surface-primary))');
   });
 
   it('keeps neutral workflow and picker surfaces free of blue-black dark fills', () => {
@@ -340,7 +345,7 @@ describe('dark appearance semantic tokens', () => {
     expect(dark).toContain('--sto-wf-detail-cover-bg: var(--sto-surface-elevated)');
     expect(dark).toContain('--sto-wf-flow-block-bg: var(--sto-surface-primary)');
     expect(dark).toContain('--sto-wf-flow-block-border: var(--sto-border-default)');
-    expect(skillPickerShellClass).toContain('dark:bg-[var(--sto-surface-primary)]');
+    expect(skillPickerShellClass).toContain('sto-overlay');
     expect(skillPickerShellClass).not.toContain('dark:bg-[#18181B]');
     expect(workflowPickerSource).toContain('dark:bg-[var(--sto-surface-primary)]');
     expect(workflowPickerSource).not.toContain('dark:bg-[#18181B]');
@@ -348,8 +353,8 @@ describe('dark appearance semantic tokens', () => {
 
   it('maps remaining picker and channel weak copy to dark semantic roles', () => {
     expect(workflowPickerSource).toContain('dark:text-[var(--sto-text-tertiary)]');
-    expect(quickInputPickerSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
-    expect(quickInputPickerSource).toContain('dark:text-[var(--sto-text-tertiary)]');
+    expect(quickInputPickerSource).toContain('text-[var(--sto-icon-tertiary)]');
+    expect(quickInputPickerSource).toContain('text-[var(--sto-text-tertiary)]');
     expect(channelConfigModalSource).toContain('dark:text-[var(--sto-text-tertiary)]');
     expect(channelConfigModalSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
   });
@@ -371,10 +376,10 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('maps quick input management weak copy and icons to dark semantic roles', () => {
-    expect(quickInputManageSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
-    expect(quickInputManageSource).toContain('dark:text-[var(--sto-text-tertiary)]');
-    expect(quickInputManageItemSource).toContain('dark:text-[var(--sto-icon-tertiary)]');
-    expect(quickInputManageItemSource).toContain('dark:hover:text-[var(--sto-icon-secondary)]');
+    expect(quickInputManageSource).toContain('text-[var(--sto-icon-tertiary)]');
+    expect(quickInputManageSource).toContain('text-[var(--sto-text-tertiary)]');
+    expect(quickInputManageItemSource).toContain('text-[var(--sto-icon-tertiary)]');
+    expect(quickInputManageItemSource).toContain('hover:text-[var(--sto-quick-input-icon-hover-foreground)]');
   });
 
   it('uses neutral dark surfaces for the app plaza instead of blue-black fills', () => {
@@ -399,12 +404,12 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('keeps the legacy inline parameter form readable if its fallback path is enabled', () => {
-    expect(parameterFormCardSource).toContain('dark:bg-[var(--sto-surface-primary)]');
-    expect(parameterFormCardSource).toContain('dark:text-[var(--sto-text-primary)]');
-    expect(parameterFormFieldSource).toContain('dark:bg-[var(--sto-surface-elevated)]');
-    expect(parameterFormFieldSource).toContain('dark:text-[var(--sto-text-tertiary)]');
-    expect(parameterOptionCardSource).toContain('dark:bg-[var(--sto-surface-elevated)]');
-    expect(parameterOptionCardSource).toContain('dark:text-[var(--sto-text-secondary)]');
+    expect(parameterFormCardSource).toContain('bg-[var(--sto-form-panel-background)]');
+    expect(parameterFormCardSource).toContain('text-[var(--sto-text-primary)]');
+    expect(parameterFormFieldSource).toContain('bg-[var(--sto-form-inset-background)]');
+    expect(parameterFormFieldSource).toContain('text-[var(--sto-text-tertiary)]');
+    expect(parameterOptionCardSource).toContain('bg-[var(--sto-form-disabled-background)]');
+    expect(parameterOptionCardSource).toContain('text-[var(--sto-text-secondary)]');
   });
 
   it('keeps the dark content canvas deeper than the sidebar and selection surfaces', () => {
@@ -422,16 +427,22 @@ describe('dark appearance semantic tokens', () => {
 
   it('replaces every light chat table surface in dark appearance', () => {
     expect(globalsCss).toMatch(
-      /\.dark \.prose-chat-reply \.prose-table-wrap th,\s*\.dark \.prose-chat-reply \.prose-table-wrap td\s*\{[^}]*color:\s*var\(--sto-text-primary\)/s,
+      /\.prose-chat-reply \.prose-table-wrap th,\s*\.prose-chat-reply \.prose-table-wrap td\s*\{[^}]*color:\s*var\(--sto-markdown-table-foreground\)/s,
     );
     expect(globalsCss).toMatch(
-      /\.dark \.prose-chat-reply \.prose-table-wrap th\s*\{[^}]*background:\s*var\(--sto-surface-secondary\)/s,
+      /\.prose-chat-reply \.prose-table-wrap th\s*\{[^}]*background:\s*var\(--sto-markdown-table-heading-background\)/s,
     );
     expect(globalsCss).toMatch(
-      /\.dark \.prose-chat-reply \.prose-table-wrap tbody tr:nth-child\(odd\) td\s*\{[^}]*background-color:\s*var\(--sto-surface-primary\)/s,
+      /\.prose-chat-reply \.prose-table-wrap tbody tr:nth-child\(odd\) td\s*\{[^}]*background-color:\s*var\(--sto-markdown-table-row-odd-background\)/s,
     );
     expect(globalsCss).toMatch(
-      /\.dark \.prose-chat-reply \.prose-table-wrap tbody tr:nth-child\(even\) td\s*\{[^}]*background-color:\s*var\(--sto-surface-secondary\)/s,
+      /\.prose-chat-reply \.prose-table-wrap tbody tr:nth-child\(even\) td\s*\{[^}]*background-color:\s*var\(--sto-markdown-table-row-even-background\)/s,
     );
+
+    const dark = extractThemeBlock('.dark {');
+    expect(dark).toContain('--sto-markdown-table-foreground: var(--sto-text-primary)');
+    expect(dark).toContain('--sto-markdown-table-heading-background: var(--sto-surface-secondary)');
+    expect(dark).toContain('--sto-markdown-table-row-odd-background: var(--sto-surface-primary)');
+    expect(dark).toContain('--sto-markdown-table-row-even-background: var(--sto-surface-secondary)');
   });
 });
