@@ -35,10 +35,10 @@ interface TrialRunDrawerViewProps extends TestRunDrawerProps {
 }
 
 const STATUS_STYLE: Record<TrialRunView, string> = {
-  running: 'text-[#FF6700]',
-  cancelled: 'text-[#FAAD14]',
-  failed: 'text-[#FA3C3C]',
-  completed: 'text-[#00B54B]',
+  running: 'text-[var(--sto-feature-brand-legacy)]',
+  cancelled: 'text-[var(--sto-workflow-trial-warning)]',
+  failed: 'text-[var(--sto-workflow-trial-danger)]',
+  completed: 'text-[var(--sto-workflow-trial-success)]',
 };
 
 function openArtifact(artifact: TrialRunDisplayArtifact) {
@@ -78,9 +78,9 @@ function TrialRunTimeline({ items }: { items: TrialRunTimelineItem[] }) {
             return (
               <li className="relative grid grid-cols-[12px_minmax(0,1fr)_auto] gap-x-2 pb-3 last:pb-0" key={item.id}>
                 <span className="relative flex justify-center pt-1.5" aria-hidden>
-                  <span data-testid="trial-run-timeline-dot" className="z-10 h-1.5 w-1.5 rounded-full bg-[#C9CDD4] dark:bg-[var(--sto-icon-tertiary)]" />
+                  <span data-testid="trial-run-timeline-dot" className="z-10 h-1.5 w-1.5 rounded-full bg-[var(--sto-border-heavy)]" />
                   {index < items.length - 1 ? (
-                    <span data-testid="trial-run-timeline-line" className="absolute bottom-[-6px] top-3 w-px bg-[#E5E6EB] dark:bg-[var(--sto-border-default)]" />
+                    <span data-testid="trial-run-timeline-line" className="absolute bottom-[-6px] top-3 w-px bg-[var(--sto-border-default)]" />
                   ) : null}
                 </span>
                 <div className="min-w-0">
@@ -224,11 +224,11 @@ function TrialStatusRow({
   return (
     <div
       data-testid="trial-run-status"
-      className={`flex h-[42px] shrink-0 items-center gap-2 rounded-[10px] border border-[#E5E6EB] bg-white px-3 dark:border-border dark:bg-[var(--sto-surface-primary)] ${STATUS_STYLE[view]}`}
+      className={`sto-card sto-card--flat flex h-[42px] shrink-0 items-center gap-2 rounded-[10px] border px-3 ${STATUS_STYLE[view]}`}
     >
       <Icon className={`h-3.5 w-3.5 ${view === 'running' ? 'motion-safe:animate-spin' : ''}`} aria-hidden />
       <strong className="text-xs font-medium">{config.label}</strong>
-      <span className="text-[11px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
+      <span className="text-[11px] text-[var(--sto-text-tertiary)]">
         {t('run.currentVersion')}：{formatTrialRunVersion(version)}
       </span>
       {view === 'completed' ? (
@@ -306,14 +306,14 @@ export function TrialRunDrawerView(props: TrialRunDrawerViewProps) {
           {showRunningNotice ? (
             <div
               data-testid="trial-run-notice"
-              className="flex min-h-[52px] shrink-0 items-start gap-2 rounded-[10px] border border-[#FFD6BA] bg-[#FFF1E8] px-3 py-2 text-xs leading-4 text-[#1D2129] dark:border-[hsl(var(--primary)/0.25)] dark:bg-[hsl(var(--primary)/0.10)] dark:text-[var(--sto-text-primary)]"
+              className="flex min-h-[52px] shrink-0 items-start gap-2 rounded-[10px] border border-[var(--sto-workflow-notice-border)] bg-[var(--sto-workflow-notice-background)] px-3 py-2 text-xs leading-4 text-[var(--sto-text-primary)]"
             >
-              <Volume2 data-testid="trial-run-notice-icon" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#FF6700]" aria-hidden />
+              <Volume2 data-testid="trial-run-notice-icon" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--sto-feature-brand-legacy)]" aria-hidden />
               <p className="min-w-0 flex-1">{t('run.runningNotice')}</p>
               <button
                 type="button"
                 aria-label={t('run.dismissNotice')}
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#1D2129] hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6700] dark:text-[var(--sto-icon-secondary)] dark:hover:bg-white/[0.06]"
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--sto-text-primary)] hover:bg-[var(--sto-control-icon-subtle-hover-background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sto-feature-brand-legacy)]"
                 onClick={() => setDismissedNoticeRunId(noticeRunId)}
               >
                 <X className="h-3.5 w-3.5" aria-hidden />

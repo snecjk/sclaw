@@ -354,13 +354,17 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('keeps workflow designer canvas, nodes and overlays neutral in dark appearance', () => {
-    expect(workflowDesignerCanvasCss).toContain('.dark .workflow-designer-flow');
-    expect(workflowDesignerCanvasCss).toContain('background: var(--sto-surface-under)');
-    expect(workflowDesignerCanvasCss).toContain('background: var(--sto-surface-primary)');
-    expect(workflowDesignerCanvasCss).toContain('color: var(--sto-text-primary)');
-    expect(workflowDesignerSource).toContain('dark:border-border dark:bg-[var(--sto-surface-primary)]');
-    expect(workflowHistoryDrawerSource).toContain('dark:bg-[var(--sto-surface-primary)]');
-    expect(workflowStartupDialogSource).toContain('dark:bg-[var(--sto-surface-primary)]');
+    const dark = extractThemeBlock('.dark {');
+
+    expect(workflowDesignerCanvasCss).not.toContain('.dark');
+    expect(workflowDesignerCanvasCss).toContain('var(--sto-workflow-canvas-background)');
+    expect(dark).toContain('--sto-workflow-canvas-background: var(--sto-surface-under)');
+    expect(dark).toContain('--sto-workflow-node-border: var(--sto-border-default)');
+    expect(dark).toContain('--sto-feature-foreground-strong: var(--sto-text-primary)');
+    expect(workflowDesignerSource).toContain('bg-[var(--sto-workflow-library-background)]');
+    expect(workflowHistoryDrawerSource).toContain('bg-[var(--sto-feature-panel-background)]');
+    expect(workflowStartupDialogSource).toContain('bg-[var(--sto-workflow-dialog-scrim)]');
+    expect(workflowStartupDialogSource).toContain('bg-[var(--sto-workflow-dialog-background)]');
   });
 
   it('replaces remaining bright chat fallback surfaces in dark appearance', () => {
@@ -380,12 +384,12 @@ describe('dark appearance semantic tokens', () => {
     expect(dark).toContain('--sto-wf-flow-block-border: var(--sto-border-default)');
     expect(skillPickerShellClass).toContain('sto-overlay');
     expect(skillPickerShellClass).not.toContain('dark:bg-[#18181B]');
-    expect(workflowPickerSource).toContain('dark:bg-[var(--sto-surface-primary)]');
-    expect(workflowPickerSource).not.toContain('dark:bg-[#18181B]');
+    expect(workflowPickerSource).toContain('sto-overlay sto-overlay--menu-border');
+    expect(workflowPickerSource).not.toContain('dark:');
   });
 
   it('maps remaining picker and channel weak copy to dark semantic roles', () => {
-    expect(workflowPickerSource).toContain('dark:text-[var(--sto-text-tertiary)]');
+    expect(workflowPickerSource).toContain('text-[var(--sto-text-tertiary)]');
     expect(quickInputPickerSource).toContain('text-[var(--sto-icon-tertiary)]');
     expect(quickInputPickerSource).toContain('text-[var(--sto-text-tertiary)]');
     expect(channelConfigModalSource).toContain('dark:text-[var(--sto-text-tertiary)]');
@@ -400,12 +404,11 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('keeps workflow trial and local history status surfaces readable in dark appearance', () => {
-    expect(trialRunViewSource).toContain('dark:bg-[var(--sto-surface-primary)]');
-    expect(trialRunViewSource).toContain('dark:bg-[hsl(var(--primary)/0.10)]');
-    expect(trialRunViewSource).toContain('dark:text-[var(--sto-text-primary)]');
-    expect(localRunHistorySource).toContain(
-      'dark:text-[var(--sto-text-tertiary)] dark:bg-[var(--sto-surface-elevated)]',
-    );
+    expect(trialRunViewSource).not.toContain('dark:');
+    expect(trialRunViewSource).toContain('sto-card sto-card--flat');
+    expect(trialRunViewSource).toContain('border-[var(--sto-workflow-notice-border)]');
+    expect(localRunHistorySource).not.toContain('dark:');
+    expect(localRunHistorySource).toContain('var(--sto-workflow-status-warning-background)');
   });
 
   it('maps quick input management weak copy and icons to dark semantic roles', () => {
@@ -416,24 +419,18 @@ describe('dark appearance semantic tokens', () => {
   });
 
   it('uses neutral dark surfaces for the app plaza instead of blue-black fills', () => {
-    const darkMoreApps = moreAppsCss.slice(
-      moreAppsCss.indexOf(".dark [data-app-shell='provincial'] .page-more-apps"),
-      moreAppsCss.indexOf('@media (max-width: 960px)'),
-    );
-
-    expect(darkMoreApps).toContain('--ma-white: var(--sto-surface-primary)');
-    expect(darkMoreApps).toContain('--ma-surface-panel: var(--sto-surface-primary)');
-    expect(darkMoreApps).toContain('--ma-surface-elevated: var(--sto-surface-elevated)');
-    expect(darkMoreApps).toContain('--ma-hero-bg: linear-gradient(135deg, #181818 0%, #212121 100%)');
-    expect(darkMoreApps).not.toContain('hsl(220');
+    expect(moreAppsCss).not.toContain('.dark');
+    expect(moreAppsCss).not.toMatch(/--ma-(?!scrollbar-gutter)/);
+    expect(moreAppsCss).toContain('background: var(--sto-card-panel-bg)');
+    expect(moreAppsCss).toContain('box-shadow: var(--sto-app-plaza-dialog-shadow)');
   });
 
   it('maps the in-app browser chrome to neutral dark surfaces and text roles', () => {
-    expect(browserOverlayCss).toContain('.dark .sclaw-browser-drawer-panel');
-    expect(browserOverlayCss).toContain('background: var(--sto-surface-under)');
-    expect(browserOverlayCss).toContain('.dark .sclaw-browser-toolbar');
-    expect(browserOverlayCss).toContain('color: var(--sto-text-primary)');
-    expect(browserOverlayCss).toContain('color: var(--sto-icon-secondary)');
+    expect(browserOverlayCss).not.toContain('.dark');
+    expect(browserOverlayCss).toContain('background: var(--sto-surface-canvas)');
+    expect(browserOverlayCss).toContain('background: var(--sto-card-panel-bg)');
+    expect(browserOverlayCss).toContain('color: var(--sto-feature-foreground-strong)');
+    expect(browserOverlayCss).toContain('color: var(--sto-feature-secondary-foreground)');
   });
 
   it('keeps the legacy inline parameter form readable if its fallback path is enabled', () => {

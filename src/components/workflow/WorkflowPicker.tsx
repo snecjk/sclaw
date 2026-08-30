@@ -191,19 +191,19 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     };
 
     const sectionTitleBaseClass =
-      'sticky z-10 flex h-6 w-full items-center bg-white px-2 py-1 text-left text-[12px] font-medium leading-4 text-[#86909C] dark:bg-[var(--sto-surface-primary)] dark:text-[var(--sto-text-tertiary)]';
+      'sticky z-10 flex h-6 w-full items-center bg-[var(--sto-card-panel-bg)] px-2 py-1 text-left text-[12px] font-medium leading-4 text-[var(--sto-text-tertiary)]';
     const itemClass =
       'sto-navigation-item sto-navigation-item--picker flex h-8 w-full items-center gap-1.5 rounded-lg px-2 text-left transition-colors';
-    const itemIconClass = 'h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground';
-    const itemTitleClass = 'max-w-[45%] shrink-0 truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground';
-    const itemDescriptionClass = 'min-w-0 flex-1 truncate text-[10px] font-normal leading-3.5 text-[#86909C] dark:text-[var(--sto-text-tertiary)]';
+    const itemIconClass = 'h-3 w-3 shrink-0 text-[var(--sto-text-primary)]';
+    const itemTitleClass = 'max-w-[45%] shrink-0 truncate text-[12px] font-normal leading-4 text-[var(--sto-quick-input-content-foreground)]';
+    const itemDescriptionClass = 'min-w-0 flex-1 truncate text-[10px] font-normal leading-3.5 text-[var(--sto-text-tertiary)]';
     const workflowEmptyText = (
-      <div className="px-2 py-2 text-[12px] font-normal leading-4 text-[#86909C] dark:text-muted-foreground">
+      <div className="px-2 py-2 text-[12px] font-normal leading-4 text-[var(--sto-text-tertiary)]">
         {t('composer.workflowNoTemplates')}
       </div>
     );
     const renderEmptyText = (message: string) => (
-      <div className="px-2 py-2 text-[12px] font-normal leading-4 text-[#86909C] dark:text-muted-foreground">
+      <div className="px-2 py-2 text-[12px] font-normal leading-4 text-[var(--sto-text-tertiary)]">
         {message}
       </div>
     );
@@ -227,14 +227,14 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
             : undefined
         }
       >
-        <div className="mb-1 flex h-[34px] w-[264px] shrink-0 items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
-          <Search className="h-4 w-4 shrink-0 text-[#A7ADB8] dark:text-muted-foreground" strokeWidth={2} aria-hidden />
+        <div className="sto-control sto-control--neutral-field mb-1 flex h-[34px] w-[264px] shrink-0 items-center gap-2 rounded-lg border px-3">
+          <Search className="h-4 w-4 shrink-0 text-[var(--sto-feature-placeholder)]" strokeWidth={2} aria-hidden />
           <input
             value={toolbarQuery}
             onChange={(event) => setToolbarQuery(event.target.value)}
             placeholder={t('composer.workflowPlaceholder')}
             aria-label={t('composer.workflowPlaceholder')}
-            className="h-full min-w-0 flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4] dark:text-foreground dark:placeholder:text-muted-foreground"
+            className="h-full min-w-0 flex-1 bg-transparent text-[12px] font-normal text-[var(--sto-quick-input-content-foreground)] outline-none placeholder:text-[var(--sto-border-heavy)]"
             autoFocus
           />
         </div>
@@ -262,13 +262,13 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
                   }}
                   className={skillPickerRowClass}
                 >
-                  <Workflow className="mt-0.5 h-3 w-3 shrink-0 text-[#1D2129] dark:text-muted-foreground" strokeWidth={2} />
+                  <Workflow className="mt-0.5 h-3 w-3 shrink-0 text-[var(--sto-text-primary)]" strokeWidth={2} />
                   <div className="min-w-0">
-                    <div className="truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground">
+                    <div className="truncate text-[12px] font-normal leading-4 text-[var(--sto-quick-input-content-foreground)]">
                       <HighlightedText text={workflow.name} query={activeQuery} />
                     </div>
                     {workflow.description ? (
-                      <div className="mt-0.5 truncate text-[10px] font-normal leading-3.5 text-[#86909C] dark:text-muted-foreground">
+                      <div className="mt-0.5 truncate text-[10px] font-normal leading-3.5 text-[var(--sto-text-tertiary)]">
                         <HighlightedText text={workflow.description} query={activeQuery} />
                       </div>
                     ) : null}
@@ -286,7 +286,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
             onClose();
             navigate('/my-tasks?tab=workflow');
           }}
-          className="mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white text-[12px] font-medium text-[#1D2129] transition-colors hover:bg-[#F0F2F5] dark:border-white/10 dark:bg-white/[0.03] dark:text-foreground dark:hover:bg-white/[0.06]"
+          className="sto-control sto-control--neutral-outline-default mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border text-[12px] font-medium transition-colors hover:bg-[var(--sto-navigation-picker-hover-background)]"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           <span>{t('composer.workflowManage')}</span>
@@ -299,7 +299,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       <div
         ref={setRefs}
         className={cn(
-          'z-[100001] flex max-h-[272px] flex-col overflow-hidden rounded-[18px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_0_rgba(0,0,0,0.1)] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
+          'sto-overlay sto-overlay--menu-border z-[100001] flex max-h-[272px] flex-col overflow-hidden rounded-[18px] border p-2 shadow-[var(--sto-shadow-control-popover)]',
           position
             ? 'fixed'
             : 'absolute left-0 bottom-full mb-2 w-[280px]',
@@ -358,7 +358,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
                 </button>
               ))}
 
-              <div className="my-1 h-px bg-[#F2F3F5] dark:bg-[var(--sto-border-default)]" />
+              <div className="my-1 h-px bg-[var(--sto-surface-subtle)]" />
 
               <div ref={skillSectionRef}>
                 <button

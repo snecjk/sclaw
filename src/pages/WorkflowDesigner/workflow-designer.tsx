@@ -371,12 +371,12 @@ export function WorkflowDesigner({
           <button
             type="button"
             onClick={handleAiBuild}
-            className="pointer-events-auto inline-flex h-12 w-fit items-center gap-2.5 rounded-[18px] border border-orange-200 bg-orange-50/80 px-5 text-base font-bold text-orange-500 shadow-sm hover:bg-orange-50 dark:border-[hsl(var(--primary)/0.25)] dark:bg-[hsl(var(--primary)/0.10)] dark:hover:bg-[hsl(var(--primary)/0.14)]"
+            className="pointer-events-auto inline-flex h-12 w-fit items-center gap-2.5 rounded-[18px] border border-[var(--sto-workflow-ai-border)] bg-[var(--sto-workflow-ai-background)] px-5 text-base font-bold text-[var(--sto-feature-brand-accent)] shadow-sm hover:bg-[var(--sto-feature-warning-background)]"
           >
             <Sparkles className="h-5 w-5" />
             AI 帮我建
           </button>
-          <div className="pointer-events-auto max-h-[440px] overflow-hidden rounded-[20px] border border-slate-100 bg-white/95 p-5 shadow-[0_16px_34px_rgba(15,23,42,0.08)] dark:border-border dark:bg-[var(--sto-surface-primary)] dark:shadow-[0_16px_34px_rgba(0,0,0,0.35)]">
+          <div className="pointer-events-auto max-h-[440px] overflow-hidden rounded-[20px] border border-[var(--sto-feature-muted-background)] bg-[var(--sto-workflow-library-background)] p-5 shadow-[var(--sto-feature-shadow-panel)]">
             <DesignerNodeLibrary onPick={handleAddNode} className="max-h-[400px] overflow-auto" />
           </div>
         </div>

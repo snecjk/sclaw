@@ -643,7 +643,7 @@ function FolderPickerDialog({
 
       {contextMenu ? (
         <div
-          className="fixed z-[10080] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
+          className="fixed z-[10080] min-w-[128px] rounded-[10px] border border-[var(--sto-border-default)] bg-[var(--sto-card-elevated-bg)] p-2 text-[var(--sto-text-primary)] shadow-[var(--sto-feature-shadow-menu)]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}
@@ -652,7 +652,7 @@ function FolderPickerDialog({
           <button
             type="button"
             role="menuitem"
-            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 hover:bg-[#F2F3F5] dark:hover:bg-muted"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 hover:bg-[var(--sto-control-hover-bg)]"
             onClick={() => {
               setContextMenu(null);
               setRenamingFolder(contextMenu.folder);
@@ -664,7 +664,7 @@ function FolderPickerDialog({
           <button
             type="button"
             role="menuitem"
-            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[#F53F3F] hover:bg-[#F2F3F5] dark:text-destructive dark:hover:bg-muted"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[var(--sto-dialog-destructive-background)] hover:bg-[var(--sto-control-hover-bg)]"
             onClick={() => {
               setContextMenu(null);
               setDeletingFolder(contextMenu.folder);
@@ -755,7 +755,7 @@ function FolderPickerDialog({
               <Button
                 onClick={() => void handleDeleteFolder()}
                 disabled={deleteSubmitting}
-                className="h-9 rounded-[10px] bg-[#F53F3F] px-4 text-sm text-white hover:bg-[#E23B3B] dark:bg-destructive dark:hover:bg-destructive/90"
+                className="h-9 rounded-[10px] bg-[var(--sto-dialog-destructive-background)] px-4 text-sm text-[hsl(var(--destructive-foreground))] hover:bg-[var(--sto-dialog-destructive-hover-background)]"
               >
                 {deleteSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '删除'}
               </Button>

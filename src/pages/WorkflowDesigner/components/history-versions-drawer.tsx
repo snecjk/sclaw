@@ -99,17 +99,17 @@ export function HistoryVersionsDrawer({
   if (!open) return null;
 
   return (
-    <section className="absolute inset-y-0 right-0 z-[40] flex min-w-[620px] flex-col border-l border-slate-200 bg-white shadow-[-8px_0_24px_rgba(15,23,42,0.06)] dark:border-border dark:bg-[var(--sto-surface-primary)] dark:shadow-[-8px_0_24px_rgba(0,0,0,0.35)] sm:left-[96px]">
-      <header className="flex h-[108px] shrink-0 items-center justify-between border-b border-slate-200 px-9 dark:border-border">
+    <section className="absolute inset-y-0 right-0 z-[40] flex min-w-[620px] flex-col border-l border-[var(--sto-feature-divider)] bg-[var(--sto-feature-panel-background)] shadow-[var(--sto-feature-shadow-drawer)] sm:left-[96px]">
+      <header className="flex h-[108px] shrink-0 items-center justify-between border-b border-[var(--sto-feature-divider)] px-9">
         <div className="flex items-center gap-3">
-          <History className="h-6 w-6 text-slate-950 dark:text-[var(--sto-icon-primary)]" />
-          <h2 className="text-[28px] font-extrabold leading-none text-slate-950 dark:text-[var(--sto-text-primary)]">版本列表</h2>
+          <History className="h-6 w-6 text-[var(--sto-feature-foreground-strongest)]" />
+          <h2 className="text-[28px] font-extrabold leading-none text-[var(--sto-feature-foreground-strongest)]">版本列表</h2>
         </div>
         <button
           type="button"
           aria-label="关闭版本列表"
           onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-600 dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-[var(--sto-surface-elevated)] dark:hover:text-[var(--sto-icon-secondary)]"
+          className="flex h-10 w-10 items-center justify-center rounded-md text-[var(--sto-feature-muted-foreground)] hover:bg-[var(--sto-feature-hover-background)] hover:text-[var(--sto-feature-hover-foreground)]"
         >
           <X className="h-6 w-6" />
         </button>
@@ -117,13 +117,13 @@ export function HistoryVersionsDrawer({
 
       <div className="min-h-0 flex-1 overflow-auto px-9 py-9">
         {loading && versions.length === 0 ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-[var(--sto-text-tertiary)]">
+          <div className="flex items-center gap-2 text-sm text-[var(--sto-feature-secondary-foreground)]">
             <Loader2 className="h-4 w-4 animate-spin" />
             加载中
           </div>
         ) : null}
         {!loading && versions.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-[var(--sto-text-tertiary)]">暂无历史版本</p>
+          <p className="text-sm text-[var(--sto-feature-secondary-foreground)]">暂无历史版本</p>
         ) : null}
         <ol className="space-y-8">
           {versions.map((version, index) => {
@@ -135,11 +135,13 @@ export function HistoryVersionsDrawer({
                 <div className="flex items-start justify-between gap-6">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-[23px] font-extrabold leading-none text-slate-950 dark:text-[var(--sto-text-primary)]">
+                      <span className="text-[23px] font-extrabold leading-none text-[var(--sto-feature-foreground-strongest)]">
                         v{version.version}
                       </span>
                       <VersionPill
-                        className={isPublished ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-slate-100 text-slate-500 dark:bg-[var(--sto-surface-elevated)] dark:text-[var(--sto-text-tertiary)]'}
+                        className={isPublished
+                          ? 'bg-[var(--sto-feature-success-background)] text-[var(--sto-feature-success-foreground)]'
+                          : 'bg-[var(--sto-feature-muted-background)] text-[var(--sto-feature-secondary-foreground)]'}
                       >
                         {STATUS_LABEL[version.status.toLowerCase()] ?? version.status}
                       </VersionPill>
@@ -147,14 +149,14 @@ export function HistoryVersionsDrawer({
                         <VersionPill className="bg-orange-500 text-white">当前生效</VersionPill>
                       ) : null}
                       {isEditing ? (
-                        <VersionPill className="bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-300">当前编辑</VersionPill>
+                        <VersionPill className="bg-[var(--sto-feature-warning-background)] text-[var(--sto-feature-brand-hover)]">当前编辑</VersionPill>
                       ) : null}
                       {showRestore ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 px-2 text-xs text-slate-500 opacity-0 transition group-hover:opacity-100 dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-surface-elevated)]"
+                          className="h-8 px-2 text-xs text-[var(--sto-feature-secondary-foreground)] opacity-0 transition group-hover:opacity-100"
                           disabled={restoringId === version.id}
                           onClick={() => void handleRestore(version)}
                         >
@@ -169,7 +171,7 @@ export function HistoryVersionsDrawer({
                     </div>
                     <button
                       type="button"
-                      className="mt-6 block max-w-[520px] truncate text-left text-[21px] font-normal leading-none text-slate-500 underline underline-offset-4 hover:text-slate-700 dark:text-[var(--sto-text-secondary)] dark:hover:text-[var(--sto-text-primary)]"
+                      className="mt-6 block max-w-[520px] truncate text-left text-[21px] font-normal leading-none text-[var(--sto-feature-secondary-foreground)] underline underline-offset-4 hover:text-[var(--sto-feature-control-foreground)]"
                       onClick={() => {
                         if (showRestore) void handleRestore(version);
                       }}
@@ -177,7 +179,7 @@ export function HistoryVersionsDrawer({
                       {resolveVersionName(version, workflow, index)}
                     </button>
                   </div>
-                  <time className="shrink-0 pt-1 text-[21px] font-semibold leading-none text-slate-400 dark:text-[var(--sto-text-tertiary)]">
+                  <time className="shrink-0 pt-1 text-[21px] font-semibold leading-none text-[var(--sto-feature-muted-foreground)]">
                     {formatVersionTime(version.updatedAt ?? version.createdAt)}
                   </time>
                 </div>

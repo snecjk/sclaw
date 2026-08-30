@@ -123,21 +123,44 @@ describe('light appearance color system', () => {
     expect(dark).toContain('--sto-sidebar-nav-active-bg: var(--sto-surface-elevated)');
   });
 
-  it('preserves feature-local light colors', () => {
-    expect(moreAppsCss).toContain('--ma-orange: #ff6f00');
-    expect(moreAppsCss).toContain('--ma-text: #1a1a1a');
-    expect(moreAppsCss).toContain('--ma-text-secondary: #86909c');
-    expect(moreAppsCss).toContain('--ma-border: #e5e6eb');
-    expect(moreAppsCss).toContain('--ma-card: #ffffff');
+  it('preserves feature light roles through canonical semantic mappings', () => {
+    const root = extractThemeBlock(':root {');
 
-    expect(workflowCanvasCss).toContain(
-      'radial-gradient(circle at 1px 1px, #dfe6ee 1.2px, transparent 1.2px),\n    #f7fbff;',
+    expect(root).toContain('--sto-feature-foreground-strong: #0f172a');
+    expect(root).toContain('--sto-feature-foreground-strongest: #020617');
+    expect(root).toContain('--sto-feature-success-foreground: #059669');
+    expect(root).toContain('--sto-feature-secondary-foreground: #64748b');
+    expect(root).toContain('--sto-app-plaza-brand-hover: #e67a00');
+    expect(root).toContain('--sto-workflow-canvas-grid: #dfe6ee');
+    expect(root).toContain('--sto-workflow-canvas-background: #f7fbff');
+    expect(root).toContain('--sto-workflow-control-background: #fefefe');
+    expect(root).toContain('--sto-workflow-control-border: #eeeeee');
+    expect(root).toContain('--sto-workflow-control-hover-background: #f4f4f4');
+    expect(root).toContain('--sto-workflow-minimap-mask: rgba(240, 240, 240, 0.6)');
+    expect(root).toContain('--sto-workflow-minimap-node: #e2e2e2');
+    expect(root).toContain('--sto-workflow-node-border: #eef2f7');
+    expect(root).toContain('--sto-workflow-node-shadow: 0 12px 30px rgb(15 23 42 / 7%)');
+    expect(root).toContain('--sto-workflow-node-selected-shadow: 0 18px 40px rgb(15 23 42 / 12%)');
+    expect(root).toContain('--sto-workflow-ai-border: #fed7aa');
+    expect(root).toContain('--sto-workflow-ai-background: rgb(255 247 237 / 80%)');
+    expect(root).toContain('--sto-workflow-library-background: rgb(255 255 255 / 95%)');
+    expect(root).toContain('--sto-workflow-dialog-scrim: rgb(15 23 42 / 30%)');
+    expect(root).toContain('--sto-workflow-upload-background: rgb(255 255 255 / 90%)');
+    expect(root).toContain('--sto-workflow-upload-border: rgb(226 232 240 / 90%)');
+    expect(root).toContain('--sto-workflow-status-warning-foreground: #b45309');
+    expect(root).toContain('--sto-workflow-status-warning-background: #fffbeb');
+
+    expect(moreAppsCss).not.toMatch(/--ma-(?!scrollbar-gutter)/);
+    expect(moreAppsCss).toContain('color: var(--sto-segment-plain-selected-foreground)');
+    expect(moreAppsCss).toContain('background: var(--sto-card-panel-bg)');
+    expect(moreAppsCss).toContain('--sto-art-app-plaza-hero-bg: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%)');
+
+    expect(workflowCanvasCss).toContain('var(--sto-workflow-canvas-background)');
+    expect(workflowCanvasCss).toMatch(
+      /\.wf-canvas-node\s*\{[\s\S]*border: 1px solid var\(--sto-workflow-node-border\);[\s\S]*background: var\(--sto-card-panel-bg\);[\s\S]*box-shadow: var\(--sto-workflow-node-shadow\);/,
     );
     expect(workflowCanvasCss).toMatch(
-      /\.wf-canvas-node\s*\{[\s\S]*border: 1px solid #eef2f7;[\s\S]*background: #ffffff;[\s\S]*box-shadow: 0 12px 30px rgb\(15 23 42 \/ 7%\);/,
-    );
-    expect(workflowCanvasCss).toMatch(
-      /\.wf-canvas-node\.selected\s*\{[\s\S]*border-color: #dbe4f0;[\s\S]*box-shadow: 0 18px 40px rgb\(15 23 42 \/ 12%\);/,
+      /\.wf-canvas-node\.selected\s*\{[\s\S]*border-color: var\(--sto-feature-selected-border\);[\s\S]*box-shadow: var\(--sto-workflow-node-selected-shadow\);/,
     );
   });
 
@@ -149,10 +172,11 @@ describe('light appearance color system', () => {
     expect(saveArtifactDialogSource).toContain(
       'bg-[#F53F3F] px-4 text-[12px] font-normal text-white hover:bg-[#E23B3B] dark:bg-destructive',
     );
-    expect(taskCreateModalSource).toContain('text-[#F53F3F]');
+    expect(taskCreateModalSource).toContain('text-[var(--sto-dialog-destructive-background)]');
     expect(taskCreateModalSource).toContain(
-      'bg-[#F53F3F] px-4 text-sm text-white hover:bg-[#E23B3B] dark:bg-destructive',
+      'bg-[var(--sto-dialog-destructive-background)] px-4 text-sm text-[hsl(var(--destructive-foreground))] hover:bg-[var(--sto-dialog-destructive-hover-background)]',
     );
+    expect(taskCreateModalSource).not.toContain('dark:');
     expect(confirmDialogSource).toContain(
       "variant === 'destructive' && 'bg-[var(--sto-dialog-destructive-background)] hover:bg-[var(--sto-dialog-destructive-hover-background)]'",
     );

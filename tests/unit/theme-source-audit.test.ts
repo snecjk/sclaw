@@ -157,6 +157,23 @@ const taskSevenSourceFiles = new Set([
   'src/pages/Subscriptions/index.tsx',
 ]);
 
+const taskEightFeatureStylesheets = [
+  'src/components/more-apps/more-apps.css',
+  'src/components/more-apps/app-plaza-shell.css',
+  'src/components/sclaw-browser/sclaw-browser-overlay.css',
+  'src/pages/WorkflowDesigner/workflow-designer-canvas.css',
+] as const;
+
+const taskEightFeatureComponents = [
+  'src/pages/WorkflowDesigner/workflow-designer.tsx',
+  'src/pages/WorkflowDesigner/components/history-versions-drawer.tsx',
+  'src/pages/WorkflowDesigner/components/local-run-history-dialog.tsx',
+  'src/pages/WorkflowDesigner/components/startup-run-dialog.tsx',
+  'src/pages/WorkflowDesigner/components/test-run-trial-view.tsx',
+  'src/pages/MyTask/components/TaskCreateModal.tsx',
+  'src/components/workflow/WorkflowPicker.tsx',
+] as const;
+
 type TaskSevenViolation = Pick<SourceMatch, 'file' | 'line' | 'value'>;
 
 function isTaskSevenSource(file: string): boolean {
@@ -406,6 +423,71 @@ function reasonFor(match: SourceMatch): string {
 }
 
 describe('repository-wide theme source audit', () => {
+  it('keeps Task 8 feature stylesheets free of page-owned dark palettes', () => {
+    const violations = taskEightFeatureStylesheets.flatMap((file) => {
+      const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+      return matchesInSource(file, source)
+        .filter((match) => match.rule === 'pageDarkSelector')
+        .map(({ file: sourceFile, line, value }) => ({ file: sourceFile, line, value }));
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Task 8 feature components free of color-bearing dark utilities', () => {
+    const violations = taskEightFeatureComponents.flatMap((file) => {
+      const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+      return matchesInSource(file, source)
+        .filter((match) => match.rule === 'pageDarkUtility')
+        .map(({ file: sourceFile, line, value }) => ({ file: sourceFile, line, value }));
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Task 8 artwork data isolated from ordinary UI surfaces and controls', () => {
+    const artworkOwners = new Set([
+      'src/components/more-apps/more-apps.css',
+      'src/pages/WorkflowDesigner/workflow-designer-canvas.css',
+    ]);
+    const violations = productionSources(sourceRoot)
+      .filter(({ file }) => !artworkOwners.has(file))
+      .flatMap(({ file, source }) => [...source.matchAll(/--sto-art-[a-z0-9-]+/g)]
+        .map((match) => ({ file, line: lineNumberAt(source, match.index), value: match[0] })));
+
+    expect(violations).toEqual([]);
+
+    const moreAppsSource = readFileSync(
+      resolve(process.cwd(), 'src/components/more-apps/more-apps.css'),
+      'utf8',
+    );
+    const workflowCanvasSource = readFileSync(
+      resolve(process.cwd(), 'src/pages/WorkflowDesigner/workflow-designer-canvas.css'),
+      'utf8',
+    );
+    const tokenSource = readFileSync(resolve(process.cwd(), rawThemeOwner), 'utf8');
+    const taskEightRoleNames = tokenSource.match(
+      /--sto-(?:feature|app-plaza|workflow|browser)-[a-z0-9-]+(?=:)/g,
+    ) ?? [];
+    const taskEightRoleCounts = new Map<string, number>();
+    for (const role of taskEightRoleNames) {
+      taskEightRoleCounts.set(role, (taskEightRoleCounts.get(role) ?? 0) + 1);
+    }
+
+    expect(tokenSource).not.toContain('--sto-art-');
+    expect(taskEightRoleCounts.size).toBeLessThanOrEqual(76);
+    expect([...taskEightRoleCounts.values()]).toEqual(
+      Array.from({ length: taskEightRoleCounts.size }, () => 2),
+    );
+    expect((moreAppsSource.match(/--sto-art-[a-z0-9-]+/g) ?? [])
+      .every((token) => token.startsWith('--sto-art-app-plaza-'))).toBe(true);
+    expect((workflowCanvasSource.match(/--sto-art-[a-z0-9-]+/g) ?? [])
+      .every((token) => token.startsWith('--sto-art-workflow-'))).toBe(true);
+    expect(`${moreAppsSource}\n${workflowCanvasSource}`).not.toMatch(
+      /--sto-art-[a-z0-9-]*(?:surface|control|overlay|feedback)[a-z0-9-]*/,
+    );
+  });
+
   it('rejects cool dark shadows and ordinary brand glows in Task 7 surfaces', () => {
     const violations = taskSevenShadowViolations();
 
