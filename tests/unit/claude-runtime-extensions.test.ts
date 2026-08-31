@@ -4,6 +4,7 @@ import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { SCHEDULED_TASK_CORE_PROMPT } from '../../shared/scheduled-task-instruction';
 import { STO_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-scheduled-task-tool/definition';
 import { STO_WORKFLOW_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-workflow-tool/definition';
+import { USER_SKILL_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-user-skill-tool/definition';
 import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 
 let pendingDingTalkContext: Record<string, unknown> | null = null;
@@ -77,6 +78,22 @@ describe('buildClaudeRuntimeOptions', () => {
 
     expect(runtime.systemPromptAppend).toContain(STO_WORKFLOW_SYSTEM_PROMPT);
     expect(runtime.mcpServers?.['sto-workflow-tool']).toBeDefined();
+  });
+
+  it('activates the migrated user-skill extension only for creation intent', async () => {
+    const unrelated = await buildClaudeRuntimeOptions(
+      'agent:main:user-skill-unrelated',
+      '分析一下这个项目',
+    );
+    const matched = await buildClaudeRuntimeOptions(
+      'agent:main:user-skill-create',
+      '把这个方法保存成用户技能',
+    );
+
+    expect(unrelated.mcpServers?.['sto-user-skill-tool']).toBeUndefined();
+    expect(unrelated.systemPromptAppend).not.toContain(USER_SKILL_SYSTEM_PROMPT);
+    expect(matched.mcpServers?.['sto-user-skill-tool']).toBeDefined();
+    expect(matched.systemPromptAppend).toContain(USER_SKILL_SYSTEM_PROMPT);
   });
 
   it('registers embed bridge prompt for app plaza embed sessions', async () => {

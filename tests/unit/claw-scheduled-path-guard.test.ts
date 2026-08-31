@@ -76,6 +76,7 @@ describe('claw scheduled path guard extension', () => {
       'sclaw-extension-lifecycle',
       'sto-scheduled-task-tool',
       'sto-dingtalk-send-guard',
+      'sto-user-skill-tool',
     ]);
     expect(result.diagnostics).toEqual([]);
   });
@@ -88,6 +89,7 @@ describe('claw scheduled path guard extension', () => {
       'sclaw-scheduled-path-guard',
       'sto-scheduled-task-tool',
       'sto-dingtalk-send-guard',
+      'sto-user-skill-tool',
     ]);
   });
 

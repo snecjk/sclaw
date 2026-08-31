@@ -10,6 +10,7 @@ import { clawScheduledPathGuardDefinition } from './extensions/claw-scheduled-pa
 import { stoScheduledTaskToolDefinition } from './extensions/sto-scheduled-task-tool/definition';
 import { stoWorkflowToolDefinition } from './extensions/sto-workflow-tool/definition';
 import { stoDingTalkSendGuardDefinition } from './extensions/sto-dingtalk-send-guard/definition';
+import { stoUserSkillToolDefinition } from './extensions/sto-user-skill-tool/definition';
 
 export interface RegisteredAgentExtension {
   common: SclawAgentExtensionDefinition;
@@ -28,6 +29,8 @@ export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
   common: stoWorkflowToolDefinition,
 }, {
   common: stoDingTalkSendGuardDefinition,
+}, {
+  common: stoUserSkillToolDefinition,
 }];
 
 const EXTENSION_ID_PATTERN = /^[a-z][a-z0-9-]{0,127}$/;

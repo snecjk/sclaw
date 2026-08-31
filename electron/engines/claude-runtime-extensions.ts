@@ -5,11 +5,6 @@ import {
   buildStoBrowserToolClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-browser-tool/sdk';
 import {
-  createUserSkillMcpServer,
-  USER_SKILL_SYSTEM_PROMPT,
-} from '../../sto-plugin/claude/sto-user-skill-tool/tools';
-import { buildUserSkillHooks } from '../../sto-plugin/claude/sto-user-skill-tool/hooks';
-import {
   isScheduledTaskExecutionSessionKey,
 } from '../../shared/scheduled-task-instruction';
 import {
@@ -78,20 +73,6 @@ const browserToolExtension: ClaudeRuntimeExtension = {
       sessionKey,
       hostApiPort: PORTS.CLAWX_HOST_API,
     });
-  },
-};
-
-const userSkillToolExtension: ClaudeRuntimeExtension = {
-  id: 'sto-user-skill-tool',
-  build() {
-    logger.info('[claude-user-skill] registering save_user_skill MCP + write guard');
-    return {
-      hooks: buildUserSkillHooks(),
-      systemPromptAppend: USER_SKILL_SYSTEM_PROMPT,
-      mcpServers: {
-        'sto-user-skill-tool': createUserSkillMcpServer(),
-      },
-    };
   },
 };
 
@@ -167,7 +148,6 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   connectorBashGateExtension,
   browserToolExtension,
-  userSkillToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,
   connectorsContextExtension,

@@ -32,10 +32,13 @@ import { STO_SCHEDULED_TASK_CAPABILITY } from '../../extensions/sto-scheduled-ta
 import { createHostApiScheduledTaskPort } from '../../extensions/sto-scheduled-task-tool/host-api-capability';
 import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtalk-send-guard/capability';
 import { createHostApiDingTalkSendGuardPort } from '../../extensions/sto-dingtalk-send-guard/host-api-capability';
+import { STO_USER_SKILL_CAPABILITY } from '../../extensions/sto-user-skill-tool/capability';
+import { createHostApiUserSkillPort } from '../../extensions/sto-user-skill-tool/host-api-capability';
 
 const defaultCapabilities = new SclawCapabilityRegistry()
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
-  .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort());
+  .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())
+  .provide(STO_USER_SKILL_CAPABILITY, createHostApiUserSkillPort());
 const defaultStateManager = new SclawExtensionStateManager();
 const defaultLogger: SclawExtensionLogger = {
   debug: (message, details) => console.debug(message, details ?? ''),
