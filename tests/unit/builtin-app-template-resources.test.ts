@@ -98,4 +98,15 @@ describe('built-in app template resources', () => {
     const home = readFileSync(join(siteRoot, 'src/pages/HomePage.tsx'), 'utf8');
     expect(home).not.toMatch(/今日待办|进行中任务|本周完成|stoToken|SSO Auth/);
   });
+
+  it('site 将开发示例与真实业务请求隔离', () => {
+    const siteRoot = join(resources, 'site-minimal');
+    const app = readFileSync(join(siteRoot, 'src/App.tsx'), 'utf8');
+    const example = readFileSync(join(siteRoot, 'src/pages/DemoPage.tsx'), 'utf8');
+
+    expect(app).toContain('path="example"');
+    expect(example).not.toContain('/api/health');
+    expect(example).not.toContain('RequestError');
+    expect(example).not.toContain('华东网点巡检');
+  });
 });
