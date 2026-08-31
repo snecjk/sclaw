@@ -10,6 +10,7 @@ import {
 import { AppHeader } from './AppHeader';
 import { AppSider } from './AppSider';
 import { PageContainer } from './PageContainer';
+import { OpenTabs } from './OpenTabs';
 
 export function AppLayout() {
   const navigate = useNavigate();
@@ -20,6 +21,11 @@ export function AppLayout() {
   return (
     <Layout className="app-shell">
       <AppHeader />
+      <OpenTabs
+        activeItem={selectedItem}
+        items={SIDE_NAV}
+        onNavigate={(next) => navigate(toRoutePath(next))}
+      />
 
       <Layout>
         <AppSider

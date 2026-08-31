@@ -30,9 +30,9 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  height: 56px !important;
+  height: var(--sto-shell-topbar) !important;
   padding-inline: var(--sto-space-4) !important;
-  line-height: 56px !important;
+  line-height: var(--sto-shell-topbar) !important;
   background: var(--sto-color-bg-container) !important;
   border-bottom: var(--sto-border-width) solid var(--sto-color-border);
   position: sticky;
@@ -44,20 +44,15 @@ body {
   display: flex;
   align-items: center;
   gap: var(--sto-space-2);
-  min-width: 180px;
+  min-width: 240px;
   flex-shrink: 0;
 }
 
 .app-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--sto-radius-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  color: var(--sto-color-bg-container);
-  background: var(--sto-color-brand);
+  width: 68px;
+  height: 26px;
+  color: var(--sto-color-brand);
+  flex: 0 0 auto;
 }
 
 .app-brand-text {
@@ -66,8 +61,8 @@ body {
   line-height: 1.2;
 }
 
-.app-brand-title { font-size: 14px !important; }
-.app-brand-sub { font-size: 12px !important; }
+.app-brand-title { font-size: 26px !important; line-height: 26px !important; }
+.app-brand-sub { display: none; }
 
 .app-user-trigger {
   display: inline-flex;
@@ -112,7 +107,7 @@ body {
 .app-sider {
   background: var(--sto-color-bg-container) !important;
   border-right: var(--sto-border-width) solid var(--sto-color-border);
-  min-height: calc(100vh - 56px);
+  min-height: calc(100vh - var(--sto-shell-topbar) - var(--sto-shell-tabs));
 }
 
 .app-side-menu {
@@ -120,9 +115,66 @@ body {
   padding: var(--sto-space-3) var(--sto-space-2);
 }
 
+.app-side-menu .ant-menu-item {
+  height: 36px;
+  line-height: 36px;
+  margin-block: 0;
+  border-radius: 0;
+}
+
+.app-side-menu .ant-menu-item-selected {
+  color: var(--sto-color-brand);
+  background: #fff9f5;
+}
+
+.sto-opentabs {
+  display: flex;
+  align-items: flex-end;
+  height: var(--sto-shell-tabs);
+  background: var(--sto-color-bg-container);
+  border-bottom: var(--sto-border-width) solid #f2f3f5;
+}
+
+.sto-opentabs-list {
+  display: flex;
+  align-items: flex-end;
+  height: 24px;
+  margin-top: 4px;
+}
+
+.sto-opentab {
+  position: relative;
+  z-index: 0;
+  display: inline-flex;
+  align-items: center;
+  width: 125px;
+  height: 24px;
+  padding: 0 28px 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--sto-color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.sto-opentab-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  color: #f5f6f7;
+}
+
+.sto-opentab-bg svg { display: block; width: 100%; height: 100%; }
+.sto-opentab.is-home { width: 52px; padding-inline: 12px; justify-content: center; }
+.sto-opentab.is-active { z-index: 2; color: var(--sto-color-bg-container); }
+.sto-opentab.is-active .sto-opentab-bg { color: var(--sto-color-brand); }
+
 .app-content {
-  padding: var(--sto-space-6);
-  min-height: calc(100vh - 56px);
+  padding: var(--sto-space-4);
+  min-height: calc(100vh - var(--sto-shell-topbar) - var(--sto-shell-tabs));
   overflow: auto;
 }
 
@@ -130,7 +182,7 @@ body {
   display: flex;
   justify-content: space-between;
   gap: var(--sto-space-4);
-  margin-bottom: var(--sto-space-5);
+  margin-bottom: var(--sto-space-3);
 }
 
 .page-header-main { min-width: 0; }
@@ -153,22 +205,32 @@ body {
 }
 
 .content-section {
-  padding: var(--sto-space-6);
+  padding: var(--sto-space-4);
   background: var(--sto-color-bg-container);
   border: var(--sto-border-width) solid var(--sto-color-border);
-  border-radius: var(--sto-radius-md);
+  border-radius: var(--sto-radius-lg);
 }
 
 .content-section-header {
   display: flex;
   justify-content: space-between;
   gap: var(--sto-space-3);
-  margin-bottom: var(--sto-space-4);
+  margin-bottom: var(--sto-space-3);
 }
 
 .content-section-title {
   margin: 0 !important;
   color: var(--sto-color-text-heading) !important;
+}
+
+.content-section-title::before {
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  margin-right: var(--sto-space-2);
+  background: var(--sto-color-brand);
+  content: '';
+  vertical-align: -2px;
 }
 
 .empty-state {

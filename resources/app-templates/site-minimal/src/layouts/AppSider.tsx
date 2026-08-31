@@ -11,7 +11,7 @@ interface AppSiderProps {
 
 export function AppSider({ items, selectedKey, onNavigate }: AppSiderProps) {
   return (
-    <Sider width={220} theme="light" className="app-sider">
+    <Sider width={180} theme="light" className="app-sider">
       <Menu
         mode="inline"
         selectedKeys={[selectedKey]}

@@ -72,6 +72,22 @@ describe('built-in app template resources', () => {
       .toContain('--sto-color-primary');
   });
 
+  it('site 采用 STO PC 视觉令牌与壳层尺寸', () => {
+    const siteRoot = join(resources, 'site-minimal');
+    const tokens = readFileSync(join(siteRoot, 'src/theme/tokens.ts'), 'utf8');
+    const css = readFileSync(join(siteRoot, 'src/theme/theme.css'), 'utf8');
+    const header = readFileSync(join(siteRoot, 'src/layouts/AppHeader.tsx'), 'utf8');
+    const layout = readFileSync(join(siteRoot, 'src/layouts/AppLayout.tsx'), 'utf8');
+
+    expect(tokens).toContain("colorBrand: '#FF6700'");
+    expect(tokens).toContain("colorBgLayout: '#F0F2F5'");
+    expect(tokens).toContain('controlHeight: 28');
+    expect(css).toContain('--sto-shell-topbar: 60px');
+    expect(css).toContain('--sto-shell-side: 180px');
+    expect(header).toContain('<svg');
+    expect(layout).toContain('<OpenTabs');
+  });
+
   it('site 归档包含主题、应用骨架和页面原语', () => {
     const siteRoot = join(resources, 'site-minimal');
     const sourceFiles = [
@@ -114,6 +130,8 @@ describe('built-in app template resources', () => {
 
     const home = readFileSync(join(siteRoot, 'src/pages/HomePage.tsx'), 'utf8');
     expect(home).not.toMatch(/今日待办|进行中任务|本周完成|stoToken|SSO Auth/);
+    expect(home).not.toContain('__APP_TITLE__');
+    expect(home).not.toContain('breadcrumbs=');
   });
 
   it('site 将开发示例与真实业务请求隔离', () => {
