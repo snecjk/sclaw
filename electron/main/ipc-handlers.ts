@@ -9,6 +9,7 @@ import { join, extname, basename, dirname } from 'node:path';
 import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
+import { omitUnchangedHistoryMessages, readClientHistoryFingerprint } from '../engines/history-rpc-result';
 import type { AgentEngineType } from '../engines/types';
 import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
@@ -990,20 +991,71 @@ function registerGatewayHandlers(
       }
 
       if (method === 'chat.history') {
+        const perfStart = Date.now();
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           limit?: number;
+          beforeId?: string;
           engineType?: AgentEngineType;
+          clientFingerprint?: unknown;
         };
-        const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
+        const engineType = parseEngineType(body.engineType);
+        const adapter = await getAdapterForSession(body.sessionKey ?? '', engineType);
+        const beforeId = typeof body.beforeId === 'string' && body.beforeId ? body.beforeId : undefined;
+        const getStart = Date.now();
         const result = await adapter.getHistory(
           { gatewayManager },
-          { sessionKey: body.sessionKey ?? '', limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000 },
+          {
+            sessionKey: body.sessionKey ?? '',
+            limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000,
+            beforeId,
+          },
         );
+        const getMs = Date.now() - getStart;
         if (!result.success) {
+          logger.info('[chat-history-perf]', {
+            stage: 'ipc.rpc.failed',
+            sessionKey: body.sessionKey ?? '',
+            engineType: body.engineType ?? adapter.type,
+            getMs,
+            totalMs: Date.now() - perfStart,
+            error: result.error || 'chat.history failed',
+          });
           return { success: false, error: result.error || 'chat.history failed' };
         }
-        return { success: true, result: sanitizeMemoryFromChatPayload(result.result) };
+        const historyResult = omitUnchangedHistoryMessages({
+          engineType: adapter.type,
+          result: result.result ?? { messages: [] },
+          clientFingerprint: readClientHistoryFingerprint(body.clientFingerprint),
+          beforeId,
+        });
+        const sanitizeStart = Date.now();
+        const payload = sanitizeMemoryFromChatPayload(historyResult);
+        const sanitizeMs = Date.now() - sanitizeStart;
+        const messages = (payload as { messages?: unknown[] } | null)?.messages;
+        const messageCount = Array.isArray(messages) ? messages.length : 0;
+        let payloadBytes = 0;
+        try {
+          payloadBytes = JSON.stringify(payload).length;
+        } catch {
+          payloadBytes = 0;
+        }
+        logger.info('[chat-history-perf]', {
+          stage: 'ipc.rpc.done',
+          sessionKey: body.sessionKey ?? '',
+          engineType: adapter.type,
+          getMs,
+          sanitizeMs,
+          totalMs: Date.now() - perfStart,
+          messageCount,
+          payloadBytes,
+          unchanged: Boolean(historyResult.unchanged),
+          hasClientFingerprint: Boolean(readClientHistoryFingerprint(body.clientFingerprint)),
+          hasMore: Boolean(historyResult.hasMore),
+          totalCount: historyResult.totalCount ?? messageCount,
+          beforeId: beforeId ?? null,
+        });
+        return { success: true, result: payload };
       }
 
       if (method === 'chat.send') {
