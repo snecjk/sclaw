@@ -13,10 +13,8 @@ import { homedir } from 'os';
 import { extname, dirname, join, relative, resolve, sep } from 'path';
 import {
   creepRatio,
-  isTemplateTextFile,
   pipelineProgress,
   sanitizePackageName,
-  substituteTemplateVars,
   type AppDevPhase,
 } from '../utils/app-dev-info';
 import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManagedNode, getManagedNodePaths } from '../utils/node-runtime';
@@ -55,6 +53,7 @@ import { appTemplateApiClient, type AppTemplatePageType } from './app-template-a
 import { buildAppTemplateArchive } from './app-template-archive';
 import { createUlid } from '../utils/ulid';
 import { writeAppDevWorkspaceId } from './app-dev-marker';
+import { copyTemplate } from './app-template-copy';
 import {
   assertBuiltinTemplateDebugModeAllowed,
   assertTemplateWorkspaceCanPublish,
@@ -627,29 +626,6 @@ export function getAppDevStatus(workspaceId: string): AppDevStatus | null {
     return setStatus(workspaceId, { phase: 'stopped', progress: 0, previewUrl: undefined });
   }
   return { ...status };
-}
-
-/** Recursively copy the template applying variable substitution to text files. */
-async function copyTemplate(
-  srcDir: string,
-  destDir: string,
-  vars: { appName: string; appTitle: string },
-): Promise<void> {
-  await mkdir(destDir, { recursive: true });
-  const entries = await readdir(srcDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name === '.sclaw-template-meta.json') continue;
-    const src = join(srcDir, entry.name);
-    const dest = join(destDir, entry.name);
-    if (entry.isDirectory()) {
-      await copyTemplate(src, dest, vars);
-    } else if (isTemplateTextFile(entry.name)) {
-      const content = await readFile(src, 'utf8');
-      await writeFile(dest, substituteTemplateVars(content, vars), 'utf8');
-    } else {
-      await cp(src, dest);
-    }
-  }
 }
 
 /** New apps get `.env` from `.env.example` so Vite SSO proxy/env vars load on first preview. */
