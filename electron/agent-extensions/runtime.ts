@@ -12,8 +12,11 @@ import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from './extensions/sto-dingtalk-se
 import { createHostApiDingTalkSendGuardPort } from './extensions/sto-dingtalk-send-guard/host-api-capability';
 import { STO_USER_SKILL_CAPABILITY } from './extensions/sto-user-skill-tool/capability';
 import { createHostApiUserSkillPort } from './extensions/sto-user-skill-tool/host-api-capability';
+import { STO_BROWSER_BRIDGE_CAPABILITY } from './extensions/sto-browser-tool/capability';
+import { createHostApiBrowserBridgePort } from './extensions/sto-browser-tool/host-api-capability';
 
 export const sclawAgentExtensionCapabilities = new SclawCapabilityRegistry()
+  .provide(STO_BROWSER_BRIDGE_CAPABILITY, createHostApiBrowserBridgePort())
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
   .provide(STO_WORKFLOW_CAPABILITY, createHostApiWorkflowPort())
   .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())

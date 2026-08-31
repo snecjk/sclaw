@@ -42,6 +42,9 @@ async function buildGuard(root: string): Promise<{
   for (const extension of result.extensions) {
     const factory = typeof extension === 'function' ? extension : extension.factory;
     await factory({
+      registerTool() {},
+      getActiveTools() { return []; },
+      setActiveTools() {},
       on(event: string, handler: ToolCallHandler) {
         if (event === 'tool_call') handlers.push(handler);
       },
@@ -74,6 +77,7 @@ describe('claw scheduled path guard extension', () => {
       typeof extension === 'function' ? 'anonymous' : extension.name
     ))).toEqual([
       'sclaw-extension-lifecycle',
+      'sto-browser-tool',
       'sto-scheduled-task-tool',
       'sto-dingtalk-send-guard',
       'sto-user-skill-tool',
@@ -87,6 +91,7 @@ describe('claw scheduled path guard extension', () => {
     expect(guard.names).toEqual([
       'sclaw-extension-lifecycle',
       'sclaw-scheduled-path-guard',
+      'sto-browser-tool',
       'sto-scheduled-task-tool',
       'sto-dingtalk-send-guard',
       'sto-user-skill-tool',

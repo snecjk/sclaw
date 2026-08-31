@@ -1,42 +1,154 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  SclawCapabilityRegistry,
+  SclawExtensionStateManager,
+  type SclawExtensionLogger,
+} from '../../shared/agent-extensions';
+import { buildClaudeAgentExtensions } from '../../electron/agent-extensions/adapters/claude';
+import { buildPiAgentExtensions } from '../../electron/agent-extensions/adapters/pi';
+import {
+  STO_BROWSER_BRIDGE_CAPABILITY,
+  type StoBrowserBridgePort,
+} from '../../electron/agent-extensions/extensions/sto-browser-tool/capability';
+import { stoBrowserToolDefinition } from '../../electron/agent-extensions/extensions/sto-browser-tool/definition';
 import {
   BRIDGE_SYSTEM_PROMPT,
-  browserMcpToolName,
-  createBrowserMcpServer,
   EMBED_BRIDGE_SYSTEM_PROMPT,
-} from '../../sto-plugin/claude/sto-browser-tool/tools';
-import { buildStoBrowserToolClaudeRuntimeOptions } from '../../sto-plugin/claude/sto-browser-tool/sdk';
+} from '../../electron/agent-extensions/extensions/sto-browser-tool/prompts';
 
-describe('sto-browser-tool Claude MCP', () => {
-  it('documents bridge_click in system prompt', () => {
-    expect(BRIDGE_SYSTEM_PROMPT).toContain('bridge_click');
-    expect(EMBED_BRIDGE_SYSTEM_PROMPT).toContain('不要调用 ba_*');
+const expectedTools = [
+  'bridge_snapshot', 'bridge_click', 'bridge_fill', 'bridge_navigate',
+  'bridge_screenshot', 'bridge_list_sessions',
+];
+const logger: SclawExtensionLogger = {
+  debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(),
+};
+
+function dependencies() {
+  const port: StoBrowserBridgePort = {
+    listSessions: vi.fn(async () => [{
+      sessionId: 'embed-other', tabId: -1, url: 'https://embed.example',
+      title: 'Embed', source: 'embed',
+    }, {
+      sessionId: 'chrome-1', tabId: 7, url: 'https://example.com',
+      title: 'Chrome', source: 'extension',
+    }]),
+    runCommand: vi.fn(async (input) => ({ ok: true, action: input.action })),
+  };
+  return {
+    port,
+    capabilities: new SclawCapabilityRegistry().provide(STO_BROWSER_BRIDGE_CAPABILITY, port),
+    stateManager: new SclawExtensionStateManager(),
+    logger,
+  };
+}
+
+function executionContext(deps: ReturnType<typeof dependencies>, sessionKey: string) {
+  return {
+    engine: 'claude' as const,
+    sessionKey,
+    mode: 'interactive' as const,
+    commandShell: 'powershell' as const,
+    capabilities: deps.capabilities,
+    state: deps.stateManager.beginTurn(sessionKey),
+    logger,
+    toolCallId: 'browser-1',
+  };
+}
+
+describe('sto-browser-tool common extension', () => {
+  it('lazily compiles all six tools for ordinary Claude chat', async () => {
+    const deps = dependencies();
+    const entries = [{ common: stoBrowserToolDefinition }];
+    const unrelated = await buildClaudeAgentExtensions({
+      sessionKey: 'agent:main:ordinary-browser', mode: 'interactive',
+      userPrompt: '分析这个项目', entries, ...deps,
+    });
+    expect(unrelated.options.mcpServers).toBeUndefined();
+    expect(unrelated.options.systemPromptAppend).toBeUndefined();
+
+    const matched = await buildClaudeAgentExtensions({
+      sessionKey: 'agent:main:ordinary-browser', mode: 'interactive',
+      userPrompt: '点击当前浏览器页面里的客户管理菜单', entries, ...deps,
+    });
+    const server = matched.options.mcpServers?.['sto-browser-tool'] as unknown as {
+      instance: { _registeredTools: Record<string, unknown> };
+    };
+    expect(Object.keys(server.instance._registeredTools)).toEqual(expectedTools);
+    expect(matched.options.systemPromptAppend).toContain(BRIDGE_SYSTEM_PROMPT);
   });
 
-  it('builds MCP tool names with sto-browser-tool prefix', () => {
-    expect(browserMcpToolName('bridge_click')).toBe('mcp__sto-browser-tool__bridge_click');
-  });
-
-  it('creates in-process MCP server', () => {
-    const server = createBrowserMcpServer({ hostApiPort: 3210 });
-    expect(server).toBeDefined();
-    expect(server.type).toBe('sdk');
-  });
-
-  it('uses embed-specific prompt for embed app chat sessions', () => {
-    const runtime = buildStoBrowserToolClaudeRuntimeOptions({
+  it('automatically activates the embed prompt and removes the ba_* contradiction', async () => {
+    const result = await buildClaudeAgentExtensions({
       sessionKey: 'agent:main:session-embed-app-teambition--abc',
-      hostApiPort: 3210,
+      mode: 'interactive', entries: [{ common: stoBrowserToolDefinition }],
+      ...dependencies(),
     });
-    expect(runtime.systemPromptAppend).toContain(EMBED_BRIDGE_SYSTEM_PROMPT);
-    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(result.options.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(result.options.systemPromptAppend).toContain(EMBED_BRIDGE_SYSTEM_PROMPT);
+    expect(result.options.systemPromptAppend).toContain('同一任务不要混用两套工具');
+    expect(result.options.systemPromptAppend).not.toContain('仅使用 bridge_*');
   });
 
-  it('uses general bridge prompt for non-embed sessions', () => {
-    const runtime = buildStoBrowserToolClaudeRuntimeOptions({
-      sessionKey: 'agent:main:main',
-      hostApiPort: 3210,
+  it('registers lazy PI tools and activates them before an agent turn', async () => {
+    const result = await buildPiAgentExtensions({
+      sessionKey: 'pi-browser', mode: 'interactive',
+      entries: [{ common: stoBrowserToolDefinition }], ...dependencies(),
     });
-    expect(runtime.systemPromptAppend).toBe(BRIDGE_SYSTEM_PROMPT);
+    expect(result.registeredToolNames).toEqual(expectedTools);
+    expect(result.initiallyActiveToolNames).toEqual([]);
+
+    const handlers = new Map<string, (event: Record<string, unknown>) => unknown>();
+    const activeTools: string[] = [];
+    const extension = result.extensions.find(
+      (item) => typeof item !== 'function' && item.name === 'sto-browser-tool',
+    );
+    if (!extension || typeof extension === 'function') throw new Error('missing extension');
+    await extension.factory({
+      registerTool() {},
+      on(event, handler) { handlers.set(event, handler as never); },
+      getActiveTools() { return activeTools; },
+      setActiveTools(names) { activeTools.splice(0, activeTools.length, ...names); },
+    } as never);
+
+    const prompt = await handlers.get('before_agent_start')?.({
+      prompt: '那你有浏览器工具吗', systemPrompt: 'base', systemPromptOptions: {},
+    }) as { systemPrompt?: string } | undefined;
+    expect(activeTools).toEqual(expectedTools);
+    expect(prompt?.systemPrompt).toContain(BRIDGE_SYSTEM_PROMPT);
+  });
+
+  it('requires an explicit embed session and never falls back to another page', async () => {
+    const deps = dependencies();
+    const click = stoBrowserToolDefinition.tools?.find((item) => item.name === 'bridge_click');
+    if (!click) throw new Error('missing bridge_click');
+    const context = executionContext(deps, 'agent:main:session-embed-app-teambition--abc');
+
+    expect(await click.execute({ name: '客户管理' }, context)).toMatchObject({
+      success: false, error: { code: 'EMBED_SESSION_ID_REQUIRED' },
+    });
+    expect(await click.execute({ sessionId: 'chrome-1', name: '客户管理' }, context))
+      .toMatchObject({ success: false, error: { code: 'EMBED_SESSION_ID_INVALID' } });
+    expect(deps.port.runCommand).not.toHaveBeenCalled();
+
+    expect(await click.execute({
+      sessionId: 'embed-runtime-1', name: '客户管理',
+    }, context)).toMatchObject({ success: true, domain: 'browser-bridge' });
+    expect(deps.port.runCommand).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'embed-runtime-1', action: 'click', payload: { name: '客户管理' },
+    }));
+  });
+
+  it('selects external Chrome instead of an unrelated embed for ordinary chat', async () => {
+    const deps = dependencies();
+    const snapshot = stoBrowserToolDefinition.tools?.find(
+      (item) => item.name === 'bridge_snapshot',
+    );
+    if (!snapshot) throw new Error('missing bridge_snapshot');
+    expect(await snapshot.execute({}, executionContext(deps, 'agent:main:ordinary')))
+      .toMatchObject({ success: true });
+    expect(deps.port.runCommand).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'chrome-1', action: 'snapshot',
+    }));
   });
 });

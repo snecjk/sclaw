@@ -30,7 +30,7 @@ import {
 } from './event-policy';
 import { KeyedTaskQueue } from './keyed-task-queue';
 import { filterPiSkills } from './skill-policy';
-import { buildPiEnabledToolNames } from './tool-policy';
+import { buildPiToolSelection } from './tool-policy';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
 
 type PiSession = {
@@ -44,6 +44,8 @@ type PiSession = {
   lastRunStatus?: 'completed' | 'failed';
   lastRunError?: string;
   streamingAssistant?: Record<string, unknown> & { role: 'assistant'; content: Array<Record<string, unknown>> };
+  initiallyActiveToolNames: string[];
+  clearExtensionSessionState: () => void;
   unsubscribe: () => void;
 };
 
@@ -171,12 +173,17 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   for (const diagnostic of unifiedExtensions.diagnostics) {
     logPiCore('extension.diagnostic', diagnostic as unknown as Record<string, unknown>);
   }
-  const enabledToolNames = buildPiEnabledToolNames(unifiedExtensions.toolNames);
+  const { allowedToolNames, initiallyActiveToolNames } = buildPiToolSelection(
+    unifiedExtensions.registeredToolNames,
+    unifiedExtensions.initiallyActiveToolNames,
+  );
   logPiCore('extension.tools-enabled', {
     sessionKey: config.sessionKey,
     mode: config.scheduledAllowedRoots?.length ? 'scheduled' : 'interactive',
-    toolCount: enabledToolNames.length,
-    tools: enabledToolNames,
+    allowedToolCount: allowedToolNames.length,
+    allowedTools: allowedToolNames,
+    initiallyActiveToolCount: initiallyActiveToolNames.length,
+    initiallyActiveTools: initiallyActiveToolNames,
   });
   const managedContextPath = join(config.agentDir, 'AGENTS.md');
   const loader = new sdk.DefaultResourceLoader({
@@ -279,14 +286,20 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     settingsManager,
     resourceLoader: loader,
     sessionManager,
-    tools: enabledToolNames,
+    tools: allowedToolNames,
   });
+  // createAgentSession.tools is a permanent allowlist in Pi. It initially
+  // enables every listed tool, so restore the lazy-activation baseline after
+  // the complete registry has been admitted.
+  session.setActiveToolsByName(initiallyActiveToolNames);
 
   const entry: PiSession = {
     session,
     sessionId: session.sessionId,
     sessionFile: session.sessionFile,
     configKey: configKey(config),
+    initiallyActiveToolNames,
+    clearExtensionSessionState: unifiedExtensions.clearSessionState,
     unsubscribe: () => {},
   };
   entry.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
@@ -387,6 +400,7 @@ async function ensureSession(config: PiSessionConfig): Promise<PiSession> {
     });
     existing.unsubscribe();
     existing.session.dispose();
+    existing.clearExtensionSessionState();
     sessions.delete(config.sessionKey);
   }
   const created = await createSession(config);
@@ -423,6 +437,10 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       // Reload while idle so every turn sees the current SClaw-managed skill set.
       const reloadStartedAt = Date.now();
       await entry.session.reload();
+      // Reload reconstructs Pi's registry and re-enables every allowlisted
+      // extension tool. Reset to the baseline; before_agent_start will restore
+      // session-cached or newly matched lazy activations for this turn.
+      entry.session.setActiveToolsByName(entry.initiallyActiveToolNames);
       logPiCore('session.prompt.resources-reloaded', {
         sessionKey: config.sessionKey,
         durationMs: Date.now() - reloadStartedAt,
@@ -547,6 +565,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
         await entry.session.abort().catch(() => {});
         entry.unsubscribe();
         entry.session.dispose();
+        entry.clearExtensionSessionState();
         sessions.delete(request.sessionKey!);
       }
       const sessionFile = typeof payload.sessionFile === 'string' ? payload.sessionFile : undefined;
@@ -561,6 +580,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
         await entry.session.abort().catch(() => {});
         entry.unsubscribe();
         entry.session.dispose();
+        entry.clearExtensionSessionState();
       }
       sessions.clear();
       respond(request.requestId, true, { stopped: true });

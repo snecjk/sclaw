@@ -23,3 +23,25 @@ export function buildPiEnabledToolNames(extensionToolNames: readonly string[]): 
   }
   return [...enabled.values()];
 }
+
+export interface PiToolSelection {
+  /** Final SDK allowlist: tools omitted here cannot be activated later. */
+  allowedToolNames: string[];
+  /** Tools exposed before any lazy activation has matched. */
+  initiallyActiveToolNames: string[];
+}
+
+/**
+ * Pi's SDK uses createAgentSession.tools as both the initial selection and a
+ * permanent allowlist. Keep every registered extension tool in that allowlist,
+ * then explicitly restore the smaller active set after session creation/reload.
+ */
+export function buildPiToolSelection(
+  registeredExtensionToolNames: readonly string[],
+  initiallyActiveExtensionToolNames: readonly string[],
+): PiToolSelection {
+  return {
+    allowedToolNames: buildPiEnabledToolNames(registeredExtensionToolNames),
+    initiallyActiveToolNames: buildPiEnabledToolNames(initiallyActiveExtensionToolNames),
+  };
+}

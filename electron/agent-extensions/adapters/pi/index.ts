@@ -34,8 +34,11 @@ import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtal
 import { createHostApiDingTalkSendGuardPort } from '../../extensions/sto-dingtalk-send-guard/host-api-capability';
 import { STO_USER_SKILL_CAPABILITY } from '../../extensions/sto-user-skill-tool/capability';
 import { createHostApiUserSkillPort } from '../../extensions/sto-user-skill-tool/host-api-capability';
+import { STO_BROWSER_BRIDGE_CAPABILITY } from '../../extensions/sto-browser-tool/capability';
+import { createHostApiBrowserBridgePort } from '../../extensions/sto-browser-tool/host-api-capability';
 
 const defaultCapabilities = new SclawCapabilityRegistry()
+  .provide(STO_BROWSER_BRIDGE_CAPABILITY, createHostApiBrowserBridgePort())
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
   .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())
   .provide(STO_USER_SKILL_CAPABILITY, createHostApiUserSkillPort());
@@ -67,9 +70,11 @@ export interface BuildPiAgentExtensionsResult {
   extensions: InlineExtension[];
   /** Every common/native tool registered in Pi's tool registry. */
   registeredToolNames: string[];
-  /** Exact initially-active extension tool names for createAgentSession.tools. */
-  toolNames: string[];
+  /** Exact extension tool names that are active before lazy activation. */
+  initiallyActiveToolNames: string[];
   diagnostics: SclawExtensionDiagnostic[];
+  /** Clears framework-owned session/turn/tool-call state on worker disposal. */
+  clearSessionState(): void;
 }
 
 function replaceInput(target: Record<string, unknown>, replacement: Record<string, unknown>): void {
@@ -407,7 +412,13 @@ export async function buildPiAgentExtensions(
       factory(pi) {
         pi.on('turn_start', () => stateManager.beginTurn(input.sessionKey));
         pi.on('turn_end', () => stateManager.endTurn(input.sessionKey));
-        pi.on('session_shutdown', () => stateManager.clearSession(input.sessionKey));
+        pi.on('session_shutdown', (event) => {
+          // Pi tears down and recreates its extension runtime on every resource
+          // reload. That is not the end of the SClaw conversation, so keep
+          // session-scoped activation/state across reloads and only clear it
+          // when Pi is actually leaving or replacing the session.
+          if (event.reason !== 'reload') stateManager.clearSession(input.sessionKey);
+        });
       },
     });
   }
@@ -425,7 +436,8 @@ export async function buildPiAgentExtensions(
   return {
     extensions,
     registeredToolNames,
-    toolNames: initiallyActiveToolNames,
+    initiallyActiveToolNames,
     diagnostics,
+    clearSessionState: () => stateManager.clearSession(input.sessionKey),
   };
 }

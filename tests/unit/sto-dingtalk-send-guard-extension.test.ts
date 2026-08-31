@@ -131,7 +131,7 @@ describe('sto DingTalk send guard common extension', () => {
       ...dependencies,
     });
     expect(result.registeredToolNames).toEqual([]);
-    expect(result.toolNames).toEqual([]);
+    expect(result.initiallyActiveToolNames).toEqual([]);
 
     type Handler = (event: Record<string, unknown>) => Promise<unknown> | unknown;
     const handlers = new Map<string, Handler>();

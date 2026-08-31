@@ -5,6 +5,7 @@ import { SCHEDULED_TASK_CORE_PROMPT } from '../../shared/scheduled-task-instruct
 import { STO_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-scheduled-task-tool/definition';
 import { STO_WORKFLOW_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-workflow-tool/definition';
 import { USER_SKILL_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-user-skill-tool/definition';
+import { BRIDGE_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-browser-tool/prompts';
 import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 
 let pendingDingTalkContext: Record<string, unknown> | null = null;
@@ -59,8 +60,8 @@ describe('buildClaudeRuntimeOptions', () => {
 
     expect(runtime.systemPromptAppend).not.toContain(STO_SCHEDULED_TASK_SYSTEM_PROMPT);
     expect(runtime.mcpServers?.['sto-scheduled-task-tool']).toBeUndefined();
-    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
-    expect(runtime.systemPromptAppend).toContain('bridge_click');
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeUndefined();
+    expect(runtime.systemPromptAppend).not.toContain(BRIDGE_SYSTEM_PROMPT);
   });
 
   it('activates scheduled-task management prompt and MCP for a matching chat turn', async () => {
@@ -96,11 +97,20 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(matched.systemPromptAppend).toContain(USER_SKILL_SYSTEM_PROMPT);
   });
 
+  it('activates the migrated browser bridge for browser-operation intent', async () => {
+    const runtime = await buildClaudeRuntimeOptions(
+      'agent:main:browser-operation',
+      '点击当前浏览器页面里的客户管理菜单',
+    );
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain(BRIDGE_SYSTEM_PROMPT);
+  });
+
   it('registers embed bridge prompt for app plaza embed sessions', async () => {
     const runtime = await buildClaudeRuntimeOptions('agent:main:session-embed-app-tb--x');
 
     expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
-    expect(runtime.systemPromptAppend).toContain('不要调用 ba_*');
+    expect(runtime.systemPromptAppend).toContain('同一任务不要混用两套工具');
   });
 
   it('uses the engine-neutral Chinese scheduled-task management policy', () => {

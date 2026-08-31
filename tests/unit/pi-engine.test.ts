@@ -27,6 +27,7 @@ import { filterPiSkills, isPiSkillPathAllowed } from '../../electron/pi-runtime/
 import {
   PI_BUILTIN_TOOL_NAMES,
   buildPiEnabledToolNames,
+  buildPiToolSelection,
 } from '../../electron/pi-runtime/tool-policy';
 
 describe('Pi engine descriptor', () => {
@@ -70,6 +71,23 @@ describe('Pi session tool allowlist', () => {
       ...PI_BUILTIN_TOOL_NAMES,
       'CUSTOM_TOOL',
     ]);
+  });
+
+  it('keeps lazy tools in the permanent allowlist but out of the initial active set', () => {
+    expect(buildPiToolSelection(
+      ['always_on_tool', 'lazy_browser_tool'],
+      ['always_on_tool'],
+    )).toEqual({
+      allowedToolNames: [
+        ...PI_BUILTIN_TOOL_NAMES,
+        'always_on_tool',
+        'lazy_browser_tool',
+      ],
+      initiallyActiveToolNames: [
+        ...PI_BUILTIN_TOOL_NAMES,
+        'always_on_tool',
+      ],
+    });
   });
 });
 

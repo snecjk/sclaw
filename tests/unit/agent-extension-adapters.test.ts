@@ -235,7 +235,7 @@ describe('Pi agent extension adapter', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
       .toEqual(['sclaw-extension-lifecycle', 'synthetic-extension']);
-    expect(result.toolNames).toEqual(['synthetic_echo']);
+    expect(result.initiallyActiveToolNames).toEqual(['synthetic_echo']);
     expect(logger.info).toHaveBeenCalledWith('[agent-extension] build.completed', expect.objectContaining({
       engine: 'pi',
       diagnostics: 0,
@@ -300,7 +300,7 @@ describe('Pi agent extension adapter', () => {
     });
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
       .toEqual(['sclaw-extension-lifecycle', 'pi-native']);
-    expect(result.toolNames).toEqual(['pi_native_tool']);
+    expect(result.initiallyActiveToolNames).toEqual(['pi_native_tool']);
   });
 
   it('appends native PI contributions in augment mode', async () => {
@@ -321,7 +321,7 @@ describe('Pi agent extension adapter', () => {
     });
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
       .toEqual(['sclaw-extension-lifecycle', 'synthetic-extension', 'pi-native']);
-    expect(result.toolNames).toEqual(['synthetic_echo', 'pi_native_tool']);
+    expect(result.initiallyActiveToolNames).toEqual(['synthetic_echo', 'pi_native_tool']);
   });
 
   it('throws a controlled error carrying the common failure envelope', async () => {
@@ -416,7 +416,7 @@ describe('agent extension lazy activation', () => {
       sessionKey: 'lazy-pi', mode: 'interactive', entries: [{ common: lazyDefinition }], ...dependencies(),
     });
     expect(result.registeredToolNames).toEqual(['lazy_synthetic_tool']);
-    expect(result.toolNames).toEqual([]);
+    expect(result.initiallyActiveToolNames).toEqual([]);
 
     const handlers = new Map<string, (event: Record<string, unknown>) => Promise<unknown>>();
     let activeTools = ['read', 'bash'];
@@ -436,5 +436,46 @@ describe('agent extension lazy activation', () => {
     }) as { systemPrompt?: string } | undefined;
     expect(activeTools).toEqual(['read', 'bash', 'lazy_synthetic_tool']);
     expect(prompt?.systemPrompt).toBe('base\n\nlazy synthetic prompt');
+  });
+
+  it('preserves session activation across a Pi resource reload', async () => {
+    const deps = dependencies();
+    const result = await buildPiAgentExtensions({
+      sessionKey: 'lazy-pi-reload', mode: 'interactive',
+      entries: [{ common: lazyDefinition }], ...deps,
+    });
+    const handlers = new Map<string, (event: Record<string, unknown>) => Promise<unknown> | unknown>();
+    let activeTools = ['read', 'bash'];
+    for (const extension of result.extensions) {
+      if (typeof extension === 'function') continue;
+      await extension.factory({
+        registerTool() {},
+        on(event, handler) { handlers.set(event, handler as never); },
+        getActiveTools() { return activeTools; },
+        setActiveTools(names) { activeTools = names; },
+      } as never);
+    }
+
+    await handlers.get('before_agent_start')?.({
+      prompt: 'use lazy tools', systemPrompt: 'base', systemPromptOptions: {},
+    });
+    expect(activeTools).toContain('lazy_synthetic_tool');
+
+    await handlers.get('session_shutdown')?.({ type: 'session_shutdown', reason: 'reload' });
+    activeTools = ['read', 'bash'];
+    const followUp = await handlers.get('before_agent_start')?.({
+      prompt: 'continue', systemPrompt: 'base', systemPromptOptions: {},
+    }) as { systemPrompt?: string } | undefined;
+
+    expect(activeTools).toContain('lazy_synthetic_tool');
+    expect(followUp?.systemPrompt).toBe('base\n\nlazy synthetic prompt');
+
+    result.clearSessionState();
+    activeTools = ['read', 'bash'];
+    const afterDispose = await handlers.get('before_agent_start')?.({
+      prompt: 'continue', systemPrompt: 'base', systemPromptOptions: {},
+    }) as { systemPrompt?: string } | undefined;
+    expect(activeTools).not.toContain('lazy_synthetic_tool');
+    expect(afterDispose).toBeUndefined();
   });
 });

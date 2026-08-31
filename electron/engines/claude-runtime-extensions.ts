@@ -2,9 +2,6 @@ import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { buildWorkspaceArtifactOutputRule } from '../../shared/workspace-paths';
 import {
-  buildStoBrowserToolClaudeRuntimeOptions,
-} from '../../sto-plugin/claude/sto-browser-tool/sdk';
-import {
   isScheduledTaskExecutionSessionKey,
 } from '../../shared/scheduled-task-instruction';
 import {
@@ -12,7 +9,6 @@ import {
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
 import { getAuthState } from '../utils/auth-store';
 import { logger } from '../utils/logger';
-import { PORTS } from '../utils/config';
 import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
 import { buildConnectorBashGateHooks } from '../connectors/claude-binary-gate';
 import { buildClaudeAgentExtensions } from '../agent-extensions/adapters/claude';
@@ -65,16 +61,6 @@ function mergeRuntimeOptions(target: ClaudeRuntimeOptions, source: ClaudeRuntime
     };
   }
 }
-
-const browserToolExtension: ClaudeRuntimeExtension = {
-  id: 'sto-browser-tool',
-  build({ sessionKey }) {
-    return buildStoBrowserToolClaudeRuntimeOptions({
-      sessionKey,
-      hostApiPort: PORTS.CLAWX_HOST_API,
-    });
-  },
-};
 
 const agentTelemetryExtension: ClaudeRuntimeExtension = {
   id: 'sto-agent-telemetry',
@@ -147,7 +133,6 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
 
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   connectorBashGateExtension,
-  browserToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,
   connectorsContextExtension,
