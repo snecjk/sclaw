@@ -184,10 +184,10 @@ describe('MoreAppsPage server catalog', () => {
   it('renders mixed-delimiter server badges as one deduplicated ideographic-comma label', async () => {
     render(<MoreAppsPage />);
     const addButton = screen.getByRole('button', { name: '安装外部应用' });
-    expect(addButton.querySelector('.lucide-plus')).toBeInTheDocument();
+    expect(addButton.querySelector('.lucide-download')).toBeInTheDocument();
     expect(addButton.closest('.app-plaza-heading-row')).toBeInTheDocument();
     expect(screen.getByRole('tablist').closest('.more-apps-toolbar-row')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('搜索应用名称或关键词').closest('.more-apps-toolbar-row')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('搜索应用名称或描述').closest('.more-apps-toolbar-row')).toBeInTheDocument();
     expect(await screen.findByText('客户管理、部门岗位、客户对账')).toHaveClass('app-market__row-tags');
     expect(document.querySelectorAll('.app-market__row-tags')).toHaveLength(1);
     expect(screen.queryByText('维护客户归属关系')).not.toBeInTheDocument();
@@ -709,7 +709,7 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.queryByText('客户关系')).not.toBeInTheDocument();
   });
 
-  it('filters development apps locally by page type', async () => {
+  it('lists development apps of both page types without a type filter row', async () => {
     mockDevApps = [
       {
         workspaceId: 'ws-site',
@@ -734,16 +734,9 @@ describe('MoreAppsPage server catalog', () => {
     render(<MoreAppsPage />);
     fireEvent.click(await screen.findByRole('tab', { name: '开发应用' }));
 
-    expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: '全部' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('开发应用类型筛选')).not.toBeInTheDocument();
     expect(screen.getByText('Site Alpha')).toBeInTheDocument();
-    expect(screen.getByText('Assets Beta')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '独立站点' }));
-    expect(screen.getByText('Site Alpha')).toBeInTheDocument();
-    expect(screen.queryByText('Assets Beta')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '托管应用' }));
-    expect(screen.queryByText('Site Alpha')).not.toBeInTheDocument();
     expect(screen.getByText('Assets Beta')).toBeInTheDocument();
     expect(refreshDevAppsMock).toHaveBeenCalledTimes(1);
   });
@@ -767,32 +760,33 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.queryByRole('tab', { name: '开发应用' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '创建应用' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: '创建应用' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: '导入应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '更多开发操作' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '安装外部应用' })).toBeInTheDocument();
     expect(useMoreAppsStore.getState().activeTab).toBe('market');
   });
 
-  it('merges create and import into a ghost dropdown for whitelisted users', () => {
+  it('opens create app directly and keeps import in the overflow menu', () => {
     render(<MoreAppsPage />);
 
-    const trigger = screen.getByRole('button', { name: '创建应用' });
-    expect(trigger).toHaveClass('more-apps-add-btn--ghost');
-    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
-    expect(trigger.querySelector('.lucide-chevron-down')).toBeInTheDocument();
+    const createBtn = screen.getByRole('button', { name: '创建应用' });
+    expect(createBtn).toHaveClass('more-apps-add-btn');
+    expect(createBtn).not.toHaveAttribute('aria-haspopup');
+    expect(createBtn.querySelector('.lucide-chevron-down')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '更多开发操作' })).toHaveAttribute('aria-haspopup', 'menu');
   });
 
   it('shows template management to app-dev whitelist users', async () => {
     render(<MoreAppsPage />);
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: '创建应用' }), {
+    fireEvent.pointerDown(screen.getByRole('button', { name: '更多开发操作' }), {
       button: 0,
       ctrlKey: false,
     });
 
-    expect(await screen.findByRole('menuitem', { name: '创建应用' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '管理应用模板' })).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: '管理应用模板' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '导入应用' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '创建应用' })).not.toBeInTheDocument();
   });
 
   it('shows a fallback when a banner image fails', async () => {

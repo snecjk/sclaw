@@ -179,51 +179,21 @@ export function DevAppCard({ app }: DevAppCardProps) {
         <div
           className="more-apps-card__icon--dev"
           aria-label={`应用类型：${pageTypeLabel}`}
-          title={`应用类型：${pageTypeLabel}`}
+          title={`${pageTypeLabel} · ${statusLabel}`}
         >
-          <PageTypeIcon className="h-6 w-6" aria-hidden />
+          <PageTypeIcon className="h-4 w-4" aria-hidden />
         </div>
-        <div className="more-apps-card__head">
+        <div className="more-apps-card__head more-apps-card__head--dev">
           <h3 className="more-apps-card__title">{app.name}</h3>
-          <p
-            className={cn(
-              'mt-1 text-[11px]',
-              localReady
-                ? 'text-[var(--sto-functional-success)] dark:text-emerald-300'
-                : 'text-[var(--sto-functional-warning)] dark:text-amber-300',
-            )}
-          >
-            {statusLabel}
+          <p className="more-apps-card__desc more-apps-card__desc--dev">
+            {localReady
+              ? (app.projectType === 'fullstack' ? '前端 + 后端应用' : '前端应用') + '，通过对话持续完善'
+              : '换设备或本地目录已删除时，选择父目录拉取后即可继续编辑'}
           </p>
         </div>
       </div>
 
-      <p className="more-apps-card__desc">
-        {localReady
-          ? (app.projectType === 'fullstack' ? '前端 + 后端应用' : '前端应用') + '，通过对话持续完善'
-          : '换设备或本地目录已删除时，选择父目录拉取后即可继续编辑'}
-      </p>
-
       <div className="more-apps-card__foot more-apps-card__foot--dev">
-        <button
-          type="button"
-          className="more-apps-card__primary-action"
-          disabled={cloning}
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleEdit();
-          }}
-        >
-          {cloning ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-          ) : localReady ? (
-            <Pencil className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <Download className="h-3.5 w-3.5" aria-hidden />
-          )}
-          {cloning ? '拉取中…' : localReady ? '继续编辑' : '拉取到本地'}
-        </button>
-
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
@@ -235,7 +205,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
               <MoreHorizontal className="h-4 w-4" aria-hidden />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[160px]" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuContent align="start" className="min-w-[160px]" onClick={(e) => e.stopPropagation()}>
             {localReady ? (
               <DropdownMenuItem onClick={() => void handleEdit()}>
                 <Pencil className="mr-2 h-3.5 w-3.5" aria-hidden />
@@ -274,6 +244,18 @@ export function DevAppCard({ app }: DevAppCardProps) {
             ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
+        <button
+          type="button"
+          className="more-apps-card__primary-action"
+          disabled={cloning}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleEdit();
+          }}
+        >
+          {cloning ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+          {cloning ? '拉取中…' : localReady ? '继续编辑' : '拉取到本地'}
+        </button>
       </div>
 
       {deleteOpen
