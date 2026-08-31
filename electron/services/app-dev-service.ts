@@ -55,6 +55,16 @@ import { appTemplateApiClient, type AppTemplatePageType } from './app-template-a
 import { buildAppTemplateArchive } from './app-template-archive';
 import { createUlid } from '../utils/ulid';
 import { writeAppDevWorkspaceId } from './app-dev-marker';
+import {
+  assertBuiltinTemplateDebugModeAllowed,
+  assertTemplateWorkspaceCanPublish,
+  fingerprintBuiltinTemplateTree,
+  initializeBuiltinTemplateDebugWorkspace,
+  inspectBuiltinTemplateDebugWorkspace,
+  resolveAppTemplateWorkspacePath,
+  resetBuiltinTemplateDebugWorkspace,
+  syncBuiltinTemplateDebugWorkspace,
+} from './app-template-builtin-debug-service';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -342,10 +352,15 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 
 ## 自然语言建页与接口（强制）
 - 用户用自然语言生成页面时：若页面**需要调业务接口**（查询/列表/看板取数等），且用户**尚未指定**要用的 sai-cli 指令或接口：
-  - **先引导用户指定 CLI 接口**，再生成并绑定真实取数；未指定前不要臆造 URL / 命令路径去接真接口
-  - 引导话术示例：「这个页面需要接业务数据。请告诉我要用哪条 sai-cli 指令（例如：一口价运费查询），指定后我再按该指令的参数和字段生成搜索/列表。」
-  - 若用户说不清命令名，可协助执行 \`sai-cli discover "<业务词>"\`，把结果列出来**请用户指定一条**；仍以用户指定为准
+  - 先执行 \`sai-cli siteapp external-service list --keyword "<业务词>" -f json\`，只读取平台已发布服务的摘要；用户明确要浏览全部服务时执行不带 keyword 的 \`list\`
+  - 唯一候选确定后，使用摘要中的 \`serviceId\` 和 \`latestVersion\` 执行 \`sai-cli siteapp external-service describe --serviceId <serviceId> --version <latestVersion> -f json\`
+  - 一次只 describe 一个服务；多个合理候选时先让用户选择，\`hasUsageGuide=false\` 或说明不足时向用户确认，禁止根据名称或描述猜测接口
+  - 平台服务没有匹配结果时，回退原始 sai-cli 接口发现流程：
+    - **先引导用户指定 CLI 接口**，再生成并绑定真实取数；未指定前不要臆造 URL / 命令路径去接真接口
+    - 引导话术示例：「这个页面需要接业务数据。请告诉我要用哪条 sai-cli 指令（例如：一口价运费查询），指定后我再按该指令的参数和字段生成搜索/列表。」
+    - 若用户说不清命令名，可协助执行 \`sai-cli discover "<业务词>"\`，把结果列出来**请用户指定一条**；仍以用户指定为准
 - 用户已指定 CLI 后：\`sai-cli help\` → 若有绝对 HTTP 地址，先执行 \`node scripts/ensure-dev-proxy.mjs "<绝对URL>"\`，把输出的 \`relativeUrl\`（\`/proxy/<key>/...\`）写入 action-registry 或页面；**禁止**页面直连 \`https://*.sto.cn\`（本地 CORS）
+- 已通过 usageGuide 明确接口后：若有绝对 HTTP 地址，同样先执行 \`node scripts/ensure-dev-proxy.mjs "<绝对URL>"\`，再使用输出的 \`relativeUrl\`
 - 取数约定：代码里统一写 \`/proxy/<key>/...\`；**开发**由 Vite proxy 转发，**生产**由 \`src/lib/request.ts\` 按 \`contracts/dev-proxy.v1.json\` 还原为真实域名（禁止把 \`/proxy\` 当生产静态路径）
 - 预览出现 CORS/直连失败：对报错 URL 再跑 ensure-dev-proxy，改 url 为 relativeUrl，并重启预览
 - 生产 Network 若仍请求 \`https://page-*.sto.cn/proxy/...\`：检查是否未走 request 封装或缺 proxy 合约 key
@@ -649,14 +664,33 @@ export interface AppTemplateWorkspaceMarker {
   name: string;
   description: string;
   latestVersion?: string;
+  source?: 'local-resource' | 'memory-center';
+  sourceFingerprint?: string;
   packageOssKey?: string;
   packageEtag?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-function appTemplateWorkspaceMarkerPath(templateRoot: string): string {
+export function appTemplateWorkspaceMarkerPath(templateRoot: string): string {
   return join(templateRoot, '.sclaw', 'app-template.json');
+}
+
+export async function readAppTemplateWorkspaceMarker(
+  templateRoot: string,
+): Promise<AppTemplateWorkspaceMarker> {
+  const marker = JSON.parse(
+    await readFile(appTemplateWorkspaceMarkerPath(templateRoot), 'utf8'),
+  ) as Partial<AppTemplateWorkspaceMarker>;
+  if (
+    marker.kind !== 'app-template'
+    || typeof marker.templateId !== 'string'
+    || !marker.templateId.trim()
+    || (marker.pageType !== 'site' && marker.pageType !== 'assets')
+  ) {
+    throw new Error('当前工作区不是有效的应用模板');
+  }
+  return marker as AppTemplateWorkspaceMarker;
 }
 
 export async function openAppTemplateWorkspace(input: {
@@ -665,27 +699,56 @@ export async function openAppTemplateWorkspace(input: {
   name: string;
   description?: string;
   latestVersion?: string;
+  source?: 'local-resource' | 'memory-center';
 }): Promise<CreateUserAppResult & { templateId: string }> {
   const name = input.name.trim();
   if (!name) throw new Error('模板名称不能为空');
+  if (input.source === 'local-resource') {
+    assertBuiltinTemplateDebugModeAllowed(app.isPackaged);
+  }
   const templateId = input.templateId?.trim() || createUlid();
-  const appPath = join(DEFAULT_TEMPLATES_PARENT_DIR, templateId);
+  const appPath = resolveAppTemplateWorkspacePath(
+    DEFAULT_TEMPLATES_PARENT_DIR,
+    templateId,
+    input.source,
+  );
   const markerPath = appTemplateWorkspaceMarkerPath(appPath);
+
+  // An interrupted initialization can leave the isolated debug directory
+  // behind before its marker is written. Rebuild that incomplete directory
+  // from resources on the next open.
+  if (
+    input.source === 'local-resource'
+    && existsSync(appPath)
+    && !existsSync(markerPath)
+  ) {
+    await rm(appPath, { recursive: true, force: true });
+  }
 
   if (!existsSync(markerPath)) {
     let sourceDir: string;
     if (input.templateId) {
-      if (!input.latestVersion?.trim()) throw new Error('模板最新版本不能为空');
-      sourceDir = await appTemplatePackageManager.ensureTemplate(
-        templateId,
-        input.latestVersion,
-        input.pageType,
-      );
+      if (input.source === 'local-resource') {
+        const expectedTemplateId = `${input.pageType}-minimal`;
+        if (templateId !== expectedTemplateId) throw new Error('本地内置模板与应用类型不一致');
+        sourceDir = resolveLocalBuiltinTemplateDir(templateId as 'site-minimal' | 'assets-minimal');
+      } else {
+        if (!input.latestVersion?.trim()) throw new Error('模板最新版本不能为空');
+        sourceDir = await appTemplatePackageManager.ensureTemplate(
+          templateId,
+          input.latestVersion,
+          input.pageType,
+        );
+      }
     } else {
       sourceDir = resolveLocalBuiltinTemplateDir(`${input.pageType}-minimal`);
     }
-    await mkdir(DEFAULT_TEMPLATES_PARENT_DIR, { recursive: true });
-    await cp(sourceDir, appPath, { recursive: true });
+    await mkdir(dirname(appPath), { recursive: true });
+    if (input.source === 'local-resource' || !input.templateId) {
+      await initializeBuiltinTemplateDebugWorkspace(sourceDir, appPath);
+    } else {
+      await cp(sourceDir, appPath, { recursive: true });
+    }
 
     const manifestPath = join(appPath, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
@@ -705,6 +768,10 @@ export async function openAppTemplateWorkspace(input: {
       name,
       description: input.description?.trim() || '',
       latestVersion: input.latestVersion,
+      source: input.source ?? (input.templateId ? 'memory-center' : undefined),
+      sourceFingerprint: input.source === 'local-resource'
+        ? await fingerprintBuiltinTemplateTree(sourceDir)
+        : undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -741,6 +808,54 @@ export async function openAppTemplateWorkspace(input: {
   return { workspaceId, appPath, workspaceName: workspace.name ?? name, templateId };
 }
 
+async function resolveBuiltinTemplateDebugContext(workspaceId: string): Promise<{
+  workspaceRoot: string;
+  resourcesRoot: string;
+}> {
+  assertBuiltinTemplateDebugModeAllowed(app.isPackaged);
+  const workspaceRoot = await getWorkspaceRootPath(workspaceId);
+  if (!workspaceRoot) throw new Error('模板调试工作区不存在');
+  const marker = await readAppTemplateWorkspaceMarker(workspaceRoot);
+  if (marker.source !== 'local-resource') {
+    throw new Error('当前工作区不是本地内置模板调试工作区');
+  }
+  const expectedTemplateId = `${marker.pageType}-minimal` as 'site-minimal' | 'assets-minimal';
+  if (marker.templateId !== expectedTemplateId) {
+    throw new Error('本地内置模板与应用类型不一致');
+  }
+  return {
+    workspaceRoot,
+    resourcesRoot: dirname(resolveLocalBuiltinTemplateDir(expectedTemplateId)),
+  };
+}
+
+export async function getBuiltinAppTemplateDebugStatus(workspaceId: string) {
+  const workspaceRoot = await getWorkspaceRootPath(workspaceId);
+  if (!workspaceRoot) throw new Error('模板调试工作区不存在');
+  const marker = await readAppTemplateWorkspaceMarker(workspaceRoot);
+  const expectedTemplateId = `${marker.pageType}-minimal` as 'site-minimal' | 'assets-minimal';
+  if (marker.source !== 'local-resource' || marker.templateId !== expectedTemplateId) {
+    return { isBuiltinDebug: false, sourceChanged: false, changes: [] };
+  }
+  assertBuiltinTemplateDebugModeAllowed(app.isPackaged);
+  return inspectBuiltinTemplateDebugWorkspace({
+    workspaceRoot,
+    resourcesRoot: dirname(resolveLocalBuiltinTemplateDir(expectedTemplateId)),
+  });
+}
+
+export async function syncBuiltinAppTemplateDebugWorkspace(workspaceId: string) {
+  const context = await resolveBuiltinTemplateDebugContext(workspaceId);
+  return syncBuiltinTemplateDebugWorkspace(context);
+}
+
+export async function resetBuiltinAppTemplateDebugWorkspace(workspaceId: string) {
+  const context = await resolveBuiltinTemplateDebugContext(workspaceId);
+  const result = await resetBuiltinTemplateDebugWorkspace(context);
+  await restartApp(workspaceId, context.workspaceRoot);
+  return result;
+}
+
 export async function publishAppTemplateWorkspace(input: {
   workspaceId: string;
 }): Promise<Awaited<ReturnType<typeof appTemplateApiClient.publish>>> {
@@ -748,7 +863,8 @@ export async function publishAppTemplateWorkspace(input: {
   if (!appPath) throw new Error('模板工作区不存在');
   const markerPath = appTemplateWorkspaceMarkerPath(appPath);
   if (!existsSync(markerPath)) throw new Error('当前工作区不是应用模板');
-  const marker = JSON.parse(await readFile(markerPath, 'utf8')) as AppTemplateWorkspaceMarker;
+  const marker = await readAppTemplateWorkspaceMarker(appPath);
+  assertTemplateWorkspaceCanPublish(marker.source);
   const manifest = JSON.parse(
     await readFile(join(appPath, 'manifest.json'), 'utf8'),
   ) as Record<string, unknown>;
@@ -1471,13 +1587,27 @@ export interface AppCheckpoint {
   timestamp: number;
 }
 
-export async function createCheckpoint(appPath: string, message: string): Promise<boolean> {
-  if (!(await isGitAvailable())) return false;
+export type AppCheckpointCreationStatus = 'created' | 'clean-head' | 'failed';
+
+export async function createCheckpointWithStatus(
+  appPath: string,
+  message: string,
+): Promise<AppCheckpointCreationStatus> {
+  if (!(await isGitAvailable())) return 'failed';
   const status = await runGit(appPath, ['status', '--porcelain']);
-  if (!status.ok || !status.output) return false; // no changes => no checkpoint
-  await runGit(appPath, ['add', '-A']);
+  if (!status.ok) return 'failed';
+  if (!status.output) {
+    const head = await runGit(appPath, ['rev-parse', '--verify', 'HEAD']);
+    return head.ok ? 'clean-head' : 'failed';
+  }
+  const add = await runGit(appPath, ['add', '-A']);
+  if (!add.ok) return 'failed';
   const commit = await runGit(appPath, ['commit', '-m', message || '应用更新']);
-  return commit.ok;
+  return commit.ok ? 'created' : 'failed';
+}
+
+export async function createCheckpoint(appPath: string, message: string): Promise<boolean> {
+  return (await createCheckpointWithStatus(appPath, message)) === 'created';
 }
 
 export async function listCheckpoints(appPath: string, limit = 20): Promise<AppCheckpoint[]> {
@@ -2097,7 +2227,7 @@ export async function listAppDevAssistSkills(appPath: string): Promise<AppDevAss
 
 /** Bake default assist skills into a user app (idempotent). */
 async function ensureDefaultAppDevAssistSkills(appPath: string): Promise<void> {
-  const defaults = ['openspec', 'nl-page-from-sai'] as const;
+  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual'] as const;
   for (const skillId of defaults) {
     const installed = join(appPath, 'openspec', 'skills', skillId, 'SKILL.md');
     if (existsSync(installed)) continue;

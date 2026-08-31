@@ -3,12 +3,29 @@ import { app } from 'electron';
 
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { assertInternalHostApiRequest } from '../internal-request-auth';
 import { appTemplateApiClient } from '../../services/app-template-api-client';
 import { listLocalBuiltinAppTemplates } from '../../services/app-template-package-manager';
 import {
+  getBuiltinAppTemplateDebugStatus,
   openAppTemplateWorkspace,
   publishAppTemplateWorkspace,
+  resetBuiltinAppTemplateDebugWorkspace,
+  syncBuiltinAppTemplateDebugWorkspace,
 } from '../../services/app-dev-service';
+import {
+  applyAppTemplateSourceImport,
+  cancelAppTemplateSourceImport,
+  getAppTemplateImportStatus,
+  prepareAppTemplateSourceImport,
+} from '../../services/app-template-source-import-service';
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw Object.assign(new Error(`${field} 不能为空`), { statusCode: 400 });
+  }
+  return value.trim();
+}
 
 export async function handleAppTemplateRoutes(
   req: IncomingMessage,
@@ -32,8 +49,8 @@ export async function handleAppTemplateRoutes(
       if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
         throw Object.assign(new Error('pageSize 必须是 1 到 100 的整数'), { statusCode: 400 });
       }
-      const localItems = !app.isPackaged && rawPageType
-        ? await listLocalBuiltinAppTemplates(undefined, rawPageType)
+      const localItems = !app.isPackaged
+        ? await listLocalBuiltinAppTemplates(undefined, rawPageType ?? undefined)
         : [];
       let page;
       try {
@@ -65,6 +82,7 @@ export async function handleAppTemplateRoutes(
         name?: string;
         description?: string;
         latestVersion?: string;
+        source?: 'local-resource' | 'memory-center';
       }>(req);
       if (body.pageType !== 'site' && body.pageType !== 'assets') {
         throw Object.assign(new Error('pageType 仅支持 site 或 assets'), { statusCode: 400 });
@@ -75,6 +93,105 @@ export async function handleAppTemplateRoutes(
         name: body.name ?? '',
         description: body.description,
         latestVersion: body.latestVersion,
+        source: body.source,
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/status'
+      && req.method === 'GET'
+    ) {
+      assertInternalHostApiRequest(req);
+      const result = await getAppTemplateImportStatus({
+        workspaceId: requireString(url.searchParams.get('workspaceId'), 'workspaceId'),
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/builtin-debug/status'
+      && req.method === 'GET'
+    ) {
+      assertInternalHostApiRequest(req);
+      const result = await getBuiltinAppTemplateDebugStatus(
+        requireString(url.searchParams.get('workspaceId'), 'workspaceId'),
+      );
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/builtin-debug/sync'
+      && req.method === 'POST'
+    ) {
+      assertInternalHostApiRequest(req);
+      const body = await parseJsonBody<{ workspaceId?: unknown; confirmed?: unknown }>(req);
+      if (body.confirmed !== true) {
+        throw Object.assign(new Error('同步回内置模板前必须明确确认'), { statusCode: 400 });
+      }
+      const result = await syncBuiltinAppTemplateDebugWorkspace(
+        requireString(body.workspaceId, 'workspaceId'),
+      );
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/builtin-debug/reset'
+      && req.method === 'POST'
+    ) {
+      assertInternalHostApiRequest(req);
+      const body = await parseJsonBody<{ workspaceId?: unknown; confirmed?: unknown }>(req);
+      if (body.confirmed !== true) {
+        throw Object.assign(new Error('重新加载内置模板前必须明确确认'), { statusCode: 400 });
+      }
+      const result = await resetBuiltinAppTemplateDebugWorkspace(
+        requireString(body.workspaceId, 'workspaceId'),
+      );
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/prepare'
+      && req.method === 'POST'
+    ) {
+      assertInternalHostApiRequest(req);
+      const body = await parseJsonBody<{ workspaceId?: unknown; sourcePath?: unknown }>(req);
+      const result = await prepareAppTemplateSourceImport({
+        workspaceId: requireString(body.workspaceId, 'workspaceId'),
+        sourcePath: typeof body.sourcePath === 'string' ? body.sourcePath : undefined,
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/apply'
+      && req.method === 'POST'
+    ) {
+      assertInternalHostApiRequest(req);
+      const body = await parseJsonBody<{ workspaceId?: unknown; importToken?: unknown }>(req);
+      const result = await applyAppTemplateSourceImport({
+        workspaceId: requireString(body.workspaceId, 'workspaceId'),
+        importToken: requireString(body.importToken, 'importToken'),
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (
+      url.pathname === '/api/app-templates/workspaces/import-source/cancel'
+      && req.method === 'POST'
+    ) {
+      assertInternalHostApiRequest(req);
+      const body = await parseJsonBody<{ workspaceId?: unknown; importToken?: unknown }>(req);
+      const result = await cancelAppTemplateSourceImport({
+        workspaceId: requireString(body.workspaceId, 'workspaceId'),
+        importToken: requireString(body.importToken, 'importToken'),
       });
       sendJson(res, 200, { success: true, ...result });
       return true;

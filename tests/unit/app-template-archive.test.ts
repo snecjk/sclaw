@@ -21,6 +21,7 @@ describe('buildAppTemplateArchive', () => {
     await mkdir(join(root, 'node_modules', 'secret'), { recursive: true });
     await mkdir(join(root, 'dist'), { recursive: true });
     await mkdir(join(root, '.sclaw'), { recursive: true });
+    await mkdir(join(root, '.sclaw', 'local'), { recursive: true });
     await writeFile(join(root, 'manifest.json'), JSON.stringify({
       schemaVersion: 1,
       templateId: 'site-minimal',
@@ -35,6 +36,10 @@ describe('buildAppTemplateArchive', () => {
     await writeFile(join(root, 'node_modules', 'secret', 'index.js'), 'secret');
     await writeFile(join(root, 'dist', 'index.js'), 'built');
     await writeFile(join(root, '.sclaw', 'app-template.json'), '{"local":true}');
+    await writeFile(
+      join(root, '.sclaw', 'local', 'template-source-import.json'),
+      JSON.stringify({ sourcePath: '/Users/example/private/source-project' }),
+    );
 
     const bytes = await buildAppTemplateArchive(root);
     const zip = await JSZip.loadAsync(bytes);
@@ -49,6 +54,11 @@ describe('buildAppTemplateArchive', () => {
     expect(zip.file('.env')).toBeNull();
     expect(zip.file('.env.secret')).toBeNull();
     expect(zip.file('.sclaw/app-template.json')).toBeNull();
+    expect(zip.file('.sclaw/local/template-source-import.json')).toBeNull();
+    const archiveText = await Promise.all(
+      names.map(async (name) => zip.file(name)?.async('string') ?? ''),
+    );
+    expect(archiveText.join('\n')).not.toContain('/Users/example/private/source-project');
     expect(zip.file('site-minimal/manifest.json')).toBeNull();
   });
 });

@@ -15,6 +15,10 @@ import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 
 type Filter = 'all' | CodeApplicationPageType;
 
+function itemKey(item: Pick<AppTemplateSummary, 'templateId' | 'source'>): string {
+  return `${item.source ?? 'memory-center'}:${item.templateId}`;
+}
+
 export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [items, setItems] = useState<AppTemplateSummary[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
@@ -47,7 +51,9 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
   if (!open) return null;
 
   const enterWorkspace = async (input: Parameters<typeof openAppTemplateWorkspace>[0]) => {
-    setOpeningId(input.templateId ?? 'new');
+    setOpeningId(input.templateId
+      ? `${input.source ?? 'memory-center'}:${input.templateId}`
+      : 'new');
     try {
       const result = await openAppTemplateWorkspace(input);
       useAppPlazaShellStore.getState().openOrFocusDevAppTab(
@@ -139,7 +145,7 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {visibleItems.map((item) => (
-                <article key={item.templateId} className="rounded-xl border border-border p-4">
+                <article key={itemKey(item)} className="rounded-xl border border-border p-4">
                   <div className="flex items-start gap-3">
                     <div className="rounded-lg bg-violet-500/10 p-2 text-violet-600"><FileCode2 className="h-4 w-4" /></div>
                     <div className="min-w-0 flex-1">
@@ -156,16 +162,19 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={openingId === item.templateId}
+                      disabled={openingId === itemKey(item)}
                       onClick={() => void enterWorkspace({
                         templateId: item.templateId,
                         pageType: item.pageType,
                         name: item.name,
                         description: item.description,
                         latestVersion: item.latestVersion,
+                        source: item.source,
                       })}
                     >
-                      {openingId === item.templateId ? '打开中…' : '编辑'}
+                      {openingId === itemKey(item)
+                        ? '打开中…'
+                        : item.source === 'local-resource' ? '调试' : '编辑'}
                     </Button>
                   </div>
                 </article>

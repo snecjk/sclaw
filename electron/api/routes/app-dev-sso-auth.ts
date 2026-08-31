@@ -24,11 +24,6 @@ export async function handleAppDevSsoAuthRoute(
     sendJson(res, 403, { success: false, error: 'LOCAL_AUTH_SESSION_DENIED' });
     return true;
   }
-  if (session.pageType !== 'site') {
-    sendJson(res, 403, { success: false, error: 'SSO_AUTH_PAGE_TYPE_UNSUPPORTED' });
-    return true;
-  }
-
   const auth = await getAuthState();
   const expiresAt = auth.user?.stoTokenExpiresAt
     ? Date.parse(auth.user.stoTokenExpiresAt)

@@ -38,9 +38,8 @@ describe('site-minimal SSO Auth plugin contract', () => {
     );
   });
 
-  it('uses the initialized plugin identity in requests and layout UI', () => {
+  it('uses the initialized plugin identity in requests and header UI', () => {
     expect(read('src/lib/request.ts')).toContain('getSsoAuth()');
-    expect(read('src/layouts/AppLayout.tsx')).toContain('getSsoAuth()');
-    expect(read('src/pages/HomePage.tsx')).toContain('getSsoAuth()');
+    expect(read('src/layouts/AppHeader.tsx')).toContain('getSsoAuth()');
   });
 });

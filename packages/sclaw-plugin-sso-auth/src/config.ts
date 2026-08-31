@@ -80,6 +80,13 @@ function resolveInput(explicit?: unknown): unknown {
   return undefined;
 }
 
+export function resolveStoSsoDeployEnv(hostname?: string): StoSsoDeployEnv {
+  const host = (hostname ?? (typeof window !== 'undefined' ? window.location.hostname : '')).toLowerCase();
+  if (host.includes('test') || host.includes('daily')) return 'daily';
+  if (host.includes('pre')) return 'stage';
+  return 'online';
+}
+
 export function readStoSsoAuthConfig(explicit?: unknown): StoSsoAuthConfig {
   const input = resolveInput(explicit);
   if (input === undefined) {
@@ -88,24 +95,27 @@ export function readStoSsoAuthConfig(explicit?: unknown): StoSsoAuthConfig {
   if (!isRecord(input)) invalid('SSO Auth 配置必须是对象');
   assertKnownFields(input, ROOT_FIELDS);
 
-  if (input.pageType !== 'site' && input.pageType !== 'assets') {
-    throw new StoSsoAuthError(
-      'SSO_AUTH_PAGE_TYPE_UNSUPPORTED',
-      'SSO Auth 插件不支持当前应用类型',
-    );
-  }
   if (input.protocolVersion !== 'sto-sso-auth/v1') invalid('不支持的 SSO Auth 协议版本');
 
-  const applicationId = requiredString(input.applicationId, 'applicationId');
+  const applicationId = input.applicationId === undefined
+    ? undefined
+    : requiredString(input.applicationId, 'applicationId');
   if (input.runtimeMode !== 'local' && input.runtimeMode !== 'published') {
     invalid('runtimeMode 必须是 local 或 published');
   }
-  if (!DEPLOY_ENVIRONMENTS.has(input.deployEnv as StoSsoDeployEnv)) {
+  const deployEnv = input.deployEnv === undefined || input.deployEnv === 'auto'
+    ? resolveStoSsoDeployEnv()
+    : input.deployEnv as StoSsoDeployEnv;
+  if (!DEPLOY_ENVIRONMENTS.has(deployEnv)) {
     invalid('deployEnv 必须是 daily、stage 或 online');
   }
 
-  const deployEnv = input.deployEnv as StoSsoDeployEnv;
-  if (input.pageType === 'assets') {
+  const pageType = input.pageType === undefined ? 'site' : input.pageType;
+  if (pageType !== 'site' && pageType !== 'assets') {
+    throw new StoSsoAuthError('SSO_AUTH_PAGE_TYPE_UNSUPPORTED', 'SSO Auth 插件不支持当前应用类型');
+  }
+  if (pageType === 'assets') {
+    if (!applicationId) invalid('Assets 本地开发必须提供 applicationId');
     if (input.runtimeMode !== 'local' || deployEnv !== 'daily' || input.sso !== undefined) {
       throw new StoSsoAuthError(
         'SSO_AUTH_PAGE_TYPE_UNSUPPORTED',
@@ -114,7 +124,7 @@ export function readStoSsoAuthConfig(explicit?: unknown): StoSsoAuthConfig {
     }
     return {
       protocolVersion: 'sto-sso-auth/v1',
-      applicationId,
+      applicationId: applicationId!,
       pageType: 'assets',
       runtimeMode: 'local',
       deployEnv: 'daily',
@@ -139,12 +149,12 @@ export function readStoSsoAuthConfig(explicit?: unknown): StoSsoAuthConfig {
     }
     sso = { ...approved };
   } else if (input.runtimeMode === 'published') {
-    invalid('发布态 Site 必须提供完整的 sso 配置');
+    sso = { ...APPROVED_SSO_CONFIG[deployEnv] };
   }
 
   return {
     protocolVersion: 'sto-sso-auth/v1',
-    applicationId,
+    ...(applicationId ? { applicationId } : {}),
     pageType: 'site',
     runtimeMode: input.runtimeMode,
     deployEnv,

@@ -60,4 +60,34 @@ describe('AppTemplateManagerDialog', () => {
     expect(openTabMock).toHaveBeenCalledWith('workspace-1', '模板：最简独立站点', 'template');
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('将本地内置模板作为调试工作区打开', async () => {
+    listMock.mockResolvedValueOnce({
+      items: [{
+        templateId: 'assets-minimal',
+        pageType: 'assets',
+        name: '最简托管应用',
+        description: '本地资源模板',
+        status: 'ACTIVE',
+        isBuiltin: true,
+        latestVersion: 'local',
+        source: 'local-resource',
+        createdAt: '',
+        updatedAt: '',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 100,
+    });
+    render(<AppTemplateManagerDialog open onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '调试' }));
+
+    await waitFor(() => expect(openWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({
+      templateId: 'assets-minimal',
+      pageType: 'assets',
+      latestVersion: 'local',
+      source: 'local-resource',
+    })));
+  });
 });

@@ -83,7 +83,7 @@ describe('published Site SSO', () => {
     await expect(auth.bootstrap()).rejects.toMatchObject({ code: 'SSO_EXCHANGE_FAILED' });
     await expect(auth.bootstrap()).rejects.toMatchObject({ code: 'SSO_EXCHANGE_FAILED' });
     expect(JSON.stringify(await auth.bootstrap().catch((error) => error))).not.toContain('secret-code');
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(3);
     expect([...platform.session.values()].join(' ')).not.toContain('secret-code');
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readStoSsoAuthConfig } from '../src/config';
+import { readStoSsoAuthConfig, resolveStoSsoDeployEnv } from '../src/config';
 
 const publishedSite = {
   protocolVersion: 'sto-sso-auth/v1',
@@ -16,6 +16,19 @@ const publishedSite = {
 } as const;
 
 describe('readStoSsoAuthConfig', () => {
+  it('infers SSO environment from the published hostname', () => {
+    expect(resolveStoSsoDeployEnv('page-test.sto.cn')).toBe('daily');
+    expect(resolveStoSsoDeployEnv('page-pre.sto.cn')).toBe('stage');
+    expect(resolveStoSsoDeployEnv('page.sto.cn')).toBe('online');
+  });
+
+  it('allows published Site config without application metadata', () => {
+    expect(readStoSsoAuthConfig({
+      protocolVersion: 'sto-sso-auth/v1',
+      runtimeMode: 'published',
+      deployEnv: 'daily',
+    })).toMatchObject({ pageType: 'site', deployEnv: 'daily', sso: publishedSite.sso });
+  });
   it('accepts the published Site configuration contract', () => {
     expect(readStoSsoAuthConfig(publishedSite)).toEqual(publishedSite);
   });

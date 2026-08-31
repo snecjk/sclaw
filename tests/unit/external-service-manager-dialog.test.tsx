@@ -45,6 +45,7 @@ describe('ExternalServiceManagerDialog', () => {
         latestVersion: '1.0.0',
         authType: 'stoToken',
         hasSdk: false,
+        hasUsageGuide: false,
         updatedAt: '2026-08-27T00:00:00Z',
       }],
       total: 1,

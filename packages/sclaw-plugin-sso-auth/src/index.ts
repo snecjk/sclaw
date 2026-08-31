@@ -6,6 +6,10 @@ import type { BootstrapSsoAuthOptions, StoSsoAuth } from './types';
 let currentAuth: StoSsoAuth | undefined;
 let bootstrapPromise: Promise<StoSsoAuth> | undefined;
 
+function resolveFetch(customFetch?: typeof fetch): typeof fetch {
+  return (customFetch ?? globalThis.fetch).bind(globalThis);
+}
+
 export async function bootstrapSsoAuth(
   options: BootstrapSsoAuthOptions = {},
 ): Promise<StoSsoAuth> {
@@ -14,7 +18,7 @@ export async function bootstrapSsoAuth(
       const config = readStoSsoAuthConfig(options.config);
       const auth = createSsoAuthProvider({
         config,
-        fetch: options.fetch ?? globalThis.fetch,
+        fetch: resolveFetch(options.fetch),
         platform: options.platform,
       });
       await auth.bootstrap();
@@ -35,7 +39,7 @@ export function getSsoAuth(): StoSsoAuth {
   return currentAuth;
 }
 
-export { readStoSsoAuthConfig } from './config';
+export { readStoSsoAuthConfig, resolveStoSsoDeployEnv } from './config';
 export { StoSsoAuthError, STO_SSO_AUTH_ERROR_CODES } from './errors';
 export type { SsoBrowserPlatform } from './browser-platform';
 export type * from './types';

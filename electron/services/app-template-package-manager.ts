@@ -63,31 +63,34 @@ export function resolveLocalBuiltinTemplateDir(
 
 export async function listLocalBuiltinAppTemplates(
   resourcesRoot: string | undefined,
-  pageType: AppTemplatePageType,
+  pageType?: AppTemplatePageType,
 ): Promise<AppTemplateSummary[]> {
-  const templateId = `${pageType}-minimal` as const;
-  const root = resolveLocalBuiltinTemplateDir(templateId, resourcesRoot ?? builtinTemplateResourcesRoot());
-  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as {
-    templateId?: string;
-    pageType?: string;
-    name?: string;
-    description?: string;
-  };
-  if (manifest.templateId !== templateId || manifest.pageType !== pageType) {
-    throw new Error(`内置模板 manifest.json 与资源目录不一致: ${templateId}`);
-  }
-  return [{
-    templateId,
-    pageType,
-    name: manifest.name?.trim() || templateId,
-    description: manifest.description?.trim() || '',
-    status: 'ACTIVE',
-    isBuiltin: true,
-    latestVersion: 'local',
-    createdAt: '',
-    updatedAt: '',
-    source: 'local-resource',
-  }];
+  const pageTypes: AppTemplatePageType[] = pageType ? [pageType] : ['site', 'assets'];
+  return Promise.all(pageTypes.map(async (currentPageType) => {
+    const templateId = `${currentPageType}-minimal` as const;
+    const root = resolveLocalBuiltinTemplateDir(templateId, resourcesRoot ?? builtinTemplateResourcesRoot());
+    const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as {
+      templateId?: string;
+      pageType?: string;
+      name?: string;
+      description?: string;
+    };
+    if (manifest.templateId !== templateId || manifest.pageType !== currentPageType) {
+      throw new Error(`内置模板 manifest.json 与资源目录不一致: ${templateId}`);
+    }
+    return {
+      templateId,
+      pageType: currentPageType,
+      name: manifest.name?.trim() || templateId,
+      description: manifest.description?.trim() || '',
+      status: 'ACTIVE' as const,
+      isBuiltin: true,
+      latestVersion: 'local',
+      createdAt: '',
+      updatedAt: '',
+      source: 'local-resource' as const,
+    };
+  }));
 }
 
 function normalizedEtag(value: string | null): string | null {
