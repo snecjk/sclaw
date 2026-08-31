@@ -38,11 +38,11 @@ describe('built-in app template resources', () => {
     );
 
     expect(sitePackage.dependencies).toMatchObject({
-      '@sto/sclaw-plugin-sso-auth': '0.1.3',
+      '@sto/sclaw-plugin-sso-auth': '0.1.5',
     });
     expect(siteMain).toContain('bootstrapInstalledPlugins');
     expect(assetsPackage.dependencies).toMatchObject({
-      '@sto/sclaw-plugin-sso-auth': '0.1.3',
+      '@sto/sclaw-plugin-sso-auth': '0.1.5',
     });
     expect(assetsMain).toContain('bootstrapSsoAuth');
     expect(assetsMain).toContain("runtimeMode === 'local'");
