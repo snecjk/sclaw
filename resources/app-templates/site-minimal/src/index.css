@@ -211,6 +211,10 @@ body {
   border-radius: var(--sto-radius-lg);
 }
 
+.content-section + .content-section {
+  margin-top: var(--sto-space-4);
+}
+
 .content-section-header {
   display: flex;
   justify-content: space-between;

@@ -144,4 +144,11 @@ describe('built-in app template resources', () => {
     expect(example).not.toContain('RequestError');
     expect(example).not.toContain('华东网点巡检');
   });
+
+  it('site 连续白卡模块保留 16px 纵向间距', () => {
+    const css = readFileSync(join(resources, 'site-minimal', 'src/index.css'), 'utf8');
+
+    expect(css).toContain('.content-section + .content-section');
+    expect(css).toContain('margin-top: var(--sto-space-4)');
+  });
 });
