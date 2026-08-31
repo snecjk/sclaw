@@ -21,6 +21,9 @@
 
 ## 调用边界
 
+- Agent 的服务发现与使用说明读取统一走 `sai-cli siteapp external-service list（keyword 可选）/describe`。
+- `sclaw:services` 与 `scripts/external-services.mjs` 仅为既有应用和管理流程兼容保留，不作为 Agent 推荐的发现入口。
+- CLI `describe` 只提供文档上下文，不代表 npm 包已安装、服务已绑定或本地代理已生成。
 - 业务代码只从 `src/sclaw/services.generated.ts` 获取服务客户端。
 - 请求 path 必须是以 `/` 开头的相对路径，禁止传入绝对 URL或协议相对 URL。
 - `auth.type: "stoToken"` 仅允许绑定 `sto.cn` 或其子域名。

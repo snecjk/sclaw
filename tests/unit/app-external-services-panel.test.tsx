@@ -30,6 +30,7 @@ describe('AppExternalServicesPanel', () => {
         latestVersion: '1.0.0',
         authType: 'stoToken',
         hasSdk: true,
+        hasUsageGuide: true,
         updatedAt: '2026-08-27T00:00:00Z',
       }], total: 1, pageNum: 1, pageSize: 20,
     });

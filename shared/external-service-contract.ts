@@ -48,6 +48,7 @@ export interface ExternalServiceSummary {
   latestVersion: string | null;
   authType: ExternalServiceAuthType;
   hasSdk: boolean;
+  hasUsageGuide: boolean;
   updatedAt: string;
 }
 

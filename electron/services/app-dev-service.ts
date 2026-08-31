@@ -253,10 +253,15 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 
 ## 自然语言建页与接口（强制）
 - 用户用自然语言生成页面时：若页面**需要调业务接口**（查询/列表/看板取数等），且用户**尚未指定**要用的 sai-cli 指令或接口：
-  - **先引导用户指定 CLI 接口**，再生成并绑定真实取数；未指定前不要臆造 URL / 命令路径去接真接口
-  - 引导话术示例：「这个页面需要接业务数据。请告诉我要用哪条 sai-cli 指令（例如：一口价运费查询），指定后我再按该指令的参数和字段生成搜索/列表。」
-  - 若用户说不清命令名，可协助执行 \`sai-cli discover "<业务词>"\`，把结果列出来**请用户指定一条**；仍以用户指定为准
+  - 先执行 \`sai-cli siteapp external-service list --keyword "<业务词>" -f json\`，只读取平台已发布服务的摘要；用户明确要浏览全部服务时执行不带 keyword 的 \`list\`
+  - 唯一候选确定后，使用摘要中的 \`serviceId\` 和 \`latestVersion\` 执行 \`sai-cli siteapp external-service describe --serviceId <serviceId> --version <latestVersion> -f json\`
+  - 一次只 describe 一个服务；多个合理候选时先让用户选择，\`hasUsageGuide=false\` 或说明不足时向用户确认，禁止根据名称或描述猜测接口
+  - 平台服务没有匹配结果时，回退原始 sai-cli 接口发现流程：
+    - **先引导用户指定 CLI 接口**，再生成并绑定真实取数；未指定前不要臆造 URL / 命令路径去接真接口
+    - 引导话术示例：「这个页面需要接业务数据。请告诉我要用哪条 sai-cli 指令（例如：一口价运费查询），指定后我再按该指令的参数和字段生成搜索/列表。」
+    - 若用户说不清命令名，可协助执行 \`sai-cli discover "<业务词>"\`，把结果列出来**请用户指定一条**；仍以用户指定为准
 - 用户已指定 CLI 后：\`sai-cli help\` → 若有绝对 HTTP 地址，先执行 \`node scripts/ensure-dev-proxy.mjs "<绝对URL>"\`，把输出的 \`relativeUrl\`（\`/proxy/<key>/...\`）写入 action-registry 或页面；**禁止**页面直连 \`https://*.sto.cn\`（本地 CORS）
+- 已通过 usageGuide 明确接口后：若有绝对 HTTP 地址，同样先执行 \`node scripts/ensure-dev-proxy.mjs "<绝对URL>"\`，再使用输出的 \`relativeUrl\`
 - 取数约定：代码里统一写 \`/proxy/<key>/...\`；**开发**由 Vite proxy 转发，**生产**由 \`src/lib/request.ts\` 按 \`contracts/dev-proxy.v1.json\` 还原为真实域名（禁止把 \`/proxy\` 当生产静态路径）
 - 预览出现 CORS/直连失败：对报错 URL 再跑 ensure-dev-proxy，改 url 为 relativeUrl，并重启预览
 - 生产 Network 若仍请求 \`https://page-*.sto.cn/proxy/...\`：检查是否未走 request 封装或缺 proxy 合约 key
