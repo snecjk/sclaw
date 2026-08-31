@@ -74,10 +74,13 @@ function installControlRecipes(theme: 'light' | 'dark'): () => void {
   });
   const style = document.createElement('style');
   style.dataset.dataCenterToolbarThemeTest = '';
-  style.textContent = root.toString().replace(
+  const themeVariables = Array.from(declarations.entries())
+    .map(([token, value]) => `${token}: ${value};`)
+    .join('\n');
+  style.textContent = `:root {\n${themeVariables}\n}\n${root.toString().replace(
     /var\((--sto-[\w-]+)\)/g,
     (match, token: string) => declarations.has(token) ? resolveToken(token, declarations) : match,
-  );
+  )}`;
   document.documentElement.className = theme === 'dark' ? 'dark' : '';
   document.head.append(style);
   return () => {
@@ -136,6 +139,8 @@ describe('data center toolbar theme', () => {
 
     const search = screen.getByPlaceholderText('搜索文件或文件夹').parentElement;
     const association = screen.getByRole('button', { name: '关联：全部' });
+    const viewOption = screen.getByRole('button', { name: '网格视图' });
+    const viewSwitch = viewOption.parentElement;
     const createFolder = screen.getByRole('button', { name: '新建文件夹' });
 
     for (const control of [search, association, createFolder]) {
@@ -145,6 +150,10 @@ describe('data center toolbar theme', () => {
       expect(computed.backgroundColor).toBe('rgb(40, 40, 40)');
       expect(computed.borderTopColor).toBe('rgba(255, 255, 255, 0.08)');
     }
+    if (!(viewSwitch instanceof HTMLElement)) throw new Error('Expected view toolbar surface');
+    viewOption.dataset.stoState = 'hover';
+    expect(getComputedStyle(viewOption).backgroundColor).toBe('rgb(40, 40, 40)');
+    expect(getComputedStyle(viewSwitch).borderTopColor).toBe('rgba(255, 255, 255, 0.08)');
     dispose();
   });
 
@@ -155,5 +164,57 @@ describe('data center toolbar theme', () => {
     const selectedView = screen.getByRole('button', { name: '列表视图' });
     expect(getComputedStyle(selectedView).backgroundColor).toBe('rgb(229, 230, 235)');
     dispose();
+  });
+
+  it('keeps the search input text semantics and gives it a persistent accessible name', () => {
+    renderToolbar();
+
+    expect(screen.getByRole('textbox', { name: '搜索文件或文件夹' })).toBeTruthy();
+  });
+
+  it('shows a focus ring on the search surface when its input receives keyboard focus', () => {
+    const dispose = installControlRecipes('dark');
+    const searchSurface = document.createElement('label');
+    searchSurface.className = 'sto-control sto-control--outline sto-control--neutral-outline-default sto-control--data-center-toolbar-interactive';
+    const searchInput = document.createElement('input');
+    searchSurface.append(searchInput);
+    document.body.append(searchSurface);
+
+    searchInput.focus();
+    expect(searchSurface.matches(':focus-within')).toBe(true);
+    searchSurface.dataset.stoState = 'focus';
+
+    expect(getComputedStyle(searchSurface).boxShadow).not.toBe('');
+    expect(getComputedStyle(searchSurface).boxShadow).not.toBe('none');
+    searchSurface.remove();
+    dispose();
+  });
+
+  it('uses the common light hover surface for an unselected view option', () => {
+    const dispose = installControlRecipes('light');
+    renderToolbar();
+
+    const gridView = screen.getByRole('button', { name: '网格视图' });
+    gridView.dataset.stoState = 'hover';
+
+    expect(getComputedStyle(gridView).backgroundColor).toBe('rgb(242, 243, 245)');
+    dispose();
+  });
+
+  it('keeps the shared toolbar geometry across control families', () => {
+    renderToolbar();
+
+    const controls = [
+      screen.getByPlaceholderText('搜索文件或文件夹').parentElement,
+      screen.getByRole('button', { name: '关联：全部' }),
+      screen.getByRole('button', { name: '列表视图' }).parentElement,
+      screen.getByRole('button', { name: '新建文件夹' }),
+    ];
+
+    for (const control of controls) {
+      if (!(control instanceof HTMLElement)) throw new Error('Expected toolbar control shell');
+      expect(control.className).toContain('h-[34px]');
+      expect(control.className).toContain('rounded-[10px]');
+    }
   });
 });

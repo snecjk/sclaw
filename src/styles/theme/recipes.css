@@ -340,14 +340,17 @@
     color: var(--sto-control-neutral-foreground);
   }
 
-  .sto-control--data-center-toolbar-interactive:is(:hover, :focus-within, [data-state='open'], [data-sto-state='hover']) {
+  .sto-control--data-center-toolbar-interactive:is(:hover, [data-state='open'], [data-sto-state='hover']) {
     background-color: var(--sto-control-hover-bg);
     border-color: var(--sto-border-default);
   }
 
-  .sto-segment-item--data-center-view:is(:hover, [data-sto-state='hover'], [aria-pressed='true']) {
-    background-color: var(--sto-control-active-bg);
-    color: var(--sto-text-primary);
+  .sto-control--data-center-toolbar-interactive:is(:focus-within, [data-sto-state='focus']) {
+    background-color: var(--sto-control-hover-bg);
+    border-color: var(--sto-border-default);
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: var(--sto-control-focus-shadow);
   }
 
   /* Navigation recipe: Radix highlighted/open remain native meanings. */
@@ -530,6 +533,16 @@
     outline: 2px solid transparent;
     outline-offset: 2px;
     box-shadow: var(--sto-control-focus-shadow);
+  }
+
+  .sto-segment-item.sto-segment-item--data-center-view:is(:hover, [data-sto-state='hover']) {
+    background-color: var(--sto-control-hover-bg);
+    color: var(--sto-text-primary);
+  }
+
+  .sto-segment-item--data-center-view[aria-pressed='true'] {
+    background-color: var(--sto-control-active-bg);
+    color: var(--sto-text-primary);
   }
 
   /* Overlay states remain color-stable; containers gain no new focus outline. */

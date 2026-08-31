@@ -13,12 +13,15 @@ export function DataCenterToolbarSearch({
   value: string;
   onValueChange: (value: string) => void;
 }) {
+  const accessibleLabel = inputProps['aria-label'] ?? placeholder;
+
   return (
     <label className={cn(dataCenterToolbarInteractiveSurfaceClass, 'flex w-[300px] items-center gap-2 px-3')}>
       <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       <input
         {...inputProps}
-        type="search"
+        type="text"
+        aria-label={accessibleLabel}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onValueChange(event.target.value)}
