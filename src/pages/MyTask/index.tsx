@@ -43,10 +43,8 @@ import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
-import {
-  TemplateSelectModal,
-  buildRecommendTaskMessage,
-} from './components/TemplateSelectModal';
+import { TemplateSelectModal } from './components/TemplateSelectModal';
+import { buildRecommendTaskMessage } from './components/template-select-message';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { MyTaskSection, TaskView, TaskViewModel, ExecutionRecord } from './types';
@@ -285,7 +283,7 @@ export default function MyTask() {
         toast.error(String(err));
       }
     },
-    [toggleJob]
+    [t, toggleJob]
   );
 
   const handleTrigger = useCallback(
@@ -356,7 +354,7 @@ export default function MyTask() {
         useChatStore.getState().releaseScheduledSessionActivating(sessionKey);
       }
     },
-    [triggerJob, navigate, location.pathname, t]
+    [triggerJob, navigate, location.pathname]
   );
 
   const handleSave = useCallback(

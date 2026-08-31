@@ -80,10 +80,6 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
-      "file": "src/components/icons/composer-toolbar-icons.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
       "file": "src/components/input-composer/input-composer-toolbar.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
@@ -153,10 +149,6 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
     },
     {
       "file": "src/components/skill-plaza/SkillCard.tsx",
-      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
-    },
-    {
-      "file": "src/components/skill-plaza/SkillDetailModal.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
@@ -261,6 +253,10 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
     },
     {
       "file": "src/pages/MyTask/components/RecordDetailModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/MyTask/components/SchedulePicker.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {

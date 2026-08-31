@@ -22,6 +22,40 @@ interface SkillPlazaHeaderProps {
   onUploadSuccess?: () => void;
 }
 
+function DebouncedSkillSearch({
+  searchQuery,
+  onSearchQueryChange,
+  placeholder,
+}: {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [inputValue, setInputValue] = useState(searchQuery);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      if (inputValue !== searchQuery) onSearchQueryChange(inputValue);
+    }, 300);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [inputValue, searchQuery, onSearchQueryChange]);
+
+  return (
+    <StoSearchField
+      value={inputValue}
+      onValueChange={setInputValue}
+      placeholder={placeholder}
+      aria-label={placeholder}
+      className="h-9 min-w-[200px] max-w-[320px] flex-1"
+      inputClassName="font-medium leading-none"
+    />
+  );
+}
+
 /**
  * 技能广场顶栏 + 保留「技能广场 | 我的技能」页签。
  */
@@ -41,23 +75,6 @@ export function SkillPlazaHeader({
 
   const connectorsLoading = useConnectorsStore((s) => s.loading);
   const connectorsFetchList = useConnectorsStore((s) => s.fetchList);
-
-  const [inputValue, setInputValue] = useState(searchQuery);
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      if (inputValue !== searchQuery) setSearchQuery(inputValue);
-    }, 300);
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, [inputValue, searchQuery, setSearchQuery]);
-
-  useEffect(() => {
-    setInputValue(searchQuery);
-  }, [searchQuery]);
 
   const handleOpenFolder = async () => {
     try {
@@ -105,13 +122,11 @@ export function SkillPlazaHeader({
 
         {isSkills ? (
           <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
-            <StoSearchField
-              value={inputValue}
-              onValueChange={setInputValue}
+            <DebouncedSkillSearch
+              key={searchQuery}
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
               placeholder={t('plaza.searchPlaceholderShort', { defaultValue: '搜索技能' })}
-              aria-label={t('plaza.searchPlaceholderShort', { defaultValue: '搜索技能' })}
-              className="h-9 min-w-[200px] max-w-[320px] flex-1"
-              inputClassName="font-medium leading-none"
             />
 
             <StoOutlineButton

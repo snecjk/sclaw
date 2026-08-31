@@ -148,7 +148,7 @@ describe('Task 8 feature theme contracts', () => {
     expect(moreAppsPageSource).toContain('sto-navigation-item__count');
     expect(appCardSource).toContain('sto-control--icon-muted');
     expect(appCardSource).toContain('sto-control--brand-solid');
-    expect(addExternalAppModalSource).toContain('sto-overlay--raised-dialog');
+    expect(addExternalAppModalSource).toContain('sto-overlay--dialog');
     expect(addExternalAppModalSource).toContain('sto-control--dialog-field');
     expect(addExternalAppModalSource).toContain('sto-control--dialog-secondary');
     expect(addExternalAppModalSource).toContain('sto-control--dialog-primary');

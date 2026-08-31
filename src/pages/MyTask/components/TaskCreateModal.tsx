@@ -1094,7 +1094,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs text-muted-foreground">{t('myTask.schedule.tooComplexToEdit')}</p>
                 {originalCronExpr ? (
-                  <code className="block overflow-x-auto rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 py-2 text-[12px] text-foreground dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)]">
+                  <code className="block overflow-x-auto rounded-[8px] border border-[var(--sto-code-display-border)] bg-[var(--sto-code-display-background)] px-3 py-2 text-[12px] text-foreground">
                     {originalCronExpr}
                   </code>
                 ) : null}

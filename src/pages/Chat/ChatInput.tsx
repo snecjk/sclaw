@@ -199,16 +199,22 @@ export function ChatInput({
     [agents, currentAgentId],
   );
   const selectedTarget = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === targetAgentId) ?? null,
-    [agents, targetAgentId],
+    () => (agents ?? []).find(
+      (agent) => agent.id === targetAgentId && agent.id !== currentAgentId,
+    ) ?? null,
+    [agents, currentAgentId, targetAgentId],
   );
+  const effectiveTargetAgentId = selectedTarget?.id ?? null;
   const showAgentPicker = false;
 
   const layout = composerLayout;
   const isHomeLayout = layout === 'home';
   const targetAgentIdRef = useRef<string | null>(null);
-  targetAgentIdRef.current = targetAgentId;
   const coreRef = useRef<ReturnType<typeof useInputComposerCore> | null>(null);
+
+  useEffect(() => {
+    targetAgentIdRef.current = effectiveTargetAgentId;
+  }, [effectiveTargetAgentId]);
 
   const core = useInputComposerCore({
     submitMode: 'send',
@@ -229,7 +235,10 @@ export function ChatInput({
     },
     toolbarAnchorRef: toolbarToolsLayout === 'dropdown' ? collapsedToolsAnchorRef : undefined,
   });
-  coreRef.current = core;
+
+  useEffect(() => {
+    coreRef.current = core;
+  }, [core]);
 
   const {
     mentionEditorRef,
@@ -308,7 +317,7 @@ export function ChatInput({
         onQueue(
           payload.displayText,
           payload.attachments,
-          targetAgentId,
+          effectiveTargetAgentId,
           undefined,
           null,
           undefined,
@@ -319,7 +328,7 @@ export function ChatInput({
       onSend(
         payload.displayText,
         payload.attachments,
-        targetAgentId,
+        effectiveTargetAgentId,
         undefined,
         null,
         null,
@@ -328,7 +337,16 @@ export function ChatInput({
         extras,
       );
     })();
-  }, [filePickerRequest, pickFiles, removeAttachment, disabled, sending, onQueue, onSend, targetAgentId]);
+  }, [
+    disabled,
+    effectiveTargetAgentId,
+    filePickerRequest,
+    onQueue,
+    onSend,
+    pickFiles,
+    removeAttachment,
+    sending,
+  ]);
 
   const voice = useInputComposerVoice({
     mentionEditorRef,
@@ -377,19 +395,6 @@ export function ChatInput({
       mentionEditorRef.current?.focus();
     }
   }, [disabled, mentionEditorRef]);
-
-  useEffect(() => {
-    if (!targetAgentId) return;
-    if (targetAgentId === currentAgentId) {
-      setTargetAgentId(null);
-      setPickerOpen(false);
-      return;
-    }
-    if (!(agents ?? []).some((agent) => agent.id === targetAgentId)) {
-      setTargetAgentId(null);
-      setPickerOpen(false);
-    }
-  }, [agents, currentAgentId, targetAgentId]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -461,7 +466,7 @@ export function ChatInput({
       logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
         textLength: displayText.length,
         mentionCount: snapshot.mentions.length,
-        targetAgentId: targetAgentId ?? null,
+        targetAgentId: effectiveTargetAgentId,
         attachmentCount: payload.attachments.length,
         workflowCount: payload.workflows.length,
         skillCount: payload.skillMetas.length,
@@ -490,7 +495,7 @@ export function ChatInput({
         onQueue(
           displayText,
           attachmentsToSend,
-          targetAgentId,
+          effectiveTargetAgentId,
           mentionsToSend,
           workflowIdToSend,
           skillMetaToSend,
@@ -500,7 +505,7 @@ export function ChatInput({
         onSend(
           displayText,
           attachmentsToSend,
-          targetAgentId,
+          effectiveTargetAgentId,
           mentionsToSend,
           workflowIdToSend,
           workflowSourceToSend,
@@ -520,7 +525,6 @@ export function ChatInput({
     cancelVoiceConfirm,
     clearAttachments,
     closeDingTalkMention,
-    composerSnapshot.skill,
     currentSessionKey,
     disabled,
     getSnapshot,
@@ -533,10 +537,12 @@ export function ChatInput({
     sending,
     setComposerSnapshot,
     setMentionTrigger,
-    targetAgentId,
+    effectiveTargetAgentId,
   ]);
 
-  handleSendRef.current = handleSend;
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -553,7 +559,7 @@ export function ChatInput({
       open={pickerOpen}
       onOpenChange={setPickerOpen}
       agents={mentionableAgents}
-      selectedAgentId={targetAgentId}
+      selectedAgentId={effectiveTargetAgentId}
       pickerRef={pickerRef}
       disabled={disabled}
       title={t('composer.pickAgent')}
@@ -567,8 +573,11 @@ export function ChatInput({
   ) : null;
 
   const useCollapsedToolbarTools = toolbarToolsLayout === 'dropdown';
-  const toolbarAttachButtonRef = useCollapsedToolbarTools
+  const attachMenuAnchorRef = useCollapsedToolbarTools
     ? collapsedToolsAnchorRef
+    : attachSource.attachButtonRef;
+  const toolbarAttachButtonRef = useCollapsedToolbarTools
+    ? undefined
     : attachSource.attachButtonRef;
   const toolbarSkillButtonRef = useCollapsedToolbarTools
     ? undefined
@@ -578,6 +587,9 @@ export function ChatInput({
     : workflowPicker.buttonRef;
   const toolbarQuickInputButtonRef = useCollapsedToolbarTools
     ? undefined
+    : quickInputPicker.buttonRef;
+  const quickInputFlyTargetRef = useCollapsedToolbarTools
+    ? collapsedToolsAnchorRef
     : quickInputPicker.buttonRef;
 
   const shell = (
@@ -764,7 +776,7 @@ export function ChatInput({
 
   return (
     <div className={cn('w-full pb-0 pt-2 transition-all duration-300', className)}>
-      <FlyToTargetLayer targetRef={toolbarQuickInputButtonRef}>
+      <FlyToTargetLayer targetRef={quickInputFlyTargetRef}>
         <QuickInputIcon className="h-full w-full text-foreground" />
       </FlyToTargetLayer>
       {composerScenarioActions?.length ? (
@@ -790,7 +802,7 @@ export function ChatInput({
       <ComposerAttachMenu
         open={attachSource.menuOpen}
         onOpenChange={attachSource.setMenuOpen}
-        anchorRef={toolbarAttachButtonRef}
+        anchorRef={attachMenuAnchorRef}
         showSharedArtifact={attachSource.showSharedArtifact}
         onSelect={attachSource.handleMenuSelect}
         labels={{

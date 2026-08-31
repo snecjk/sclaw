@@ -416,7 +416,7 @@ describe('Skill Plaza header composition', () => {
     fireEvent.click(screen.getByRole('button', { name: '文件夹' }));
     expect(mocks.invokeIpc).toHaveBeenCalledWith('open-skill-folder');
     expect(searchbox.parentElement?.className).toContain(
-      'dark:bg-[var(--sto-control-bg)]',
+      'sto-control--neutral-field',
     );
   });
 

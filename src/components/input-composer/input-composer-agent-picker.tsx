@@ -10,7 +10,7 @@ import type { RefObject } from 'react';
 import { Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { inputComposerHomeToolbarIconBtn } from './input-composer-toolbar';
+import { inputComposerHomeToolbarIconBtn } from './input-composer-toolbar-styles';
 import type { AgentSummary } from '@/types/agent';
 
 function AgentPickerItem({

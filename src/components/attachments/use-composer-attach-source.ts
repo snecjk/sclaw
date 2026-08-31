@@ -8,7 +8,8 @@ import { isSiteUser, useAuthStore } from '@/stores/auth';
 import type { ComposerAttachSource } from './ComposerAttachMenu';
 
 export interface UseComposerAttachSourceOptions {
-  pickFiles: () => void | Promise<void>;
+  /** 调用方可返回已选附件；来源菜单只负责触发，不消费返回值。 */
+  pickFiles: () => void | Promise<unknown>;
   /** 弹窗已完成 download+stage，这里只接入本地 staged 结果 */
   stageDataCenterFiles: (files: DataCenterStagedFile[]) => Promise<void>;
 }

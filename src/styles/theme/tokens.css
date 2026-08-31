@@ -91,6 +91,8 @@
     --sto-control-hover-bg: #f2f3f5;
     --sto-control-active-bg: #e5e6eb;
     --sto-control-placeholder: hsl(var(--muted-foreground));
+    --sto-code-display-background: var(--sto-surface-canvas);
+    --sto-code-display-border: var(--sto-border-default);
     --sto-text-primary: #1d2129;
     --sto-text-secondary: #4e5969;
     --sto-text-tertiary: #86909c;
@@ -518,6 +520,7 @@
     --sto-control-hover-bg: #282828;
     --sto-control-active-bg: #282828;
     --sto-control-placeholder: var(--sto-text-tertiary);
+    --sto-code-display-background: var(--sto-control-bg);
     --sto-text-primary: #dfdfdf;
     --sto-text-secondary: rgb(255 255 255 / 70%);
     --sto-text-tertiary: rgb(255 255 255 / 50%);

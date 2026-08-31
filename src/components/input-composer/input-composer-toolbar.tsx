@@ -23,6 +23,7 @@ import {
 } from '@/components/icons/composer-toolbar-icons';
 import { InputComposerToolbarIconTooltip } from './input-composer-toolbar-icon-tooltip';
 import type { InputComposerShellLayout } from './input-composer-shell';
+import { inputComposerHomeToolbarIconBtn as homeIconBtn } from './input-composer-toolbar-styles';
 
 /** 工具栏按钮组 props；`labels` 为 i18n 文案，`extra` 可插 Agent picker 等 */
 export interface InputComposerToolbarProps {
@@ -82,11 +83,6 @@ export interface InputComposerToolbarProps {
   /** dropdown 模式下扳手外层锚点，供附件菜单 / picker 定位（不要绑 Radix Trigger） */
   dropdownToolsAnchorRef?: RefObject<HTMLElement | null>;
 }
-
-const homeIconBtn = cn(
-  'inline-flex h-[30px] w-[30px] flex-col items-center justify-center rounded-lg px-[1.62px] py-[2.08px]',
-  'text-[var(--sto-icon-primary)] hover:bg-[#F0F2F5] dark:text-[var(--sto-icon-secondary)] dark:hover:bg-muted',
-);
 
 const homeIconActive = 'bg-[#F0F2F5] hover:bg-[#F0F2F5] dark:bg-muted dark:hover:bg-muted';
 
@@ -359,5 +355,3 @@ export function InputComposerToolbar({
     </>
   );
 }
-
-export { homeIconBtn as inputComposerHomeToolbarIconBtn };

@@ -133,6 +133,21 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function requestPickerChildren(
+  type: DataCenterFilePickerType,
+  spaceId: string | null,
+  parentEntryId: string,
+) {
+  return listDataCenterEntries({
+    spaceType: type,
+    spaceId: spaceId ?? undefined,
+    parentEntryId,
+    pageSize: 200,
+    sortField: 'name',
+    sortOrder: 'asc',
+  });
+}
+
 export interface DataCenterFilePickerModalProps {
   open: boolean;
   /**
@@ -149,19 +164,24 @@ export interface DataCenterFilePickerModalProps {
 
 type ChildrenMap = Record<string, DataCenterEntry[]>;
 type BoolMap = Record<string, boolean>;
+interface SearchResultState {
+  requestKey: string;
+  results: DataCenterEntry[];
+}
 
-export function DataCenterFilePickerModal({
-  open,
+type DataCenterFilePickerModalContentProps = Omit<DataCenterFilePickerModalProps, 'open'>;
+
+function DataCenterFilePickerModalContent({
   type,
   onClose,
   onConfirm,
-}: DataCenterFilePickerModalProps) {
+}: DataCenterFilePickerModalContentProps) {
   const { t } = useTranslation('chat');
   const { t: tCommon } = useTranslation('common');
 
   // 解析后的 spaceId：drive / qa_artifact 为 null；网点共享在打开时由 getDataCenterSpaces 填入
   const [resolvedSpaceId, setResolvedSpaceId] = useState<string | null>(null);
-  const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(type === 'site_shared_artifact');
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
   const [keyword, setKeyword] = useState('');
@@ -170,8 +190,10 @@ export function DataCenterFilePickerModal({
   const [loadingMap, setLoadingMap] = useState<BoolMap>({});
   const [openMap, setOpenMap] = useState<BoolMap>({ [ROOT_ENTRY_ID]: true });
   const [selected, setSelected] = useState<Record<string, DataCenterPickerSelection>>({});
-  const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<DataCenterEntry[]>([]);
+  const [searchState, setSearchState] = useState<SearchResultState>({
+    requestKey: '',
+    results: [],
+  });
   /** 与数据中心一致：浏览当前目录（搜索进文件夹后切到该目录） */
   const [browseParentId, setBrowseParentId] = useState(ROOT_ENTRY_ID);
   const [breadcrumbs, setBreadcrumbs] = useState<DataCenterBreadcrumb[]>([]);
@@ -186,30 +208,11 @@ export function DataCenterFilePickerModal({
   const emptyLabel = t('composer.attachEmpty');
   const loadingLabel = t('composer.attachLoading');
 
-  /** 打开时重置 UI，并按 type 解析 space（网点共享走 getDataCenterSpaces）。 */
+  /** 网点共享打开时解析 spaceId；其他类型无需 bootstrap。 */
   useEffect(() => {
-    if (!open) return;
-
-    setKeyword('');
-    setDebouncedKeyword('');
-    setChildrenMap({});
-    setLoadingMap({});
-    setOpenMap({ [ROOT_ENTRY_ID]: true });
-    setSelected({});
-    setSearchResults([]);
-    setBrowseParentId(ROOT_ENTRY_ID);
-    setBreadcrumbs([]);
-    setBootstrapError(null);
-    setResolvedSpaceId(null);
-    setConfirming(false);
-
-    if (type !== 'site_shared_artifact') {
-      setBootstrapping(false);
-      return;
-    }
+    if (type !== 'site_shared_artifact') return;
 
     let cancelled = false;
-    setBootstrapping(true);
     void getDataCenterSpaces()
       .then((result) => {
         if (cancelled) return;
@@ -238,28 +241,20 @@ export function DataCenterFilePickerModal({
     return () => {
       cancelled = true;
     };
-  }, [open, type, onClose]);
+  }, [type, onClose]);
 
   useEffect(() => {
-    if (!open) return;
     const timer = window.setTimeout(() => setDebouncedKeyword(keyword.trim()), 250);
     return () => window.clearTimeout(timer);
-  }, [keyword, open]);
+  }, [keyword]);
 
   /** 树节点懒加载：listDataCenterEntries(parent)（与数据中心一致，不限 entryType） */
-  const loadChildren = useCallback(async (parentEntryId: string) => {
+  const loadChildren = async (parentEntryId: string) => {
     if (type === 'site_shared_artifact' && !resolvedSpaceId) return;
 
     setLoadingMap((prev) => ({ ...prev, [parentEntryId]: true }));
     try {
-      const result = await listDataCenterEntries({
-        spaceType: type,
-        spaceId: resolvedSpaceId ?? undefined,
-        parentEntryId,
-        pageSize: 200,
-        sortField: 'name',
-        sortOrder: 'asc',
-      });
+      const result = await requestPickerChildren(type, resolvedSpaceId, parentEntryId);
       const items = result.items ?? [];
       setChildrenMap((prev) => ({ ...prev, [parentEntryId]: items }));
       if (parentEntryId === browseParentId) {
@@ -272,14 +267,38 @@ export function DataCenterFilePickerModal({
     } finally {
       setLoadingMap((prev) => ({ ...prev, [parentEntryId]: false }));
     }
-  }, [type, resolvedSpaceId, browseParentId]);
+  };
 
   useEffect(() => {
-    if (!open || bootstrapping || bootstrapError) return;
+    if (bootstrapping || bootstrapError) return;
     if (type === 'site_shared_artifact' && !resolvedSpaceId) return;
     if (debouncedKeyword) return;
-    void loadChildren(browseParentId);
-  }, [open, bootstrapping, bootstrapError, debouncedKeyword, loadChildren, type, resolvedSpaceId, browseParentId]);
+    let cancelled = false;
+    void requestPickerChildren(type, resolvedSpaceId, browseParentId)
+      .then((result) => {
+        if (cancelled) return;
+        setChildrenMap((prev) => ({
+          ...prev,
+          [browseParentId]: result.items ?? [],
+        }));
+        setBreadcrumbs(result.breadcrumbs ?? []);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        toast.error(error instanceof Error ? error.message : '加载文件列表失败');
+        setChildrenMap((prev) => ({ ...prev, [browseParentId]: [] }));
+        setBreadcrumbs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrapping, bootstrapError, debouncedKeyword, type, resolvedSpaceId, browseParentId]);
+
+  const searchRequestKey = debouncedKeyword
+    ? `${type}:${resolvedSpaceId ?? ''}:${browseParentId}:${debouncedKeyword}`
+    : '';
+  const searchResults = searchState.requestKey === searchRequestKey ? searchState.results : [];
+  const searching = Boolean(searchRequestKey) && searchState.requestKey !== searchRequestKey;
 
   /**
    * 关键字搜索：与数据中心一致
@@ -287,15 +306,10 @@ export function DataCenterFilePickerModal({
    * - 有 keyword 时后端按全库 display_name 模糊匹配（不限当前父目录）
    */
   useEffect(() => {
-    if (!open || !debouncedKeyword || bootstrapping) {
-      setSearchResults([]);
-      setSearching(false);
-      return;
-    }
+    if (!searchRequestKey || bootstrapping || bootstrapError) return;
     if (type === 'site_shared_artifact' && !resolvedSpaceId) return;
 
     let cancelled = false;
-    setSearching(true);
     void listDataCenterEntries({
       spaceType: type,
       spaceId: resolvedSpaceId ?? undefined,
@@ -307,21 +321,18 @@ export function DataCenterFilePickerModal({
     })
       .then((result) => {
         if (cancelled) return;
-        setSearchResults(result.items ?? []);
+        setSearchState({ requestKey: searchRequestKey, results: result.items ?? [] });
       })
       .catch((error) => {
         if (cancelled) return;
         toast.error(error instanceof Error ? error.message : '搜索失败');
-        setSearchResults([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSearching(false);
+        setSearchState({ requestKey: searchRequestKey, results: [] });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [open, debouncedKeyword, type, resolvedSpaceId, bootstrapping, browseParentId]);
+  }, [searchRequestKey, debouncedKeyword, type, resolvedSpaceId, bootstrapping, bootstrapError, browseParentId]);
 
   const selectedList = useMemo(() => Object.values(selected), [selected]);
   const selectedCount = selectedList.length;
@@ -378,7 +389,6 @@ export function DataCenterFilePickerModal({
   const openBreadcrumb = useCallback((entryId: string) => {
     setKeyword('');
     setDebouncedKeyword('');
-    setSearchResults([]);
     setChildrenMap({});
     setLoadingMap({});
     setBrowseParentId(entryId);
@@ -410,11 +420,16 @@ export function DataCenterFilePickerModal({
     });
   };
 
-  if (!open || typeof document === 'undefined') return null;
-
   const renderTreeRows = (parentId: string, depth: number): ReactNode => {
     const items = childrenMap[parentId] ?? [];
-    const loading = loadingMap[parentId];
+    const loading = Boolean(loadingMap[parentId]) || (
+      !debouncedKeyword
+      && !bootstrapping
+      && !bootstrapError
+      && parentId === browseParentId
+      && childrenMap[parentId] === undefined
+      && (type !== 'site_shared_artifact' || Boolean(resolvedSpaceId))
+    );
     const indentStyle = { paddingLeft: depth * TREE_INDENT_PX };
     if (loading && items.length === 0) {
       return (
@@ -660,5 +675,22 @@ export function DataCenterFilePickerModal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+export function DataCenterFilePickerModal({
+  open,
+  type,
+  onClose,
+  onConfirm,
+}: DataCenterFilePickerModalProps) {
+  if (!open || typeof document === 'undefined') return null;
+  return (
+    <DataCenterFilePickerModalContent
+      key={type}
+      type={type}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -20,7 +20,6 @@ interface TokenQuotaDialogProps {
 }
 
 type TierFetchState =
-  | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'done'; data: TokenQuotaTierQueryResult }
   | { status: 'error' };
@@ -70,53 +69,54 @@ function tierKey(tier: TokenQuotaTierItem): string {
   return `${tier.level}-${tier.quotaAmount ?? 'default'}`;
 }
 
-export function TokenQuotaDialog({
-  open,
+async function fetchTierState(tokenId: string): Promise<TierFetchState> {
+  if (!tokenId) return { status: 'error' };
+  try {
+    const data = await hostApiFetch<TokenQuotaTierQueryResult | null>(
+      `/api/token-quota/tiers?tokenId=${encodeURIComponent(tokenId)}`,
+    );
+    return data?.tierList?.length
+      ? { status: 'done', data }
+      : { status: 'error' };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
+type TokenQuotaDialogContentProps = Omit<TokenQuotaDialogProps, 'open'>;
+
+function TokenQuotaDialogContent({
   onClose,
   tokenId,
   spend,
   maxBudget,
   onQuotaChanged,
-}: TokenQuotaDialogProps) {
+}: TokenQuotaDialogContentProps) {
   const { t } = useTranslation('dashboard');
   const [applying, setApplying] = useState<number | null>(null);
-  const [fetchState, setFetchState] = useState<TierFetchState>({ status: 'idle' });
+  const [fetchState, setFetchState] = useState<TierFetchState>({ status: 'loading' });
 
-  const loadTiers = useCallback(async () => {
-    if (!tokenId) {
-      setFetchState({ status: 'error' });
-      return;
-    }
+  const loadTiers = async () => {
     setFetchState({ status: 'loading' });
-    try {
-      const data = await hostApiFetch<TokenQuotaTierQueryResult | null>(
-        `/api/token-quota/tiers?tokenId=${encodeURIComponent(tokenId)}`,
-      );
-      if (!data?.tierList?.length) {
-        setFetchState({ status: 'error' });
-        return;
-      }
-      setFetchState({ status: 'done', data });
-    } catch {
-      setFetchState({ status: 'error' });
-    }
-  }, [tokenId]);
+    setFetchState(await fetchTierState(tokenId));
+  };
 
   useEffect(() => {
-    if (!open) {
-      setFetchState({ status: 'idle' });
-      setApplying(null);
-      return;
-    }
-    void loadTiers();
-  }, [open, loadTiers]);
+    let cancelled = false;
+    void fetchTierState(tokenId).then((nextState) => {
+      if (!cancelled) setFetchState(nextState);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tokenId]);
 
   const tierData = fetchState.status === 'done' ? fetchState.data : null;
   const tierList = tierData?.tierList ?? [];
 
-  const displayTiers = useMemo(() => flattenDisplayTiers(tierList), [tierList]);
-  const availableAmount = useMemo(() => findAvailableQuotaAmount(displayTiers), [displayTiers]);
-  const { flatTiers, childGroups } = useMemo(() => partitionTierLayout(tierList), [tierList]);
+  const displayTiers = flattenDisplayTiers(tierList);
+  const availableAmount = findAvailableQuotaAmount(displayTiers);
+  const { flatTiers, childGroups } = partitionTierLayout(tierList);
 
   const totalQuota = tierData?.currentQuota ?? maxBudget;
   const available = Math.max(0, totalQuota - spend);
@@ -160,8 +160,6 @@ export function TokenQuotaDialog({
       onClose();
     }
   };
-
-  if (!open) return null;
 
   return createPortal(
     <div
@@ -258,6 +256,20 @@ export function TokenQuotaDialog({
       </div>
     </div>,
     document.body,
+  );
+}
+
+export function TokenQuotaDialog(props: TokenQuotaDialogProps) {
+  if (!props.open) return null;
+  return (
+    <TokenQuotaDialogContent
+      key={props.tokenId}
+      onClose={props.onClose}
+      tokenId={props.tokenId}
+      spend={props.spend}
+      maxBudget={props.maxBudget}
+      onQuotaChanged={props.onQuotaChanged}
+    />
   );
 }
 

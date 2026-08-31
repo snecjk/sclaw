@@ -31,23 +31,18 @@ export interface SidebarRecentGroupDialogsProps {
   onDissolveConfirm: (groupId: string) => void | Promise<void>;
 }
 
-export function SidebarRecentGroupDialogs({
+function SidebarRecentGroupDialogsContent({
   dialog,
   onClose,
   onCreateConfirm,
   onDissolveConfirm,
 }: SidebarRecentGroupDialogsProps) {
   const { t } = useTranslation('common');
-  const [nameDraft, setNameDraft] = useState('');
+  const [nameDraft, setNameDraft] = useState(
+    () => dialog.defaultName ?? t('sidebar.defaultGroupName'),
+  );
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (dialog.mode === 'create') {
-      setNameDraft(dialog.defaultName ?? t('sidebar.defaultGroupName'));
-      setSubmitting(false);
-    }
-  }, [dialog.mode, dialog.defaultName, t]);
 
   useEffect(() => {
     if (dialog.mode === 'create' && inputRef.current) {
@@ -191,4 +186,13 @@ export function SidebarRecentGroupDialogs({
     </div>,
     document.body,
   );
+}
+
+export function SidebarRecentGroupDialogs(props: SidebarRecentGroupDialogsProps) {
+  const { dialog } = props;
+  if (!dialog.mode) return null;
+  const resetKey = dialog.mode === 'create'
+    ? `create:${dialog.sessionKey ?? ''}:${dialog.defaultName ?? ''}`
+    : `dissolve:${dialog.groupId ?? ''}`;
+  return <SidebarRecentGroupDialogsContent key={resetKey} {...props} />;
 }
