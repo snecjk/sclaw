@@ -5,9 +5,6 @@ import {
   buildStoBrowserToolClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-browser-tool/sdk';
 import {
-  buildStoDingTalkSendGuardClaudeRuntimeOptions,
-} from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
-import {
   createUserSkillMcpServer,
   USER_SKILL_SYSTEM_PROMPT,
 } from '../../sto-plugin/claude/sto-user-skill-tool/tools';
@@ -82,12 +79,6 @@ const browserToolExtension: ClaudeRuntimeExtension = {
       hostApiPort: PORTS.CLAWX_HOST_API,
     });
   },
-};
-
-const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
-  id: 'sto-dingtalk-send-guard',
-  build: ({ sessionKey, userPrompt }) =>
-    buildStoDingTalkSendGuardClaudeRuntimeOptions(sessionKey, userPrompt),
 };
 
 const userSkillToolExtension: ClaudeRuntimeExtension = {
@@ -176,7 +167,6 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   connectorBashGateExtension,
   browserToolExtension,
-  dingTalkSendGuardExtension,
   userSkillToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,

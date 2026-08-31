@@ -34,6 +34,7 @@ function context(stateManager: SclawExtensionStateManager): SclawExtensionBuildC
     engine: 'pi',
     sessionKey: 'session-1',
     mode: 'interactive',
+    commandShell: 'bash',
     capabilities: new SclawCapabilityRegistry(),
     state: stateManager.forExtension('session-1', 'test-extension'),
     logger,
@@ -86,6 +87,7 @@ describe('agent extension core', () => {
     ], {
       rawToolName: 'Bash',
       toolName: 'bash',
+      toolKind: 'shell',
       toolCallId: 'call-1',
       input: { command: 'echo ok' },
     }, context(stateManager));
@@ -98,6 +100,7 @@ describe('agent extension core', () => {
     }], {
       rawToolName: 'Bash',
       toolName: 'bash',
+      toolKind: 'shell',
       toolCallId: 'call-2',
       input: {},
     }, context(stateManager));
@@ -113,6 +116,7 @@ describe('agent extension core', () => {
     ], {
       rawToolName: 'echo',
       toolName: 'echo',
+      toolKind: 'other',
       toolCallId: 'call-1',
       input: {},
       isError: false,
@@ -209,10 +213,16 @@ describe('TypeBox to Zod conversion', () => {
 describe('agent extension registry validation', () => {
   it('registers the migrated production extensions', () => {
     expect(SCLAW_AGENT_EXTENSIONS.map((entry) => entry.common.id))
-      .toEqual(['claw-scheduled-path-guard', 'sto-scheduled-task-tool', 'sto-workflow-tool']);
+      .toEqual([
+        'claw-scheduled-path-guard',
+        'sto-scheduled-task-tool',
+        'sto-workflow-tool',
+        'sto-dingtalk-send-guard',
+      ]);
     expect(SCLAW_AGENT_EXTENSIONS[0].common.engines).toEqual(['pi']);
     expect(SCLAW_AGENT_EXTENSIONS[1].common.engines).toBeUndefined();
     expect(SCLAW_AGENT_EXTENSIONS[2].common.engines).toEqual(['claude']);
+    expect(SCLAW_AGENT_EXTENSIONS[3].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS.every((entry) => entry.native == null)).toBe(true);
   });
 

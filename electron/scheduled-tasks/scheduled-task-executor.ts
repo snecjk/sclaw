@@ -129,6 +129,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     }
 
     const adapter = getAdapter(task.engineType);
+    const scheduledCapabilities = adapter.scheduledTaskCapabilities;
     const ctx: EngineAdapterContext = { gatewayManager };
     const systemPromptAppend = this.deps.buildSystemPromptAppend(task) ?? undefined;
     // executor 只传递定时任务语义；system prompt 的实际承载方式由各引擎 adapter 决定。
@@ -174,12 +175,16 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       deliver: true,
       idempotencyKey: run.idempotencyKey,
       systemPromptAppend,
-      permissionProfile: task.engineType === 'pi' ? 'workspace-write' : task.permissionProfile ?? undefined,
-      allowedRoots: task.engineType === 'pi'
+      permissionProfile: scheduledCapabilities.enforcedPermissionProfile
+        ?? task.permissionProfile
+        ?? scheduledCapabilities.defaultPermissionProfile,
+      allowedRoots: scheduledCapabilities.restrictToAllowedRoots
         ? [task.workspacePath, task.myArtifactFolderPath, task.sharedArtifactFolderPath]
             .filter((value): value is string => Boolean(value?.trim()))
         : undefined,
-      cwdOverride: task.engineType === 'pi' ? task.workspacePath ?? undefined : undefined,
+      cwdOverride: scheduledCapabilities.restrictToAllowedRoots
+        ? task.workspacePath ?? undefined
+        : undefined,
       engineType: adapter.type,
       media: media.length ? media : undefined,
       runtimePolicy: {

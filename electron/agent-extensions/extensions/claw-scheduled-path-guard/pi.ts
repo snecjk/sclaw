@@ -20,7 +20,7 @@ export function buildClawScheduledPathGuard(
       pi.on('tool_call', async (event) => {
         const input = event.input as Record<string, unknown>;
         if (event.toolName === 'bash') {
-          if (piBashViolatesScheduledPolicy(String(input.command ?? ''), roots)) {
+          if (await piBashViolatesScheduledPolicy(String(input.command ?? ''), roots)) {
             context.logger.warn('[claw-scheduled-path-guard] tool blocked', {
               toolName: event.toolName,
               reason: 'scheduled-bash-policy',

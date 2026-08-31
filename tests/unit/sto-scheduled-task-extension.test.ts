@@ -52,6 +52,7 @@ function matchesIntent(userPrompt: string): boolean {
     engine: 'pi',
     sessionKey: 'agent:main:intent-test',
     mode: 'interactive',
+    commandShell: 'bash',
     userPrompt,
     capabilities: deps.capabilities,
     state: deps.stateManager.forExtension('agent:main:intent-test', 'sto-scheduled-task-tool'),
@@ -227,6 +228,7 @@ describe('sto-scheduled-task-tool common extension', () => {
       engine,
       sessionKey: 'agent:main:chat',
       mode: 'interactive',
+      commandShell: engine === 'pi' ? 'powershell' : 'bash',
       toolCallId: 'tool-create',
       capabilities: deps.capabilities,
       state,
@@ -239,7 +241,7 @@ describe('sto-scheduled-task-tool common extension', () => {
       workspacePath: 'D:/workspace',
       model: 'model-1',
       accountId: 'account-1',
-      permissionProfile: engine === 'pi' ? 'workspace-write' : 'dangerous-bypass',
     }));
+    expect(vi.mocked(deps.port.create).mock.calls[0]?.[0]).not.toHaveProperty('permissionProfile');
   });
 });

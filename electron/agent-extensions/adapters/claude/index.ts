@@ -17,6 +17,7 @@ import {
   supportsEngine,
   supportsSessionMode,
   type SclawAgentSessionMode,
+  type SclawCommandShell,
   type SclawCapabilityResolver,
   type SclawExtensionBuildContext,
   type SclawExtensionDiagnostic,
@@ -24,6 +25,7 @@ import {
   type SclawExtensionStateManager,
   type SclawToolOutcome,
   type SclawToolPolicy,
+  type SclawToolKind,
 } from '../../../../shared/agent-extensions';
 import type { ClaudeRuntimeOptions } from '../../../engines/claude-runtime-extensions';
 import {
@@ -43,6 +45,7 @@ import { CLAUDE_AGENT_EXTENSIONS } from './registry';
 export interface BuildClaudeAgentExtensionsInput {
   sessionKey: string;
   mode: SclawAgentSessionMode;
+  commandShell?: SclawCommandShell;
   userPrompt?: string;
   cwd?: string;
   agentId?: string;
@@ -94,6 +97,13 @@ function responseIsError(response: unknown): boolean {
   return Boolean(response && typeof response === 'object' && (response as Record<string, unknown>).isError);
 }
 
+function claudeToolKind(toolName: string): SclawToolKind {
+  const normalized = normalizeSclawToolName(toolName);
+  if (normalized === 'bash') return 'shell';
+  if (['read', 'write', 'edit', 'grep', 'glob'].includes(normalized)) return 'filesystem';
+  return 'other';
+}
+
 function resolveToolCallId(extra: unknown, extensionId: string): string {
   if (extra && typeof extra === 'object') {
     const record = extra as Record<string, unknown>;
@@ -120,6 +130,7 @@ function policyHooks(
       const decision = await runSclawBeforeToolPolicies(extensionId, policies, {
         rawToolName: input.tool_name,
         toolName: normalizeSclawToolName(input.tool_name),
+        toolKind: claudeToolKind(input.tool_name),
         toolCallId: input.tool_use_id,
         input: toolInput,
       }, context);
@@ -155,6 +166,7 @@ function policyHooks(
         await runSclawAfterToolPolicies(extensionId, policies, {
           rawToolName: input.tool_name,
           toolName: normalizeSclawToolName(input.tool_name),
+          toolKind: claudeToolKind(input.tool_name),
           toolCallId: input.tool_use_id,
           input: toolInput,
           result: input.tool_response,
@@ -223,6 +235,7 @@ export async function buildClaudeAgentExtensions(
       engine: 'claude',
       extensionId: definition.id,
       mode: input.mode,
+      commandShell: input.commandShell ?? 'bash',
     });
 
     const missingCapability = definition.requiredCapabilities?.find((token) => !capabilities.has(token));
@@ -241,6 +254,7 @@ export async function buildClaudeAgentExtensions(
       engine: 'claude',
       sessionKey: input.sessionKey,
       mode: input.mode,
+      commandShell: input.commandShell ?? 'bash',
       userPrompt: input.userPrompt,
       cwd: input.cwd,
       agentId: input.agentId,

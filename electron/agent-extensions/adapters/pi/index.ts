@@ -12,12 +12,14 @@ import {
   supportsEngine,
   supportsSessionMode,
   type SclawAgentSessionMode,
+  type SclawCommandShell,
   type SclawCapabilityResolver,
   type SclawExtensionBuildContext,
   type SclawExtensionDiagnostic,
   type SclawExtensionLogger,
   type SclawToolDefinition,
   type SclawToolOutcome,
+  type SclawToolKind,
 } from '../../../../shared/agent-extensions';
 import {
   isValidAgentExtensionId,
@@ -28,9 +30,12 @@ import {
 import { PI_AGENT_EXTENSIONS } from './registry';
 import { STO_SCHEDULED_TASK_CAPABILITY } from '../../extensions/sto-scheduled-task-tool/capability';
 import { createHostApiScheduledTaskPort } from '../../extensions/sto-scheduled-task-tool/host-api-capability';
+import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtalk-send-guard/capability';
+import { createHostApiDingTalkSendGuardPort } from '../../extensions/sto-dingtalk-send-guard/host-api-capability';
 
 const defaultCapabilities = new SclawCapabilityRegistry()
-  .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort());
+  .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
+  .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort());
 const defaultStateManager = new SclawExtensionStateManager();
 const defaultLogger: SclawExtensionLogger = {
   debug: (message, details) => console.debug(message, details ?? ''),
@@ -42,6 +47,7 @@ const defaultLogger: SclawExtensionLogger = {
 export interface BuildPiAgentExtensionsInput {
   sessionKey: string;
   mode: SclawAgentSessionMode;
+  commandShell?: SclawCommandShell;
   cwd?: string;
   allowedRoots?: readonly string[];
   agentId?: string;
@@ -70,6 +76,13 @@ function replaceInput(target: Record<string, unknown>, replacement: Record<strin
 
 function resultIsError(result: unknown): boolean {
   return Boolean(result && typeof result === 'object' && (result as Record<string, unknown>).isError);
+}
+
+function piToolKind(toolName: string): SclawToolKind {
+  const normalized = normalizeSclawToolName(toolName);
+  if (normalized === 'bash') return 'shell';
+  if (['read', 'write', 'edit', 'grep', 'find', 'ls'].includes(normalized)) return 'filesystem';
+  return 'other';
 }
 
 function normalizeNativeExtensions(value: InlineExtension | readonly InlineExtension[]): InlineExtension[] {
@@ -138,6 +151,7 @@ export async function buildPiAgentExtensions(
       engine: 'pi',
       sessionKey: input.sessionKey,
       mode: input.mode,
+      commandShell: input.commandShell ?? (process.platform === 'win32' ? 'powershell' : 'bash'),
       userPrompt,
       cwd: input.cwd,
       allowedRoots: input.allowedRoots,
@@ -246,6 +260,7 @@ export async function buildPiAgentExtensions(
               const decision = await runSclawBeforeToolPolicies(definition.id, policies, {
                 rawToolName: event.toolName,
                 toolName: normalizeSclawToolName(event.toolName),
+                toolKind: piToolKind(event.toolName),
                 toolCallId: event.toolCallId,
                 input: inputRecord,
               }, contextFor());
@@ -262,6 +277,7 @@ export async function buildPiAgentExtensions(
                 await runSclawAfterToolPolicies(definition.id, policies, {
                   rawToolName: event.toolName,
                   toolName: normalizeSclawToolName(event.toolName),
+                  toolKind: piToolKind(event.toolName),
                   toolCallId: event.toolCallId,
                   input: event.input,
                   content: event.content,

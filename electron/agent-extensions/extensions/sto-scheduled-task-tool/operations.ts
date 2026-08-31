@@ -192,7 +192,6 @@ export const stoScheduledTaskTools = [
           enabled: input.enabled,
           model: input.model?.trim() || defaults.model,
           name: requireNonEmpty(input.name, 'name'),
-          permissionProfile: context.engine === 'pi' ? 'workspace-write' : 'dangerous-bypass',
           prompt: requireNonEmpty(input.promptTemplate, 'promptTemplate'),
           accountId: input.providerAccountId?.trim() || defaults.accountId,
           timeoutSec: input.timeoutSec,
@@ -247,7 +246,6 @@ export const stoScheduledTaskTools = [
           ...(patch.providerAccountId !== undefined ? { accountId: patch.providerAccountId?.trim() || defaults.accountId } : {}),
           ...(patch.timeoutSec !== undefined ? { timeoutSec: patch.timeoutSec } : {}),
           ...(patch.workspacePath !== undefined ? { workspacePath: patch.workspacePath.trim() || defaults.workspacePath || '' } : {}),
-          permissionProfile: context.engine === 'pi' ? 'workspace-write' : 'dangerous-bypass',
         };
         return { task: await port.update(task.id, update) };
       });

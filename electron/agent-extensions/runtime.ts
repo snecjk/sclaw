@@ -8,10 +8,13 @@ import { STO_SCHEDULED_TASK_CAPABILITY } from './extensions/sto-scheduled-task-t
 import { createHostApiScheduledTaskPort } from './extensions/sto-scheduled-task-tool/host-api-capability';
 import { STO_WORKFLOW_CAPABILITY } from './extensions/sto-workflow-tool/capability';
 import { createHostApiWorkflowPort } from './extensions/sto-workflow-tool/host-api-capability';
+import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from './extensions/sto-dingtalk-send-guard/capability';
+import { createHostApiDingTalkSendGuardPort } from './extensions/sto-dingtalk-send-guard/host-api-capability';
 
 export const sclawAgentExtensionCapabilities = new SclawCapabilityRegistry()
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
-  .provide(STO_WORKFLOW_CAPABILITY, createHostApiWorkflowPort());
+  .provide(STO_WORKFLOW_CAPABILITY, createHostApiWorkflowPort())
+  .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort());
 export const sclawAgentExtensionState = new SclawExtensionStateManager();
 
 export const sclawAgentExtensionLogger: SclawExtensionLogger = {

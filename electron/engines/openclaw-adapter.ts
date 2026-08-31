@@ -190,6 +190,11 @@ function sessionsFromOpenClawStoreMetadata(
 
 export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
+  scheduledTaskCapabilities: {
+    requiresWorkspacePath: false,
+    supportsWorkflow: true,
+    restrictToAllowedRoots: false,
+  },
   chatCapabilities: {
     hasReliableRuntimeStatus: false,
     hasStructuredReasoningEvents: false,

@@ -1546,6 +1546,12 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
 
 export const claudeAdapter: EngineAdapter = {
   type: 'claude',
+  scheduledTaskCapabilities: {
+    defaultPermissionProfile: 'dangerous-bypass',
+    requiresWorkspacePath: false,
+    supportsWorkflow: true,
+    restrictToAllowedRoots: false,
+  },
   chatCapabilities: {
     hasReliableRuntimeStatus: true,
     hasStructuredReasoningEvents: true,

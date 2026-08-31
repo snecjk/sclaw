@@ -95,9 +95,18 @@ export interface EngineChatCapabilities {
   requiresHistoryProjection: boolean;
 }
 
+export interface EngineScheduledTaskCapabilities {
+  defaultPermissionProfile?: EnginePermissionProfile;
+  enforcedPermissionProfile?: EnginePermissionProfile;
+  requiresWorkspacePath: boolean;
+  supportsWorkflow: boolean;
+  restrictToAllowedRoots: boolean;
+}
+
 export interface EngineAdapter {
   type: AgentEngineType;
   chatCapabilities: EngineChatCapabilities;
+  scheduledTaskCapabilities: EngineScheduledTaskCapabilities;
   inspectRun(
     ctx: EngineAdapterContext,
     params: { sessionKey: string; runId?: string | null; startedAt: number; limit?: number },

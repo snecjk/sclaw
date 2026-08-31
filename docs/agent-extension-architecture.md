@@ -10,9 +10,15 @@ SClaw business extensions are compiled into the desktop application and register
 4. The Claude adapter compiles common tools to an in-process MCP server and policies to Claude hooks.
 5. The Pi adapter compiles the same definitions to `InlineExtension`, `registerTool`, and Pi lifecycle events.
 
-The production common allowlist is `SCLAW_AGENT_EXTENSIONS` in `electron/agent-extensions/registry.ts`. Each adapter materializes its own engine registry and attaches only its native contributions, preventing Claude native code from entering the PI worker bundle and vice versa. Migrated entries currently include the PI-only `claw-scheduled-path-guard`, the cross-engine `sto-scheduled-task-tool`, and the currently Claude-enabled `sto-workflow-tool`. Host-owned operations are exposed through typed capabilities backed by the local Host API, keeping authentication and process-local services outside extension business code.
+Adapters must also populate the engine-neutral runtime environment used by common policies. `commandShell` is mandatory (`bash` or `powershell`), and tool events carry a semantic `toolKind` (`shell`, `filesystem`, or `other`) so common extensions never branch on engine names or engine-specific tool names. Scheduled-task permission, workspace, workflow, and root-restriction behavior is declared through each `EngineAdapter.scheduledTaskCapabilities` entry.
+
+The production common allowlist is `SCLAW_AGENT_EXTENSIONS` in `electron/agent-extensions/registry.ts`. Each adapter materializes its own engine registry and attaches only its native contributions, preventing Claude native code from entering the PI worker bundle and vice versa. Migrated entries currently include the PI-only `claw-scheduled-path-guard`, the cross-engine `sto-scheduled-task-tool`, the currently Claude-enabled `sto-workflow-tool`, and the cross-engine `sto-dingtalk-send-guard`. Host-owned operations are exposed through typed capabilities backed by the local Host API, keeping authentication and process-local services outside extension business code.
 
 `sto-workflow-tool` is implemented entirely with common definitions, TypeBox schemas, policies, prompts, and a `StoWorkflowPort`; it no longer depends on Claude SDK types. Its definition remains filtered to Claude because the local workflow execution bridge does not yet support PI. Enabling PI later requires adding PI runtime support and then widening the engine selector, rather than copying the workflow implementation.
+
+`sto-dingtalk-send-guard` is a common Claude/PI policy and prompt extension, not a message-sending tool. It consumes one-shot mention context through a typed Host API capability, normalizes `dws chat message send` shell input, blocks unsafe batch or local-path sends, and centralizes rate-limit/dedup state in Main. OpenClaw keeps its legacy plugin implementation until that engine is removed.
+
+Its guidance prompt uses session-scoped activation. Explicit DingTalk keywords, oral send intent such as “发给…”, or non-destructively detected pending mention context activate it; the pending context is consumed only while building the activated prompt. Once active, follow-up turns remain active for the session. The before/after-tool safety policy is deliberately not activation-gated, so a direct `dws chat message send` call is still normalized and guarded even when no prompt contribution was loaded.
 
 ## On-demand activation
 
@@ -64,6 +70,7 @@ extensions/<extension-id>/
 - Activation ids are unique within an extension and every contribution reference is validated at registry build time.
 - Tool names are unique across the enabled common and native contributions for each engine.
 - OpenClaw remains on its legacy plugin path and is not part of this abstraction.
+- PI scheduled path checks canonicalize candidates through `realpath`/`relative`, recognize Windows and POSIX absolute paths, and fail closed for shell-expanded paths that cannot be proven to remain under configured roots.
 
 ## Runtime diagnostics
 

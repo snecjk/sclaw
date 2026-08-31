@@ -8,6 +8,7 @@ import {
 } from '../../shared/agent-engine';
 import { inferSessionCatalogMeta } from '../../shared/session-type';
 import {
+  extractScheduledCommandAbsolutePaths,
   isPiToolPathAllowed,
   piBashViolatesScheduledPolicy,
 } from '../../electron/pi-runtime/path-policy';
@@ -284,11 +285,33 @@ describe('Pi scheduled-task path policy', () => {
     try {
       expect(await isPiToolPathAllowed(join(workspace, 'new.txt'), [workspace])).toBe(true);
       expect(await isPiToolPathAllowed(join(outside, 'secret.txt'), [workspace])).toBe(false);
-      expect(piBashViolatesScheduledPolicy('cat ../outside/secret.txt', [workspace])).toBe(true);
-      expect(piBashViolatesScheduledPolicy(`echo ok > "${join(workspace, 'out.txt')}"`, [workspace])).toBe(false);
+      expect(await piBashViolatesScheduledPolicy('cat ../outside/secret.txt', [workspace])).toBe(true);
+      expect(await piBashViolatesScheduledPolicy(`echo ok > "${join(workspace, 'out.txt')}"`, [workspace])).toBe(false);
     } finally {
       await rm(base, { recursive: true, force: true });
     }
+  });
+
+  it('extracts Windows and macOS absolute paths without directory allowlists', () => {
+    expect(extractScheduledCommandAbsolutePaths(
+      'type C:/Users/admin/secret.txt && type "D:\\Data Files\\report.txt" --output="E:/Output Dir/result.txt"',
+      'win32',
+    )).toEqual([
+      'C:/Users/admin/secret.txt',
+      'D:\\Data Files\\report.txt',
+      'E:/Output Dir/result.txt',
+    ]);
+    expect(extractScheduledCommandAbsolutePaths(
+      'cat /Volumes/Data/secret.txt /private/etc/hosts /tmp/report.txt',
+      'darwin',
+    )).toEqual(['/Volumes/Data/secret.txt', '/private/etc/hosts', '/tmp/report.txt']);
+  });
+
+  it('fails closed for shell-expanded paths', async () => {
+    await expect(piBashViolatesScheduledPolicy('cat $HOME/secret.txt', ['/workspace']))
+      .resolves.toBe(true);
+    await expect(piBashViolatesScheduledPolicy('cat "$(pwd)/secret.txt"', ['/workspace']))
+      .resolves.toBe(true);
   });
 
   it('rejects an existing symlink that escapes an allowed root', async () => {

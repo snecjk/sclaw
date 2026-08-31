@@ -9,6 +9,7 @@ import type { PiNativeContribution } from './adapters/pi/types';
 import { clawScheduledPathGuardDefinition } from './extensions/claw-scheduled-path-guard/definition';
 import { stoScheduledTaskToolDefinition } from './extensions/sto-scheduled-task-tool/definition';
 import { stoWorkflowToolDefinition } from './extensions/sto-workflow-tool/definition';
+import { stoDingTalkSendGuardDefinition } from './extensions/sto-dingtalk-send-guard/definition';
 
 export interface RegisteredAgentExtension {
   common: SclawAgentExtensionDefinition;
@@ -25,6 +26,8 @@ export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
   common: stoScheduledTaskToolDefinition,
 }, {
   common: stoWorkflowToolDefinition,
+}, {
+  common: stoDingTalkSendGuardDefinition,
 }];
 
 const EXTENSION_ID_PATTERN = /^[a-z][a-z0-9-]{0,127}$/;

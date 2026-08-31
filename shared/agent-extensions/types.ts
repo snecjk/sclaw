@@ -2,6 +2,8 @@ import type { Static, TObject } from 'typebox';
 
 export type SclawAgentEngine = 'claude' | 'pi';
 export type SclawAgentSessionMode = 'interactive' | 'scheduled';
+export type SclawCommandShell = 'bash' | 'powershell';
+export type SclawToolKind = 'shell' | 'filesystem' | 'other';
 export type SclawNativeContributionMode = 'augment' | 'replace';
 export type SclawActivationScope = 'turn' | 'session';
 
@@ -41,6 +43,8 @@ export interface SclawExtensionContext {
   engine: SclawAgentEngine;
   sessionKey: string;
   mode: SclawAgentSessionMode;
+  /** Shell dialect used by shell tools in this runtime. */
+  commandShell: SclawCommandShell;
   cwd?: string;
   allowedRoots?: readonly string[];
   agentId?: string;
@@ -128,6 +132,7 @@ export interface SclawToolDefinition<
 export interface SclawBeforeToolEvent {
   rawToolName: string;
   toolName: string;
+  toolKind: SclawToolKind;
   toolCallId: string;
   input: Record<string, unknown>;
 }

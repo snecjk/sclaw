@@ -72,7 +72,11 @@ describe('claw scheduled path guard extension', () => {
     });
     expect(result.extensions.map((extension) => (
       typeof extension === 'function' ? 'anonymous' : extension.name
-    ))).toEqual(['sclaw-extension-lifecycle', 'sto-scheduled-task-tool']);
+    ))).toEqual([
+      'sclaw-extension-lifecycle',
+      'sto-scheduled-task-tool',
+      'sto-dingtalk-send-guard',
+    ]);
     expect(result.diagnostics).toEqual([]);
   });
 
@@ -83,6 +87,7 @@ describe('claw scheduled path guard extension', () => {
       'sclaw-extension-lifecycle',
       'sclaw-scheduled-path-guard',
       'sto-scheduled-task-tool',
+      'sto-dingtalk-send-guard',
     ]);
   });
 

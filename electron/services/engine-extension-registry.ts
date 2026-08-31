@@ -5,9 +5,7 @@ export type EngineExtensionSupport = {
     pluginId: string;
     sourceDir: string;
   };
-  claudeSdk?: {
-    runtimeAdapterId: string;
-  };
+  /** @deprecated Claude extensions are compiled through agent-extensions. */
   claudePlugin?: {
     pluginId: string;
     sourceDir: string;
@@ -32,13 +30,6 @@ export const ENGINE_EXTENSIONS: EngineExtensionDefinition[] = [
       openclaw: {
         pluginId: 'sto-dingtalk-send-guard',
         sourceDir: join(ROOT, 'sto-plugin', 'openclaw', 'sto-dingtalk-send-guard'),
-      },
-      claudeSdk: {
-        runtimeAdapterId: 'sto-dingtalk-send-guard',
-      },
-      claudePlugin: {
-        pluginId: 'sto-dingtalk-send-guard',
-        sourceDir: join(ROOT, 'sto-plugin', 'claude', 'sto-dingtalk-send-guard', 'plugin'),
       },
     },
   },

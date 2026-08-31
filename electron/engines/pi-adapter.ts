@@ -256,6 +256,12 @@ export async function deletePiSession(sessionKey: string): Promise<void> {
 
 export const piAdapter: EngineAdapter = {
   type: 'pi',
+  scheduledTaskCapabilities: {
+    enforcedPermissionProfile: 'workspace-write',
+    requiresWorkspacePath: true,
+    supportsWorkflow: false,
+    restrictToAllowedRoots: true,
+  },
   chatCapabilities: {
     hasReliableRuntimeStatus: true,
     hasStructuredReasoningEvents: true,

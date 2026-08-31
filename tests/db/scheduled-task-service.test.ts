@@ -40,6 +40,7 @@ describe('ScheduledTaskService', () => {
       expect(task.id).toBeTruthy();
       expect(task.retryPolicy).toEqual({ maxAttempts: 1, backoffSec: 30 });
       expect(task.failurePolicy).toEqual({ pauseAfterConsecutiveFailures: 3 });
+      expect(task.permissionProfile).toBe('dangerous-bypass');
       expect(task.cronExprSnapshot).toBe('0 9 * * *');
       expect(task.nextRunAt).toBeTruthy();
       expect(new Date(task.nextRunAt!).getTime()).toBeGreaterThan(Date.now() - 60_000);

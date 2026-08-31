@@ -61,7 +61,7 @@ export const stoWorkflowToolDefinition: SclawAgentExtensionDefinition = {
           reason: 'get_workflow_schema already returned the startup schema. The client must collect and confirm parameters before create_workflow can be used.',
         };
       }
-      if (event.toolName === 'bash') {
+      if (event.toolKind === 'shell') {
         const command = typeof event.input.command === 'string' ? event.input.command : '';
         if (isWorkflowShellCommand(command)) {
           return {

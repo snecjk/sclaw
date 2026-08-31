@@ -71,7 +71,7 @@ export const stoScheduledTaskToolDefinition: SclawAgentExtensionDefinition = {
         return { action: 'deny', reason: '旧版 Cron 工具已禁用，请使用 sto-scheduled-task-tool。' };
       }
       if (isScheduledTaskCreationToolName(event.rawToolName)) return { action: 'allow' };
-      if (event.toolName === 'bash') {
+      if (event.toolKind === 'shell') {
         const command = typeof event.input.command === 'string' ? event.input.command : '';
         if (isScheduledTaskShellCommand(command)) {
           return {
