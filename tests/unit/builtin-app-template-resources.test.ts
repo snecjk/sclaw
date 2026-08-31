@@ -72,6 +72,23 @@ describe('built-in app template resources', () => {
       .toContain('--sto-color-primary');
   });
 
+  it('site 归档包含主题、应用骨架和页面原语', () => {
+    const siteRoot = join(resources, 'site-minimal');
+    const sourceFiles = [
+      'src/theme/theme.css',
+      'src/layouts/AppHeader.tsx',
+      'src/layouts/AppSider.tsx',
+      'src/layouts/PageContainer.tsx',
+      'src/components/PageHeader.tsx',
+      'src/components/ContentSection.tsx',
+      'src/components/EmptyState.tsx',
+    ];
+
+    sourceFiles.forEach((file) => {
+      expect(existsSync(join(siteRoot, file))).toBe(true);
+    });
+  });
+
   it('site 提供简洁可扩展的应用骨架', () => {
     const siteRoot = join(resources, 'site-minimal');
 
