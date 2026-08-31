@@ -17,7 +17,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import qrCodeIcon from '@/assets/icons/qr-code-icon.svg';
+import qrCodeIcon from '@/assets/icons/qr-code-icon.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import vipH5ProdQrCode from '@/assets/vip-h5-prod-qr-code.png';
 import vipH5TestQrCode from '@/assets/vip-h5-test-qr-code.png';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
@@ -785,7 +786,10 @@ export function DataCenter() {
                   className="shrink-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#6B8CFF] focus-visible:ring-offset-1"
                   onClick={() => setQrCodePinned((pinned) => !pinned)}
                 >
-                  <img src={qrCodeIcon} alt="" className="h-[21px] w-[21px] dark:invert" />
+                  <ThemedMonochromeIcon
+                    source={qrCodeIcon}
+                    className="sto-icon--neutral-strong h-[21px] w-[21px]"
+                  />
                 </button>
               </TooltipTrigger>
               <TooltipContent

@@ -311,13 +311,13 @@ export const formFieldOpenClass = cn(
 
 /** 定时任务弹窗：表单 label */
 export const taskCreateFormLabelClass = cn(
-  'block text-[12px] font-medium leading-[18px] tracking-normal text-[#1D2129]',
+  'block text-[12px] font-medium leading-[18px] tracking-normal text-[#1D2129] dark:text-[var(--sto-text-primary)]',
 );
 
 /** 定时任务弹窗：单行输入框 / 选择框 */
 export const taskCreateFormControlClass = cn(
-  'box-border flex h-[42px] w-full items-center',
-  'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] px-3 py-2',
+  'sto-control sto-control--dialog-field box-border flex h-[42px] w-full items-center',
+  'rounded-[8px] border px-3 py-2',
   'text-[12px] text-foreground',
 );
 
@@ -335,8 +335,8 @@ export const modalPrimarySubmitButtonClass = cn(
 
 /** SchedulePicker 触发器（与 formField 系列一致） */
 export const schedulePickerTriggerClass = cn(
-  'box-border flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5',
-  'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] px-3 py-2',
+  'sto-control sto-control--dialog-field box-border flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5',
+  'rounded-[8px] border px-3 py-2',
   'text-[12px] font-medium text-foreground',
   'outline-none transition-colors',
   formFieldHoverBorderClass,
@@ -974,7 +974,7 @@ export const contentHeaderSessionChipCloseClass = cn(
 /** 标题栏右侧 icon 按钮（16×16 icon，Grey-9 默认） */
 export const contentHeaderActionBtnClass = cn(
   'no-drag flex h-[var(--sto-content-header-control-h,28px)] w-[var(--sto-content-header-control-h,28px)] shrink-0 items-center justify-center rounded-md',
-  'text-[#4E5969] transition-colors duration-fast',
+  'sto-icon--neutral transition-colors duration-fast',
   'hover:bg-black/[0.04] hover:text-foreground',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
@@ -1242,13 +1242,12 @@ export const workflowListCardMenuItemClass =
 
 /** 工作流详情 / 新建弹窗遮罩（暗色需更高不透明度，否则与页面底融在一起） */
 export const workflowDetailModalOverlayClass = cn(
-  'bg-black/20 backdrop-blur-[1px]',
-  'dark:bg-black/60 dark:backdrop-blur-sm',
+  'sto-overlay-scrim sto-overlay-scrim--dialog',
 );
 
 /** 工作流详情弹窗内容壳（540px / 圆角 24 / MasterGo 阴影） */
 export const workflowDetailModalContentClass = cn(
-  'flex w-full max-w-[540px] flex-col overflow-hidden rounded-[24px] bg-card',
+  'sto-overlay sto-overlay--dialog flex w-full max-w-[540px] flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border',
   'max-h-[min(960px,calc(100vh-40px))]',
   'shadow-[var(--sto-wf-detail-modal-shadow)]',
 );
@@ -1378,8 +1377,7 @@ export const createWorkflowModalOverlayClass = workflowDetailModalOverlayClass;
 
 /** 新建工作流弹窗内容壳（MasterGo 8:79172 组 7109 — 460×392 / 圆角 18） */
 export const createWorkflowModalContentClass = cn(
-  'flex w-full max-w-[460px] flex-col overflow-hidden rounded-[18px] bg-card shadow-modal',
-  'dark:border dark:border-border',
+  'sto-overlay sto-overlay--dialog flex w-full max-w-[460px] flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border',
 );
 
 /** 新建工作流弹窗标题区 */
@@ -1399,8 +1397,8 @@ export const createWorkflowModalSubtitleClass =
 
 /** 新建工作流弹窗关闭钮（标题行内 18×18） */
 export const createWorkflowModalCloseClass = cn(
-  'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm',
-  'text-foreground transition-colors duration-fast hover:bg-black/[0.04]',
+  'sto-control sto-dialog-close flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm',
+  'transition-colors duration-fast',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
@@ -1435,7 +1433,7 @@ export const createWorkflowModalCategorySelectClass =
 
 /** 新建工作流弹窗底栏 */
 export const createWorkflowModalFooterClass =
-  'flex shrink-0 items-center justify-end px-4 py-4';
+  'sto-dialog-footer shrink-0 items-center px-4 py-4';
 
 /** 新建工作流确认钮（#1D2129 底 / 34px / 圆角 12px） */
 export const createWorkflowModalConfirmButtonClass = cn(

@@ -97,8 +97,8 @@ export function ConfirmDialog({
     >
       <div
         className={cn(
-          'sto-overlay w-full max-w-[400px] overflow-hidden rounded-[12px] border p-5',
-          'shadow-[var(--sto-shadow-dialog)] focus:outline-none',
+          'sto-overlay sto-overlay--dialog w-full max-w-[400px] overflow-hidden rounded-[var(--sto-dialog-radius)] border p-5',
+          'focus:outline-none',
         )}
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
@@ -112,7 +112,7 @@ export function ConfirmDialog({
         <p className="mt-2 text-[13px] leading-relaxed text-[var(--sto-text-tertiary)]">
           {message}
         </p>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="sto-dialog-footer mt-5">
           <Button
             ref={cancelRef}
             variant="outline"
@@ -123,11 +123,12 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            variant={variant === 'destructive' ? 'destructive' : 'default'}
+            variant={variant === 'destructive' ? 'destructive' : 'outline'}
             onClick={handleConfirm}
             disabled={confirming}
             className={cn(
               'h-8 rounded-md px-3 text-[13px] font-medium shadow-none',
+              variant === 'default' && 'sto-control--dialog-primary',
               variant === 'destructive' && 'bg-[var(--sto-dialog-destructive-background)] hover:bg-[var(--sto-dialog-destructive-hover-background)]',
             )}
           >

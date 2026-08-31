@@ -95,7 +95,7 @@ export function ChatSearchBar({
               ? contentHeaderActionBtnClass
               : cn(
                   'h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]',
-                  isOpen && 'bg-primary/12 text-primary',
+                  isOpen && 'bg-[var(--sto-control-active-bg)] text-[var(--sto-icon-primary)]',
                 ),
           )}
           onClick={onToggle}
@@ -125,7 +125,7 @@ export function ChatSearchBar({
           'bg-[var(--sto-search-overlay-background)] shadow-[var(--sto-shadow-search-overlay)] backdrop-blur-md',
         )}
       >
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <div className="sto-icon--neutral flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--sto-control-hover-bg)]">
           <Search className="h-3.5 w-3.5" aria-hidden />
         </div>
         <Input

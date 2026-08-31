@@ -434,6 +434,14 @@ const overlayStates: Record<State, StateColors> = {
   error: sharedError,
 };
 
+const dialogStates: Record<State, StateColors> = {
+  ...overlayStates,
+  default: normal('--sto-dialog-background', '--sto-dialog-border', '--sto-overlay-foreground'),
+  hover: normal('--sto-dialog-background', '--sto-dialog-border', '--sto-overlay-foreground'),
+  active: normal('--sto-dialog-background', '--sto-dialog-border', '--sto-overlay-foreground'),
+  focus: normal('--sto-dialog-background', '--sto-dialog-border', '--sto-overlay-foreground'),
+};
+
 const expectedByPrimitive: Record<Primitive, Record<State, StateColors>> = {
   Button: primaryControlStates,
   Card: cardStates,
@@ -441,7 +449,7 @@ const expectedByPrimitive: Record<Primitive, Record<State, StateColors>> = {
   Textarea: fieldStates,
   Select: fieldStates,
   Tabs: segmentStates,
-  Dialog: overlayStates,
+  Dialog: dialogStates,
   Dropdown: navigationStates,
   Tooltip: overlayStates,
 };
@@ -469,6 +477,7 @@ describe('mounted primitive theme recipe matrix', () => {
       for (const state of primitiveStates[primitive]) {
         it(`${theme} ${primitive} applies semantic ${state} colors`, () => {
           const mounted = mountPrimitive(primitive, state, theme);
+          if (primitive === 'Dialog') expect(mounted).toHaveClass('sto-overlay--dialog');
           expectColors(mounted, expectedByPrimitive[primitive][state]);
           if (state === 'focus' && primitive === 'Card') {
             expect(getComputedStyle(mounted).boxShadow)
@@ -834,10 +843,61 @@ describe('card cascade combinations', () => {
       .toBe(colorMarker('--sto-brand-primary'));
     expect(getComputedStyle(result.getByTestId('dialog-secondary-hover')).backgroundColor)
       .toBe(colorMarker('--sto-disabled-background'));
-    expect(getComputedStyle(result.getByTestId('dialog-primary-hover')).filter)
-      .toBe('brightness(1.05)');
+    expect(getComputedStyle(result.getByTestId('dialog-primary-hover')).backgroundColor)
+      .toBe(colorMarker('--sto-dialog-action-hover-background'));
     expect(getComputedStyle(result.getByTestId('quiet-disabled-hover')).color)
       .toBe(colorMarker('--sto-text-tertiary'));
+
+    result.unmount();
+    dispose();
+  });
+
+  it.each(themes)('keeps selected App Plaza feature tabs visually plain in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
+    const competingNavigationState = container.ownerDocument.createElement('style');
+    competingNavigationState.textContent = `
+      .sto-navigation-item[aria-selected='true'] {
+        background: rgb(31, 41, 55);
+      }
+    `;
+    container.ownerDocument.head.append(competingNavigationState);
+    const result = render(
+      <button
+        data-testid="selected-feature-tab"
+        aria-selected="true"
+        className="sto-navigation-item sto-navigation-item--feature-tab more-apps-tab"
+      />,
+      { container },
+    );
+
+    expect(container.ownerDocument.defaultView?.getComputedStyle(result.getByTestId('selected-feature-tab')).backgroundColor)
+      .toBe('rgba(0, 0, 0, 0)');
+
+    result.unmount();
+    dispose();
+  });
+
+  it.each(themes)('matches Skill Plaza category tab sizing in App Plaza in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
+    const result = render(
+      <button
+        data-testid="app-category-tab"
+        className="sto-navigation-item sto-navigation-item--feature-filter app-market__cat"
+      />,
+      { container },
+    );
+    const style = container.ownerDocument.defaultView?.getComputedStyle(
+      result.getByTestId('app-category-tab'),
+    );
+    if (!style) throw new Error('Expected iframe computed styles');
+
+    expect(style.fontSize).toBe('13px');
+    expect(style.paddingTop).toBe('6px');
+    expect(style.paddingRight).toBe('12px');
+    expect(style.paddingBottom).toBe('6px');
+    expect(style.paddingLeft).toBe('12px');
+    expect(style.borderRadius).toBe('12px');
+    expect(style.gap).toBe('2px');
 
     result.unmount();
     dispose();

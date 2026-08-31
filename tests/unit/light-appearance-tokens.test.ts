@@ -169,7 +169,7 @@ describe('light appearance color system', () => {
     expect(taskCreateModalSource).toContain(
       'bg-[var(--sto-dialog-destructive-background)] px-4 text-sm text-[hsl(var(--destructive-foreground))] hover:bg-[var(--sto-dialog-destructive-hover-background)]',
     );
-    expect(taskCreateModalSource).not.toContain('dark:');
+    expect(taskCreateModalSource).not.toMatch(/dark:(?:bg|text)-destructive/);
     expect(confirmDialogSource).toContain(
       "variant === 'destructive' && 'bg-[var(--sto-dialog-destructive-background)] hover:bg-[var(--sto-dialog-destructive-hover-background)]'",
     );

@@ -85,13 +85,13 @@ export interface InputComposerToolbarProps {
 
 const homeIconBtn = cn(
   'inline-flex h-[30px] w-[30px] flex-col items-center justify-center rounded-lg px-[1.62px] py-[2.08px]',
-  'text-[#000] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted',
+  'text-[var(--sto-icon-primary)] hover:bg-[#F0F2F5] dark:text-[var(--sto-icon-secondary)] dark:hover:bg-muted',
 );
 
 const homeIconActive = 'bg-[#F0F2F5] hover:bg-[#F0F2F5] dark:bg-muted dark:hover:bg-muted';
 
 const defaultIconBtn =
-  'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]';
+  'h-8 w-8 rounded-full p-0 text-[var(--sto-icon-primary)] hover:bg-black/5 hover:text-foreground dark:text-[var(--sto-icon-secondary)] dark:hover:bg-white/[0.06]';
 
 const defaultIconActive =
   'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]';

@@ -625,12 +625,12 @@
 .page-more-apps .app-market__cat {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 7px 14px;
+  gap: 2px;
+  padding: 6px 12px;
   border: 0;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 14px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
@@ -1009,7 +1009,7 @@
   position: relative;
   width: min(100%, 440px);
   padding: 20px;
-  border-radius: 16px;
+  border-radius: var(--sto-dialog-radius);
 }
 
 .more-apps-modal__head {

@@ -16,9 +16,10 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { collectionCardShellClass } from '@/lib/surfaces';
 import { CollectionCardAction } from '@/components/ui/collection-card-action';
-import messageIcon from '@/assets/icons/message.svg';
+import messageIcon from '@/assets/icons/message.svg?raw';
 import loadingIcon from '@/assets/icons/loading.svg';
-import moreIcon from '@/assets/icons/more.svg';
+import moreIcon from '@/assets/icons/more.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import { SkillIcon } from './SkillIcon';
 
 interface SkillCardProps {
@@ -151,7 +152,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
               disabled={isDisabled}
               className={actionIconBtnClass}
             >
-              <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
+              <ThemedMonochromeIcon source={messageIcon} className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
@@ -218,7 +219,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
           <button type="button" onClick={handleUse} disabled={isDisabled} className={actionIconBtnClass}>
-            <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
+            <ThemedMonochromeIcon source={messageIcon} className="h-3.5 w-3.5" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
@@ -236,7 +237,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
             onMouseLeave={scheduleCloseMoreMenu}
             aria-label={t('plaza.action.more', { defaultValue: '更多' })}
           >
-            <img src={moreIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
+            <ThemedMonochromeIcon source={moreIcon} className="h-3.5 w-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent

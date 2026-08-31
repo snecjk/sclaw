@@ -265,8 +265,8 @@
   .sto-control.sto-control--dialog-field:is(:focus, :focus-visible, [data-sto-state='focus']) { border-color: var(--sto-brand-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 12%, transparent); outline: none; }
   .sto-control--dialog-secondary { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-segment-plain-selected-foreground); }
   .sto-control--dialog-secondary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-disabled-background); }
-  .sto-control--dialog-primary { background-color: var(--sto-brand-primary); border-color: transparent; color: var(--sto-control-primary-foreground); }
-  .sto-control--dialog-primary:is(:hover, [data-sto-state='hover']) { filter: brightness(1.05); }
+  .sto-control--dialog-primary { background-color: var(--sto-dialog-action-background); border-color: transparent; color: var(--sto-dialog-action-foreground); }
+  .sto-control--dialog-primary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-dialog-action-hover-background); }
 
   .sto-control:not([class*='sto-control--']):is(:hover, :active, [data-sto-state='hover'], [data-sto-state='active']) {
     background-color: var(--sto-control-hover-bg);
@@ -415,7 +415,7 @@
   }
 
   .sto-navigation-item--feature-tab { background-color: transparent; border-color: transparent; color: var(--sto-text-tertiary); }
-  .sto-navigation-item--feature-tab:is(:hover, [data-sto-state='hover'], [aria-selected='true']) { color: var(--sto-segment-plain-selected-foreground); }
+  .sto-navigation-item.sto-navigation-item--feature-tab:is(:hover, [data-sto-state='hover'], [aria-selected='true']) { background: transparent; color: var(--sto-segment-plain-selected-foreground); }
   .sto-navigation-item--feature-filter { background-color: transparent; border-color: transparent; color: var(--sto-markdown-code-muted); }
   .sto-navigation-item--feature-filter .sto-navigation-item__count { color: var(--sto-metadata-count-foreground); }
   .sto-navigation-item--feature-filter:is(:hover, [data-sto-state='hover'], [aria-pressed='true']) { background-color: var(--sto-control-active-bg); color: var(--sto-quick-input-content-foreground); }
@@ -540,8 +540,18 @@
   .sto-overlay--side-panel { box-shadow: -8px 0 24px color-mix(in srgb, var(--sto-shadow-tone) 6%, transparent); }
   .sto-overlay--selection-popover { background-color: var(--sto-overlay-background); border-color: var(--sto-feature-soft-border); box-shadow: 0 18px 48px color-mix(in srgb, var(--sto-shadow-tone) 18%, transparent); }
   .sto-overlay--raised-dialog { background-color: var(--sto-card-panel-bg); color: var(--sto-segment-plain-selected-foreground); box-shadow: 0 24px 48px color-mix(in srgb, var(--sto-shadow-tone) 16%, transparent); }
+  .sto-overlay.sto-overlay--dialog { background-color: var(--sto-dialog-background); border-color: var(--sto-dialog-border); box-shadow: var(--sto-dialog-shadow); backdrop-filter: none; }
   .sto-overlay-scrim { background-color: var(--sto-overlay-scrim); }
-  .sto-overlay-scrim--dialog { background-color: var(--sto-overlay-dialog-scrim); }
+  .sto-overlay-scrim--dialog { background-color: var(--sto-overlay-dialog-scrim); backdrop-filter: none; }
+  .sto-dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; }
+  :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control--primary { background-color: var(--sto-dialog-action-background); border-color: transparent; color: var(--sto-dialog-action-foreground); }
+  :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control--primary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-dialog-action-hover-background); border-color: transparent; }
+  :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control:is(:focus-visible, [data-sto-state='focus']) { box-shadow: var(--sto-dialog-action-focus-shadow); }
+  .sto-icon--neutral { color: var(--sto-icon-secondary); }
+  .sto-icon--neutral-strong { color: var(--sto-icon-primary); }
+  .sto-icon--neutral-quiet { color: var(--sto-icon-tertiary); }
+  .sto-dialog-close { background-color: transparent; border-color: transparent; color: var(--sto-icon-secondary); }
+  .sto-dialog-close:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-hover-bg); color: var(--sto-icon-primary); }
 
   /* Third-party canvas chrome cannot carry recipe classes; this bridge keeps state ownership here. */
   .workflow-designer-flow .react-flow__controls { background-color: var(--sto-control-toolbar-background); border-color: var(--sto-overlay-border); box-shadow: 0 1px 3px color-mix(in srgb, var(--sto-overlay-scrim) 20%, transparent); }

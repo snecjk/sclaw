@@ -99,7 +99,7 @@ export function AddExternalAppModal() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="more-apps-add-modal-title"
-        className="sto-overlay sto-overlay--raised-dialog more-apps-modal__panel"
+        className="sto-overlay sto-overlay--dialog more-apps-modal__panel rounded-[var(--sto-dialog-radius)]"
       >
         <div className="more-apps-modal__head">
           <h2 id="more-apps-add-modal-title" className="more-apps-modal__title">
@@ -110,7 +110,7 @@ export function AddExternalAppModal() {
           <button
             type="button"
             onClick={closeAddModal}
-            className="sto-control sto-control--dismiss more-apps-modal__close"
+            className="sto-control sto-dialog-close more-apps-modal__close"
             aria-label={t('common.close', { defaultValue: '关闭' })}
             data-more-apps-modal-close
           >
@@ -166,7 +166,7 @@ export function AddExternalAppModal() {
           <p className="more-apps-modal__hint">
             {t('moreApps.addModal.hint', { defaultValue: '外部应用将在应用内嵌打开，链接保存在本浏览器本地' })}
           </p>
-          <div className="more-apps-modal__actions">
+          <div className="sto-dialog-footer more-apps-modal__actions">
             <button
               type="button"
               onClick={closeAddModal}

@@ -442,15 +442,17 @@ describe('dark appearance semantic tokens', () => {
     expect(parameterOptionCardSource).not.toContain('opacity-60');
   });
 
-  it('keeps the dark content canvas deeper than the sidebar and selection surfaces', () => {
+  it('keeps the dark main workspace at #141414 while panels and surrounding surfaces retain their levels', () => {
     const dark = extractThemeBlock('.dark {');
 
     expect(dark).toContain('--background: 0 0% 5.1%');
     expect(dark).toContain('--sto-shell-bg: var(--sto-surface-secondary)');
-    expect(dark).toContain('--sto-workspace-bg: var(--sto-surface-under)');
+    expect(dark).toContain('--sto-surface-primary: #181818');
+    expect(dark).toContain('--sto-workspace-bg: #141414');
+    expect(dark).toContain('--sto-panel-bg: var(--sto-surface-primary)');
     expect(dark).toContain('--sto-page-bg: var(--sto-surface-under)');
     expect(dark).toContain('--sto-sidebar-bg: var(--sto-surface-secondary)');
-    expect(dark).toContain('--sto-main-card-bg: var(--sto-surface-under)');
+    expect(dark).toContain('--sto-main-card-bg: var(--sto-workspace-bg)');
     expect(dark).toContain('--sto-sidebar-nav-active-bg: var(--sto-surface-elevated)');
     expect(dark).toContain('--sto-sidebar-subitem-active-bg: var(--sto-surface-elevated)');
   });

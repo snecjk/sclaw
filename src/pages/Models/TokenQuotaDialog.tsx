@@ -165,12 +165,12 @@ export function TokenQuotaDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm dark:bg-black/60"
+      className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4"
       role="dialog"
       aria-modal="true"
       onKeyDown={handleKeyDown}
     >
-      <div className="mx-auto w-full max-w-3xl rounded-xl border border-glass-border bg-white shadow-2xl dark:bg-[hsl(var(--glass-bg))]">
+      <div className="sto-overlay sto-overlay--dialog mx-auto w-full max-w-3xl rounded-[var(--sto-dialog-radius)] border">
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="text-lg font-semibold text-foreground">
             {t('tokenQuotaDialog.title', '申请扩容')}
@@ -334,8 +334,9 @@ function TierCard({
         )}
         {status === 'available' && (
           <Button
+            variant="outline"
             size="sm"
-            className="w-full rounded-md bg-orange-500 text-[12px] text-white hover:bg-orange-600"
+            className="sto-control--dialog-primary w-full rounded-md text-[12px]"
             onClick={() => onApply(tier)}
             disabled={isApplying || tier.quotaAmount == null}
           >

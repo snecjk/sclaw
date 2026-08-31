@@ -189,6 +189,14 @@
     --sto-overlay-glass-shadow: var(--sto-glass-shadow);
     --sto-overlay-scrim: rgba(0, 0, 0, 0.4);
     --sto-overlay-dialog-scrim: rgba(15, 23, 42, 0.42);
+    --sto-dialog-background: var(--sto-overlay-background);
+    --sto-dialog-border: var(--sto-overlay-border);
+    --sto-dialog-shadow: var(--sto-shadow-dialog);
+    --sto-dialog-radius: 18px;
+    --sto-dialog-action-background: var(--sto-brand-primary);
+    --sto-dialog-action-hover-background: var(--sto-brand-hover);
+    --sto-dialog-action-foreground: var(--sto-control-primary-foreground);
+    --sto-dialog-action-focus-shadow: var(--sto-control-focus-shadow);
 
     /* Content, overlay, and form mappings preserve the approved light pixels. */
     --sto-content-process-icon-opacity: 0.7;
@@ -520,11 +528,11 @@
     --sto-border-default: rgba(255, 255, 255, 0.08);
     --sto-border-heavy: rgba(255, 255, 255, 0.16);
     --sto-shell-bg: var(--sto-surface-secondary);
-    --sto-workspace-bg: var(--sto-surface-under);
+    --sto-workspace-bg: #141414;
     --sto-panel-bg: var(--sto-surface-primary);
     --sto-surface-edge: var(--sto-border-default);
     --sto-workspace-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
-    --sto-main-card-bg: var(--sto-surface-under);
+    --sto-main-card-bg: var(--sto-workspace-bg);
     --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-page-bg: var(--sto-surface-under);
     --sto-sidebar-bg: var(--sto-surface-secondary);
@@ -567,6 +575,13 @@
     --sto-overlay-glass-shadow: var(--sto-overlay-shadow);
     --sto-overlay-scrim: rgba(0, 0, 0, 0.6);
     --sto-overlay-dialog-scrim: rgba(0, 0, 0, 0.6);
+    --sto-dialog-background: var(--sto-surface-secondary);
+    --sto-dialog-border: var(--sto-border-default);
+    --sto-dialog-shadow: 0 20px 56px rgba(0, 0, 0, 0.56);
+    --sto-dialog-action-background: rgba(255, 255, 255, 0.88);
+    --sto-dialog-action-hover-background: rgba(255, 255, 255, 0.96);
+    --sto-dialog-action-foreground: var(--sto-surface-primary);
+    --sto-dialog-action-focus-shadow: 0 0 0 2px var(--sto-dialog-background), 0 0 0 4px rgba(255, 255, 255, 0.2);
     --sto-content-process-icon-opacity: 1;
     --sto-content-process-icon-foreground: var(--sto-icon-secondary);
     --sto-content-heading-secondary: var(--sto-text-secondary);

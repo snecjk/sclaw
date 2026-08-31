@@ -214,16 +214,16 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
       {/* 未绑定 — 介绍弹框 */}
       {introOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => setIntroOpen(false)}
         >
           <div
-            className="relative w-[360px] rounded-2xl bg-white p-6 shadow-xl dark:bg-[var(--sto-surface-elevated)]"
+            className="sto-overlay sto-overlay--dialog relative w-[360px] rounded-[var(--sto-dialog-radius)] border p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
-              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[#F2F3F5] dark:hover:bg-[var(--sto-control-hover-bg)]"
+              className="sto-control sto-dialog-close absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors"
               onClick={() => setIntroOpen(false)}
             >
               <X className="h-4 w-4 text-muted-foreground" />
@@ -250,7 +250,7 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
             <div className="mt-6 flex items-center justify-center">
               <button
                 type="button"
-                className="inline-flex h-9 min-w-[120px] items-center justify-center gap-1.5 rounded-[10px] bg-primary px-8 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="sto-control sto-control--dialog-primary inline-flex h-9 min-w-[120px] items-center justify-center gap-1.5 rounded-[10px] px-8 text-[13px] font-medium transition-colors"
                 disabled={inFlight}
                 onClick={handleIntroConnect}
               >
@@ -265,16 +265,16 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
       {/* 已绑定 — 详情弹框（与箭头一致） */}
       {detailOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => setDetailOpen(false)}
         >
           <div
-            className="relative w-[360px] rounded-2xl bg-white p-6 shadow-xl dark:bg-[var(--sto-surface-elevated)]"
+            className="sto-overlay sto-overlay--dialog relative w-[360px] rounded-[var(--sto-dialog-radius)] border p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
-              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[#F2F3F5] dark:hover:bg-[var(--sto-control-hover-bg)]"
+              className="sto-control sto-dialog-close absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors"
               onClick={() => setDetailOpen(false)}
             >
               <X className="h-4 w-4 text-muted-foreground" />
@@ -298,7 +298,7 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
               ) : null}
             </div>
 
-            <div className="mt-6 flex items-center justify-center gap-3">
+            <div className="sto-dialog-footer mt-6">
               <button
                 type="button"
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-destructive/40 px-5 text-[13px] font-medium text-destructive transition-colors hover:bg-destructive/5"

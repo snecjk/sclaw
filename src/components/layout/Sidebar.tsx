@@ -21,9 +21,10 @@ import {
   Database,
   BookOpen,
 } from 'lucide-react';
-import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
-import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
+import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg?raw';
+import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg?raw';
 import { SidebarTimerIcon } from '@/components/layout/sidebar-timer-icon';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 
 import {
   DropdownMenu,
@@ -1939,18 +1940,14 @@ export function Sidebar() {
                     >
                       {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
                       {taskGroupsAllExpanded ? (
-                        <img
-                          src={sidebarCollapseAllGroupsIcon}
-                          alt=""
+                        <ThemedMonochromeIcon
+                          source={sidebarCollapseAllGroupsIcon}
                           className="h-[18px] w-[18px]"
-                          aria-hidden
                         />
                       ) : (
-                        <img
-                          src={sidebarExpandAllGroupsIcon}
-                          alt=""
+                        <ThemedMonochromeIcon
+                          source={sidebarExpandAllGroupsIcon}
                           className="h-[18px] w-[18px]"
-                          aria-hidden
                         />
                       )}
                     </button>

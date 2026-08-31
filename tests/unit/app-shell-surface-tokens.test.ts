@@ -27,6 +27,10 @@ const themeTokensCss = readFileSync(
   resolve(process.cwd(), 'src/styles/theme/tokens.css'),
   'utf8',
 );
+const appPlazaShellCss = readFileSync(
+  resolve(process.cwd(), 'src/components/more-apps/app-plaza-shell.css'),
+  'utf8',
+);
 
 function extractBlock(source: string, marker: string): string {
   const start = source.indexOf(marker);
@@ -64,7 +68,10 @@ describe('app shell surface tokens (Stage 4)', () => {
 
     expect(dark).toMatch(/--sto-page-bg:\s*var\(--sto-surface-under\)/);
     expect(dark).toMatch(/--sto-sidebar-bg:\s*var\(--sto-surface-secondary\)/);
-    expect(dark).toMatch(/--sto-main-card-bg:\s*var\(--sto-surface-under\)/);
+    expect(dark).toMatch(/--sto-surface-primary:\s*#181818/);
+    expect(dark).toMatch(/--sto-workspace-bg:\s*#141414/);
+    expect(dark).toMatch(/--sto-panel-bg:\s*var\(--sto-surface-primary\)/);
+    expect(dark).toMatch(/--sto-main-card-bg:\s*var\(--sto-workspace-bg\)/);
     expect(dark).toMatch(/--sto-main-card-shadow:\s*var\(--sto-workspace-shadow\)/);
   });
 
@@ -80,6 +87,24 @@ describe('app shell surface tokens (Stage 4)', () => {
     expect(stoMainCardShellClass).toContain('shadow-[var(--sto-main-card-shadow)]');
     expect(stoTaskSubitemChatCanvasBg).toBe('bg-[var(--sto-main-card-bg)]');
     expect(stoTaskSubitemChatCanvasBg).not.toContain('dark:bg-background');
+  });
+
+  it('keeps the App Plaza catalog home on the workspace surface without recoloring browser chrome', () => {
+    expect(appPlazaShellCss).toMatch(
+      /\.app-plaza-shell__home\s*\{[^}]*background:\s*var\(--sto-workspace-bg\)/s,
+    );
+    expect(appPlazaShellCss).toMatch(
+      /\.app-plaza-shell\s*\{[^}]*background:\s*hsl\(var\(--background\)\)/s,
+    );
+    expect(appPlazaShellCss).toMatch(
+      /\.app-plaza-browser-toolbar\s*\{[^}]*background:\s*hsl\(var\(--background\)\)/s,
+    );
+    expect(appPlazaShellCss).toMatch(
+      /\.app-plaza-blank\s*\{[^}]*background:\s*hsl\(var\(--background\)\)/s,
+    );
+    expect(appPlazaShellCss).toMatch(
+      /\.app-plaza-suspended-placeholder\s*\{[^}]*background:\s*hsl\(var\(--background\)\)/s,
+    );
   });
 
   it('maps Preview and Composer to L2 panel tokens (no theme-only bg-white/card fork)', () => {

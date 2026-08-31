@@ -496,9 +496,9 @@ function FolderPickerDialog({
 
   return (
     <>
-      <div className="fixed inset-0 z-[10060] flex items-center justify-center bg-black/35 px-4" onClick={onClose}>
+      <div className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[10060] flex items-center justify-center px-4" onClick={onClose}>
       <div
-        className="flex max-h-[min(560px,calc(100vh-4rem))] w-full max-w-[520px] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+        className="sto-overlay sto-overlay--dialog flex max-h-[min(560px,calc(100vh-4rem))] w-full max-w-[520px] flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -509,7 +509,7 @@ function FolderPickerDialog({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="sto-control sto-dialog-close flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
             aria-label="关闭"
           >
             <X className="h-4 w-4" />
@@ -558,7 +558,7 @@ function FolderPickerDialog({
                   }}
                   className="flex h-10 items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-muted"
                 >
-                  <Folder className="h-4 w-4 shrink-0 text-[#4E7FFF]" />
+                  <Folder className="sto-icon--neutral h-4 w-4 shrink-0" />
                   <span className="min-w-0 flex-1 truncate font-medium text-foreground">{folder.name}</span>
                   <ChevronDown className="-rotate-90 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 </button>
@@ -591,7 +591,7 @@ function FolderPickerDialog({
 
       {creatingFolder ? (
         <div
-          className="fixed inset-0 z-[10070] flex items-center justify-center bg-black/35 px-6"
+          className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[10070] flex items-center justify-center px-6"
           onClick={() => {
             if (createSubmitting) return;
             setCreatingFolder(false);
@@ -599,7 +599,7 @@ function FolderPickerDialog({
           }}
         >
           <div
-            className="w-full max-w-[360px] rounded-2xl border border-border bg-background p-4 shadow-2xl"
+            className="sto-overlay sto-overlay--dialog w-full max-w-[360px] rounded-[var(--sto-dialog-radius)] border p-4"
             onClick={(event) => event.stopPropagation()}
           >
             <h4 className="text-base font-semibold text-foreground">新建文件夹</h4>
@@ -617,7 +617,7 @@ function FolderPickerDialog({
               placeholder="请输入文件夹名称"
               className="mt-3 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
             />
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="sto-dialog-footer mt-4">
               <Button
                 variant="outline"
                 disabled={createSubmitting}
@@ -677,7 +677,7 @@ function FolderPickerDialog({
 
       {renamingFolder ? (
         <div
-          className="fixed inset-0 z-[10070] flex items-center justify-center bg-black/35 px-6"
+          className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[10070] flex items-center justify-center px-6"
           onClick={() => {
             if (renameSubmitting) return;
             setRenamingFolder(null);
@@ -685,7 +685,7 @@ function FolderPickerDialog({
           }}
         >
           <div
-            className="w-full max-w-[360px] rounded-2xl border border-border bg-background p-4 shadow-2xl"
+            className="sto-overlay sto-overlay--dialog w-full max-w-[360px] rounded-[var(--sto-dialog-radius)] border p-4"
             onClick={(event) => event.stopPropagation()}
           >
             <h4 className="text-base font-semibold text-foreground">重命名文件夹</h4>
@@ -703,7 +703,7 @@ function FolderPickerDialog({
               placeholder="请输入文件夹名称"
               className="mt-3 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
             />
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="sto-dialog-footer mt-4">
               <Button
                 variant="outline"
                 disabled={renameSubmitting}
@@ -729,21 +729,21 @@ function FolderPickerDialog({
 
       {deletingFolder ? (
         <div
-          className="fixed inset-0 z-[10070] flex items-center justify-center bg-black/35 px-6"
+          className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[10070] flex items-center justify-center px-6"
           onClick={() => {
             if (deleteSubmitting) return;
             setDeletingFolder(null);
           }}
         >
           <div
-            className="w-full max-w-[360px] rounded-2xl border border-border bg-background p-4 shadow-2xl"
+            className="sto-overlay sto-overlay--dialog w-full max-w-[360px] rounded-[var(--sto-dialog-radius)] border p-4"
             onClick={(event) => event.stopPropagation()}
           >
             <h4 className="text-base font-semibold text-foreground">删除文件夹</h4>
             <p className="mt-3 text-sm text-muted-foreground">
               确定要删除文件夹“{deletingFolder.name}”吗？
             </p>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="sto-dialog-footer mt-4">
               <Button
                 variant="outline"
                 disabled={deleteSubmitting}
@@ -975,14 +975,14 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+      className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
     >
       <motion.div
-        className="w-full max-w-[min(640px,100%)] bg-[#FFFFFF] rounded-[18px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
+        className="sto-overlay sto-overlay--dialog w-full max-w-[min(640px,100%)] rounded-[var(--sto-dialog-radius)] border flex flex-col max-h-[calc(100vh-4rem)]"
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -1000,7 +1000,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 flex items-center justify-center w-9 h-9 -mr-2 -mt-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="sto-control sto-dialog-close shrink-0 flex items-center justify-center w-9 h-9 -mr-2 -mt-1.5 rounded-lg transition-colors"
             aria-label={t('myTask.createModal.closeAria')}
           >
             <X className="h-5 w-5" />
@@ -1094,7 +1094,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               <div className="flex flex-col gap-1.5">
                 <p className="text-xs text-muted-foreground">{t('myTask.schedule.tooComplexToEdit')}</p>
                 {originalCronExpr ? (
-                  <code className="block overflow-x-auto rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 py-2 text-[12px] text-foreground">
+                  <code className="block overflow-x-auto rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 py-2 text-[12px] text-foreground dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)]">
                     {originalCronExpr}
                   </code>
                 ) : null}
@@ -1207,6 +1207,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               className={cn(
                 taskCreateFormControlClass,
                 formFieldFocusClass,
+                'dark:[color-scheme:dark]',
                 isEditing && 'cursor-not-allowed opacity-60',
               )}
             >
@@ -1217,7 +1218,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">
+        <div className="sto-dialog-footer px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[var(--sto-dialog-radius)] flex-shrink-0">
           <Button
             variant="outline"
             onClick={onClose}

@@ -90,13 +90,13 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay
-          className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+          className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
         />
         <Dialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-full max-w-[440px] max-h-[85vh]',
-            'bg-background rounded-2xl shadow-2xl',
+            'sto-overlay sto-overlay--dialog rounded-[var(--sto-dialog-radius)] border',
             'flex flex-col overflow-hidden',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -113,7 +113,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               <Dialog.Close asChild>
                 <button
                   onClick={onClose}
-                  className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
+                  className="sto-control sto-dialog-close absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full transition-colors focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -202,15 +202,15 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
           </div>
 
           {/* CTA */}
-          <div className="p-4 bg-background">
+          <div className="sto-dialog-footer border-t border-[var(--sto-dialog-border)] p-4">
             {liveSkill.updateAvailable ? (
               <button
                 onClick={handleInstall}
                 disabled={isInstalling}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-amber-950 bg-amber-100 hover:bg-amber-200 transition-colors disabled:opacity-50 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:bg-amber-900/60"
+                className="sto-control sto-control--dialog-primary inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
               >
                 {isInstalling ? (
-                  <span className="animate-spin h-4 w-4 border-2 border-amber-900/30 border-t-amber-900 rounded-full dark:border-amber-100/30 dark:border-t-amber-100" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
                   <Download className="h-4 w-4" />
                 )}
@@ -220,7 +220,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               <button
                 onClick={handleUse}
                 disabled={isDisabled}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                className="sto-control sto-control--dialog-primary inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
               >
                 <Play className="h-4 w-4" />
                 {t('plaza.action.useNow', { defaultValue: '立即使用' })}
@@ -229,7 +229,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               <button
                 onClick={handleInstall}
                 disabled={isInstalling}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="sto-control sto-control--dialog-primary inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
               >
                 {isInstalling ? (
                   <span className="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full" />

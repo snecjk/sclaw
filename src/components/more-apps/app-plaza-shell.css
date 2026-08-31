@@ -151,7 +151,7 @@
   z-index: 2;
   pointer-events: auto;
   /* Opaque fill — prevents “ghost” layers / click-through to browser-stack. */
-  background: hsl(var(--background));
+  background: var(--sto-workspace-bg);
 }
 
 .app-plaza-shell__home-scroll {

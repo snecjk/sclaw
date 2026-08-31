@@ -509,7 +509,7 @@ export const TaskInstructionComposer = forwardRef<
         onDragLeave={enableAttachments ? handleDragLeave : undefined}
         onDrop={enableAttachments ? handleDrop : undefined}
         className={cn(
-          'flex h-[276px] flex-col rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] shadow-none ring-0',
+          'flex h-[276px] flex-col rounded-[8px] border shadow-none ring-0',
           'hover:shadow-none dark:hover:shadow-none',
           formFieldHoverBorderClass,
           formFieldFocusWithinClass,

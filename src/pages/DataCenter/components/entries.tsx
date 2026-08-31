@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type Mou
 import { useTranslation } from 'react-i18next';
 import { Loader2, MoreHorizontal } from 'lucide-react';
 import emptyIllustration from '@/assets/empty.png';
-import downloadIcon from '@/assets/icons/download-icon.svg';
-import shareIcon from '@/assets/icons/share-icon.svg';
-import uploadIcon from '@/assets/icons/upload-icon.svg';
+import downloadIcon from '@/assets/icons/download-icon.svg?raw';
+import shareIcon from '@/assets/icons/share-icon.svg?raw';
+import uploadIcon from '@/assets/icons/upload-icon.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -507,10 +508,10 @@ function EntryActions({
           <button
             type="button"
             onClick={() => onUploadToShared(entry)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--sto-icon-secondary)] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={uploadToSharedLabel}
           >
-            <img src={uploadIcon} alt="" aria-hidden="true" className="h-4 w-4 dark:invert" />
+            <ThemedMonochromeIcon source={uploadIcon} className="h-4 w-4" />
           </button>
         </ActionTooltip>
       ) : null}
@@ -519,10 +520,10 @@ function EntryActions({
           <button
             type="button"
             onClick={() => onDownload(entry)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--sto-icon-secondary)] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={t('dataCenterPage.menu.download')}
           >
-            <img src={downloadIcon} alt="" aria-hidden="true" className="h-4 w-4 dark:invert" />
+            <ThemedMonochromeIcon source={downloadIcon} className="h-4 w-4" />
           </button>
         </ActionTooltip>
       ) : null}
@@ -531,10 +532,10 @@ function EntryActions({
           <button
             type="button"
             onClick={() => onShare(entry)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--sto-icon-secondary)] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={t('dataCenterPage.menu.share')}
           >
-            <img src={shareIcon} alt="" aria-hidden="true" className="h-4 w-4 dark:invert" />
+            <ThemedMonochromeIcon source={shareIcon} className="h-4 w-4" />
           </button>
         </ActionTooltip>
       ) : null}

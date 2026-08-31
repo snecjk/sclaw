@@ -3,7 +3,8 @@
  */
 import { Folder, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import sidebarProjectNewChatIcon from '@/assets/icons/sidebar-project-new-chat.svg';
+import sidebarProjectNewChatIcon from '@/assets/icons/sidebar-project-new-chat.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,11 +80,9 @@ export function SidebarProjectRowTrailing({
                 'outline-none hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
               )}
             >
-              <img
-                src={sidebarProjectNewChatIcon}
-                alt=""
+              <ThemedMonochromeIcon
+                source={sidebarProjectNewChatIcon}
                 className="h-[18px] w-[18px]"
-                aria-hidden
               />
             </button>
           </TooltipTrigger>

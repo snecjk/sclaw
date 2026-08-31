@@ -209,12 +209,12 @@ export function UserFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] px-4 overflow-y-auto"
+      className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] px-4 overflow-y-auto"
       onClick={handleCancel}
     >
       <div
         ref={modalRef}
-        className={cn('w-full bg-background rounded-2xl border border-border shadow-2xl overflow-hidden my-8', widthClass)}
+        className={cn('sto-overlay sto-overlay--dialog w-full rounded-[var(--sto-dialog-radius)] border overflow-hidden my-8', widthClass)}
         onClick={(e) => e.stopPropagation()}
         style={typeof width === 'number' ? { maxWidth: width } : undefined}
       >

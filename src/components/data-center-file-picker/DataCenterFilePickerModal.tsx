@@ -103,7 +103,7 @@ const STYLES = {
   footer: 'flex shrink-0 items-center justify-end pt-4',
   cancelBtn: 'rounded-[12px] text-[12px] font-normal',
   confirmBtn:
-    'rounded-[12px] bg-[#1D2129] text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground',
+    'rounded-[12px] bg-[#1D2129] text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]',
 } as const;
 
 // ---------------------------------------------------------------------------

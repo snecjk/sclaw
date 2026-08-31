@@ -200,7 +200,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
   return createPortal(
     <>
       <motion.div
-        className="sto-overlay-scrim fixed inset-0 z-[10050] flex items-center justify-center px-4 backdrop-blur-sm"
+        className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[10050] flex items-center justify-center px-4"
         onClick={() => {
           if (!saving && !shareDialogOpen) onClose();
         }}
@@ -213,7 +213,7 @@ function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="quick-input-manage-title"
-          className="sto-overlay flex h-[496px] w-[640px] flex-col overflow-hidden rounded-[18px] p-0 shadow-[var(--sto-overlay-shadow)]"
+          className="sto-overlay sto-overlay--dialog flex h-[496px] w-[640px] flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border p-0"
           onClick={(e) => e.stopPropagation()}
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}

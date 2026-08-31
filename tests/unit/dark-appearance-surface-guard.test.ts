@@ -317,8 +317,8 @@ const taskSevenLocalThemeBranch = /dark:(?:bg|text|border|shadow|ring|fill|hover
 
 const requiredSemanticFragments: Record<(typeof taskSixFiles)[number], readonly string[]> = {
   'src/components/skill-plaza/SkillUploadModal.tsx': [
-    'dark:bg-[var(--sto-control-bg)]',
-    'dark:bg-[var(--sto-surface-elevated)]',
+    'sto-overlay--dialog',
+    'sto-dialog-close',
   ],
   'src/components/workflow/WorkflowPreviewPanel.tsx': [
     'dark:bg-[var(--sto-surface-primary)]',
@@ -326,8 +326,8 @@ const requiredSemanticFragments: Record<(typeof taskSixFiles)[number], readonly 
     'dark:text-[var(--sto-text-primary)]',
   ],
   'src/components/connectors/ConnectorCard.tsx': [
-    'dark:bg-[var(--sto-surface-elevated)]',
-    'dark:hover:bg-[var(--sto-control-hover-bg)]',
+    'sto-overlay--dialog',
+    'sto-dialog-close',
   ],
   'src/components/ui/button.tsx': [
     'sto-control sto-control--outline',

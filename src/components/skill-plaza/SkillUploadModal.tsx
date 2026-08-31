@@ -303,12 +303,12 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="no-drag fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Overlay className="sto-overlay-scrim sto-overlay-scrim--dialog no-drag fixed inset-0 z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
           className={cn(
             'no-drag fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-full max-w-[420px] max-h-[calc(100vh-2rem)]',
-            'bg-background rounded-2xl shadow-2xl dark:bg-[var(--sto-surface-elevated)]',
+            'sto-overlay sto-overlay--dialog rounded-[var(--sto-dialog-radius)] border',
             'flex flex-col overflow-hidden',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -319,7 +319,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
           <Dialog.Close asChild>
             <button
               onClick={onClose}
-              className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground transition-colors focus:outline-none dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]"
+              className="sto-control sto-dialog-close absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full transition-colors focus:outline-none"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -359,7 +359,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                   )}
                 >
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
-                    <FileArchive className="h-6 w-6 text-muted-foreground" />
+                    <FileArchive className="sto-icon--neutral h-6 w-6" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
                     {t('plaza.upload.dragHint', { defaultValue: '拖拽文件、.zip文件、文件夹到此处' })}
@@ -409,7 +409,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                           {t('plaza.upload.selectFileHint', { defaultValue: '支持多选 .zip 文件或 SKILL.md 文件' })}
                         </span>
                       </span>
-                      <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                      <ChevronRight className="sto-icon--neutral h-5 w-5 flex-shrink-0 transition-colors group-hover:text-foreground" aria-hidden="true" />
                     </button>
 
                     <button
@@ -429,7 +429,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                           {t('plaza.upload.selectFolderHint', { defaultValue: '支持多选包含 SKILL.md 的技能文件夹' })}
                         </span>
                       </span>
-                      <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                      <ChevronRight className="sto-icon--neutral h-5 w-5 flex-shrink-0 transition-colors group-hover:text-foreground" aria-hidden="true" />
                     </button>
                   </div>
                 </div>

@@ -9,9 +9,9 @@ import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
-import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
-import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg';
+import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg?raw';
+import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg?raw';
+import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg?raw';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
@@ -41,6 +41,7 @@ import {
 } from '@/lib/sidebar-project-session-navigation';
 import { resolveSidebarChannelSource } from '@/lib/session-channel-source';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
@@ -336,18 +337,14 @@ export function SidebarProjectsSection({
                   >
                     {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
                     {projectGroupsAllExpanded ? (
-                      <img
-                        src={sidebarCollapseAllGroupsIcon}
-                        alt=""
+                      <ThemedMonochromeIcon
+                        source={sidebarCollapseAllGroupsIcon}
                         className="h-[18px] w-[18px]"
-                        aria-hidden
                       />
                     ) : (
-                      <img
-                        src={sidebarExpandAllGroupsIcon}
-                        alt=""
+                      <ThemedMonochromeIcon
+                        source={sidebarExpandAllGroupsIcon}
                         className="h-[18px] w-[18px]"
-                        aria-hidden
                       />
                     )}
                   </button>
@@ -371,11 +368,9 @@ export function SidebarProjectsSection({
                     sidebarTextIconClass,
                   )}
                 >
-                  <img
-                    src={sidebarNewProjectIcon}
-                    alt=""
+                  <ThemedMonochromeIcon
+                    source={sidebarNewProjectIcon}
                     className="h-[18px] w-[18px]"
-                    aria-hidden
                   />
                 </button>
               </TooltipTrigger>

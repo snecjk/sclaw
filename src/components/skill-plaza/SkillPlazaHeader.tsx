@@ -5,7 +5,8 @@ import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useConnectorsStore } from '@/stores/connectors';
-import folderIcon from '@/assets/icons/folder.svg';
+import folderIcon from '@/assets/icons/folder.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import { SkillUploadModal } from './SkillUploadModal';
 import {
   StoOutlineButton,
@@ -118,7 +119,7 @@ export function SkillPlazaHeader({
               className="h-9 gap-1.5 border-border"
               title={t('openFolder', { defaultValue: '打开技能文件夹' })}
             >
-              <img src={folderIcon} alt="" aria-hidden className="h-3.5 w-3.5 flex-shrink-0 object-contain dark:invert" />
+              <ThemedMonochromeIcon source={folderIcon} className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{t('openFolderShort', { defaultValue: '文件夹' })}</span>
             </StoOutlineButton>
 

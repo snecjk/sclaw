@@ -593,7 +593,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           </button>
           <div className="flex shrink-0 gap-2">
             <Button type="button" variant="outline" className="h-8 rounded-[8px] px-4 text-[12px] font-normal" onClick={onClose}>{t('actions.cancel')}</Button>
-            <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={save} disabled={!canSave || saving}>
+            <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]" onClick={save} disabled={!canSave || saving}>
               {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
               {t('actions.confirm')}
             </Button>
@@ -635,7 +635,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 type="button"
                 onClick={() => void handleCreateFolder()}
                 disabled={!newFolderName.trim() || createSubmitting}
-                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
               >
                 {createSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('dataCenterPage.saveArtifact.create')}
               </Button>
@@ -721,7 +721,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 type="button"
                 onClick={() => void handleRenameFolder()}
                 disabled={!renameName.trim() || renameSubmitting}
-                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
               >
                 {renameSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('actions.confirm')}
               </Button>
@@ -824,7 +824,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 </Button>
                 <Button
                   type="button"
-                  className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+                  className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
                   disabled={saving}
                   onClick={() => { void saveWithConflictAction('keep_both', conflict); }}
                 >
