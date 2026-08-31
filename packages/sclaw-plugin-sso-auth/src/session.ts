@@ -24,6 +24,33 @@ function sanitizeUser(user: StoSsoUser): StoSsoUser {
   );
 }
 
+export function readJwtExpiration(token: string): number | null {
+  const payload = token.split('.')[1];
+  if (!payload) return null;
+  try {
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const bytes = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const expiration = (parsed as { exp?: unknown }).exp;
+    return typeof expiration === 'number' && Number.isFinite(expiration) ? expiration : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isTokenExpired(token: string, nowMs = Date.now()): boolean {
+  const expiration = readJwtExpiration(token);
+  return expiration !== null && expiration <= Math.floor(nowMs / 1000);
+}
+
+function tokenMaxAgeSeconds(token: string, nowMs = Date.now()): number {
+  const expiration = readJwtExpiration(token);
+  if (expiration === null) return TOKEN_MAX_AGE_SECONDS;
+  return Math.max(0, Math.min(TOKEN_MAX_AGE_SECONDS, Math.floor(expiration - nowMs / 1000)));
+}
+
 export function readTokenCookie(cookie: string): string | null {
   const match = cookie.match(/(?:^|;\s*)stoToken=([^;]*)/i);
   if (!match?.[1]) return null;
@@ -58,8 +85,9 @@ export function persistSession(
   }
 
   try {
+    const maxAge = tokenMaxAgeSeconds(session.token);
     platform.setCookie(
-      `${TOKEN_COOKIE_KEY}=${encodeURIComponent(session.token)}; Path=/; Max-Age=${TOKEN_MAX_AGE_SECONDS}; SameSite=Lax${secureSuffix(platform)}`,
+      `${TOKEN_COOKIE_KEY}=${encodeURIComponent(session.token)}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secureSuffix(platform)}`,
     );
     if (readTokenCookie(platform.cookie) !== session.token) {
       throw new Error('Token Cookie was not persisted');
