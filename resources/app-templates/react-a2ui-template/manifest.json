@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "templateId": "react-a2ui-template",
+  "pageType": "site",
+  "name": "A2UI React 站点",
+  "description": "公司 Vite 工程底座 + antd PC 三栏工作台 + A2UI 页面资产"
+}

@@ -7,7 +7,7 @@ import {
   runStoAppDeployFlow,
 } from '@/lib/sto-app-deploy-flow';
 import {
-  codeDeployStatusLabel,
+  codeDeployProgressLabel,
   formatCodeDeployFailurePrompt,
   type CodeDeployRecordFields,
 } from '../../shared/code-deploy-status';
@@ -167,7 +167,7 @@ export function useStoAppDeploy(input: {
     clear,
     statusText: job
       ? job.fields.status
-        ? codeDeployStatusLabel(job.fields.status)
+        ? codeDeployProgressLabel(job.fields)
         : job.label
       : null,
   };

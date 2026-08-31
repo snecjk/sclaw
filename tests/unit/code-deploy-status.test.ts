@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  codeDeployProgressLabel,
   codeDeployStatusLabel,
   extractDeploymentIdFromText,
   formatCodeDeployFailurePrompt,
@@ -12,6 +13,7 @@ import {
   isSpuriousPendingDeployFailure,
   normalizeCodeDeployStatus,
   pickCodeDeployFields,
+  presentCodeDeployFields,
 } from '../../shared/code-deploy-status';
 
 describe('code-deploy-status', () => {
@@ -40,6 +42,21 @@ describe('code-deploy-status', () => {
     expect(isCodeDeploySettled(pending)).toBe(false);
     expect(isCodeDeploySettled({ status: 'FAILED', failureMessage: 'npm run build failed' })).toBe(true);
     expect(isCodeDeploySettled({ status: 'SUCCESS' })).toBe(true);
+  });
+
+  it('presents pending pipeline misreports as building, not failed', () => {
+    const presented = presentCodeDeployFields({
+      status: 'failed',
+      failureMessage: '待执行',
+      failureStage: 'refresh_pipeline',
+    });
+    expect(presented.status).toBe('待执行');
+    expect(presented.failureMessage).toBeUndefined();
+    expect(presented.failureStage).toBeUndefined();
+    expect(codeDeployProgressLabel({
+      status: 'failed',
+      failureMessage: '待执行',
+    })).toBe('待执行');
   });
 
   it('builds an AI repair prompt from failure fields', () => {

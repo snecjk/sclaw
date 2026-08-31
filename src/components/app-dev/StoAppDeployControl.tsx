@@ -11,8 +11,10 @@ import {
   type StoAppDeployJob,
 } from '@/hooks/use-sto-app-deploy';
 import {
-  codeDeployStatusLabel,
+  codeDeployProgressLabel,
   formatCodeDeployFailurePrompt,
+  isSpuriousPendingDeployFailure,
+  presentCodeDeployFields,
 } from '../../../shared/code-deploy-status';
 import type { CodeApplicationPageType } from '../../../shared/code-application-catalog';
 import { resolvePublishSuccessPresentation } from '../../../shared/code-publish-result';
@@ -46,6 +48,7 @@ export function StoAppDeployControl({
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const running = isStoAppDeployRunning(job);
+  const presentedFields = job ? presentCodeDeployFields(job.fields) : null;
   const successPresentation = job?.phase === 'success'
     ? resolvePublishSuccessPresentation({
         pageType,
@@ -161,8 +164,10 @@ export function StoAppDeployControl({
 
           <dl className="mt-3 space-y-1.5 text-[12px]">
             <StatusRow label="状态">
-              {job.fields.status
-                ? `${job.fields.status}（${codeDeployStatusLabel(job.fields.status)}）`
+              {presentedFields?.status
+                ? (isSpuriousPendingDeployFailure(job.fields)
+                  ? presentedFields.status
+                  : `${presentedFields.status}（${codeDeployProgressLabel(job.fields)}）`)
                 : running
                   ? '准备中'
                   : '-'}
@@ -177,12 +182,12 @@ export function StoAppDeployControl({
             {job.fields.pipelineInstanceId ? (
               <StatusRow label="流水线">{job.fields.pipelineInstanceId}</StatusRow>
             ) : null}
-            {job.fields.failureStage ? (
-              <StatusRow label="失败阶段">{job.fields.failureStage}</StatusRow>
+            {presentedFields?.failureStage ? (
+              <StatusRow label="失败阶段">{presentedFields.failureStage}</StatusRow>
             ) : null}
-            {job.fields.failureMessage || job.error ? (
+            {presentedFields?.failureMessage || job.error ? (
               <StatusRow label="失败原因">
-                {job.fields.failureMessage || job.error}
+                {presentedFields?.failureMessage || job.error}
               </StatusRow>
             ) : null}
           </dl>

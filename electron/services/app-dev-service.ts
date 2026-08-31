@@ -778,9 +778,13 @@ export async function openAppTemplateWorkspace(input: {
     let sourceDir: string;
     if (input.templateId) {
       if (input.source === 'local-resource') {
-        const expectedTemplateId = `${input.pageType}-minimal`;
-        if (templateId !== expectedTemplateId) throw new Error('本地内置模板与应用类型不一致');
-        sourceDir = resolveLocalBuiltinTemplateDir(templateId as 'site-minimal' | 'assets-minimal');
+        sourceDir = resolveLocalBuiltinTemplateDir(templateId);
+        const manifest = JSON.parse(await readFile(join(sourceDir, 'manifest.json'), 'utf8')) as {
+          pageType?: string;
+        };
+        if (manifest.pageType !== input.pageType) {
+          throw new Error('本地内置模板与应用类型不一致');
+        }
       } else {
         if (!input.latestVersion?.trim()) throw new Error('模板最新版本不能为空');
         sourceDir = await appTemplatePackageManager.ensureTemplate(
@@ -964,13 +968,18 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   if (templateSource === 'local-resource' && app.isPackaged) {
     throw new Error('本地资源模板仅用于开发调试');
   }
-  const expectedBuiltinId = `${pageType}-minimal` as 'site-minimal' | 'assets-minimal';
-  if (templateSource === 'local-resource' && templateId !== expectedBuiltinId) {
-    throw new Error(`本地资源模板与应用类型不一致: ${templateId}`);
-  }
   const template = templateSource === 'local-resource'
-    ? resolveLocalBuiltinTemplateDir(expectedBuiltinId)
+    ? resolveLocalBuiltinTemplateDir(templateId)
     : await appTemplatePackageManager.ensureTemplate(templateId, templateVersion, pageType);
+  if (templateSource === 'local-resource') {
+    const manifest = JSON.parse(await readFile(join(template, 'manifest.json'), 'utf8')) as {
+      templateId?: string;
+      pageType?: string;
+    };
+    if (manifest.templateId !== templateId || manifest.pageType !== pageType) {
+      throw new Error(`本地资源模板与应用类型不一致: ${templateId}`);
+    }
+  }
   if (!isValidReactTemplate(template)) {
     throw new Error(`应用模板缺失: ${template}`);
   }
