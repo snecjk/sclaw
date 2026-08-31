@@ -6,7 +6,7 @@
 
 ## 发布配置
 
-部署平台必须在 Site 业务脚本执行前注入：
+部署平台可以在 Site 业务脚本执行前注入以下配置；显式配置优先级最高：
 
 ```html
 <script>
@@ -26,6 +26,8 @@ window.__STO_SSO_AUTH_CONFIG__ = {
 </script>
 ```
 
+如果发布平台未注入该对象，插件会把非本地域名视为已发布 Site，并根据域名推断 `daily`、`stage` 或 `online`，再从内置的已批准矩阵补齐 SSO 配置。本地地址仍必须由 SClaw 开发服务显式注入配置。
+
 环境映射固定如下：
 
 | 发布环境 | SSO 环境 | Login Origin | API Origin |
@@ -41,5 +43,5 @@ window.__STO_SSO_AUTH_CONFIG__ = {
 - 发布配置是环境的唯一权威来源；Hostname 和 `VITE_SSO_ENV` 只能作为旧应用兼容策略，不能覆盖有效配置。
 - `deployEnv` 同时是 Site 外部服务 Runtime 选择 daily、stage、online 地址的唯一权威来源。
 - Assets 本地配置只允许 `runtimeMode: "local"` 与 `deployEnv: "daily"`，不得包含 SSO Origin，也不得用于发布态跳转。
-- 配置缺失、字段未知、环境不匹配或 Origin 非 HTTPS 时，Site 必须在挂载业务页面前失败。
+- 本地配置缺失、字段未知、环境不匹配或 Origin 非 HTTPS 时，Site 必须在挂载业务页面前失败。
 - code-deploy 仓库的实际注入改造应使用独立实施计划完成。

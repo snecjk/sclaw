@@ -76,8 +76,20 @@ function requiredString(value: unknown, field: string): string {
 
 function resolveInput(explicit?: unknown): unknown {
   if (explicit !== undefined) return explicit;
-  if (typeof window !== 'undefined') return window.__STO_SSO_AUTH_CONFIG__;
-  return undefined;
+  if (typeof window === 'undefined') return undefined;
+  if (window.__STO_SSO_AUTH_CONFIG__ !== undefined) return window.__STO_SSO_AUTH_CONFIG__;
+
+  const hostname = window.location.hostname.toLowerCase();
+  if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return undefined;
+  }
+
+  return {
+    protocolVersion: 'sto-sso-auth/v1',
+    pageType: 'site',
+    runtimeMode: 'published',
+    deployEnv: resolveStoSsoDeployEnv(hostname),
+  };
 }
 
 export function resolveStoSsoDeployEnv(hostname?: string): StoSsoDeployEnv {

@@ -10,7 +10,7 @@ SClaw 独立站点的身份认证基础插件。本地预览复用当前 SClaw �
 - `@sto/sclaw-plugin-sso-auth/runtime`：SClaw 静态插件注册入口。
 - `@sto/sclaw-plugin-sso-auth/vite`：仅在 `vite serve` 生效的本地同源身份桥接。
 
-本地预览由 SClaw Dev Server 注入服务端 Session 环境变量，浏览器只访问 `/__sto/sso-auth/bootstrap`。生产构建不会携带该本地桥接；发布 Site 的公开配置由 code-deploy 按 `sto-sso-auth/v1` 契约注入。
+本地预览由 SClaw Dev Server 注入服务端 Session 环境变量，浏览器只访问 `/__sto/sso-auth/bootstrap`。生产构建不会携带该本地桥接；发布 Site 优先使用 code-deploy 按 `sto-sso-auth/v1` 契约注入的公开配置。未注入公开配置时，插件会根据非本地域名推断发布环境，并使用内置的已批准 SSO 配置矩阵启动。
 
 ## 验证
 
