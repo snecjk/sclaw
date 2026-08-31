@@ -64,6 +64,37 @@ export function isCodeDeployInProgress(raw: unknown): boolean {
   return Boolean(status) && !TERMINAL.has(status);
 }
 
+/** DevOps pipeline labels that mean "not started yet", not a real failure. */
+const PENDING_PIPELINE_LABELS = new Set([
+  '待执行',
+  '排队中',
+  '等待执行',
+  'queued',
+  'pending',
+  'waiting',
+]);
+
+/**
+ * memory-center `refresh_pipeline` sometimes copies the DevOps stage name
+ * ("待执行") into failure_message and marks the deployment failed in a few seconds.
+ * Treat that as still in progress so the UI keeps polling / we can retry.
+ */
+export function isSpuriousPendingDeployFailure(
+  fields: Pick<CodeDeployRecordFields, 'status' | 'failureMessage'>,
+): boolean {
+  if (!isCodeDeployFailed(fields.status)) return false;
+  const message = fields.failureMessage?.trim() ?? '';
+  if (!message) return false;
+  return PENDING_PIPELINE_LABELS.has(message) || PENDING_PIPELINE_LABELS.has(message.toLowerCase());
+}
+
+export function isCodeDeploySettled(
+  fields: Pick<CodeDeployRecordFields, 'status' | 'failureMessage'>,
+): boolean {
+  if (isSpuriousPendingDeployFailure(fields)) return false;
+  return isCodeDeployTerminal(fields.status);
+}
+
 export interface CodeDeployRecordFields {
   deploymentId?: string;
   applicationId?: string;

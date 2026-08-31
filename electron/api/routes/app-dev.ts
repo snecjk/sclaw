@@ -56,6 +56,7 @@ import {
   extractDeploymentIdFromText,
   formatCodeDeployImmediateFailureMessage,
   isCodeDeployFailed,
+  isSpuriousPendingDeployFailure,
   pickCodeDeployFields,
 } from '../../../shared/code-deploy-status';
 
@@ -151,6 +152,17 @@ async function resolveDeployCreateResult(
   }
 
   const fields = pickCodeDeployFields(result.data);
+  if (isSpuriousPendingDeployFailure(fields)) {
+    logger.warn(
+      `[app-dev] deploy:create-pending-misreport ${serializeForAppDevLog({
+        status: fields.status,
+        failureMessage: fields.failureMessage,
+        failureStage: fields.failureStage,
+        deploymentId: fields.deploymentId,
+      })}`,
+    );
+    return { data: result.data };
+  }
   if (isCodeDeployFailed(fields.status)) {
     return { error: formatCodeDeployImmediateFailureMessage(fields) };
   }

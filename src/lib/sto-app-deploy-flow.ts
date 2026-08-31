@@ -1,8 +1,8 @@
 import {
   codeDeployStatusLabel,
   formatCodeDeployFailurePrompt,
+  isCodeDeploySettled,
   isCodeDeploySuccess,
-  isCodeDeployTerminal,
   pickCodeDeployFields,
   type CodeDeployRecordFields,
 } from '../../shared/code-deploy-status';
@@ -74,7 +74,7 @@ async function pollDeployUntilTerminal(
     };
   };
 
-  if (isCodeDeployTerminal(latestFields.status)) {
+  if (isCodeDeploySettled(latestFields)) {
     return toOutcome(latestFields, latestData);
   }
 
@@ -96,7 +96,7 @@ async function pollDeployUntilTerminal(
     };
     options?.onProgress?.(latestFields);
 
-    if (!isCodeDeployTerminal(latestFields.status)) continue;
+    if (!isCodeDeploySettled(latestFields)) continue;
     return toOutcome(latestFields, latestData);
   }
 

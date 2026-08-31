@@ -6,8 +6,10 @@ import {
   formatCodeDeployImmediateFailureMessage,
   isCodeDeployFailed,
   isCodeDeployInProgress,
+  isCodeDeploySettled,
   isCodeDeploySuccess,
   isCodeDeployTerminal,
+  isSpuriousPendingDeployFailure,
   normalizeCodeDeployStatus,
   pickCodeDeployFields,
 } from '../../shared/code-deploy-status';
@@ -30,6 +32,14 @@ describe('code-deploy-status', () => {
     expect(isCodeDeployFailed('FAILED')).toBe(true);
     expect(isCodeDeployFailed('CANCELLED')).toBe(true);
     expect(isCodeDeployFailed('BUILDING')).toBe(false);
+  });
+
+  it('does not treat DevOps pending labels as a settled failure', () => {
+    const pending = { status: 'failed', failureMessage: '待执行' };
+    expect(isSpuriousPendingDeployFailure(pending)).toBe(true);
+    expect(isCodeDeploySettled(pending)).toBe(false);
+    expect(isCodeDeploySettled({ status: 'FAILED', failureMessage: 'npm run build failed' })).toBe(true);
+    expect(isCodeDeploySettled({ status: 'SUCCESS' })).toBe(true);
   });
 
   it('builds an AI repair prompt from failure fields', () => {

@@ -97,4 +97,52 @@ describe('runStoAppDeployFlow', () => {
       appCode: 'app-1',
     });
   });
+
+  it('keeps polling when refresh reports failed with pending pipeline label', async () => {
+    vi.useFakeTimers();
+    deployStoAppMock.mockResolvedValue({
+      success: true,
+      appCode: 'app-1',
+      env: 'daily',
+      data: {
+        deployment_id: 'dep-1',
+        app_code: 'app-1',
+        env: 'daily',
+        status: 'failed',
+        failure_message: '待执行',
+        failure_stage: 'refresh_pipeline',
+      },
+    });
+    refreshStoAppDeployMock
+      .mockResolvedValueOnce({
+        success: true,
+        deploymentId: 'dep-1',
+        data: {
+          deployment_id: 'dep-1',
+          status: 'failed',
+          failure_message: '待执行',
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        deploymentId: 'dep-1',
+        data: {
+          deployment_id: 'dep-1',
+          status: 'SUCCESS',
+          env: 'daily',
+        },
+      });
+
+    const outcomePromise = runStoAppDeployFlow({
+      workspaceId: 'ws-1',
+      env: 'daily',
+      appCode: 'app-1',
+    });
+    await vi.advanceTimersByTimeAsync(4_000);
+    await vi.advanceTimersByTimeAsync(4_000);
+    const outcome = await outcomePromise;
+    expect(outcome.kind).toBe('success');
+    expect(refreshStoAppDeployMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
 });
