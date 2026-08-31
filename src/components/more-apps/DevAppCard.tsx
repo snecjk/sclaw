@@ -12,6 +12,7 @@ import {
   Trash2,
   Loader2,
   ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -30,7 +31,17 @@ import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
+import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
+import { appendSkipLoginReturnUrl, fetchAppPlazaSkipLoginLink } from '@/lib/app-plaza-api';
+import { getAppEnv, type AppEnvironment } from '../../../shared/env-config';
 import { getAppNameInitial } from './AppIcon';
+
+export function buildAppPermissionsUrl(appCode: string, env: AppEnvironment = getAppEnv()): string {
+  const origin = env === 'development' || env === 'test'
+    ? 'https://sclaw-test.sto.cn'
+    : 'https://sclaw.sto.cn';
+  return `${origin}/apps/${encodeURIComponent(appCode)}/permissions`;
+}
 
 export function formatDevAppCardDesc(app: Pick<DevAppSummary, 'pageType' | 'availability' | 'localReady' | 'source'>): string {
   const kind = app.pageType === 'assets' ? '托管应用' : '独立站点';
@@ -114,6 +125,29 @@ export function DevAppCard({ app }: DevAppCardProps) {
       return;
     }
     openExternalUrl(previewUrl);
+  };
+
+  const handleOpenPermissions = async () => {
+    if (!app.appCode) {
+      toast.message('缺少 appCode，无法打开权限配置');
+      return;
+    }
+    const permissionsUrl = buildAppPermissionsUrl(app.appCode);
+    try {
+      const skipLoginUrl = await fetchAppPlazaSkipLoginLink('SCLAW_PORTAL');
+      console.log('skipLoginUrl', skipLoginUrl);
+      console.log('permissionsUrl', permissionsUrl);
+      openInSclawBrowser({
+        url: appendSkipLoginReturnUrl(skipLoginUrl, permissionsUrl),
+        title: `${app.name} · 权限配置`,
+        appId: `dev-app-permissions:${app.appCode}`,
+        sourceUrl: permissionsUrl,
+        systemCode: 'SCLAW_PORTAL',
+        skipLoginEligible: true,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '权限配置免登链接获取失败');
+    }
   };
 
   const handleReveal = async () => {
@@ -237,6 +271,10 @@ export function DevAppCard({ app }: DevAppCardProps) {
                 系统浏览器打开
               </DropdownMenuItem>
             ) : null}
+            <DropdownMenuItem disabled={!app.appCode} onClick={() => void handleOpenPermissions()}>
+              <ShieldCheck className="mr-2 h-3.5 w-3.5" aria-hidden />
+              权限配置
+            </DropdownMenuItem>
             {canDelete ? (
               <>
                 <DropdownMenuSeparator />
