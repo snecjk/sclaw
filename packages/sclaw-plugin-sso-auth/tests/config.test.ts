@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readStoSsoAuthConfig, resolveStoSsoDeployEnv } from '../src/config';
 
 const publishedSite = {
@@ -16,6 +16,34 @@ const publishedSite = {
 } as const;
 
 describe('readStoSsoAuthConfig', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('creates published Site config from the browser hostname when global config is absent', () => {
+    vi.stubGlobal('window', {
+      location: { hostname: 'page-test.sto.cn' },
+    });
+
+    expect(readStoSsoAuthConfig()).toMatchObject({
+      protocolVersion: 'sto-sso-auth/v1',
+      pageType: 'site',
+      runtimeMode: 'published',
+      deployEnv: 'daily',
+      sso: publishedSite.sso,
+    });
+  });
+
+  it('keeps missing configuration as an error on local preview hosts', () => {
+    vi.stubGlobal('window', {
+      location: { hostname: '127.0.0.1' },
+    });
+
+    expect(() => readStoSsoAuthConfig()).toThrowError(expect.objectContaining({
+      code: 'SSO_AUTH_CONFIG_MISSING',
+    }));
+  });
+
   it('infers SSO environment from the published hostname', () => {
     expect(resolveStoSsoDeployEnv('page-test.sto.cn')).toBe('daily');
     expect(resolveStoSsoDeployEnv('page-pre.sto.cn')).toBe('stage');
