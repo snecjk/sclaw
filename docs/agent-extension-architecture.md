@@ -36,6 +36,10 @@ The common helper `createKeywordActivationMatcher` covers simple keyword and reg
 
 The workflow extension uses session-scoped activation for prompts containing `工作流` or `workflow`. It checks the Host API authentication state only after an intent match; an unavailable login leaves tools and prompt out of the request. Once matched, the activation remains available for follow-up turns in that session. Its shell-bypass and same-turn schema/create policies remain active independently of tool activation.
 
+## PI prompt ownership
+
+SClaw replaces Pi Coding Agent's built-in base system prompt through `DefaultResourceLoader.systemPromptOverride`; it does not expose Pi's coding-assistant persona to end users. The SClaw-owned base describes a general-purpose assistant for ordinary users, while retaining compact internal rules for safe use of the core file and shell tools. The SDK still assembles the managed `AGENTS.md`, selected Skills, and cwd around that custom base, and activated common/native extensions may modify the resulting prompt during `before_agent_start`. Tool schemas remain part of the provider request, while additional business tools are described by their own schemas and activated prompt contributions.
+
 ## Common-first rule
 
 Business operations, validation, prompts, policies, and result envelopes belong in the common definition. Tool parameters use `typebox@1.3.7` as their single source; the Claude adapter converts the supported TypeBox subset to Zod while Pi consumes TypeBox directly.
@@ -78,4 +82,4 @@ extensions/<extension-id>/
 
 ## Runtime diagnostics
 
-Framework logs use the stable `[agent-extension]` prefix and structured fields. Important events include `build.start`, `build.completed`, `registry.diagnostic`, `activation.evaluated`, `activation.restored`, `activation.failed`, `tools.activated`, `native.build.*`, `tool.execute.*`, `policy.before.denied`, and `prompt.build.completed`. Inputs and prompt bodies are deliberately excluded; logs contain identifiers, reason codes, character counts, outcome codes, counts, and durations only.
+Framework logs use the stable `[agent-extension]` prefix and structured fields. Important events include `build.start`, `build.completed`, `registry.diagnostic`, `activation.evaluated`, `activation.restored`, `activation.failed`, `tools.activated`, `native.build.*`, `tool.execute.*`, `policy.before.denied`, and `prompt.build.completed`. These framework events exclude inputs and prompt bodies. PI additionally emits one `[pi-core] turn.prompt.final` diagnostic per user turn containing the final system and user prompt for runtime verification; treat the local log as business-sensitive data.

@@ -31,6 +31,8 @@ import {
 import { KeyedTaskQueue } from './keyed-task-queue';
 import { filterPiSkills } from './skill-policy';
 import { buildPiToolSelection } from './tool-policy';
+import { createPiPromptLoggingExtension } from './prompt-logging-extension';
+import { buildPiSystemPromptOverride } from './system-prompt-policy';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
 
 type PiSession = {
@@ -186,6 +188,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     initiallyActiveTools: initiallyActiveToolNames,
   });
   const managedContextPath = join(config.agentDir, 'AGENTS.md');
+  const systemPromptOverride = buildPiSystemPromptOverride(config);
   const loader = new sdk.DefaultResourceLoader({
     cwd: config.cwd,
     agentDir: config.agentDir,
@@ -207,11 +210,17 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
         ? [{ path: managedContextPath, content: readFileSync(managedContextPath, 'utf-8') }]
         : [],
     }),
-    appendSystemPrompt: [
-      `SClaw default workspace: ${config.cwd}. For interactive sessions this is a default working directory, not an access boundary.`,
-      config.systemPrompt ?? '',
-    ].filter(Boolean),
-    extensionFactories: unifiedExtensions.extensions,
+    // SClaw owns the PI base prompt. The SDK still appends managed AGENTS.md,
+    // selected Skills and cwd when it assembles the final system prompt.
+    systemPromptOverride: () => systemPromptOverride,
+    extensionFactories: [
+      ...unifiedExtensions.extensions,
+      createPiPromptLoggingExtension({
+        sessionKey: config.sessionKey,
+        getRunId: () => sessions.get(config.sessionKey)?.activeRunId,
+        log: logPiCore,
+      }),
+    ],
   });
   await loader.reload();
   const loadedSkills = loader.getSkills();

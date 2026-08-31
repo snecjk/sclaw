@@ -29,6 +29,7 @@ import {
   buildPiEnabledToolNames,
   buildPiToolSelection,
 } from '../../electron/pi-runtime/tool-policy';
+import { buildPiSystemPromptOverride } from '../../electron/pi-runtime/system-prompt-policy';
 
 describe('Pi engine descriptor', () => {
   it('registers chat and scheduled tasks but rejects workflow capability', () => {
@@ -47,6 +48,30 @@ describe('Pi engine descriptor', () => {
       taskId: 'task-1',
       appId: null,
     });
+  });
+});
+
+describe('Pi system prompt policy', () => {
+  it('uses the SClaw prompt as the complete PI base prompt', () => {
+    const prompt = buildPiSystemPromptOverride({
+      cwd: 'D:/workspace',
+      systemPrompt: '  SClaw system prompt  ',
+    });
+    expect(prompt).toContain('You are SClaw, a general-purpose AI assistant');
+    expect(prompt).toContain('Never assume software-development work');
+    expect(prompt).toContain('read: read files');
+    expect(prompt).toContain('Each oldText matches the original file');
+    expect(prompt).toContain('PI_* variables');
+    expect(prompt.endsWith('SClaw system prompt')).toBe(true);
+  });
+
+  it('provides an SClaw fallback instead of restoring the PI built-in prompt', () => {
+    const prompt = buildPiSystemPromptOverride({ cwd: 'D:/workspace' });
+    expect(prompt).toContain('You are SClaw, a general-purpose AI assistant');
+    expect(prompt).not.toContain('coding agent');
+    expect(prompt).toContain('# SClaw runtime context');
+    expect(prompt).toContain('D:/workspace');
+    expect(prompt).not.toContain('expert coding assistant operating inside pi');
   });
 });
 
