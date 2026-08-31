@@ -7,6 +7,8 @@ export const APP_DEV_CHAT_SPLIT_MAX = 55;
 export const APP_DEV_CHAT_SPLIT_MIN_PX = 280;
 
 export const APP_DEV_CHAT_SPLIT_STORAGE_KEY = 'stoclaw:app-dev-chat-split-percent';
+export const APP_DEV_IDE_CHAT_SPLIT_STORAGE_KEY = 'stoclaw:app-dev-ide-chat-split-percent';
+export const APP_DEV_IDE_CHAT_SPLIT_DEFAULT = 40;
 export const APP_DEV_CHAT_SPLIT_CSS_VAR = '--app-dev-chat-col';
 export const APP_DEV_SPLIT_RESIZE_SHIELD_ID = 'app-dev-split-resize-shield';
 
@@ -15,8 +17,11 @@ export const appDevSplitRowClass = cn(
   'grid-cols-[minmax(0,1fr)_minmax(280px,var(--app-dev-chat-col,28%))]',
 );
 
-export function clampAppDevChatSplitPercent(percent: number): number {
-  if (!Number.isFinite(percent)) return APP_DEV_CHAT_SPLIT_DEFAULT;
+export function clampAppDevChatSplitPercent(
+  percent: number,
+  fallback = APP_DEV_CHAT_SPLIT_DEFAULT,
+): number {
+  if (!Number.isFinite(percent)) return fallback;
   const rounded = Math.round(percent * 10) / 10;
   return Math.max(APP_DEV_CHAT_SPLIT_MIN, Math.min(APP_DEV_CHAT_SPLIT_MAX, rounded));
 }
@@ -41,24 +46,28 @@ export function clampAppDevChatSplitFromPx(containerWidth: number, chatPx: numbe
   );
 }
 
-export function readStoredAppDevChatSplitPercent(): number {
-  if (typeof localStorage === 'undefined') return APP_DEV_CHAT_SPLIT_DEFAULT;
+export function readStoredAppDevChatSplitPercent(
+  storageKey = APP_DEV_CHAT_SPLIT_STORAGE_KEY,
+  fallback = APP_DEV_CHAT_SPLIT_DEFAULT,
+): number {
+  if (typeof localStorage === 'undefined') return fallback;
   try {
-    const raw = localStorage.getItem(APP_DEV_CHAT_SPLIT_STORAGE_KEY);
-    if (raw == null || raw === '') return APP_DEV_CHAT_SPLIT_DEFAULT;
-    return clampAppDevChatSplitPercent(Number(raw));
+    const raw = localStorage.getItem(storageKey);
+    if (raw == null || raw === '') return fallback;
+    return clampAppDevChatSplitPercent(Number(raw), fallback);
   } catch {
-    return APP_DEV_CHAT_SPLIT_DEFAULT;
+    return fallback;
   }
 }
 
-export function writeStoredAppDevChatSplitPercent(percent: number): void {
+export function writeStoredAppDevChatSplitPercent(
+  percent: number,
+  storageKey = APP_DEV_CHAT_SPLIT_STORAGE_KEY,
+  fallback = APP_DEV_CHAT_SPLIT_DEFAULT,
+): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    localStorage.setItem(
-      APP_DEV_CHAT_SPLIT_STORAGE_KEY,
-      String(clampAppDevChatSplitPercent(percent)),
-    );
+    localStorage.setItem(storageKey, String(clampAppDevChatSplitPercent(percent, fallback)));
   } catch {
     // ignore quota / private mode
   }

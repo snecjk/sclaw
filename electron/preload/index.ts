@@ -184,6 +184,10 @@ const electronAPI = {
         'sprite:getSessionContext',
         'sprite:pushSessionContext',
         'sprite:showMainWindow',
+        'app-dev-ide:open',
+        'app-dev-ide:focus',
+        'app-dev-ide:isOpen',
+        'app-dev-ide:listOpen',
         // Float Icon
         'floaticon:toggleSprite',
         'floaticon:setPosition',
@@ -282,6 +286,7 @@ const electronAPI = {
         'jsbridge:open-tab',
         'jsbridge:close-tab',
         'jsbridge:toast',
+        'app-dev-ide:ownership',
       ];
 
       if (validChannels.includes(channel)) {

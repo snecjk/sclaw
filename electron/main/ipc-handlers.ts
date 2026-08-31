@@ -94,7 +94,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   getSpriteWindow?: () => BrowserWindow | null,
   getFloatIconWindow?: () => BrowserWindow | null,
-  getMainWindow?: () => BrowserWindow | null,
+  _getMainWindow?: () => BrowserWindow | null,
 ): void {
   // Catch embed webview window.open as early as guest WebContents are created.
   void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
@@ -118,9 +118,6 @@ export function registerIpcHandlers(
   // Gateway handlers
   registerGatewayHandlers(
     gatewayManager,
-    getMainWindow ?? (() => mainWindow),
-    getSpriteWindow,
-    getFloatIconWindow,
   );
 
   // ClawHub handlers
@@ -170,6 +167,8 @@ export function registerIpcHandlers(
 
   // Sprite handlers (desktop sprite session context bridge)
   registerSpriteHandlers(mainWindow);
+
+  registerAppDevIdeHandlers();
 
   // Float icon handlers (desktop floating launcher)
   registerFloatIconHandlers(getFloatIconWindow);
@@ -887,23 +886,12 @@ function registerLogHandlers(): void {
  */
 function registerGatewayHandlers(
   gatewayManager: GatewayManager,
-  getMainWindow: () => BrowserWindow | null,
-  getSpriteWindow?: () => BrowserWindow | null,
-  getFloatIconWindow?: () => BrowserWindow | null,
 ): void {
-  // Helper: broadcast an event to all renderer windows (main + sprite + float-icon)
+  // Helper: broadcast an event to all renderer windows
   const broadcast = (channel: string, ...args: unknown[]) => {
-    const mainWindow = getMainWindow();
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      safeWebContentsSend(mainWindow.webContents, channel, ...args);
-    }
-    const sprite = getSpriteWindow?.();
-    if (sprite && !sprite.isDestroyed()) {
-      safeWebContentsSend(sprite.webContents, channel, ...args);
-    }
-    const floatIcon = getFloatIconWindow?.();
-    if (floatIcon && !floatIcon.isDestroyed()) {
-      safeWebContentsSend(floatIcon.webContents, channel, ...args);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      safeWebContentsSend(win.webContents, channel, ...args);
     }
   };
   type GatewayHttpProxyRequest = {
@@ -2349,6 +2337,37 @@ function registerSpriteHandlers(mainWindow: BrowserWindow): void {
       mainWindow.show();
       mainWindow.focus();
     }
+  });
+}
+
+function registerAppDevIdeHandlers(): void {
+  ipcMain.handle('app-dev-ide:open', async (_event, input: unknown) => {
+    const payload = input && typeof input === 'object' ? input as { workspaceId?: unknown; title?: unknown } : {};
+    const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId.trim() : '';
+    if (!workspaceId) throw new Error('workspaceId 不能为空');
+    const title = typeof payload.title === 'string' ? payload.title : undefined;
+    const { openAppDevIdeWindow } = await import('./app-dev-ide-window');
+    openAppDevIdeWindow({ workspaceId, title });
+    return { ok: true };
+  });
+
+  ipcMain.handle('app-dev-ide:focus', async (_event, workspaceId: unknown) => {
+    const id = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+    if (!id) return false;
+    const { focusAppDevIdeWindow } = await import('./app-dev-ide-window');
+    return focusAppDevIdeWindow(id);
+  });
+
+  ipcMain.handle('app-dev-ide:isOpen', async (_event, workspaceId: unknown) => {
+    const id = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+    if (!id) return false;
+    const { isAppDevIdeOpen } = await import('./app-dev-ide-window');
+    return isAppDevIdeOpen(id);
+  });
+
+  ipcMain.handle('app-dev-ide:listOpen', async () => {
+    const { listOpenAppDevIdeWorkspaceIds } = await import('./app-dev-ide-window');
+    return listOpenAppDevIdeWorkspaceIds();
   });
 }
 
