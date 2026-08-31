@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   codeDeployStatusLabel,
+  extractDeploymentIdFromText,
   formatCodeDeployFailurePrompt,
+  formatCodeDeployImmediateFailureMessage,
   isCodeDeployFailed,
   isCodeDeployInProgress,
   isCodeDeploySuccess,
@@ -106,5 +108,49 @@ describe('code-deploy-status', () => {
     });
     expect(fields.deploymentId).toBe('dep_latest');
     expect(fields.status).toBe('BUILDING');
+  });
+
+  it('unwraps siteapp snake_case deploy records', () => {
+    const fields = pickCodeDeployFields({
+      path: 'siteapp.deploy.create',
+      result: {
+        body: {
+          data: {
+            deployment_id: 'dep_siteapp_1',
+            app_code: 'app_test',
+            env: 'daily',
+            status: 'failed',
+            failure_stage: 'create_iteration',
+            failure_message: '版本已存在',
+            deployment_version: '2026.08.31.1335',
+            revision_id: 'rev_1',
+          },
+        },
+      },
+    });
+    expect(fields).toMatchObject({
+      deploymentId: 'dep_siteapp_1',
+      applicationId: 'app_test',
+      env: 'daily',
+      status: 'failed',
+      failureStage: 'create_iteration',
+      failureMessage: '版本已存在',
+      deploymentVersion: '2026.08.31.1335',
+      revisionId: 'rev_1',
+    });
+  });
+
+  it('extracts deployment id from busy downstream text', () => {
+    expect(extractDeploymentIdFromText(
+      '当前环境已有发布正在执行：dep_23da553e188f35b444195aec7588636e',
+    )).toBe('dep_23da553e188f35b444195aec7588636e');
+  });
+
+  it('formats immediate deploy failure message', () => {
+    expect(formatCodeDeployImmediateFailureMessage({
+      status: 'FAILED',
+      failureStage: 'create_iteration',
+      failureMessage: '版本已存在',
+    })).toBe('版本已存在 · 阶段：create_iteration');
   });
 });

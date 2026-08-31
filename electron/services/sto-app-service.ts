@@ -1,6 +1,6 @@
 /**
- * User-app collaboration facade — delegates to sai-cli via code-collab-service.
- * List / offline / create remain HTTP in code-application-api.ts.
+ * User-app collaboration facade — delegates to sai-cli siteapp via code-collab-service.
+ * List / archive use memory-center HTTP in site-app-api.ts.
  */
 import { resolve } from 'path';
 import {
@@ -68,31 +68,17 @@ export async function continueStoAppMerge(
 }
 
 export async function cloneStoApp(
-  applicationId: string,
+  appCode: string,
   targetDir: string,
 ): Promise<StoAppCommandResult> {
   try {
-    return toCommandResult(await cloneCodeApplication(applicationId, targetDir));
+    return toCommandResult(await cloneCodeApplication(appCode, targetDir));
   } catch (error) {
     throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
-/** @deprecated list uses HTTP code-application-api */
-export async function listStoApps(): Promise<{
-  ok: boolean;
-  apps: Array<{ applicationId: string; applicationName: string; raw?: unknown }>;
-  output: string;
-}> {
-  return { ok: false, apps: [], output: '请使用 code-application HTTP 列表接口' };
-}
-
-/** @deprecated create uses HTTP code-application-api */
-export async function createStoApp(): Promise<StoAppCommandResult> {
-  throw new Error('createStoApp 已弃用，请使用 code-collab-service.createCodeApplication');
-}
-
-export function extractApplicationId(json: unknown): string | undefined {
+export function extractAppCode(json: unknown): string | undefined {
   if (!json || typeof json !== 'object') return undefined;
   const row = json as Record<string, unknown>;
   const pick = (...values: unknown[]) => {
@@ -102,11 +88,11 @@ export function extractApplicationId(json: unknown): string | undefined {
     return undefined;
   };
   return pick(
-    row.applicationId,
-    row.appId,
-    row.id,
-    (row.application as Record<string, unknown> | undefined)?.applicationId,
-    (row.data as Record<string, unknown> | undefined)?.applicationId,
+    row.appCode,
+    row.app_code,
+    row.applicationCode,
+    (row.application as Record<string, unknown> | undefined)?.appCode,
+    (row.data as Record<string, unknown> | undefined)?.appCode,
   );
 }
 

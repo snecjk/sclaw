@@ -50,6 +50,14 @@ import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-st
 import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
 import { assertExternalServicesReadyForDeploy } from '../../services/app-dev-deploy-preflight';
+import { ensureSiteAppActiveForDeploy, probeSiteAppDeployCreateDownstream, probeSiteAppDeployRefreshDownstream } from '../../services/site-app-api';
+import { siteappCliErrorMessage } from '../../../shared/siteapp-cli-payload';
+import {
+  extractDeploymentIdFromText,
+  formatCodeDeployImmediateFailureMessage,
+  isCodeDeployFailed,
+  pickCodeDeployFields,
+} from '../../../shared/code-deploy-status';
 
 const APP_DEV_LOG_MAX_CHARS = 12_000;
 
@@ -84,6 +92,69 @@ function summarizeDeployCloud(cloud: {
     headCommitSha: cloud.headCommitSha,
     previewUrl: cloud.previewUrl,
   };
+}
+
+async function resolveSiteappDownstreamFailureMessage(
+  result: { ok: boolean; error?: unknown; data?: unknown; exitCode: number },
+  fallback: string,
+  probe: () => Promise<string | null>,
+): Promise<string> {
+  const cliMessage = siteappCliErrorMessage({
+    ok: result.ok,
+    exitCode: result.exitCode,
+    error: result.error,
+    data: result.data,
+  });
+  if (!result.ok && /downstream request failed/i.test(cliMessage)) {
+    const downstream = await probe();
+    if (downstream) return downstream;
+  }
+  return cliMessage || fallback;
+}
+
+function isDeploymentBusyMessage(message: string): boolean {
+  return /DEPLOYMENT_BUSY|已有发布正在执行/.test(message);
+}
+
+function buildBusyDeployReuseData(
+  deploymentId: string,
+  deployParams: Record<string, string>,
+): Record<string, unknown> {
+  return {
+    deployment_id: deploymentId,
+    app_code: deployParams.app_code,
+    env: deployParams.env,
+    deployment_version: deployParams.deployment_version,
+    request_id: deployParams.request_id,
+    status: 'BUILDING',
+  };
+}
+
+async function resolveDeployCreateResult(
+  result: { ok: boolean; error?: unknown; data?: unknown; exitCode: number },
+  deployParams: Record<string, string>,
+): Promise<{ data: unknown } | { error: string }> {
+  if (!result.ok) {
+    const message = await resolveSiteappDownstreamFailureMessage(
+      result,
+      '发布失败',
+      () => probeSiteAppDeployCreateDownstream(deployParams),
+    );
+    const busyDeploymentId = extractDeploymentIdFromText(message);
+    if (busyDeploymentId && isDeploymentBusyMessage(message)) {
+      logger.info(
+        `[app-dev] deploy:reuse-busy deploymentId=${busyDeploymentId} message=${message}`,
+      );
+      return { data: buildBusyDeployReuseData(busyDeploymentId, deployParams) };
+    }
+    return { error: message };
+  }
+
+  const fields = pickCodeDeployFields(result.data);
+  if (isCodeDeployFailed(fields.status)) {
+    return { error: formatCodeDeployImmediateFailureMessage(fields) };
+  }
+  return { data: result.data };
 }
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
@@ -472,15 +543,25 @@ export async function handleAppDevRoutes(
       const pushResult = await pushStoApp(appPath, pushMessage);
       logger.info(`[app-dev] deploy:push-done ${serializeForAppDevLog(pushResult)}`);
 
-      const deployParams = {
+      const activated = await ensureSiteAppActiveForDeploy(appCode);
+      logger.info(
+        `[app-dev] deploy:site-app-active appCode=${appCode} status=${activated.status ?? '-'}`,
+      );
+
+      const { resolveSiteappDeployCreateParams, siteappDeployCreate } = await import('../../utils/siteapp-cli');
+      const deployParams = resolveSiteappDeployCreateParams({
         env,
         appCode,
         requestId: body.requestId,
         deploymentVersion: body.deploymentVersion,
-      };
+      });
       logger.info(`[app-dev] deploy:create-start params=${serializeForAppDevLog(deployParams)}`);
-      const { siteappDeployCreate } = await import('../../utils/siteapp-cli');
-      const result = await siteappDeployCreate(deployParams);
+      const result = await siteappDeployCreate({
+        appCode,
+        env,
+        requestId: deployParams.request_id,
+        deploymentVersion: deployParams.deployment_version,
+      });
       if (!result.ok) {
         logger.error(`[app-dev] deploy:create-failed ${serializeForAppDevLog({
           ok: result.ok,
@@ -488,20 +569,19 @@ export async function handleAppDevRoutes(
           error: result.error,
           data: result.data,
         })}`);
-        const message = typeof result.error === 'string'
-          ? result.error
-          : result.error && typeof result.error === 'object' && 'message' in (result.error as object)
-            ? String((result.error as { message?: unknown }).message ?? '发布失败')
-            : '发布失败';
-        throw new Error(message);
       }
-      logger.info(`[app-dev] deploy:create-ok ${serializeForAppDevLog(result.data)}`);
+      const outcome = await resolveDeployCreateResult(result, deployParams);
+      if ('error' in outcome) {
+        logger.error(`[app-dev] deploy:create-error-detail ${outcome.error}`);
+        throw new Error(outcome.error);
+      }
+      logger.info(`[app-dev] deploy:create-ok ${serializeForAppDevLog(outcome.data)}`);
       sendJson(res, 200, {
         success: true,
         appCode,
         env,
         pushed: true,
-        data: result.data ?? null,
+        data: outcome.data ?? null,
       });
       return true;
     }
@@ -527,11 +607,13 @@ export async function handleAppDevRoutes(
       if (!result.ok) {
         logger.error(`[app-dev] deploy:refresh-failed deploymentId=${deploymentId} appCode=${appCode} ` +
           `${serializeForAppDevLog({ ok: result.ok, exitCode: result.exitCode, error: result.error, data: result.data })}`);
-        const message = typeof result.error === 'string'
-          ? result.error
-          : result.error && typeof result.error === 'object' && 'message' in (result.error as object)
-            ? String((result.error as { message?: unknown }).message ?? '刷新部署状态失败')
-            : '刷新部署状态失败';
+        const refreshParams = { app_code: appCode, deployment_id: deploymentId };
+        const message = await resolveSiteappDownstreamFailureMessage(
+          result,
+          '刷新部署状态失败',
+          () => probeSiteAppDeployRefreshDownstream(refreshParams),
+        );
+        logger.error(`[app-dev] deploy:refresh-error-detail ${message}`);
         throw new Error(message);
       }
       logger.info(

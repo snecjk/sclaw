@@ -30,7 +30,7 @@ import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
 import { cloneStoApp } from './sto-app-service';
 import { createSiteApplication } from './code-collab-service';
-import { archiveSiteApp, getSiteApp, listSiteApps } from './site-app-api';
+import { archiveSiteApp, enrichSiteAppRecord, getSiteApp, listSiteApps } from './site-app-api';
 import {
   getStoAppBindingByWorkspaceId,
   listStoAppBindings,
@@ -744,11 +744,12 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const created = await createSiteApplication({
     applicationName: name,
     description: `${name} 应用`,
+    pageType,
   });
   createdAppCode = created.appCode;
   logger.info(
     `[app-dev] site-app create linked name=${name} appPath=${appPath} ` +
-    `appCode=${createdAppCode} status=${created.status ?? '-'}`,
+    `appCode=${createdAppCode} pageType=${created.pageType} status=${created.status ?? '-'}`,
   );
   const workspaceFile = await writeStoWorkspaceBinding({
     appPath,
@@ -988,6 +989,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         availability: app.availability,
         localReady: app.localReady,
         workspaceId: app.workspaceId,
+        previewUrl: app.previewUrl,
       })),
     )}`,
   );
@@ -1005,11 +1007,11 @@ export async function resolveCloudAppForWorkspace(
   const binding = await getStoAppBindingByWorkspaceId(id);
   if (binding?.appCode) {
     try {
-      return await getSiteApp(binding.appCode);
+      return await enrichSiteAppRecord(await getSiteApp(binding.appCode));
     } catch {
       const listed = await listSiteApps().catch(() => [] as SiteAppRecord[]);
       const matched = listed.find((item) => item.appCode === binding.appCode);
-      if (matched) return matched;
+      if (matched) return await enrichSiteAppRecord(matched);
     }
   }
 
@@ -1034,7 +1036,7 @@ export async function resolveCloudAppForWorkspace(
     }).catch(() => undefined);
   }
 
-  return matched;
+  return matched ? await enrichSiteAppRecord(matched) : null;
 }
 
 /**

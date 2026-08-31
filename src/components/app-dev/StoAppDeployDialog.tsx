@@ -16,7 +16,7 @@ const ENV_OPTIONS: Array<{ value: CodeDeployEnv; label: string; hint: string }> 
 interface StoAppDeployDialogProps {
   open: boolean;
   appName: string;
-  applicationId?: string;
+  appCode?: string;
   workspaceId?: string;
   pageType?: CodeApplicationPageType;
   onCancel: () => void;
@@ -29,7 +29,7 @@ interface StoAppDeployDialogProps {
 export function StoAppDeployDialog({
   open,
   appName,
-  applicationId,
+  appCode,
   workspaceId,
   pageType = 'site',
   onCancel,
@@ -104,9 +104,9 @@ export function StoAppDeployDialog({
         </p>
 
         <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
-          应用 ID：
+          应用编码（appCode）：
           <span className="ml-1 font-mono text-foreground">
-            {applicationId || '将从本机绑定/状态自动解析'}
+            {appCode || '将从本机绑定/状态自动解析'}
           </span>
         </div>
 

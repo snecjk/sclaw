@@ -41,7 +41,7 @@ describe('useStoAppDeploy', () => {
 
     const { result } = renderHook(() => useStoAppDeploy({
       workspaceId: 'ws-1',
-      applicationId: 'app-1',
+      appCode: 'app-1',
       appName: 'Demo',
     }));
 

@@ -44,7 +44,7 @@ export function isStoAppDeployRunning(job: StoAppDeployJob | null): boolean {
 
 export function useStoAppDeploy(input: {
   workspaceId: string;
-  applicationId?: string;
+  appCode?: string;
   appName: string;
   onFailedPrompt?: (prompt: string) => void;
   onStatusRefresh?: () => void | Promise<void>;
@@ -71,7 +71,7 @@ export function useStoAppDeploy(input: {
     setJob({
       phase: 'pushing',
       label: '正在提交代码…',
-      fields: { env: opts.env, applicationId: input.applicationId },
+      fields: { env: opts.env, appCode: input.appCode },
       startedAt: Date.now(),
     });
     toast.message('已开始发布，可继续操作页面');
@@ -81,7 +81,7 @@ export function useStoAppDeploy(input: {
         const outcome = await runStoAppDeployFlow({
           workspaceId: input.workspaceId,
           env: opts.env,
-          applicationId: input.applicationId,
+          appCode: input.appCode,
           deploymentVersion: opts.deploymentVersion,
           appName: input.appName,
           onProgress: (progress) => {
@@ -139,7 +139,7 @@ export function useStoAppDeploy(input: {
         if (runId !== runIdRef.current) return;
         await refreshSto();
         const message = error instanceof Error ? error.message : '发布失败';
-        const fields = { env: opts.env, applicationId: input.applicationId };
+        const fields = { env: opts.env, appCode: input.appCode };
         const prompt = formatCodeDeployFailurePrompt(fields, { fallbackMessage: message });
         setJob({
           phase: 'error',

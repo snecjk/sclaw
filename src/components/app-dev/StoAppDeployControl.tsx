@@ -171,8 +171,8 @@ export function StoAppDeployControl({
             <StatusRow label="deploymentId" mono>
               {job.fields.deploymentId || '-'}
             </StatusRow>
-            <StatusRow label="applicationId" mono>
-              {job.fields.applicationId || '-'}
+            <StatusRow label="appCode" mono>
+              {job.fields.appCode || '-'}
             </StatusRow>
             {job.fields.pipelineInstanceId ? (
               <StatusRow label="流水线">{job.fields.pipelineInstanceId}</StatusRow>

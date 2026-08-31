@@ -1,6 +1,5 @@
 /**
- * Device-local bindings: cloud applicationId → local path / workspace.
- * Cloud `sto-app apps list` remains authoritative for ownership.
+ * Device-local bindings: cloud appCode → local path / workspace.
  */
 import { app } from 'electron';
 import { existsSync } from 'fs';
@@ -8,7 +7,7 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 
 export interface StoAppBinding {
-  applicationId: string;
+  appCode: string;
   applicationName: string;
   localPath: string;
   workspaceId: string;
@@ -16,7 +15,7 @@ export interface StoAppBinding {
 }
 
 interface BindingFile {
-  version: 1;
+  version: 2;
   bindings: Record<string, StoAppBinding>;
 }
 
@@ -24,17 +23,50 @@ function bindingsPath(): string {
   return join(app.getPath('userData'), 'sto-app-bindings.json');
 }
 
+function normalizeLegacyBinding(raw: unknown): StoAppBinding | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const appCode = typeof row.appCode === 'string' && row.appCode.trim()
+    ? row.appCode.trim()
+    : typeof row.applicationCode === 'string' && row.applicationCode.trim()
+      ? row.applicationCode.trim()
+      : typeof row.applicationId === 'string' && row.applicationId.trim()
+        ? row.applicationId.trim()
+        : '';
+  if (!appCode) return null;
+  const applicationName = typeof row.applicationName === 'string' && row.applicationName.trim()
+    ? row.applicationName.trim()
+    : appCode;
+  const localPath = typeof row.localPath === 'string' ? row.localPath : '';
+  const workspaceId = typeof row.workspaceId === 'string' ? row.workspaceId : '';
+  const updatedAt = typeof row.updatedAt === 'string'
+    ? row.updatedAt
+    : new Date().toISOString();
+  if (!localPath || !workspaceId) return null;
+  return { appCode, applicationName, localPath, workspaceId, updatedAt };
+}
+
 async function readAll(): Promise<BindingFile> {
   const path = bindingsPath();
-  if (!existsSync(path)) return { version: 1, bindings: {} };
+  if (!existsSync(path)) return { version: 2, bindings: {} };
   try {
     const raw = JSON.parse(await readFile(path, 'utf8')) as Partial<BindingFile>;
     if (!raw || typeof raw.bindings !== 'object' || !raw.bindings) {
-      return { version: 1, bindings: {} };
+      return { version: 2, bindings: {} };
     }
-    return { version: 1, bindings: raw.bindings };
+    const bindings: Record<string, StoAppBinding> = {};
+    for (const [key, value] of Object.entries(raw.bindings)) {
+      const normalized = normalizeLegacyBinding(value);
+      if (normalized) {
+        bindings[normalized.appCode] = normalized;
+      } else if (value && typeof value === 'object') {
+        const legacy = normalizeLegacyBinding({ ...value as Record<string, unknown>, appCode: key });
+        if (legacy) bindings[legacy.appCode] = legacy;
+      }
+    }
+    return { version: 2, bindings };
   } catch {
-    return { version: 1, bindings: {} };
+    return { version: 2, bindings: {} };
   }
 }
 
@@ -49,36 +81,36 @@ export async function listStoAppBindings(): Promise<StoAppBinding[]> {
   return Object.values(file.bindings);
 }
 
-export async function getStoAppBinding(applicationId: string): Promise<StoAppBinding | null> {
-  const id = applicationId.trim();
+export async function getStoAppBinding(appCode: string): Promise<StoAppBinding | null> {
+  const id = appCode.trim();
   if (!id) return null;
   const file = await readAll();
   return file.bindings[id] ?? null;
 }
 
 export async function upsertStoAppBinding(input: {
-  applicationId: string;
+  appCode: string;
   applicationName: string;
   localPath: string;
   workspaceId: string;
 }): Promise<StoAppBinding> {
-  const applicationId = input.applicationId.trim();
-  if (!applicationId) throw new Error('缺少 applicationId');
+  const appCode = input.appCode.trim();
+  if (!appCode) throw new Error('缺少 appCode');
   const binding: StoAppBinding = {
-    applicationId,
-    applicationName: input.applicationName.trim() || applicationId,
+    appCode,
+    applicationName: input.applicationName.trim() || appCode,
     localPath: input.localPath,
     workspaceId: input.workspaceId,
     updatedAt: new Date().toISOString(),
   };
   const file = await readAll();
-  file.bindings[applicationId] = binding;
+  file.bindings[appCode] = binding;
   await writeAll(file);
   return binding;
 }
 
-export async function removeStoAppBinding(applicationId: string): Promise<void> {
-  const id = applicationId.trim();
+export async function removeStoAppBinding(appCode: string): Promise<void> {
+  const id = appCode.trim();
   if (!id) return;
   const file = await readAll();
   if (!(id in file.bindings)) return;
