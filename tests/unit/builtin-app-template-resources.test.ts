@@ -86,4 +86,16 @@ describe('built-in app template resources', () => {
     expect(navigation).not.toContain('业务办理');
     expect(navigation).not.toContain('系统设置');
   });
+
+  it('site 首页不预置虚构业务或认证实现说明', () => {
+    const siteRoot = join(resources, 'site-minimal');
+
+    expect(readFileSync(join(siteRoot, 'src/components/PageHeader.tsx'), 'utf8'))
+      .toContain('export function PageHeader');
+    expect(readFileSync(join(siteRoot, 'src/components/EmptyState.tsx'), 'utf8'))
+      .toContain('export function EmptyState');
+
+    const home = readFileSync(join(siteRoot, 'src/pages/HomePage.tsx'), 'utf8');
+    expect(home).not.toMatch(/今日待办|进行中任务|本周完成|stoToken|SSO Auth/);
+  });
 });

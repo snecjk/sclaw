@@ -126,6 +126,63 @@ body {
   overflow: auto;
 }
 
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sto-space-4);
+  margin-bottom: var(--sto-space-5);
+}
+
+.page-header-main { min-width: 0; }
+
+.page-header-title {
+  margin-block: var(--sto-space-2) var(--sto-space-1) !important;
+  color: var(--sto-color-text-heading) !important;
+}
+
+.page-header-description,
+.empty-state-description {
+  margin-bottom: 0 !important;
+  color: var(--sto-color-text-secondary) !important;
+}
+
+.page-header-extra {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sto-space-2);
+}
+
+.content-section {
+  padding: var(--sto-space-6);
+  background: var(--sto-color-bg-container);
+  border: var(--sto-border-width) solid var(--sto-color-border);
+  border-radius: var(--sto-radius-md);
+}
+
+.content-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sto-space-3);
+  margin-bottom: var(--sto-space-4);
+}
+
+.content-section-title {
+  margin: 0 !important;
+  color: var(--sto-color-text-heading) !important;
+}
+
+.empty-state {
+  display: flex;
+  min-height: 240px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.empty-state-title { margin: 0 0 var(--sto-space-1) !important; }
+.empty-state-action { margin-top: var(--sto-space-4); }
+
 @media (max-width: 900px) {
   .app-brand-sub,
   .app-user-meta {
