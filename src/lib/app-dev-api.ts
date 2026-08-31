@@ -68,6 +68,14 @@ export interface AppTemplatePageResult {
   pageSize: number;
 }
 
+export interface BuiltinTemplateDebugStatus {
+  isBuiltinDebug: boolean;
+  templateId?: 'site-minimal' | 'assets-minimal';
+  pageType?: CodeApplicationPageType;
+  sourceChanged: boolean;
+  changes: Array<{ path: string; kind: 'add' | 'modify' | 'delete' }>;
+}
+
 export interface AppCheckpoint {
   hash: string;
   subject: string;
@@ -177,6 +185,7 @@ export async function openAppTemplateWorkspace(input: {
   name: string;
   description?: string;
   latestVersion?: string;
+  source?: 'local-resource' | 'memory-center';
 }): Promise<{ workspaceId: string; appPath: string; workspaceName: string; templateId: string }> {
   return hostApiFetch('/api/app-templates/workspaces', {
     method: 'POST',
@@ -199,6 +208,36 @@ export async function publishAppTemplateWorkspace(
   created: boolean;
 }> {
   return hostApiFetch('/api/app-templates/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, confirmed: true }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function getBuiltinTemplateDebugStatus(
+  workspaceId: string,
+): Promise<BuiltinTemplateDebugStatus> {
+  return hostApiFetch(
+    `/api/app-templates/workspaces/builtin-debug/status?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+}
+
+export async function syncBuiltinTemplateDebugWorkspace(
+  workspaceId: string,
+): Promise<{ changedFiles: string[] }> {
+  return hostApiFetch('/api/app-templates/workspaces/builtin-debug/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, confirmed: true }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function resetBuiltinTemplateDebugWorkspace(
+  workspaceId: string,
+): Promise<{ changedFiles: string[] }> {
+  return hostApiFetch('/api/app-templates/workspaces/builtin-debug/reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, confirmed: true }),

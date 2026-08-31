@@ -20,4 +20,19 @@ describe('local built-in app template catalog', () => {
       }),
     ]);
   });
+
+  it('exposes both resources templates when no page type filter is selected', async () => {
+    const items = await listLocalBuiltinAppTemplates(
+      join(process.cwd(), 'resources', 'app-templates'),
+    );
+
+    expect(items.map((item) => ({
+      templateId: item.templateId,
+      pageType: item.pageType,
+      source: item.source,
+    }))).toEqual([
+      { templateId: 'site-minimal', pageType: 'site', source: 'local-resource' },
+      { templateId: 'assets-minimal', pageType: 'assets', source: 'local-resource' },
+    ]);
+  });
 });

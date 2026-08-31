@@ -7,6 +7,9 @@ const statusMock = vi.fn();
 const prepareMock = vi.fn();
 const applyMock = vi.fn();
 const cancelMock = vi.fn();
+const builtinStatusMock = vi.fn();
+const builtinSyncMock = vi.fn();
+const builtinResetMock = vi.fn();
 
 vi.mock('electron', () => ({ app: { isPackaged: true } }));
 vi.mock('@electron/api/route-utils', () => ({
@@ -19,6 +22,9 @@ vi.mock('@electron/api/internal-request-auth', () => ({
 vi.mock('@electron/services/app-dev-service', () => ({
   openAppTemplateWorkspace: vi.fn(),
   publishAppTemplateWorkspace: vi.fn(),
+  getBuiltinAppTemplateDebugStatus: (...args: unknown[]) => builtinStatusMock(...args),
+  syncBuiltinAppTemplateDebugWorkspace: (...args: unknown[]) => builtinSyncMock(...args),
+  resetBuiltinAppTemplateDebugWorkspace: (...args: unknown[]) => builtinResetMock(...args),
 }));
 vi.mock('@electron/services/app-template-api-client', () => ({
   appTemplateApiClient: {},
@@ -116,5 +122,38 @@ describe('app template source import routes', () => {
     expect(sendJsonMock).toHaveBeenCalledWith(expect.anything(), 400, expect.objectContaining({
       success: false,
     }));
+  });
+
+  it('serves built-in debug status and requires confirmation for sync or reload', async () => {
+    builtinStatusMock.mockResolvedValueOnce({ isBuiltinDebug: true, changes: [] });
+    builtinSyncMock.mockResolvedValueOnce({ changedFiles: ['src/App.tsx'] });
+    builtinResetMock.mockResolvedValueOnce({ changedFiles: ['src/App.tsx'] });
+    parseJsonBodyMock
+      .mockResolvedValueOnce({ workspaceId: 'ws-1', confirmed: true })
+      .mockResolvedValueOnce({ workspaceId: 'ws-1', confirmed: true });
+    const { handleAppTemplateRoutes } = await import('@electron/api/routes/app-templates');
+
+    await handleAppTemplateRoutes(
+      { method: 'GET' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1/api/app-templates/workspaces/builtin-debug/status?workspaceId=ws-1'),
+      {} as never,
+    );
+    await handleAppTemplateRoutes(
+      { method: 'POST' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1/api/app-templates/workspaces/builtin-debug/sync'),
+      {} as never,
+    );
+    await handleAppTemplateRoutes(
+      { method: 'POST' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1/api/app-templates/workspaces/builtin-debug/reset'),
+      {} as never,
+    );
+
+    expect(builtinStatusMock).toHaveBeenCalledWith('ws-1');
+    expect(builtinSyncMock).toHaveBeenCalledWith('ws-1');
+    expect(builtinResetMock).toHaveBeenCalledWith('ws-1');
   });
 });

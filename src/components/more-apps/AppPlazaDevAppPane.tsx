@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';
 import { TemplateProjectUploadControl } from './TemplateProjectUploadControl';
+import { BuiltinTemplateDebugControl } from './BuiltinTemplateDebugControl';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -209,11 +210,13 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [templatePublishConfirm, setTemplatePublishConfirm] = useState(false);
   const [templatePublishing, setTemplatePublishing] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
+  const [isBuiltinTemplateDebug, setIsBuiltinTemplateDebug] = useState<boolean | null>(null);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
   if (statusWorkspaceId !== workspaceId) {
     setStatusWorkspaceId(workspaceId);
     setSourceRevision(0);
+    setIsBuiltinTemplateDebug(null);
   }
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const pageType = useAppDevCatalogStore((s) => (
@@ -468,6 +471,14 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           ) : null}
 
           {isTemplateWorkspace ? (
+            <BuiltinTemplateDebugControl
+              workspaceId={workspaceId}
+              onStatusChange={setIsBuiltinTemplateDebug}
+              onReloaded={() => setSourceRevision((value) => value + 1)}
+            />
+          ) : null}
+
+          {isTemplateWorkspace ? (
             <TemplateProjectUploadControl
               workspaceId={workspaceId}
               onApplied={() => {
@@ -477,7 +488,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             />
           ) : null}
 
-          {isTemplateWorkspace ? (
+          {isTemplateWorkspace && isBuiltinTemplateDebug === false ? (
             <Button
               type="button"
               size="sm"

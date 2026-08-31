@@ -63,6 +63,16 @@ import { appTemplateApiClient, type AppTemplatePageType } from './app-template-a
 import { buildAppTemplateArchive } from './app-template-archive';
 import { createUlid } from '../utils/ulid';
 import { writeAppDevWorkspaceId } from './app-dev-marker';
+import {
+  assertBuiltinTemplateDebugModeAllowed,
+  assertTemplateWorkspaceCanPublish,
+  fingerprintBuiltinTemplateTree,
+  initializeBuiltinTemplateDebugWorkspace,
+  inspectBuiltinTemplateDebugWorkspace,
+  resolveAppTemplateWorkspacePath,
+  resetBuiltinTemplateDebugWorkspace,
+  syncBuiltinTemplateDebugWorkspace,
+} from './app-template-builtin-debug-service';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -565,6 +575,8 @@ export interface AppTemplateWorkspaceMarker {
   name: string;
   description: string;
   latestVersion?: string;
+  source?: 'local-resource' | 'memory-center';
+  sourceFingerprint?: string;
   packageOssKey?: string;
   packageEtag?: string | null;
   createdAt: string;
@@ -598,27 +610,56 @@ export async function openAppTemplateWorkspace(input: {
   name: string;
   description?: string;
   latestVersion?: string;
+  source?: 'local-resource' | 'memory-center';
 }): Promise<CreateUserAppResult & { templateId: string }> {
   const name = input.name.trim();
   if (!name) throw new Error('模板名称不能为空');
+  if (input.source === 'local-resource') {
+    assertBuiltinTemplateDebugModeAllowed(app.isPackaged);
+  }
   const templateId = input.templateId?.trim() || createUlid();
-  const appPath = join(DEFAULT_TEMPLATES_PARENT_DIR, templateId);
+  const appPath = resolveAppTemplateWorkspacePath(
+    DEFAULT_TEMPLATES_PARENT_DIR,
+    templateId,
+    input.source,
+  );
   const markerPath = appTemplateWorkspaceMarkerPath(appPath);
+
+  // An interrupted initialization can leave the isolated debug directory
+  // behind before its marker is written. Rebuild that incomplete directory
+  // from resources on the next open.
+  if (
+    input.source === 'local-resource'
+    && existsSync(appPath)
+    && !existsSync(markerPath)
+  ) {
+    await rm(appPath, { recursive: true, force: true });
+  }
 
   if (!existsSync(markerPath)) {
     let sourceDir: string;
     if (input.templateId) {
-      if (!input.latestVersion?.trim()) throw new Error('模板最新版本不能为空');
-      sourceDir = await appTemplatePackageManager.ensureTemplate(
-        templateId,
-        input.latestVersion,
-        input.pageType,
-      );
+      if (input.source === 'local-resource') {
+        const expectedTemplateId = `${input.pageType}-minimal`;
+        if (templateId !== expectedTemplateId) throw new Error('本地内置模板与应用类型不一致');
+        sourceDir = resolveLocalBuiltinTemplateDir(templateId as 'site-minimal' | 'assets-minimal');
+      } else {
+        if (!input.latestVersion?.trim()) throw new Error('模板最新版本不能为空');
+        sourceDir = await appTemplatePackageManager.ensureTemplate(
+          templateId,
+          input.latestVersion,
+          input.pageType,
+        );
+      }
     } else {
       sourceDir = resolveLocalBuiltinTemplateDir(`${input.pageType}-minimal`);
     }
-    await mkdir(DEFAULT_TEMPLATES_PARENT_DIR, { recursive: true });
-    await cp(sourceDir, appPath, { recursive: true });
+    await mkdir(dirname(appPath), { recursive: true });
+    if (input.source === 'local-resource' || !input.templateId) {
+      await initializeBuiltinTemplateDebugWorkspace(sourceDir, appPath);
+    } else {
+      await cp(sourceDir, appPath, { recursive: true });
+    }
 
     const manifestPath = join(appPath, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
@@ -638,6 +679,10 @@ export async function openAppTemplateWorkspace(input: {
       name,
       description: input.description?.trim() || '',
       latestVersion: input.latestVersion,
+      source: input.source ?? (input.templateId ? 'memory-center' : undefined),
+      sourceFingerprint: input.source === 'local-resource'
+        ? await fingerprintBuiltinTemplateTree(sourceDir)
+        : undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -674,6 +719,54 @@ export async function openAppTemplateWorkspace(input: {
   return { workspaceId, appPath, workspaceName: workspace.name ?? name, templateId };
 }
 
+async function resolveBuiltinTemplateDebugContext(workspaceId: string): Promise<{
+  workspaceRoot: string;
+  resourcesRoot: string;
+}> {
+  assertBuiltinTemplateDebugModeAllowed(app.isPackaged);
+  const workspaceRoot = await getWorkspaceRootPath(workspaceId);
+  if (!workspaceRoot) throw new Error('模板调试工作区不存在');
+  const marker = await readAppTemplateWorkspaceMarker(workspaceRoot);
+  if (marker.source !== 'local-resource') {
+    throw new Error('当前工作区不是本地内置模板调试工作区');
+  }
+  const expectedTemplateId = `${marker.pageType}-minimal` as 'site-minimal' | 'assets-minimal';
+  if (marker.templateId !== expectedTemplateId) {
+    throw new Error('本地内置模板与应用类型不一致');
+  }
+  return {
+    workspaceRoot,
+    resourcesRoot: dirname(resolveLocalBuiltinTemplateDir(expectedTemplateId)),
+  };
+}
+
+export async function getBuiltinAppTemplateDebugStatus(workspaceId: string) {
+  const workspaceRoot = await getWorkspaceRootPath(workspaceId);
+  if (!workspaceRoot) throw new Error('模板调试工作区不存在');
+  const marker = await readAppTemplateWorkspaceMarker(workspaceRoot);
+  const expectedTemplateId = `${marker.pageType}-minimal` as 'site-minimal' | 'assets-minimal';
+  if (marker.source !== 'local-resource' || marker.templateId !== expectedTemplateId) {
+    return { isBuiltinDebug: false, sourceChanged: false, changes: [] };
+  }
+  assertBuiltinTemplateDebugModeAllowed(app.isPackaged);
+  return inspectBuiltinTemplateDebugWorkspace({
+    workspaceRoot,
+    resourcesRoot: dirname(resolveLocalBuiltinTemplateDir(expectedTemplateId)),
+  });
+}
+
+export async function syncBuiltinAppTemplateDebugWorkspace(workspaceId: string) {
+  const context = await resolveBuiltinTemplateDebugContext(workspaceId);
+  return syncBuiltinTemplateDebugWorkspace(context);
+}
+
+export async function resetBuiltinAppTemplateDebugWorkspace(workspaceId: string) {
+  const context = await resolveBuiltinTemplateDebugContext(workspaceId);
+  const result = await resetBuiltinTemplateDebugWorkspace(context);
+  await restartApp(workspaceId, context.workspaceRoot);
+  return result;
+}
+
 export async function publishAppTemplateWorkspace(input: {
   workspaceId: string;
 }): Promise<Awaited<ReturnType<typeof appTemplateApiClient.publish>>> {
@@ -682,6 +775,7 @@ export async function publishAppTemplateWorkspace(input: {
   const markerPath = appTemplateWorkspaceMarkerPath(appPath);
   if (!existsSync(markerPath)) throw new Error('当前工作区不是应用模板');
   const marker = await readAppTemplateWorkspaceMarker(appPath);
+  assertTemplateWorkspaceCanPublish(marker.source);
   const manifest = JSON.parse(
     await readFile(join(appPath, 'manifest.json'), 'utf8'),
   ) as Record<string, unknown>;
