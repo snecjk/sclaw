@@ -71,4 +71,19 @@ describe('built-in app template resources', () => {
     expect(readFileSync(join(siteRoot, 'src/theme/theme.css'), 'utf8'))
       .toContain('--sto-color-primary');
   });
+
+  it('site 提供简洁可扩展的应用骨架', () => {
+    const siteRoot = join(resources, 'site-minimal');
+
+    expect(readFileSync(join(siteRoot, 'src/layouts/AppHeader.tsx'), 'utf8'))
+      .toContain('export function AppHeader');
+    expect(readFileSync(join(siteRoot, 'src/layouts/AppSider.tsx'), 'utf8'))
+      .toContain('export function AppSider');
+    expect(readFileSync(join(siteRoot, 'src/layouts/PageContainer.tsx'), 'utf8'))
+      .toContain('export function PageContainer');
+
+    const navigation = readFileSync(join(siteRoot, 'src/layouts/nav-config.ts'), 'utf8');
+    expect(navigation).not.toContain('业务办理');
+    expect(navigation).not.toContain('系统设置');
+  });
 });

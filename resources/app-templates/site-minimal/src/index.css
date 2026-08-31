@@ -24,17 +24,17 @@ body {
 
 .app-shell {
   min-height: 100vh;
-  background: #f5f6f8;
+  background: var(--sto-color-bg-layout);
 }
 
 .app-header {
   display: flex;
   align-items: center;
-  gap: 16px;
   height: 56px !important;
-  padding-inline: 16px !important;
+  padding-inline: var(--sto-space-4) !important;
   line-height: 56px !important;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--sto-color-bg-container) !important;
+  border-bottom: var(--sto-border-width) solid var(--sto-color-border);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -43,21 +43,21 @@ body {
 .app-header-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 200px;
+  gap: var(--sto-space-2);
+  min-width: 180px;
   flex-shrink: 0;
 }
 
 .app-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--sto-radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  color: var(--sto-color-bg-container);
+  background: var(--sto-color-brand);
 }
 
 .app-brand-text {
@@ -66,40 +66,26 @@ body {
   line-height: 1.2;
 }
 
-.app-brand-title {
-  font-size: 14px !important;
-}
-
-.app-brand-sub {
-  font-size: 11px !important;
-}
-
-.app-top-menu {
-  flex: 1;
-  min-width: 0;
-  border-bottom: none !important;
-  background: transparent !important;
-}
-
-.app-top-menu .ant-menu-item {
-  top: 0 !important;
-}
+.app-brand-title { font-size: 14px !important; }
+.app-brand-sub { font-size: 12px !important; }
 
 .app-user-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sto-space-2);
   margin-left: auto;
   border: 0;
   background: transparent;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: var(--sto-space-1) var(--sto-space-2);
+  border-radius: var(--sto-radius-sm);
 }
 
 .app-user-trigger:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--sto-color-primary-soft);
 }
+
+.app-user-avatar { background: var(--sto-color-primary-action) !important; }
 
 .app-user-meta {
   display: flex;
@@ -110,8 +96,8 @@ body {
 }
 
 .app-user-name {
-  font-size: 13px;
-  color: #1f2329;
+  font-size: 14px;
+  color: var(--sto-color-text-heading);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -119,27 +105,24 @@ body {
 }
 
 .app-user-code {
-  font-size: 11px;
-  color: #8a8f99;
+  font-size: 12px;
+  color: var(--sto-color-text-secondary);
 }
 
 .app-sider {
-  border-right: 1px solid #e5e6eb;
+  background: var(--sto-color-bg-container) !important;
+  border-right: var(--sto-border-width) solid var(--sto-color-border);
   min-height: calc(100vh - 56px);
 }
 
 .app-side-menu {
   border-inline-end: none !important;
-  padding: 12px 8px;
+  padding: var(--sto-space-3) var(--sto-space-2);
 }
 
 .app-content {
-  margin: 16px;
-  padding: 20px;
-  min-height: calc(100vh - 56px - 32px);
-  background: #fff;
-  border: 1px solid #e5e6eb;
-  border-radius: 12px;
+  padding: var(--sto-space-6);
+  min-height: calc(100vh - 56px);
   overflow: auto;
 }
 
