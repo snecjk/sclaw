@@ -60,4 +60,15 @@ describe('built-in app template resources', () => {
     });
     expect(existsSync(join(catalogRoot, 'pkg-policy-ontology-sdk', 'SKILL.md'))).toBe(true);
   });
+
+  it('site 提供统一主题入口', () => {
+    const siteRoot = join(resources, 'site-minimal');
+
+    expect(readFileSync(join(siteRoot, 'src/theme/tokens.ts'), 'utf8'))
+      .toContain('export const STO_THEME_TOKENS');
+    expect(readFileSync(join(siteRoot, 'src/theme/antd-theme.ts'), 'utf8'))
+      .toContain('export const stoAntdTheme');
+    expect(readFileSync(join(siteRoot, 'src/theme/theme.css'), 'utf8'))
+      .toContain('--sto-color-primary');
+  });
 });

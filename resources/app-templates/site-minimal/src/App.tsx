@@ -1,10 +1,11 @@
-import { App as AntdApp, ConfigProvider, theme } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './layouts/AppLayout';
 import { HomePage } from './pages/HomePage';
 import { DemoPage } from './pages/DemoPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+import { stoAntdTheme } from './theme/antd-theme';
 
 const PAGE_META: Record<string, { title: string; description?: string }> = {
   orders: {
@@ -51,13 +52,7 @@ export default function App() {
   return (
     <ConfigProvider
       locale={zhCN}
-      theme={{
-        algorithm: theme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#1677ff',
-          borderRadius: 8,
-        },
-      }}
+      theme={stoAntdTheme}
     >
       <AntdApp>
         <HashRouter>

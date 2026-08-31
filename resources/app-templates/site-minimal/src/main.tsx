@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { RuntimeBootstrapShell } from './components/RuntimeBootstrapShell';
 import { bootstrapInstalledPlugins } from './sclaw/bootstrap';
+import './theme/theme.css';
 import './index.css';
 
 const container = document.getElementById('root');
