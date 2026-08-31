@@ -37,7 +37,7 @@ import {
   removeStoAppBindingByWorkspaceId,
   upsertStoAppBinding,
 } from './sto-app-binding-store';
-import { writeStoWorkspaceBinding } from './sto-workspace-store';
+import { readStoWorkspaceFile, writeStoWorkspaceBinding } from './sto-workspace-store';
 import {
   normalizeSiteAppPageType,
   type SiteAppPageType,
@@ -137,6 +137,11 @@ function hasStoWorkspaceFile(appPath: string): boolean {
   return existsSync(join(appPath, STO_WORKSPACE_RELATIVE));
 }
 
+async function readBoundAppCode(appPath: string): Promise<string> {
+  const sto = await readStoWorkspaceFile(appPath);
+  return sto?.appCode?.trim() ?? '';
+}
+
 export function hasGitRepo(appPath: string): boolean {
   return existsSync(join(appPath, '.git'));
 }
@@ -228,7 +233,49 @@ function preferDevAppSummary(left: DevAppSummary, right: DevAppSummary): DevAppS
   if (right.localReady && !left.localReady) return right;
   if (left.workspaceId && !right.workspaceId) return left;
   if (right.workspaceId && !left.workspaceId) return right;
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt.localeCompare(right.createdAt) >= 0 ? left : right;
+  }
   return left;
+}
+
+function listIdentityKey(app: Pick<DevAppSummary, 'name' | 'pageType'>): string {
+  return `${normalizeDevAppListName(app.name)}:${app.pageType ?? 'site'}`;
+}
+
+/**
+ * Align cloud list + local list to one card per local project.
+ * Extra Site Apps created for the same folder/name (retry / first-push leftovers)
+ * must not become a second “仅云端” card.
+ */
+export function collapseDevAppsSharingLocalIdentity(apps: DevAppSummary[]): DevAppSummary[] {
+  const picked: DevAppSummary[] = [];
+  const usedWorkspaceIds = new Set<string>();
+  const usedPaths = new Set<string>();
+
+  const ordered = [...apps].sort((a, b) => {
+    if (a.localReady !== b.localReady) return a.localReady ? -1 : 1;
+    return preferDevAppSummary(a, b) === a ? -1 : 1;
+  });
+
+  for (const app of ordered) {
+    const workspaceId = app.workspaceId?.trim() ?? '';
+    const path = app.appPath?.trim() ? resolve(app.appPath.trim()) : '';
+    const workspaceTaken = Boolean(workspaceId) && usedWorkspaceIds.has(workspaceId);
+    const pathTaken = Boolean(path) && usedPaths.has(path);
+    if (workspaceTaken || pathTaken) continue;
+    picked.push(app);
+    if (workspaceId) usedWorkspaceIds.add(workspaceId);
+    if (path) usedPaths.add(path);
+  }
+
+  const localProjectKeys = new Set(
+    picked.filter((app) => app.localReady).map((app) => listIdentityKey(app)),
+  );
+  return picked.filter((app) => {
+    if (app.localReady) return true;
+    return !localProjectKeys.has(listIdentityKey(app));
+  });
 }
 
 function mergeCloudWithLocalDevApp(cloud: DevAppSummary, local: DevAppSummary): DevAppSummary {
@@ -301,7 +348,9 @@ export function mergeAndDedupeDevApps(
     if (path) seenPaths.add(resolve(path));
   }
 
-  return result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return collapseDevAppsSharingLocalIdentity(result).sort(
+    (a, b) => b.createdAt.localeCompare(a.createdAt),
+  );
 }
 
 
@@ -1095,16 +1144,40 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
       }
     }
 
+    if (localPath && existsSync(localPath)) {
+      const ownerCode = await readBoundAppCode(localPath);
+      if (ownerCode && ownerCode !== cloud.appCode) {
+        await removeStoAppBinding(cloud.appCode).catch(() => undefined);
+        localPath = '';
+        workspaceId = '';
+      }
+    }
+
+    if (localPath && claimedPaths.has(resolve(localPath))) {
+      localPath = '';
+      workspaceId = '';
+    }
+    if (workspaceId && claimedWorkspaceIds.has(workspaceId)) {
+      localPath = '';
+      workspaceId = '';
+    }
+
     // Only auto-match local folders that already have a STO workspace file.
     // Imported apps must stay local-only and must not bind by name.
     if (!localPath) {
       const match = workspaces.find((w) => {
-        if (!isAppDevWorkspaceRoot(w.rootPath) || !hasStoWorkspaceFile(w.rootPath)) return false;
+        if (!w.rootPath || !isAppDevWorkspaceRoot(w.rootPath) || !hasStoWorkspaceFile(w.rootPath)) {
+          return false;
+        }
+        if (claimedWorkspaceIds.has(w.id) || claimedPaths.has(resolve(w.rootPath))) return false;
         return w.name === cloud.applicationName || w.rootPath.endsWith(`${sep}${cloud.applicationName}`);
       });
       if (match) {
-        localPath = match.rootPath;
-        workspaceId = match.id;
+        const ownerCode = await readBoundAppCode(match.rootPath);
+        if (!ownerCode || ownerCode === cloud.appCode) {
+          localPath = match.rootPath;
+          workspaceId = match.id;
+        }
       }
     }
 

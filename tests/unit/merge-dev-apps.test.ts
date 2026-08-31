@@ -74,4 +74,65 @@ describe('mergeAndDedupeDevApps', () => {
     expect(merged[0].name).toBe('仅本地');
     expect(merged[0].appCode).toBeUndefined();
   });
+
+  it('collapses two cloud apps bound to the same local workspace into one card', () => {
+    const merged = mergeAndDedupeDevApps(
+      [
+        cloudApp({
+          appCode: 'app_new',
+          name: '测试建站链路 0831002',
+          localReady: true,
+          availability: 'local',
+          workspaceId: 'ws-shared',
+          appPath: '/tmp/shared-app',
+          createdAt: '2026-08-31T14:37:00.000Z',
+        }),
+        cloudApp({
+          appCode: 'app_old',
+          name: '测试建站链路 0831002',
+          localReady: true,
+          availability: 'local',
+          workspaceId: 'ws-shared',
+          appPath: '/tmp/shared-app',
+          createdAt: '2026-08-31T14:30:00.000Z',
+        }),
+      ],
+      [],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].appCode).toBe('app_new');
+    expect(merged[0].workspaceId).toBe('ws-shared');
+    expect(merged[0].localReady).toBe(true);
+  });
+
+  it('aligns leftover cloud create with the local project after first publish', () => {
+    const merged = mergeAndDedupeDevApps(
+      [
+        cloudApp({
+          appCode: 'app_5e8ef0d2752b3ad3',
+          name: '测试建站链路 0831002',
+          localReady: true,
+          availability: 'local',
+          workspaceId: 'ws-shared',
+          appPath: '/tmp/shared-app',
+        }),
+        cloudApp({
+          appCode: 'app_cb1bddf371e19a70',
+          name: '测试建站链路 0831002',
+          localReady: false,
+          availability: 'remote-only',
+          workspaceId: '',
+          appPath: '',
+        }),
+      ],
+      [],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      appCode: 'app_5e8ef0d2752b3ad3',
+      workspaceId: 'ws-shared',
+      localReady: true,
+      availability: 'local',
+    });
+  });
 });
