@@ -799,10 +799,10 @@
 
     --sto-browser-backdrop: rgb(0 0 0 / 45%);
 
-    --sto-card-flat-bg: transparent;
-    --sto-card-flat-hover-bg: #181818;
+    --sto-card-flat-bg: #181818;
+    --sto-card-flat-hover-bg: #212121;
     --sto-card-flat-border: var(--sto-border-default);
-    --sto-card-flat-hover-border: var(--sto-border-heavy);
+    --sto-card-flat-hover-border: var(--sto-border-default);
     --sto-card-flat-hover-shadow: none;
     --sto-card-panel-bg: #181818;
     --sto-card-elevated-bg: #282828;

@@ -340,6 +340,16 @@
     color: var(--sto-control-neutral-foreground);
   }
 
+  .sto-control--data-center-toolbar-interactive:is(:hover, :focus-within, [data-state='open'], [data-sto-state='hover']) {
+    background-color: var(--sto-control-hover-bg);
+    border-color: var(--sto-border-default);
+  }
+
+  .sto-segment-item--data-center-view:is(:hover, [data-sto-state='hover'], [aria-pressed='true']) {
+    background-color: var(--sto-control-active-bg);
+    color: var(--sto-text-primary);
+  }
+
   /* Navigation recipe: Radix highlighted/open remain native meanings. */
   .sto-navigation-item {
     --sto-disabled-source-background: var(--sto-control-ghost-background);

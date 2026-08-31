@@ -1,7 +1,32 @@
-import type { ReactNode } from 'react';
+import type { InputHTMLAttributes, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { dataCenterToolbarInteractiveSurfaceClass } from './toolbar-styles';
+
+export function DataCenterToolbarSearch({
+  value,
+  onValueChange,
+  placeholder,
+  ...inputProps
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'type' | 'value'> & {
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <label className={cn(dataCenterToolbarInteractiveSurfaceClass, 'flex w-[300px] items-center gap-2 px-3')}>
+      <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+      <input
+        {...inputProps}
+        type="search"
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onValueChange(event.target.value)}
+        className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+      />
+    </label>
+  );
+}
 
 export function TabButton({
   active = false,
@@ -36,9 +61,10 @@ export function IconToggle({ active, label, children, onClick }: { active: boole
       type="button"
       onClick={onClick}
       aria-label={label}
+      aria-pressed={active}
       className={cn(
-        'inline-flex h-7 w-7 items-center justify-center rounded-[8px] text-[#6B778C] transition-colors hover:bg-white/70 hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-background/70 dark:hover:text-foreground',
-        active && 'bg-white text-[#1D2129] shadow-sm dark:bg-background dark:text-foreground',
+        'sto-segment-item sto-segment-item--data-center-view inline-flex h-7 w-7 items-center justify-center rounded-[8px] text-muted-foreground transition-colors',
+        active && 'text-foreground',
       )}
     >
       {children}

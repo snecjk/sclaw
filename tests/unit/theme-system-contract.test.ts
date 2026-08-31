@@ -269,8 +269,9 @@ describe('theme system contract', () => {
     expect(light['--sto-border-default']).toBe('#e5e6eb');
 
     expect(dark['--sto-surface-canvas']).toBe('#0d0d0d');
-    expect(dark['--sto-card-flat-bg']).toBe('transparent');
-    expect(dark['--sto-card-flat-hover-bg']).toBe('#181818');
+    expect(dark['--sto-card-flat-bg']).toBe('#181818');
+    expect(dark['--sto-card-flat-hover-bg']).toBe('#212121');
+    expect(dark['--sto-card-flat-hover-border']).toBe('var(--sto-border-default)');
     expect(dark['--sto-card-panel-bg']).toBe('#181818');
     expect(dark['--sto-card-elevated-bg']).toBe('#282828');
     expect(dark['--sto-text-primary']).toBe('#dfdfdf');

@@ -41,12 +41,13 @@ describe('semantic card color recipes', () => {
     );
   });
 
-  it('keeps the existing light Home card colors while flattening ordinary dark cards', () => {
+  it('keeps light cards unchanged and gives dark content cards a visible resting layer', () => {
     expect(tokensCss).toMatch(/--sto-card-flat-bg:\s*#ffffff/);
     expect(tokensCss).toMatch(/--sto-card-flat-border:\s*var\(--sto-border-default\)/);
     expect(tokensCss).toMatch(/--sto-card-flat-hover-shadow:\s*0 0 16px rgba\(0, 0, 0, 0\.12\)/);
-    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-bg:\s*transparent/);
-    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-hover-bg:\s*#181818/);
+    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-bg:\s*#181818/);
+    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-hover-bg:\s*#212121/);
+    expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-hover-border:\s*var\(--sto-border-default\)/);
     expect(tokensCss).toMatch(/\.dark,\s*html\[data-sto-theme='dark'\]\s*\{[\s\S]*--sto-card-flat-hover-shadow:\s*none/);
   });
 

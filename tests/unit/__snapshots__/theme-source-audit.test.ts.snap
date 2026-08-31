@@ -6543,18 +6543,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/DataCenter/components/entries.tsx::pageDarkUtility::dark:border-::40px_64px_128px] min-[900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:border-border/60 dark:bg-card dark:shadow-none', listCardHoverB::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/entries.tsx::pageDarkUtility::dark:bg-::900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:border-border/60 dark:bg-card dark:shadow-none', listCardHoverBorderShadowClass,::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/entries.tsx::pageDarkUtility::dark:shadow-::ols-[minmax(0,1fr)_168px_74px_128px] dark:border-border/60 dark:bg-card dark:shadow-none', listCardHoverBorderShadowClass, d::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/pages/DataCenter/components/entries.tsx::pageDarkUtility::dark:bg-::-60', dropActive && 'bg-[#EAF3FF] ring-1 ring-[#4E7FFF] dark:bg-primary/10', )} > <div className::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -6625,10 +6613,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   {
     "key": "src/pages/DataCenter/components/entries.tsx::coolDarkShadow::rgba(15,23,42::border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground" s::1",
     "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/entries.tsx::rawColor::rgba(29,33,41,0.02)::rounded-[8px] border border-transparent bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-[border-color,box-shadow] duration-base min-[720px]:grid-co::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
     "key": "src/pages/DataCenter/components/entries.tsx::rawColor::#EAF3FF::d === entry.entryId && 'opacity-60', dropActive && 'bg-[#EAF3FF] ring-1 ring-[#4E7FFF] dark:bg-primary/10', )}::1",
@@ -7087,18 +7071,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/DataCenter/components/navigation.tsx::pageDarkUtility::dark:text-::text-[#6B778C] transition-colors hover:bg-white/70 hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-background/70 dark:hover:text-foreground'::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/navigation.tsx::pageDarkUtility::dark:bg-:::text-foreground', active && 'bg-white text-[#1D2129] shadow-sm dark:bg-background dark:text-foreground', )} > {children} </::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/navigation.tsx::pageDarkUtility::dark:text-::active && 'bg-white text-[#1D2129] shadow-sm dark:bg-background dark:text-foreground', )} > {children} </button> ); } expor::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/pages/DataCenter/components/navigation.tsx::pageDarkUtility::dark:text-::1 text-[14px] font-normal leading-6 text-[#FF6A00] hover:text-[#E95F00] dark:text-orange-400 dark:hover:text-orange-300" > <ArrowLeft classN::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -7120,18 +7092,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/pages/DataCenter/components/navigation.tsx::rawColor::#86909C::olors', active ? 'text-[#1D2129] dark:text-foreground' : 'text-[#86909C] dark:text-muted-foreground', disabled && 'cursor-not-allowed o::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/navigation.tsx::rawColor::#6B778C::'inline-flex h-7 w-7 items-center justify-center rounded-[8px] text-[#6B778C] transition-colors hover:bg-white/70 hover:text-[#1D2129] dark:text-mut::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/navigation.tsx::rawColor::#1D2129::ed-[8px] text-[#6B778C] transition-colors hover:bg-white/70 hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-background/70 dark:hover:text::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/navigation.tsx::rawColor::#1D2129::round/70 dark:hover:text-foreground', active && 'bg-white text-[#1D2129] shadow-sm dark:bg-background dark:text-foreground', )} >::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -7167,18 +7127,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:border-::ine-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-mut::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::r:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::cus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground" /::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::<div className="h-2 w-[88px] overflow-hidden rounded-full bg-[#D8DDE6] dark:bg-muted"> <div class::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -7200,58 +7148,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::<p className="text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground"> {t('dataCenterPage.drive.loca::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::v className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted"> <IconToggle active={currentViewMode === 'gri::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => setCre::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => setCreateFolderOpen(tr::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:border-::ine-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-mut::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::r:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::cus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground" /::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::v className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted"> <IconToggle active={store.viewMode === 'grid::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::none hover:bg-[#D8DDE6] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" o::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::[#D8DDE6] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => se::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -7279,38 +7175,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:border-::e:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted/50"::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:bg-::ble:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted/50" >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::pageDarkUtility::dark:text-::ata-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted/50" > {t('dataCenterPag::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#A8B0BD::nter-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" /> <input value={currentKey::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#1D2129::ded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:r::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#A8B0BD::ite pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-backgro::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#C9CDD4::x] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foregroun::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
     "key": "src/pages/DataCenter/index.tsx::rawColor::#D8DDE6::<div className="h-2 w-[88px] overflow-hidden rounded-full bg-[#D8DDE6] dark:bg-muted"> <div::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
@@ -7332,82 +7196,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/pages/DataCenter/index.tsx::rawColor::#6B778C::</p> <p className="text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground"> {t('dataCenterPag::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::<div className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted"> <IconToggle active={currentVie::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::tton" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8D::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#1D2129::rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#D8DDE6::E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={()::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::tton" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8D::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#1D2129::rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#D8DDE6::E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={u::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::tton" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8D::3",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#1D2129::rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark::3",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#D8DDE6::E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={u::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#A8B0BD::nter-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" /> <input value={store.keyw::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#1D2129::ded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:r::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#A8B0BD::ite pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-backgro::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#C9CDD4::x] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foregroun::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::<div className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted"> <IconToggle active={store.view::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::ne" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8D::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#1D2129::rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] disabled:cursor-not-allowed disabled:op::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#D8DDE6::E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:tex::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -7444,30 +7232,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/pages/DataCenter/index.tsx::rawColor::#A8B0BD::<div className="mt-2 text-center text-[10px] leading-4 text-[#A8B0BD]"> {t('dataCenterPage.toolbar.sharedArtifactsQrHint')::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none outli::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#1D2129::px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none outline-none ring-0 transition-colors hover:bg-[#F7F8FA] f::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#F7F8FA::t-[#1D2129] shadow-none outline-none ring-0 transition-colors hover:bg-[#F7F8FA] focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:b::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::outline-none ring-0 transition-colors hover:bg-[#F7F8FA] focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-v::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB:::border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-off::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/DataCenter/index.tsx::rawColor::#E5E6EB::us-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-foreground dark:hover:::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
