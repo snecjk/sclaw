@@ -217,7 +217,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   }, [startRun]);
   const deploy = useStoAppDeploy({
     workspaceId,
-    applicationId: stoStatus?.applicationId,
+    appCode: stoStatus?.appCode,
     appName,
     onFailedPrompt: (prompt) => {
       setComposerSeed((prev) => ({
@@ -407,7 +407,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   const canDeploy = Boolean(
     showCloudActions
     && stoStatus?.available
-    && (stoStatus.bound || stoStatus.applicationId),
+    && (stoStatus.bound || stoStatus.appCode),
   );
 
   const phase = status?.phase ?? 'created';
@@ -457,7 +457,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
             )}
             title={
               stoStatus?.bound
-                ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
+                ? `${stoStatus.syncLabel}${stoStatus.appCode ? ` · ${stoStatus.appCode}` : ''}`
                 : '未绑定 STO 应用'
             }
           >
@@ -598,7 +598,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
         appName={appName}
         workspaceId={workspaceId}
         pageType={pageType ?? 'site'}
-        applicationId={stoStatus?.applicationId}
+        appCode={stoStatus?.appCode}
         onCancel={() => setDeployOpen(false)}
         onConfirm={handleDeploy}
       />

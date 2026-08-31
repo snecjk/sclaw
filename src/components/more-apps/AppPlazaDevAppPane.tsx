@@ -241,11 +241,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const canDeploy = Boolean(
     showCloudActions
     && stoStatus?.available
-    && (stoStatus.bound || stoStatus.applicationId),
+    && (stoStatus.bound || stoStatus.appCode),
   );
   const deploy = useStoAppDeploy({
     workspaceId,
-    applicationId: stoStatus?.applicationId,
+    appCode: stoStatus?.appCode,
     appName,
     onFailedPrompt: (prompt) => {
       setComposerSeed((prev) => ({
@@ -483,7 +483,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               )}
               title={
                 stoStatus?.bound
-                  ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
+                  ? `${stoStatus.syncLabel}${stoStatus.appCode ? ` · ${stoStatus.appCode}` : ''}`
                   : '未绑定 STO 应用'
               }
             >
@@ -733,7 +733,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         appName={appName}
         workspaceId={workspaceId}
         pageType={pageType ?? 'site'}
-        applicationId={stoStatus?.applicationId}
+        appCode={stoStatus?.appCode}
         onCancel={() => setDeployOpen(false)}
         onConfirm={(input) => {
           setDeployOpen(false);

@@ -51,6 +51,41 @@ import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
 import { assertExternalServicesReadyForDeploy } from '../../services/app-dev-deploy-preflight';
 
+const APP_DEV_LOG_MAX_CHARS = 12_000;
+
+function serializeForAppDevLog(value: unknown, maxChars = APP_DEV_LOG_MAX_CHARS): string {
+  try {
+    const text = JSON.stringify(value);
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars)}…[truncated ${text.length - maxChars} chars]`;
+  } catch {
+    return '[unserializable]';
+  }
+}
+
+function summarizeDeployCloud(cloud: {
+  appCode?: string;
+  applicationName?: string;
+  status?: string;
+  gitlabProjectId?: string;
+  devopsApplicationId?: string;
+  headRevisionId?: string;
+  headCommitSha?: string;
+  previewUrl?: string;
+} | null): Record<string, unknown> | null {
+  if (!cloud) return null;
+  return {
+    appCode: cloud.appCode,
+    applicationName: cloud.applicationName,
+    status: cloud.status,
+    gitlabProjectId: cloud.gitlabProjectId,
+    devopsApplicationId: cloud.devopsApplicationId,
+    headRevisionId: cloud.headRevisionId,
+    headCommitSha: cloud.headCommitSha,
+    previewUrl: cloud.previewUrl,
+  };
+}
+
 async function resolveAppPath(workspaceId: string): Promise<string> {
   const rootPath = await getWorkspaceRootPath(workspaceId);
   if (!rootPath) throw new Error(`Workspace not found: ${workspaceId}`);
@@ -111,12 +146,12 @@ export async function handleAppDevRoutes(
 
     if (url.pathname === '/api/app-dev/apps/clone' && req.method === 'POST') {
       const body = await parseJsonBody<{
-        applicationId?: string;
+        appCode?: string;
         applicationName?: string;
         parentDir?: string;
       }>(req);
       const result = await cloneDevApp({
-        applicationId: body.applicationId ?? '',
+        appCode: body.appCode ?? '',
         applicationName: body.applicationName,
         parentDir: body.parentDir ?? '',
       });
@@ -136,13 +171,13 @@ export async function handleAppDevRoutes(
 
     if (url.pathname === '/api/app-dev/apps/delete' && req.method === 'POST') {
       const body = await parseJsonBody<{
-        applicationId?: string;
+        appCode?: string;
         workspaceId?: string;
         deleteLocal?: boolean;
       }>(req);
       const result = await deleteDevApp(
         {
-          applicationId: body.applicationId,
+          appCode: body.appCode,
           workspaceId: body.workspaceId,
           deleteLocal: body.deleteLocal === true,
         },
@@ -317,23 +352,23 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(workspaceId);
       await ensureStoWorkspaceBinding(appPath, { workspaceId }).catch(() => null);
       const status = await getStoAppStatus(appPath);
-      if (!status.applicationId) {
+      if (!status.appCode) {
         const binding = await getStoAppBindingByWorkspaceId(workspaceId);
-        if (binding?.applicationId) {
-          status.applicationId = binding.applicationId;
+        if (binding?.appCode) {
+          status.appCode = binding.appCode;
           status.applicationName = status.applicationName ?? binding.applicationName;
         }
       }
-      if (!status.applicationId) {
+      if (!status.appCode) {
         const cloud = await resolveCloudAppForWorkspace(workspaceId, appPath);
-        if (cloud?.applicationId) {
-          status.applicationId = cloud.applicationId;
+        if (cloud?.appCode) {
+          status.appCode = cloud.appCode;
           status.applicationName = status.applicationName ?? cloud.applicationName;
           status.revisionId = status.revisionId ?? cloud.headRevisionId;
           status.devCommitSha = status.devCommitSha ?? cloud.headCommitSha;
         }
       }
-      if (status.applicationId && !status.bound) {
+      if (status.appCode && !status.bound) {
         status.bound = true;
         status.syncLabel = status.syncLabel === '未绑定' ? '状态未知' : status.syncLabel;
       }
@@ -343,9 +378,14 @@ export async function handleAppDevRoutes(
 
     if (url.pathname === '/api/app-dev/sto-app/push' && req.method === 'POST') {
       const body = await parseJsonBody<{ workspaceId: string; message?: string }>(req);
+      logger.info(
+        `[app-dev] POST /api/app-dev/sto-app/push workspaceId=${body.workspaceId ?? ''} ` +
+        `message=${JSON.stringify(body.message ?? '更新应用')}`,
+      );
       const appPath = await resolveAppPath(body.workspaceId);
       await ensureStoWorkspaceBinding(appPath, { workspaceId: body.workspaceId }).catch(() => null);
       const result = await pushStoApp(appPath, body.message ?? '更新应用');
+      logger.info(`[app-dev] POST /api/app-dev/sto-app/push result ok=${result.ok} output=${JSON.stringify(result.output)}`);
       sendJson(res, 200, { success: true, ...result });
       return true;
     }
@@ -371,12 +411,15 @@ export async function handleAppDevRoutes(
       const body = await parseJsonBody<{
         workspaceId?: string;
         env?: string;
-        applicationId?: string;
+        appCode?: string;
         requestId?: string;
         deploymentVersion?: string;
         pushMessage?: string;
       }>(req);
       const workspaceId = body.workspaceId ?? '';
+      logger.info(
+        `[app-dev] deploy:start workspaceId=${workspaceId} body=${serializeForAppDevLog(body)}`,
+      );
       if (!workspaceId) throw new Error('缺少 workspaceId');
       const appPath = await resolveAppPath(workspaceId);
 
@@ -384,17 +427,31 @@ export async function handleAppDevRoutes(
       const status = await getStoAppStatus(appPath);
       const binding = await getStoAppBindingByWorkspaceId(workspaceId);
       const cloud = await resolveCloudAppForWorkspace(workspaceId, appPath);
-      const applicationId = (
-        body.applicationId
-        ?? status.applicationId
-        ?? binding?.applicationId
-        ?? cloud?.applicationId
+      const appCode = (
+        body.appCode
+        ?? status.appCode
+        ?? binding?.appCode
+        ?? cloud?.appCode
         ?? ''
       ).trim();
-      if (!applicationId) {
-        throw new Error('缺少 applicationId：请先绑定并提交到 STO 应用');
+      logger.info(
+        `[app-dev] deploy:resolved appPath=${appPath} appCode=${appCode} ` +
+        `status=${serializeForAppDevLog({
+          syncState: status.syncState,
+          syncLabel: status.syncLabel,
+          appCode: status.appCode,
+          bound: status.bound,
+        })} binding=${serializeForAppDevLog(binding)} ` +
+        `cloud=${serializeForAppDevLog(summarizeDeployCloud(cloud))}`,
+      );
+      if (!appCode) {
+        throw new Error('缺少 appCode：请先绑定并提交到 Site App');
       }
       if (cloud && !cloud.gitlabProjectId) {
+        logger.error(
+          `[app-dev] deploy:gitlab-check-failed appCode=${appCode} ` +
+          `cloud=${serializeForAppDevLog(summarizeDeployCloud(cloud))}`,
+        );
         throw new Error('云端应用尚未创建 Git 项目（gitlabProjectId 为空），无法发布');
       }
 
@@ -404,20 +461,33 @@ export async function handleAppDevRoutes(
       }
 
       await assertExternalServicesReadyForDeploy(appPath);
+      logger.info(`[app-dev] deploy:preflight-ok workspaceId=${workspaceId} env=${env}`);
 
       // Always push local changes before kicking off DevOps deploy.
       const pushMessage = (body.pushMessage ?? `发布前同步 (${env})`).trim() || `发布前同步 (${env})`;
-      logger.info(`[app-dev] deploy: push before create workspaceId=${workspaceId} env=${env}`);
-      await pushStoApp(appPath, pushMessage);
+      logger.info(
+        `[app-dev] deploy:push-start workspaceId=${workspaceId} env=${env} ` +
+        `message=${JSON.stringify(pushMessage)}`,
+      );
+      const pushResult = await pushStoApp(appPath, pushMessage);
+      logger.info(`[app-dev] deploy:push-done ${serializeForAppDevLog(pushResult)}`);
 
-      const { saiCodeDeployCreate } = await import('../../utils/sai-cli');
-      const result = await saiCodeDeployCreate({
+      const deployParams = {
         env,
-        applicationId,
+        appCode,
         requestId: body.requestId,
         deploymentVersion: body.deploymentVersion,
-      });
+      };
+      logger.info(`[app-dev] deploy:create-start params=${serializeForAppDevLog(deployParams)}`);
+      const { siteappDeployCreate } = await import('../../utils/siteapp-cli');
+      const result = await siteappDeployCreate(deployParams);
       if (!result.ok) {
+        logger.error(`[app-dev] deploy:create-failed ${serializeForAppDevLog({
+          ok: result.ok,
+          exitCode: result.exitCode,
+          error: result.error,
+          data: result.data,
+        })}`);
         const message = typeof result.error === 'string'
           ? result.error
           : result.error && typeof result.error === 'object' && 'message' in (result.error as object)
@@ -425,9 +495,10 @@ export async function handleAppDevRoutes(
             : '发布失败';
         throw new Error(message);
       }
+      logger.info(`[app-dev] deploy:create-ok ${serializeForAppDevLog(result.data)}`);
       sendJson(res, 200, {
         success: true,
-        applicationId,
+        appCode,
         env,
         pushed: true,
         data: result.data ?? null,
@@ -436,13 +507,26 @@ export async function handleAppDevRoutes(
     }
 
     if (url.pathname === '/api/app-dev/sto-app/deploy/refresh' && req.method === 'POST') {
-      const body = await parseJsonBody<{ deploymentId?: string }>(req);
+      const body = await parseJsonBody<{ deploymentId?: string; appCode?: string; workspaceId?: string }>(req);
       const deploymentId = (body.deploymentId ?? '').trim();
+      logger.info(
+        `[app-dev] deploy:refresh-start body=${serializeForAppDevLog(body)}`,
+      );
       if (!deploymentId) throw new Error('缺少 deploymentId');
 
-      const { saiCodeDeployRefresh } = await import('../../utils/sai-cli');
-      const result = await saiCodeDeployRefresh({ deploymentId });
+      let appCode = (body.appCode ?? '').trim();
+      if (!appCode && body.workspaceId?.trim()) {
+        const appPath = await resolveAppPath(body.workspaceId.trim());
+        const status = await getStoAppStatus(appPath);
+        appCode = status.appCode?.trim() ?? '';
+      }
+      if (!appCode) throw new Error('缺少 appCode');
+
+      const { siteappDeployRefresh } = await import('../../utils/siteapp-cli');
+      const result = await siteappDeployRefresh({ appCode, deploymentId });
       if (!result.ok) {
+        logger.error(`[app-dev] deploy:refresh-failed deploymentId=${deploymentId} appCode=${appCode} ` +
+          `${serializeForAppDevLog({ ok: result.ok, exitCode: result.exitCode, error: result.error, data: result.data })}`);
         const message = typeof result.error === 'string'
           ? result.error
           : result.error && typeof result.error === 'object' && 'message' in (result.error as object)
@@ -450,6 +534,10 @@ export async function handleAppDevRoutes(
             : '刷新部署状态失败';
         throw new Error(message);
       }
+      logger.info(
+        `[app-dev] deploy:refresh-ok deploymentId=${deploymentId} appCode=${appCode} ` +
+        `data=${serializeForAppDevLog(result.data)}`,
+      );
       sendJson(res, 200, {
         success: true,
         deploymentId,

@@ -777,7 +777,7 @@ export function MoreAppsPage() {
           <div className="more-apps-grid">
             {visibleDevApps.map((app) => (
               <DevAppCard
-                key={app.workspaceId || app.applicationId || `${app.name}:${app.appPath}`}
+                key={app.workspaceId || app.appCode || `${app.name}:${app.appPath}`}
                 app={app}
               />
             ))}

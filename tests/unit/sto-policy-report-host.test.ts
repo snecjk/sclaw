@@ -19,7 +19,6 @@ describe('getStoPolicyReportApiHostForAppEnv', () => {
     expect(getStoPolicyReportApiHostForAppEnv('production')).toBe('zc.sto.cn');
   });
 });
-
 describe('getStoPolicyHybridApiHostForAppEnv', () => {
   it('maps development and test to zc-hybrid-test', () => {
     expect(getStoPolicyHybridApiHostForAppEnv('development')).toBe('zc-hybrid-test.sto.cn');
@@ -50,3 +49,4 @@ describe('getStoPolicyHybridApiHostForSsoEnv', () => {
     expect(getStoPolicyHybridApiHostForSsoEnv('production-internal')).toBe('zc-hybrid.sto.cn');
   });
 });
+
