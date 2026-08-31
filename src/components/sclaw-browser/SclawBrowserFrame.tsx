@@ -44,11 +44,34 @@ interface SclawBrowserFrameProps {
   onPageUrl?: (pageUrl: string) => void;
   /** Fired when history back availability changes. */
   onNavStateChange?: (state: { canGoBack: boolean }) => void;
+  /** Optional lifecycle hook for embed debugging (navigation / load failures). */
+  onWebviewLifecycle?: (event: SclawBrowserLifecycleEvent) => void;
   /**
    * Fallback for legacy webview `new-window` DOM events.
    * Prefer Main setWindowOpenHandler → sclaw-browser:open-url for Electron 40+.
    */
   onOpenWindow?: (url: string) => void;
+}
+
+export type SclawBrowserLifecycleType =
+  | 'dom-ready'
+  | 'did-start-loading'
+  | 'did-stop-loading'
+  | 'did-navigate'
+  | 'did-navigate-in-page'
+  | 'did-finish-load'
+  | 'did-fail-load'
+  | 'did-start-navigation'
+  | 'page-title-updated';
+
+export interface SclawBrowserLifecycleEvent {
+  type: SclawBrowserLifecycleType;
+  url?: string;
+  title?: string;
+  canGoBack?: boolean;
+  errorCode?: number;
+  errorDescription?: string;
+  isMainFrame?: boolean;
 }
 
 type EmbedWebviewElement = HTMLElement & {
@@ -108,6 +131,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       onPageUrl,
       onNavStateChange,
       onOpenWindow,
+      onWebviewLifecycle,
     },
     ref,
   ) {
@@ -119,16 +143,27 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const appId = appIdProp ?? overlaySession?.appId ?? null;
     const bound = boundProp ?? Boolean(overlaySession?.appId);
     const [guestPreloadUrl, setGuestPreloadUrl] = useState<string | null>(null);
+    const loadedUrlRef = useRef<string | null>(null);
     const onPageFaviconRef = useRef(onPageFavicon);
     const onPageTitleRef = useRef(onPageTitle);
     const onPageUrlRef = useRef(onPageUrl);
     const onNavStateChangeRef = useRef(onNavStateChange);
     const onOpenWindowRef = useRef(onOpenWindow);
+    const onWebviewLifecycleRef = useRef(onWebviewLifecycle);
     onPageFaviconRef.current = onPageFavicon;
     onPageTitleRef.current = onPageTitle;
     onPageUrlRef.current = onPageUrl;
     onNavStateChangeRef.current = onNavStateChange;
     onOpenWindowRef.current = onOpenWindow;
+    onWebviewLifecycleRef.current = onWebviewLifecycle;
+
+    const emitWebviewLifecycle = (el: EmbedWebviewElement, event: SclawBrowserLifecycleEvent) => {
+      onWebviewLifecycleRef.current?.({
+        ...event,
+        url: event.url ?? safeGetWebviewUrl(el, url),
+        canGoBack: event.canGoBack ?? safeCanGoBack(el),
+      });
+    };
 
     useEffect(() => {
       if (!isElectron) return;
@@ -139,12 +174,72 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
 
     useEffect(() => {
       if (!isElectron || !guestPreloadUrl) return;
+      const trimmed = url?.trim();
+      if (!trimmed) return;
+      const el = webviewRef.current;
+      if (!el?.loadURL) return;
+      if (loadedUrlRef.current === trimmed) return;
+      loadedUrlRef.current = trimmed;
+      el.loadURL(trimmed);
+    }, [guestPreloadUrl, url]);
+
+    useEffect(() => {
+      if (!isElectron || !onWebviewLifecycleRef.current) return;
       const el = webviewRef.current;
       if (!el) return;
-      const current = safeGetWebviewUrl(el, '');
-      if (current === 'about:blank' || !current) {
-        el.loadURL?.(url);
-      }
+
+      const onDomReady = () => emitWebviewLifecycle(el, { type: 'dom-ready' });
+      const onStartLoading = () => emitWebviewLifecycle(el, { type: 'did-start-loading' });
+      const onStopLoading = () => emitWebviewLifecycle(el, { type: 'did-stop-loading' });
+      const onNavigateDiag = () => emitWebviewLifecycle(el, { type: 'did-navigate' });
+      const onNavigateInPageDiag = () => emitWebviewLifecycle(el, { type: 'did-navigate-in-page' });
+      const onFinishLoadDiag = () => emitWebviewLifecycle(el, { type: 'did-finish-load' });
+      const onStartNavigationDiag = () => emitWebviewLifecycle(el, { type: 'did-start-navigation' });
+      const onFailLoad = (event: Event) => {
+        const detail = event as Event & {
+          errorCode?: number;
+          errorDescription?: string;
+          validatedURL?: string;
+          isMainFrame?: boolean;
+        };
+        emitWebviewLifecycle(el, {
+          type: 'did-fail-load',
+          url: detail.validatedURL,
+          errorCode: detail.errorCode,
+          errorDescription: detail.errorDescription,
+          isMainFrame: detail.isMainFrame,
+        });
+      };
+      const onTitleUpdatedDiag = (event: Event) => {
+        const detail = event as Event & { title?: string };
+        if (typeof detail.title !== 'string' || !detail.title.trim()) return;
+        emitWebviewLifecycle(el, {
+          type: 'page-title-updated',
+          title: detail.title.trim(),
+        });
+      };
+
+      el.addEventListener('dom-ready', onDomReady);
+      el.addEventListener('did-start-loading', onStartLoading);
+      el.addEventListener('did-stop-loading', onStopLoading);
+      el.addEventListener('did-navigate', onNavigateDiag);
+      el.addEventListener('did-navigate-in-page', onNavigateInPageDiag);
+      el.addEventListener('did-finish-load', onFinishLoadDiag);
+      el.addEventListener('did-start-navigation', onStartNavigationDiag);
+      el.addEventListener('did-fail-load', onFailLoad);
+      el.addEventListener('page-title-updated', onTitleUpdatedDiag);
+
+      return () => {
+        el.removeEventListener('dom-ready', onDomReady);
+        el.removeEventListener('did-start-loading', onStartLoading);
+        el.removeEventListener('did-stop-loading', onStopLoading);
+        el.removeEventListener('did-navigate', onNavigateDiag);
+        el.removeEventListener('did-navigate-in-page', onNavigateInPageDiag);
+        el.removeEventListener('did-finish-load', onFinishLoadDiag);
+        el.removeEventListener('did-start-navigation', onStartNavigationDiag);
+        el.removeEventListener('did-fail-load', onFailLoad);
+        el.removeEventListener('page-title-updated', onTitleUpdatedDiag);
+      };
     }, [guestPreloadUrl, url]);
 
     const publishNavState = () => {
@@ -309,7 +404,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       return (
         <webview
           ref={webviewRef as React.RefObject<HTMLElement>}
-          src={guestPreloadUrl ? url : 'about:blank'}
+          src="about:blank"
           partition={SCLAW_EMBED_BROWSER_PARTITION}
           allowpopups={true}
           webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=no,enableRemoteModule=no"

@@ -89,6 +89,47 @@ export async function prepareSclawEmbedBrowserSession(url: string): Promise<void
   }
 }
 
+export interface SclawEmbedSessionCookieSnapshot {
+  name: string;
+  valuePreview: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  expirationDate?: number;
+}
+
+function maskCookieValue(value: string): string {
+  if (!value) return '';
+  if (value.length <= 8) return `(${value.length} chars)`;
+  return `${value.slice(0, 4)}…${value.slice(-4)} (${value.length})`;
+}
+
+/** 读取 embed 分区在指定 URL 下的 cookie（值脱敏，供 SSO 调试）。 */
+export async function listSclawEmbedSessionCookies(url: string): Promise<SclawEmbedSessionCookieSnapshot[]> {
+  const target = url.trim();
+  if (!target || !isStoEmbedBrowserUrl(target)) return [];
+
+  const embedSession = session.fromPartition(SCLAW_EMBED_BROWSER_PARTITION);
+  let parsed: URL;
+  try {
+    parsed = new URL(target);
+  } catch {
+    return [];
+  }
+
+  const cookies = await embedSession.cookies.get({ url: parsed.origin });
+  return cookies.map((cookie) => ({
+    name: cookie.name,
+    valuePreview: maskCookieValue(cookie.value),
+    domain: cookie.domain ?? '',
+    path: cookie.path ?? '/',
+    secure: Boolean(cookie.secure),
+    httpOnly: Boolean(cookie.httpOnly),
+    expirationDate: cookie.expirationDate,
+  }));
+}
+
 function stoPolicyCookieHosts(): string[] {
   const primary = getStoPolicyReportApiHost();
   const hosts = new Set<string>([primary, 'zc.sto.cn', 'pre-zc.sto.cn', 'zc-test.sto.cn']);

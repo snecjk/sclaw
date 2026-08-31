@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
+  BarChart3,
   ChevronDown,
-  Database,
   Folder,
   FolderPlus,
   Grid2X2,
@@ -62,6 +62,7 @@ import type { DataCenterTempUrl } from '@/types/data-center';
 import type { LocalAuthorizeSelectionType } from '@/types/local-authorized-file';
 import { getAppEnv } from '../../../shared/env-config';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
+import { DataCenterFinanceEmbedPane } from './components/DataCenterFinanceEmbedPane';
 import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import { FolderBreadcrumbBar, IconToggle, TabButton } from './components/navigation';
 import { ROOT_ENTRY_ID } from './constants';
@@ -113,6 +114,7 @@ export function DataCenter() {
   const qrCodeTriggerRef = useRef<HTMLButtonElement>(null);
   const qrCodeContentRef = useRef<HTMLDivElement>(null);
   const isDriveSection = store.section === 'drive';
+  const isFinanceReportSection = store.section === 'data_source';
   const isLocalDriveTab = isDriveSection && driveTab === 'local';
   const isUploadDriveTab = isDriveSection && driveTab === 'upload';
   const isSharedArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'site_shared_artifact';
@@ -591,6 +593,16 @@ export function DataCenter() {
               <button
                 type="button"
                 role="tab"
+                aria-selected={isFinanceReportSection}
+                onClick={() => handleSectionChange('data_source')}
+                className={myTaskSectionTabClass(isFinanceReportSection)}
+              >
+                <BarChart3 className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                {t('dataCenterPage.sections.financeReport')}
+              </button>
+              <button
+                type="button"
+                role="tab"
                 aria-selected={store.section === 'drive'}
                 onClick={() => handleSectionChange('drive')}
                 className={myTaskSectionTabClass(store.section === 'drive')}
@@ -603,18 +615,26 @@ export function DataCenter() {
 
           <header className="mb-6 shrink-0">
             <h1 className={stoPageTitleClass}>
-              {store.section === 'qa_artifact' ? t('dataCenterPage.sections.qaArtifact') : store.section === 'drive' ? t('dataCenterPage.sections.drive') : t('dataCenterPage.sections.dataSource')}
+              {store.section === 'qa_artifact'
+                ? t('dataCenterPage.sections.qaArtifact')
+                : isFinanceReportSection
+                  ? t('dataCenterPage.sections.financeReport')
+                  : t('dataCenterPage.sections.drive')}
             </h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-muted-foreground">
               {store.section === 'qa_artifact'
                 ? t('dataCenterPage.sectionDescriptions.qaArtifact')
-                : store.section === 'drive'
-                  ? t('dataCenterPage.sectionDescriptions.drive')
-                  : t('dataCenterPage.sectionDescriptions.dataSource')}
+                : isFinanceReportSection
+                  ? t('dataCenterPage.sectionDescriptions.financeReport')
+                  : t('dataCenterPage.sectionDescriptions.drive')}
             </p>
           </header>
 
-          {store.section === 'drive' ? (
+          {isFinanceReportSection ? (
+            <section className="flex min-h-0 flex-1 flex-col">
+              <DataCenterFinanceEmbedPane className="flex min-h-0 flex-1 flex-col" />
+            </section>
+          ) : store.section === 'drive' ? (
             <div className="mb-[18px] shrink-0">
               <div className="flex min-w-0 items-center justify-between gap-4">
                 <div className="flex h-9 items-center gap-8">
@@ -907,11 +927,7 @@ export function DataCenter() {
               )}
             </section>
           </>
-        ) : (
-          <div className="mt-10">
-            <FeedbackState icon={<Database className="h-8 w-8" />} title={t('dataCenterPage.feedback.dataSourceTitle')} description={t('dataCenterPage.feedback.dataSourceDescription')} />
-          </div>
-        )}
+        ) : null}
         </main>
       </div>
 
