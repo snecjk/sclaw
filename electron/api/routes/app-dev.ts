@@ -455,7 +455,9 @@ export async function handleAppDevRoutes(
       );
       const appPath = await resolveAppPath(body.workspaceId);
       await ensureStoWorkspaceBinding(appPath, { workspaceId: body.workspaceId }).catch(() => null);
-      const result = await pushStoApp(appPath, body.message ?? '更新应用');
+      const result = await pushStoApp(appPath, body.message ?? '更新应用', {
+        workspaceId: body.workspaceId,
+      });
       logger.info(`[app-dev] POST /api/app-dev/sto-app/push result ok=${result.ok} output=${JSON.stringify(result.output)}`);
       sendJson(res, 200, { success: true, ...result });
       return true;
@@ -495,6 +497,24 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(workspaceId);
 
       await ensureStoWorkspaceBinding(appPath, { workspaceId }).catch(() => null);
+
+      const env = body.env;
+      if (env !== 'daily' && env !== 'stage' && env !== 'online') {
+        throw new Error('请选择部署环境：daily / stage / online');
+      }
+
+      await assertExternalServicesReadyForDeploy(appPath);
+      logger.info(`[app-dev] deploy:preflight-ok workspaceId=${workspaceId} env=${env}`);
+
+      // Push first — also registers the cloud Site App on first commit.
+      const pushMessage = (body.pushMessage ?? `发布前同步 (${env})`).trim() || `发布前同步 (${env})`;
+      logger.info(
+        `[app-dev] deploy:push-start workspaceId=${workspaceId} env=${env} ` +
+        `message=${JSON.stringify(pushMessage)}`,
+      );
+      const pushResult = await pushStoApp(appPath, pushMessage, { workspaceId });
+      logger.info(`[app-dev] deploy:push-done ${serializeForAppDevLog(pushResult)}`);
+
       const status = await getStoAppStatus(appPath);
       const binding = await getStoAppBindingByWorkspaceId(workspaceId);
       const cloud = await resolveCloudAppForWorkspace(workspaceId, appPath);
@@ -516,7 +536,7 @@ export async function handleAppDevRoutes(
         `cloud=${serializeForAppDevLog(summarizeDeployCloud(cloud))}`,
       );
       if (!appCode) {
-        throw new Error('缺少 appCode：请先绑定并提交到 Site App');
+        throw new Error('缺少 appCode：提交后未能注册云端应用');
       }
       if (cloud && !cloud.gitlabProjectId) {
         logger.error(
@@ -525,23 +545,6 @@ export async function handleAppDevRoutes(
         );
         throw new Error('云端应用尚未创建 Git 项目（gitlabProjectId 为空），无法发布');
       }
-
-      const env = body.env;
-      if (env !== 'daily' && env !== 'stage' && env !== 'online') {
-        throw new Error('请选择部署环境：daily / stage / online');
-      }
-
-      await assertExternalServicesReadyForDeploy(appPath);
-      logger.info(`[app-dev] deploy:preflight-ok workspaceId=${workspaceId} env=${env}`);
-
-      // Always push local changes before kicking off DevOps deploy.
-      const pushMessage = (body.pushMessage ?? `发布前同步 (${env})`).trim() || `发布前同步 (${env})`;
-      logger.info(
-        `[app-dev] deploy:push-start workspaceId=${workspaceId} env=${env} ` +
-        `message=${JSON.stringify(pushMessage)}`,
-      );
-      const pushResult = await pushStoApp(appPath, pushMessage);
-      logger.info(`[app-dev] deploy:push-done ${serializeForAppDevLog(pushResult)}`);
 
       const activated = await ensureSiteAppActiveForDeploy(appCode);
       logger.info(

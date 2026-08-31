@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isImportedDevApp,
+  canUseStoCloudPipeline,
   shouldShowGitCommitAction,
   shouldShowStoCloudActions,
 } from '../../src/lib/app-dev-actions';
@@ -40,6 +41,21 @@ describe('app-dev-actions', () => {
       { source: 'imported', gitRepo: true },
       true,
       { bound: true, appCode: 'app-1' } as never,
+    )).toBe(false);
+  });
+
+  it('allows cloud pipeline before first cloud registration', () => {
+    expect(canUseStoCloudPipeline(
+      { source: 'created' },
+      { available: true, bound: false, syncLabel: '待首次提交' } as never,
+    )).toBe(true);
+    expect(canUseStoCloudPipeline(
+      { source: 'imported' },
+      { available: true, bound: false } as never,
+    )).toBe(false);
+    expect(canUseStoCloudPipeline(
+      { source: 'created' },
+      { available: false, bound: false } as never,
     )).toBe(false);
   });
 });

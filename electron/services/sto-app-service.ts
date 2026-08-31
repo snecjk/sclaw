@@ -40,9 +40,10 @@ export async function getStoAppStatus(appPath: string): Promise<StoAppStatusSumm
 export async function pushStoApp(
   appPath: string,
   message: string,
+  hints?: { workspaceId?: string },
 ): Promise<StoAppCommandResult> {
   try {
-    return toCommandResult(await pushCodeApplication(appPath, message));
+    return toCommandResult(await pushCodeApplication(appPath, message, hints));
   } catch (error) {
     throw error instanceof Error ? error : new Error(String(error));
   }

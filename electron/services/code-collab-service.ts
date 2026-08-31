@@ -5,7 +5,7 @@
 
 import { readFile, realpath, unlink } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
-import { resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import {
   mergeSiteAppRecords,
   normalizeSiteAppPageType,
@@ -41,7 +41,9 @@ import { enrichSiteAppRecord, getSiteApp, listSiteApps } from './site-app-api';
 import {
   getStoAppBindingByLocalPath,
   getStoAppBindingByWorkspaceId,
+  upsertStoAppBinding,
 } from './sto-app-binding-store';
+import { listUserWorkspaces } from './session-catalog-service';
 import {
   readStoWorkspaceFile,
   writeStoWorkspaceBinding,
@@ -208,6 +210,108 @@ async function requireWorkspace(
   return { cwd, state };
 }
 
+async function readMarkerForFirstPush(appPath: string): Promise<{
+  applicationName: string;
+  pageType: SiteAppPageType;
+  source?: 'created' | 'imported';
+}> {
+  const fallbackName = basename(appPath);
+  try {
+    const raw = JSON.parse(
+      await readFile(join(appPath, '.sclaw', 'app-dev.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    const applicationName = typeof raw.name === 'string' && raw.name.trim()
+      ? raw.name.trim()
+      : fallbackName;
+    const source = raw.source === 'created' || raw.source === 'imported'
+      ? raw.source
+      : undefined;
+    return {
+      applicationName,
+      pageType: normalizeSiteAppPageType(raw.pageType),
+      source,
+    };
+  } catch {
+    return { applicationName: fallbackName, pageType: 'site' };
+  }
+}
+
+async function summarizePendingRegistrationStatus(cwd: string): Promise<CodeCollabStatusSummary> {
+  const marker = await readMarkerForFirstPush(cwd);
+  let syncState: CodeCollabStatusSummary['syncState'] = 'unknown';
+  try {
+    const snapshot = await createSourceSnapshot(cwd);
+    await cleanupSourceSnapshot(snapshot);
+    syncState = 'local-changes';
+  } catch {
+    syncState = 'unknown';
+  }
+  return {
+    available: true,
+    executable: 'sai-cli',
+    bound: false,
+    syncState,
+    syncLabel: '待首次提交',
+    applicationName: marker.applicationName,
+    raw: { pendingRegistration: true, source: marker.source ?? 'created' },
+  };
+}
+
+/**
+ * Bind workspace for push. Creates the cloud Site App on first commit only.
+ */
+async function ensureWorkspaceForPush(
+  appPath: string,
+  hints?: { appCode?: string; workspaceId?: string },
+): Promise<{ cwd: string; state: StoWorkspaceFile }> {
+  const cwd = await realpath(resolve(appPath));
+  const existing = await readStoWorkspaceFile(cwd);
+  if (existing) {
+    if (existing.workspacePath !== cwd) {
+      throw new Error('workspacePath 与当前目录不一致，请检查 .sto/workspace.json');
+    }
+    return { cwd, state: existing };
+  }
+
+  const fromBinding = await ensureStoWorkspaceBinding(cwd, hints);
+  if (fromBinding) return { cwd, state: fromBinding };
+
+  const { applicationName, pageType } = await readMarkerForFirstPush(cwd);
+  logger.info(
+    `[code-collab] first-push create cloud app name=${applicationName} pageType=${pageType} appPath=${cwd}`,
+  );
+  const created = await createSiteApplication({
+    applicationName,
+    description: `${applicationName} 应用`,
+    pageType,
+  });
+
+  const state = await writeStoWorkspaceBinding({
+    appPath: cwd,
+    cloud: siteAppToWorkspaceFields(created),
+    fallback: { appCode: created.appCode, status: created.status ?? 'ready' },
+  });
+  if (!state) {
+    throw new Error('首次提交：云端应用已创建，但未能写入 .sto/workspace.json');
+  }
+
+  let workspaceId = hints?.workspaceId?.trim();
+  if (!workspaceId) {
+    const workspaces = await listUserWorkspaces();
+    workspaceId = workspaces.find((item) => resolve(item.rootPath) === cwd)?.id;
+  }
+  if (workspaceId) {
+    await upsertStoAppBinding({
+      appCode: created.appCode,
+      applicationName: created.applicationName || applicationName,
+      localPath: cwd,
+      workspaceId,
+    }).catch((err) => logger.warn('[code-collab] binding upsert after first-push create failed:', err));
+  }
+
+  return { cwd, state };
+}
+
 function assertRemoteBaseline(
   state: StoWorkspaceFile,
   provisioned: SiteappRepositoryProvision,
@@ -303,6 +407,18 @@ export async function getCodeCollabStatus(appPath: string): Promise<CodeCollabSt
     return summary;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    try {
+      const marker = await readMarkerForFirstPush(cwd);
+      if (marker.source === 'created') {
+        const pending = await summarizePendingRegistrationStatus(cwd);
+        logger.info(
+          `[code-collab] action=status pendingRegistration appPath=${cwd} syncState=${pending.syncState}`,
+        );
+        return pending;
+      }
+    } catch {
+      // fall through to generic unbound
+    }
     return {
       available: true,
       executable: 'sai-cli',
@@ -317,9 +433,10 @@ export async function getCodeCollabStatus(appPath: string): Promise<CodeCollabSt
 export async function pushCodeApplication(
   appPath: string,
   message: string,
+  hints?: { workspaceId?: string },
 ): Promise<CodeCollabCommandResult> {
   const trimmed = message.trim() || '更新应用';
-  const { cwd, state } = await requireWorkspace(appPath);
+  const { cwd, state } = await ensureWorkspaceForPush(appPath, hints);
   logger.info(
     `[code-collab] action=push start appPath=${cwd} message=${JSON.stringify(trimmed)} workspace=${serializeForCodeCollabLog({
       appCode: state.appCode,

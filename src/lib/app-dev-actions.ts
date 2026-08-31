@@ -21,6 +21,14 @@ export function shouldShowStoCloudActions(
   return true;
 }
 
+/** Push / deploy pipeline — available even before first cloud registration. */
+export function canUseStoCloudPipeline(
+  app: Pick<DevAppSummary, 'source' | 'appCode'> | null | undefined,
+  stoStatus?: StoAppStatus | null,
+): boolean {
+  return shouldShowStoCloudActions(app, stoStatus) && Boolean(stoStatus?.available);
+}
+
 /** Manual git commit in the workbench header — imported apps with a repo only. */
 export function shouldShowGitCommitAction(
   app: Pick<DevAppSummary, 'source' | 'appCode' | 'gitRepo'> | null | undefined,

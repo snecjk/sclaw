@@ -61,7 +61,7 @@ import {
   type AppPlazaDevAppTab,
   useAppPlazaShellStore,
 } from '@/stores/app-plaza-shell';
-import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
+import { shouldShowGitCommitAction, shouldShowStoCloudActions, canUseStoCloudPipeline } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { openAppDevIdeWindow, useAppDevIdeOwnership } from '@/hooks/use-app-dev-ide-ownership';
 import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
@@ -238,11 +238,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
   const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
   const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable, stoStatus);
-  const canDeploy = Boolean(
-    showCloudActions
-    && stoStatus?.available
-    && (stoStatus.bound || stoStatus.appCode),
-  );
+  const stoCloudPipelineReady = canUseStoCloudPipeline(listedApp, stoStatus);
+  const canDeploy = stoCloudPipelineReady;
   const deploy = useStoAppDeploy({
     workspaceId,
     appCode: stoStatus?.appCode,
@@ -257,6 +254,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     onStatusRefresh: async () => {
       const next = await getStoAppStatus(workspaceId).catch(() => null);
       if (next) setStoStatus(next);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
     },
   });
 
@@ -401,9 +399,13 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       await pushStoApp(workspaceId, message);
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
       if (nextStatus) setStoStatus(nextStatus);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
       toast.success('已提交到 STO 应用');
       setCommitOpen(false);
     } catch (error) {
+      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
+      if (nextStatus) setStoStatus(nextStatus);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
       toast.error(error instanceof Error ? error.message : '提交失败');
     }
   };
@@ -433,7 +435,19 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         : stoStatus.syncState === 'local-changes'
           ? 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300'
           : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
-    : 'border-border bg-muted/50 text-muted-foreground';
+    : stoCloudPipelineReady && stoStatus?.syncLabel === '待首次提交'
+      ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300'
+      : 'border-border bg-muted/50 text-muted-foreground';
+  const stoStatusLabel = stoStatus?.bound
+    ? `STO ${stoStatus.syncLabel}`
+    : stoStatus?.syncLabel === '待首次提交'
+      ? 'STO 待首次提交'
+      : 'STO 未绑定';
+  const stoStatusTitle = stoStatus?.bound
+    ? `${stoStatus.syncLabel}${stoStatus.appCode ? ` · ${stoStatus.appCode}` : ''}`
+    : stoStatus?.syncLabel === '待首次提交'
+      ? '尚未注册云端应用，首次提交后将自动注册'
+      : '未绑定 STO 应用';
 
   const isMac = window.electron?.platform === 'darwin';
 
@@ -481,13 +495,9 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 'mr-1 inline-flex h-7 items-center rounded-md border px-2 text-[11px]',
                 stoStatusTone,
               )}
-              title={
-                stoStatus?.bound
-                  ? `${stoStatus.syncLabel}${stoStatus.appCode ? ` · ${stoStatus.appCode}` : ''}`
-                  : '未绑定 STO 应用'
-              }
+              title={stoStatusTitle}
             >
-              {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
+              {stoStatusLabel}
             </span>
           ) : null}
 
@@ -534,7 +544,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
-              disabled={!stoStatus?.available || !stoStatus?.bound}
+              disabled={!stoCloudPipelineReady}
               onClick={() => setCommitOpen(true)}
             >
               提交

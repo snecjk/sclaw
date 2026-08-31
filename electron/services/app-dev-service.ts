@@ -29,7 +29,6 @@ import { KeyedGenerationTracker, OperationCanceledError } from './keyed-single-f
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
 import { cloneStoApp } from './sto-app-service';
-import { createSiteApplication } from './code-collab-service';
 import { archiveSiteApp, enrichSiteAppRecord, getSiteApp, listSiteApps } from './site-app-api';
 import {
   getStoAppBindingByWorkspaceId,
@@ -193,6 +192,106 @@ export async function listLocalOnlyDevApps(input: {
     });
   }
   return apps;
+}
+
+function dedupeSiteAppRecords(items: SiteAppRecord[]): SiteAppRecord[] {
+  const map = new Map<string, SiteAppRecord>();
+  for (const item of items) {
+    const prev = map.get(item.appCode);
+    if (!prev) {
+      map.set(item.appCode, item);
+      continue;
+    }
+    const prevArchived = prev.status?.trim().toLowerCase() === 'archived';
+    const curArchived = item.status?.trim().toLowerCase() === 'archived';
+    if (prevArchived && !curArchived) map.set(item.appCode, item);
+  }
+  return [...map.values()];
+}
+
+function normalizeDevAppListName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function preferDevAppSummary(left: DevAppSummary, right: DevAppSummary): DevAppSummary {
+  if (left.localReady && !right.localReady) return left;
+  if (right.localReady && !left.localReady) return right;
+  if (left.workspaceId && !right.workspaceId) return left;
+  if (right.workspaceId && !left.workspaceId) return right;
+  return left;
+}
+
+function mergeCloudWithLocalDevApp(cloud: DevAppSummary, local: DevAppSummary): DevAppSummary {
+  return {
+    ...cloud,
+    workspaceId: local.workspaceId,
+    appPath: local.appPath,
+    localReady: true,
+    availability: 'local',
+    projectType: local.projectType ?? cloud.projectType,
+    source: local.source ?? cloud.source,
+    gitRepo: local.gitRepo ?? cloud.gitRepo,
+    createdAt: local.createdAt || cloud.createdAt,
+  };
+}
+
+/** Merge cloud + local-only rows and drop duplicates (same appCode / workspace / path). */
+export function mergeAndDedupeDevApps(
+  cloudApps: DevAppSummary[],
+  localApps: DevAppSummary[],
+): DevAppSummary[] {
+  const byAppCode = new Map<string, DevAppSummary>();
+  for (const app of cloudApps) {
+    if (!app.appCode) continue;
+    const prev = byAppCode.get(app.appCode);
+    byAppCode.set(app.appCode, prev ? preferDevAppSummary(prev, app) : app);
+  }
+
+  const consumedWorkspaceIds = new Set<string>();
+  const result: DevAppSummary[] = [];
+
+  for (const cloud of byAppCode.values()) {
+    if (cloud.localReady) {
+      if (cloud.workspaceId) consumedWorkspaceIds.add(cloud.workspaceId);
+      result.push(cloud);
+      continue;
+    }
+    const match = localApps.find((local) => {
+      if (local.appCode) return false;
+      if (!local.localReady || !local.workspaceId) return false;
+      if (consumedWorkspaceIds.has(local.workspaceId)) return false;
+      return normalizeDevAppListName(local.name) === normalizeDevAppListName(cloud.name)
+        && (local.pageType ?? 'site') === (cloud.pageType ?? 'site');
+    });
+    if (match) {
+      consumedWorkspaceIds.add(match.workspaceId);
+      result.push(mergeCloudWithLocalDevApp(cloud, match));
+    } else {
+      result.push(cloud);
+    }
+  }
+
+  const seenWorkspaceIds = new Set(
+    result.map((app) => app.workspaceId).filter((id): id is string => Boolean(id)),
+  );
+  const seenPaths = new Set(
+    result
+      .map((app) => app.appPath?.trim())
+      .filter((path): path is string => Boolean(path))
+      .map((path) => resolve(path)),
+  );
+
+  for (const local of localApps) {
+    if (local.workspaceId && consumedWorkspaceIds.has(local.workspaceId)) continue;
+    if (local.workspaceId && seenWorkspaceIds.has(local.workspaceId)) continue;
+    const path = local.appPath?.trim();
+    if (path && seenPaths.has(resolve(path))) continue;
+    result.push(local);
+    if (local.workspaceId) seenWorkspaceIds.add(local.workspaceId);
+    if (path) seenPaths.add(resolve(path));
+  }
+
+  return result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 
@@ -740,25 +839,10 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     packageEtag: templateMeta.packageEtag,
   });
 
-  let createdAppCode: string | undefined;
-  const created = await createSiteApplication({
-    applicationName: name,
-    description: `${name} 应用`,
-    pageType,
-  });
-  createdAppCode = created.appCode;
   logger.info(
-    `[app-dev] site-app create linked name=${name} appPath=${appPath} ` +
-    `appCode=${createdAppCode} pageType=${created.pageType} status=${created.status ?? '-'}`,
+    `[app-dev] createUserApp local scaffold ready name=${name} appPath=${appPath} ` +
+    `pageType=${pageType} (cloud app deferred until first push)`,
   );
-  const workspaceFile = await writeStoWorkspaceBinding({
-    appPath,
-    cloud: siteAppToWorkspaceFields(created),
-    fallback: { appCode: createdAppCode, status: created.status ?? 'ready' },
-  });
-  if (!workspaceFile) {
-    throw new Error('云端应用已创建，但未能写入 .sto/workspace.json');
-  }
 
   // Ensure openspec exists even if an older template missed it; bake default assist skills.
   try {
@@ -780,13 +864,6 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId: string = workspace.id;
   await writeAppDevWorkspaceId(appPath, workspaceId);
-
-  await upsertStoAppBinding({
-    appCode: createdAppCode,
-    applicationName: name,
-    localPath: appPath,
-    workspaceId,
-  }).catch((err) => logger.warn('[app-dev] binding upsert after create failed:', err));
 
   logger.info(`[app-dev] createUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath}`);
 
@@ -876,7 +953,7 @@ export async function importUserApp(input: {
 export async function listDevApps(): Promise<DevAppSummary[]> {
   let listed: SiteAppRecord[] = [];
   try {
-    listed = await listSiteApps();
+    listed = dedupeSiteAppRecords(await listSiteApps());
   } catch (error) {
     logger.warn('[app-dev] listDevApps cloud list failed, showing local apps only:', error);
   }
@@ -888,7 +965,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
   const claimedWorkspaceIds = new Set<string>();
   const claimedPaths = new Set<string>();
 
-  const apps: DevAppSummary[] = [];
+  const cloudApps: DevAppSummary[] = [];
   for (const cloud of listed) {
     const binding = bindingByCode.get(cloud.appCode);
     let localPath = binding?.localPath?.trim() ?? '';
@@ -917,6 +994,9 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
 
     const pathOk = Boolean(localPath) && existsSync(localPath);
     const markerOk = pathOk && isAppDevWorkspaceRoot(localPath);
+    const isArchived = cloud.status?.trim().toLowerCase() === 'archived';
+    if (isArchived && !pathOk) continue;
+
     if (workspaceId) claimedWorkspaceIds.add(workspaceId);
     if (pathOk) claimedPaths.add(resolve(localPath));
     if (pathOk && workspaceId) {
@@ -939,7 +1019,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         }
       }
       const ws = workspaceById.get(workspaceId);
-      apps.push({
+      cloudApps.push({
         workspaceId,
         name: cloud.applicationName || ws?.name || cloud.appCode,
         appPath: localPath,
@@ -958,7 +1038,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
       continue;
     }
 
-      apps.push({
+      cloudApps.push({
         workspaceId: workspaceId || '',
         name: cloud.applicationName,
         appPath: localPath || '',
@@ -974,13 +1054,13 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
       });
     }
 
-  apps.push(...await listLocalOnlyDevApps({
+  const localApps = await listLocalOnlyDevApps({
     workspaces,
     claimedWorkspaceIds,
     claimedPaths,
-  }));
+  });
 
-  const sorted = apps.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const sorted = mergeAndDedupeDevApps(cloudApps, localApps);
   logger.info(
     `[app-dev] listDevApps count=${sorted.length} apps=${JSON.stringify(
       sorted.map((app) => ({
@@ -1258,8 +1338,9 @@ export async function deleteDevApp(
     workspaceId = binding?.workspaceId?.trim() ?? '';
   }
 
-  // Cloud-only archive: keep the local workspace unless the user asked to delete it.
+  // Cloud-only archive: keep local files unless user opted in; drop stale binding.
   if (appCode && !input.deleteLocal) {
+    await removeStoAppBinding(appCode).catch(() => undefined);
     return { offline: true, deletedLocal: false, deletedFiles: false, appPath: '' };
   }
 
