@@ -27,7 +27,7 @@ vi.mock('@/lib/app-dev-api', () => ({
 vi.mock('@/lib/api-client', () => ({ invokeIpc: vi.fn() }));
 vi.mock('@/lib/session-catalog-api', () => ({ pickProjectFolder: vi.fn() }));
 
-import { DevAppCard } from '../../src/components/more-apps/DevAppCard';
+import { DevAppCard, formatDevAppCardDesc } from '../../src/components/more-apps/DevAppCard';
 import type { DevAppSummary } from '../../src/lib/app-dev-api';
 
 function app(pageType: 'site' | 'assets'): DevAppSummary {
@@ -45,10 +45,33 @@ function app(pageType: 'site' | 'assets'): DevAppSummary {
   };
 }
 
+describe('formatDevAppCardDesc', () => {
+  it('combines page type with local / remote / imported state', () => {
+    expect(formatDevAppCardDesc({
+      pageType: 'site',
+      localReady: true,
+      availability: 'local',
+    })).toBe('独立站点 · 本机可编辑');
+    expect(formatDevAppCardDesc({
+      pageType: 'assets',
+      localReady: true,
+      availability: 'local',
+      source: 'imported',
+    })).toBe('托管应用 · 本地导入');
+    expect(formatDevAppCardDesc({
+      pageType: 'site',
+      localReady: false,
+      availability: 'remote-only',
+    })).toBe('独立站点 · 仅云端，需拉取到本地');
+  });
+});
+
 describe('DevAppCard page type', () => {
   it('marks a Site app and keeps its browser entry', async () => {
     render(<DevAppCard app={app('site')} />);
     expect(screen.getByLabelText('应用类型：独立站点')).toHaveClass('more-apps-card__icon--dev');
+    expect(screen.getByLabelText('应用类型：独立站点')).toHaveTextContent('s');
+    expect(screen.getByText('独立站点 · 本机可编辑')).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: '更多操作' }), {
       button: 0,
       ctrlKey: false,
@@ -59,6 +82,8 @@ describe('DevAppCard page type', () => {
   it('marks an Assets app and omits the browser entry', () => {
     render(<DevAppCard app={app('assets')} />);
     expect(screen.getByLabelText('应用类型：托管应用')).toHaveClass('more-apps-card__icon--dev');
+    expect(screen.getByLabelText('应用类型：托管应用')).toHaveTextContent('a');
+    expect(screen.getByText('托管应用 · 本机可编辑')).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: '更多操作' }), {
       button: 0,
       ctrlKey: false,
@@ -83,5 +108,6 @@ describe('DevAppCard page type', () => {
       ctrlKey: false,
     });
     expect(await screen.findByText('删除应用')).toBeInTheDocument();
+    expect(screen.getByText('独立站点 · 仅云端，需拉取到本地')).toBeInTheDocument();
   });
 });

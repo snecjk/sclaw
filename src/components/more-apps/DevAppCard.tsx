@@ -5,8 +5,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Globe2,
-  Package,
   FolderOpen,
   MoreHorizontal,
   Pencil,
@@ -32,6 +30,19 @@ import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
+import { getAppNameInitial } from './AppIcon';
+
+export function formatDevAppCardDesc(app: Pick<DevAppSummary, 'pageType' | 'availability' | 'localReady' | 'source'>): string {
+  const kind = app.pageType === 'assets' ? '托管应用' : '独立站点';
+  const availability = app.availability ?? (app.localReady ? 'local' : 'remote-only');
+  const state =
+    availability === 'local'
+      ? (app.source === 'imported' ? '本地导入' : '本机可编辑')
+      : availability === 'path-missing'
+        ? '目录失效，需重新拉取'
+        : '仅云端，需拉取到本地';
+  return `${kind} · ${state}`;
+}
 
 interface DevAppCardProps {
   app: DevAppSummary;
@@ -39,7 +50,6 @@ interface DevAppCardProps {
 
 export function DevAppCard({ app }: DevAppCardProps) {
   const pageTypeLabel = app.pageType === 'assets' ? '托管应用' : '独立站点';
-  const PageTypeIcon = app.pageType === 'assets' ? Package : Globe2;
   const openOrFocusDevAppTab = useAppPlazaShellStore((s) => s.openOrFocusDevAppTab);
   const closeDevAppTabsByWorkspaceId = useAppPlazaShellStore((s) => s.closeDevAppTabsByWorkspaceId);
   const unregisterWorkspaceId = useAppDevCatalogStore((s) => s.unregisterWorkspaceId);
@@ -181,14 +191,14 @@ export function DevAppCard({ app }: DevAppCardProps) {
           aria-label={`应用类型：${pageTypeLabel}`}
           title={`${pageTypeLabel} · ${statusLabel}`}
         >
-          <PageTypeIcon className="h-4 w-4" aria-hidden />
+          <span className="more-apps-card__icon-letter" aria-hidden>
+            {getAppNameInitial(app.name)}
+          </span>
         </div>
         <div className="more-apps-card__head more-apps-card__head--dev">
           <h3 className="more-apps-card__title">{app.name}</h3>
           <p className="more-apps-card__desc more-apps-card__desc--dev">
-            {localReady
-              ? (app.projectType === 'fullstack' ? '前端 + 后端应用' : '前端应用') + '，通过对话持续完善'
-              : '换设备或本地目录已删除时，选择父目录拉取后即可继续编辑'}
+            {formatDevAppCardDesc(app)}
           </p>
         </div>
       </div>

@@ -24,7 +24,7 @@ import {
   stoPageTitleClass,
 } from '@/lib/surfaces';
 import { AppCard } from './AppCard';
-import { DevAppCard } from './DevAppCard';
+import { DevAppCard, formatDevAppCardDesc } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { CreateAppDialog } from './CreateAppDialog';
 import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
@@ -132,11 +132,14 @@ export function MoreAppsPage() {
   const filteredDevApps = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return devApps;
-    return devApps.filter(
-      (app) =>
-        app.name.toLowerCase().includes(q)
-        || app.projectType.toLowerCase().includes(q),
-    );
+    return devApps.filter((app) => {
+      const haystack = [
+        app.name,
+        app.projectType,
+        formatDevAppCardDesc(app),
+      ].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
   }, [devApps, searchQuery]);
 
   const handleImportApp = useCallback(async () => {
