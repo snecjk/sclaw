@@ -149,15 +149,9 @@ body {
   align-items: center;
   width: 125px;
   height: 24px;
-  padding: 0 28px 0 12px;
+  padding: 0;
   border: 0;
-  background: transparent;
   color: var(--sto-color-text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  white-space: nowrap;
 }
 
 .sto-opentab-bg {
@@ -168,9 +162,42 @@ body {
 }
 
 .sto-opentab-bg svg { display: block; width: 100%; height: 100%; }
-.sto-opentab.is-home { width: 52px; padding-inline: 12px; justify-content: center; }
+.sto-opentab.is-home { width: 52px; }
 .sto-opentab.is-active { z-index: 2; color: var(--sto-color-bg-container); }
 .sto-opentab.is-active .sto-opentab-bg { color: var(--sto-color-brand); }
+
+.sto-opentab-trigger {
+  width: 100%;
+  height: 100%;
+  padding: 0 28px 0 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sto-opentab.is-home .sto-opentab-trigger { padding-inline: 12px; text-align: center; }
+
+.sto-opentab-close {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sto-color-text-secondary);
+  cursor: pointer;
+}
+
+.sto-opentab.is-active .sto-opentab-close { color: var(--sto-color-bg-container); }
+.sto-opentab-close svg { display: block; width: 12px; height: 12px; }
 
 .app-content {
   padding: var(--sto-space-4);
