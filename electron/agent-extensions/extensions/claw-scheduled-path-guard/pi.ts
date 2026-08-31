@@ -3,7 +3,7 @@ import type { InlineExtension } from '@earendil-works/pi-coding-agent';
 import type { SclawExtensionBuildContext } from '../../../../shared/agent-extensions';
 import {
   isPiToolPathAllowed,
-  piBashViolatesScheduledPolicy,
+  piShellCommandViolatesScheduledPolicy,
 } from '../../../pi-runtime/path-policy';
 
 const PATH_TOOL_NAMES = new Set(['read', 'write', 'edit', 'grep', 'find', 'ls']);
@@ -19,11 +19,11 @@ export function buildClawScheduledPathGuard(
     factory(pi) {
       pi.on('tool_call', async (event) => {
         const input = event.input as Record<string, unknown>;
-        if (event.toolName === 'bash') {
-          if (await piBashViolatesScheduledPolicy(String(input.command ?? ''), roots)) {
+        if (event.toolName === 'bash' || event.toolName === 'powershell') {
+          if (await piShellCommandViolatesScheduledPolicy(String(input.command ?? ''), roots)) {
             context.logger.warn('[claw-scheduled-path-guard] tool blocked', {
               toolName: event.toolName,
-              reason: 'scheduled-bash-policy',
+              reason: 'scheduled-shell-policy',
               commandPreview: String(input.command ?? '').slice(0, 300),
             });
             return {

@@ -122,17 +122,17 @@ describe('claw scheduled path guard extension', () => {
     );
   });
 
-  it('preserves the scheduled bash deny policy', async () => {
+  it.each(['bash', 'powershell'])('preserves the scheduled %s deny policy', async (toolName) => {
     const root = await createRoot();
     const { handler } = await buildGuard(root);
     await expect(handler({
-      toolName: 'bash',
-      toolCallId: 'safe-bash',
+      toolName,
+      toolCallId: `safe-${toolName}`,
       input: { command: 'echo ok' },
     })).resolves.toBeUndefined();
     await expect(handler({
-      toolName: 'bash',
-      toolCallId: 'blocked-bash',
+      toolName,
+      toolCallId: `blocked-${toolName}`,
       input: { command: 'sudo shutdown now' },
     })).resolves.toEqual({
       block: true,

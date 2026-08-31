@@ -10,7 +10,7 @@ import { inferSessionCatalogMeta } from '../../shared/session-type';
 import {
   extractScheduledCommandAbsolutePaths,
   isPiToolPathAllowed,
-  piBashViolatesScheduledPolicy,
+  piShellCommandViolatesScheduledPolicy,
 } from '../../electron/pi-runtime/path-policy';
 import {
   getPiAssistantDisplaySnapshot,
@@ -28,6 +28,7 @@ import {
   PI_BUILTIN_TOOL_NAMES,
   buildPiEnabledToolNames,
   buildPiToolSelection,
+  getPiBuiltinToolNames,
 } from '../../electron/pi-runtime/tool-policy';
 import { buildPiSystemPromptOverride } from '../../electron/pi-runtime/system-prompt-policy';
 
@@ -73,9 +74,29 @@ describe('Pi system prompt policy', () => {
     expect(prompt).toContain('D:/workspace');
     expect(prompt).not.toContain('expert coding assistant operating inside pi');
   });
+
+  it('describes the host-native shell tool', () => {
+    const windowsPrompt = buildPiSystemPromptOverride({
+      cwd: 'D:/workspace',
+      platform: 'win32',
+    });
+    expect(windowsPrompt).toContain('- powershell: run native Windows PowerShell commands');
+    expect(windowsPrompt).not.toContain('- bash:');
+
+    const linuxPrompt = buildPiSystemPromptOverride({ cwd: '/workspace', platform: 'linux' });
+    expect(linuxPrompt).toContain('- bash: run commands');
+    expect(linuxPrompt).not.toContain('- powershell:');
+  });
 });
 
 describe('Pi session tool allowlist', () => {
+  it('uses native PowerShell on Windows and Bash on Unix hosts', () => {
+    expect(getPiBuiltinToolNames('win32')).toContain('powershell');
+    expect(getPiBuiltinToolNames('win32')).not.toContain('bash');
+    expect(getPiBuiltinToolNames('linux')).toContain('bash');
+    expect(getPiBuiltinToolNames('linux')).not.toContain('powershell');
+  });
+
   it.each([
     ['new session', undefined],
     ['reopened follow-up session', 'D:/sessions/existing.jsonl'],
@@ -112,6 +133,13 @@ describe('Pi session tool allowlist', () => {
         ...PI_BUILTIN_TOOL_NAMES,
         'always_on_tool',
       ],
+    });
+  });
+
+  it('keeps the Windows shell selection in both tool sets', () => {
+    expect(buildPiToolSelection(['lazy_tool'], [], 'win32')).toEqual({
+      allowedToolNames: [...getPiBuiltinToolNames('win32'), 'lazy_tool'],
+      initiallyActiveToolNames: getPiBuiltinToolNames('win32'),
     });
   });
 });
@@ -328,8 +356,8 @@ describe('Pi scheduled-task path policy', () => {
     try {
       expect(await isPiToolPathAllowed(join(workspace, 'new.txt'), [workspace])).toBe(true);
       expect(await isPiToolPathAllowed(join(outside, 'secret.txt'), [workspace])).toBe(false);
-      expect(await piBashViolatesScheduledPolicy('cat ../outside/secret.txt', [workspace])).toBe(true);
-      expect(await piBashViolatesScheduledPolicy(`echo ok > "${join(workspace, 'out.txt')}"`, [workspace])).toBe(false);
+      expect(await piShellCommandViolatesScheduledPolicy('cat ../outside/secret.txt', [workspace])).toBe(true);
+      expect(await piShellCommandViolatesScheduledPolicy(`echo ok > "${join(workspace, 'out.txt')}"`, [workspace])).toBe(false);
     } finally {
       await rm(base, { recursive: true, force: true });
     }
@@ -351,9 +379,20 @@ describe('Pi scheduled-task path policy', () => {
   });
 
   it('fails closed for shell-expanded paths', async () => {
-    await expect(piBashViolatesScheduledPolicy('cat $HOME/secret.txt', ['/workspace']))
+    await expect(piShellCommandViolatesScheduledPolicy('cat $HOME/secret.txt', ['/workspace']))
       .resolves.toBe(true);
-    await expect(piBashViolatesScheduledPolicy('cat "$(pwd)/secret.txt"', ['/workspace']))
+    await expect(piShellCommandViolatesScheduledPolicy('cat "$(pwd)/secret.txt"', ['/workspace']))
+      .resolves.toBe(true);
+    await expect(piShellCommandViolatesScheduledPolicy(
+      'Get-Content "$env:USERPROFILE\\secret.txt"',
+      ['C:\\workspace'],
+    )).resolves.toBe(true);
+  });
+
+  it('rejects destructive PowerShell host commands', async () => {
+    await expect(piShellCommandViolatesScheduledPolicy('Stop-Computer -Force', ['C:\\workspace']))
+      .resolves.toBe(true);
+    await expect(piShellCommandViolatesScheduledPolicy('Format-Volume -DriveLetter D', ['C:\\workspace']))
       .resolves.toBe(true);
   });
 

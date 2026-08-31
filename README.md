@@ -319,15 +319,16 @@ pnpm run comms:compare
 
 ### Pi Agent engine (phase 1)
 
-SClaw can run `@earendil-works/pi-coding-agent@0.84.1` in a persistent Electron
+SClaw can run `@earendil-works/pi-coding-agent@0.84.4` in a persistent Electron
 `utilityProcess` without opening a network port. Pi chat sessions use the selected
 workspace as their default working directory and otherwise inherit the desktop
 user's operating-system permissions, including access to files outside the
-workspace when requested.
+workspace when requested. On Windows, Pi uses its native PowerShell tool instead
+of resolving `bash.exe` through WSL; macOS and Linux continue to use Bash.
 
 Pi scheduled tasks reuse the canonical scheduler and chat runtime, but restrict
 file tools to the task workspace and configured personal/shared artifact folders.
-The Bash restriction is an application policy, not an operating-system sandbox.
+The shell-command restriction is an application policy, not an operating-system sandbox.
 Pi does not support workflows in phase 1. It loads only SClaw-managed enabled
 global and agent-scoped skills projected from the engine-neutral skills store into
 Pi-owned `~/.stoclaw/pi/skills` and `~/.stoclaw/pi/agents/{agentId}/skills`

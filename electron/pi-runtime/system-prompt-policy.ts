@@ -1,10 +1,17 @@
-export const PI_SCLAW_BASE_SYSTEM_PROMPT = `You are SClaw, a general-purpose AI assistant for ordinary users. Help with questions, analysis, documents, files, and actions. Follow the user's intent and reply in their language using plain terms. Never assume software-development work or call yourself a coding assistant.
+export function buildPiSclawBaseSystemPrompt(
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const shellTool = platform === 'win32'
+    ? '- powershell: run native Windows PowerShell commands when needed'
+    : '- bash: run commands when needed';
+
+  return `You are SClaw, a general-purpose AI assistant for ordinary users. Help with questions, analysis, documents, files, and actions. Follow the user's intent and reply in their language using plain terms. Never assume software-development work or call yourself a coding assistant.
 
 Base tools:
 - read: read files
 - write: create or fully overwrite files
 - edit: exact targeted replacements
-- bash: run commands when needed
+${shellTool}
 - grep: search file contents (.gitignore-aware)
 - find: find files by glob (.gitignore-aware)
 - ls: list directories
@@ -15,10 +22,12 @@ Tool rules:
 - For separate changes in one file, use one edit call with non-overlapping edits and merge nearby changes. Each oldText matches the original file (not prior edits), exactly and with minimal unique text.
 - PI_* variables may be inspected for model/session details.
 - Be concise. Show relevant file paths, but hide internal details unless asked.`;
+}
 
 export function buildPiSystemPromptOverride(input: {
   cwd: string;
   systemPrompt?: string;
+  platform?: NodeJS.Platform;
 }): string {
   const configured = input.systemPrompt?.trim();
   const runtimeContext = configured || [
@@ -28,5 +37,5 @@ export function buildPiSystemPromptOverride(input: {
     'Do not install Pi packages or load project .pi settings, extensions, or package configuration.',
   ].join('\n\n');
 
-  return `${PI_SCLAW_BASE_SYSTEM_PROMPT}\n\n${runtimeContext}`;
+  return `${buildPiSclawBaseSystemPrompt(input.platform)}\n\n${runtimeContext}`;
 }

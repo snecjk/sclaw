@@ -80,11 +80,11 @@ export function extractScheduledCommandAbsolutePaths(
   return [...values];
 }
 
-export async function piBashViolatesScheduledPolicy(
+export async function piShellCommandViolatesScheduledPolicy(
   command: string,
   roots: string[],
 ): Promise<boolean> {
-  if (/\b(?:sudo|shutdown|reboot|diskpart|format|mkfs|reg\s+delete)\b/i.test(command)) return true;
+  if (/\b(?:sudo|shutdown|reboot|diskpart|format|mkfs|reg(?:\.exe)?\s+delete|Stop-Computer|Restart-Computer|Clear-Disk|Initialize-Disk|Format-Volume|Remove-Partition)\b/i.test(command)) return true;
   if (/(?:^|[\s/\\])\.\.(?:[/\\]|\s|$)/.test(command)) return true;
   if (SHELL_PATH_EXPANSION.test(command)) return true;
   const absolutePaths = extractScheduledCommandAbsolutePaths(command);
@@ -93,3 +93,6 @@ export async function piBashViolatesScheduledPolicy(
   }
   return false;
 }
+
+/** @deprecated Use piShellCommandViolatesScheduledPolicy for Bash and PowerShell. */
+export const piBashViolatesScheduledPolicy = piShellCommandViolatesScheduledPolicy;
