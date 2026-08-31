@@ -21,6 +21,11 @@
       "description": "页面改动后的浅色/深色、加载/空态/错误态验收清单。"
     },
     {
+      "id": "sto-pc-visual",
+      "name": "STO PC UI/UX 规范",
+      "description": "申通 PC 应用的主题、壳层、卡片、导航、页签和页面层级规范（新应用默认启用）。"
+    },
+    {
       "id": "git-checkpoint",
       "name": "变更检查点",
       "description": "每轮有效改动后提醒做可回滚检查点，并用中文说明改了什么。"

@@ -151,4 +151,26 @@ describe('built-in app template resources', () => {
     expect(css).toContain('.content-section + .content-section');
     expect(css).toContain('margin-top: var(--sto-space-4)');
   });
+
+  it('两类应用模板都内置完整的 STO PC UI/UX 技能包', () => {
+    const requiredFiles = [
+      'SKILL.md',
+      'tokens.css',
+      'tokens.md',
+      'shell.md',
+      'layouts.md',
+      'page-head.md',
+      'tabs.md',
+      'reference.html',
+      'assets/sto-mark.svg',
+      'assets/opentab.svg',
+      'assets/opentab-home.svg',
+      'assets/breadcrumb-sep.svg',
+    ];
+
+    for (const template of ['site-minimal', 'assets-minimal']) {
+      const skillRoot = join(resources, template, 'openspec', 'skill-catalog', 'sto-pc-visual');
+      requiredFiles.forEach((file) => expect(existsSync(join(skillRoot, file))).toBe(true));
+    }
+  });
 });

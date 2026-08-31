@@ -69,5 +69,19 @@ describe('应用开发外部服务上下文', () => {
     expect(pageSkill.indexOf('siteapp external-service list --keyword')).toBeLessThan(
       pageSkill.indexOf('先引导用户指定 CLI'),
     );
+
+    const visualSkill = await readFile(
+      join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'SKILL.md'),
+      'utf8',
+    );
+    expect(visualSkill).toContain('STO PC Visual');
+    expect(visualSkill).toContain('#FF6700');
+    expect(agents).toContain('openspec/skills/sto-pc-visual/SKILL.md');
+    await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'tokens.css'), 'utf8'))
+      .resolves.toContain('--shell-topbar: 60px');
+    await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'reference.html'), 'utf8'))
+      .resolves.toContain('sto-opentabs');
+    await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'assets', 'sto-mark.svg'), 'utf8'))
+      .resolves.toContain('viewBox="0 0 67.81');
   });
 });

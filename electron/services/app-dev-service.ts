@@ -2154,7 +2154,7 @@ export async function listAppDevAssistSkills(appPath: string): Promise<AppDevAss
 
 /** Bake default assist skills into a user app (idempotent). */
 async function ensureDefaultAppDevAssistSkills(appPath: string): Promise<void> {
-  const defaults = ['openspec', 'nl-page-from-sai'] as const;
+  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual'] as const;
   for (const skillId of defaults) {
     const installed = join(appPath, 'openspec', 'skills', skillId, 'SKILL.md');
     if (existsSync(installed)) continue;
