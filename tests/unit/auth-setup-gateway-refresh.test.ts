@@ -47,7 +47,7 @@ describe('resolvePostAuthGatewayRefresh', () => {
     ).toBe('reload');
   });
 
-  it('returns none on login while lifecycle is settling', () => {
+  it('returns reload on login while lifecycle is settling so it can be deferred', () => {
     expect(
       resolvePostAuthGatewayRefresh({
         source: 'login',
@@ -56,10 +56,10 @@ describe('resolvePostAuthGatewayRefresh', () => {
         stoResult: { ...emptySto, updated: ['m1'] },
         bizResult: emptyBiz,
       }),
-    ).toBe('none');
+    ).toBe('reload');
   });
 
-  it('returns none on login shortly after connect', () => {
+  it('returns reload on login shortly after connect so it can be deferred', () => {
     expect(
       resolvePostAuthGatewayRefresh({
         source: 'login',
@@ -70,7 +70,7 @@ describe('resolvePostAuthGatewayRefresh', () => {
         stoResult: { ...emptySto, created: ['m1'] },
         bizResult: emptyBiz,
       }),
-    ).toBe('none');
+    ).toBe('reload');
   });
 
   it('returns reload on account-switch when models changed and gateway is stable', () => {

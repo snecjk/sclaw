@@ -16,7 +16,7 @@ import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatSessionRuntimeView, useChatSessionSending } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
-import { ChatMessage } from '@/pages/Chat/ChatMessage';
+import { ChatStaticItemsList } from '@/components/chat/ChatStaticItemsList';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
@@ -55,7 +55,11 @@ import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
 import { useAppDevStatusPoll } from '@/hooks/use-app-dev-status-poll';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
-import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
+import { shouldShowGitCommitAction, shouldShowStoCloudActions, canUseStoCloudPipeline } from '@/lib/app-dev-actions';
+import {
+  APP_DEV_IDE_CHAT_SPLIT_DEFAULT,
+  APP_DEV_IDE_CHAT_SPLIT_STORAGE_KEY,
+} from '@/lib/app-dev-split';
 
 const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
@@ -74,8 +78,9 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   const {
     sending,
     pendingFinal,
+    transcriptPending,
     lastEventAt: lastChatEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage,
     streamingMessages,
     streamingToolResults,
@@ -94,9 +99,10 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     lastChatEventAt,
-    lastUserMessageAt,
+    turnAnchorAt,
     streamMsg,
     streamText,
     streamingMessages,
@@ -117,29 +123,16 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
             </div>
           ) : (
             <>
-              {staticItems.map((item) => {
-                if (item.type === 'assistant-turn') {
-                  return (
-                    <AssistantTurnMessage
-                      key={item.key}
-                      sessionMessages={messages}
-                      turnMessages={item.messages}
-                      turnToolResults={item.toolResults}
-                      precedingUserMessage={item.precedingUserMessage}
-                      showThinking={showThinking}
-                    />
-                  );
-                }
-                if (item.type !== 'single') return null;
-                return (
-                  <ChatMessage
-                    key={item.key}
-                    message={item.message}
-                    sessionMessages={messages}
-                    showThinking={showThinking}
-                  />
-                );
-              })}
+              <ChatStaticItemsList
+                items={staticItems}
+                messages={messages}
+                showThinking={showThinking}
+                scrollRef={scrollRef}
+                variant="home"
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory(sessionKey);
+                }}
+              />
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"
@@ -179,7 +172,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   );
 });
 
-export default function AppDevWorkbench() {
+export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' | 'ide' }) {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
   const [status, setStatus] = useState<AppDevStatus | null>(null);
@@ -221,7 +214,7 @@ export default function AppDevWorkbench() {
   }, [startRun]);
   const deploy = useStoAppDeploy({
     workspaceId,
-    applicationId: stoStatus?.applicationId,
+    appCode: stoStatus?.appCode,
     appName,
     onFailedPrompt: (prompt) => {
       setComposerSeed((prev) => ({
@@ -232,6 +225,7 @@ export default function AppDevWorkbench() {
     onStatusRefresh: async () => {
       const next = await getStoAppStatus(workspaceId).catch(() => null);
       if (next) setStoStatus(next);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
     },
   });
 
@@ -300,11 +294,13 @@ export default function AppDevWorkbench() {
       await pushStoApp(workspaceId, message);
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
       if (nextStatus) setStoStatus(nextStatus);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
       toast.success('已提交到 STO 应用');
       setCommitOpen(false);
     } catch (error) {
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
       if (nextStatus) setStoStatus(nextStatus);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
       toast.error(error instanceof Error ? error.message : '提交失败');
     }
   };
@@ -362,11 +358,8 @@ export default function AppDevWorkbench() {
   const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
   const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable, stoStatus);
   const commitMode = showGitCommit ? 'git' : 'sto';
-  const canDeploy = Boolean(
-    showCloudActions
-    && stoStatus?.available
-    && (stoStatus.bound || stoStatus.applicationId),
-  );
+  const stoCloudPipelineReady = canUseStoCloudPipeline(listedApp, stoStatus);
+  const canDeploy = stoCloudPipelineReady;
 
   const phase = status?.phase ?? 'created';
   const stoStatusTone = stoStatus?.available && stoStatus.bound
@@ -377,23 +370,37 @@ export default function AppDevWorkbench() {
         : stoStatus.syncState === 'local-changes'
           ? 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300'
           : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
-    : 'border-border bg-muted/50 text-muted-foreground';
+    : stoCloudPipelineReady && stoStatus?.syncLabel === '待首次提交'
+      ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300'
+      : 'border-border bg-muted/50 text-muted-foreground';
+  const stoStatusLabel = stoStatus?.bound
+    ? `STO ${stoStatus.syncLabel}`
+    : stoStatus?.syncLabel === '待首次提交'
+      ? 'STO 待首次提交'
+      : 'STO 未绑定';
+  const stoStatusTitle = stoStatus?.bound
+    ? `${stoStatus.syncLabel}${stoStatus.appCode ? ` · ${stoStatus.appCode}` : ''}`
+    : stoStatus?.syncLabel === '待首次提交'
+      ? '尚未注册云端应用，首次提交后将自动注册'
+      : '未绑定 STO 应用';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
-        <button
-          type="button"
-          onClick={() => {
-            useMoreAppsStore.getState().setActiveTab('dev-apps');
-            navigate('/more-apps');
-          }}
-          className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          开发应用
-        </button>
-        <div className="h-4 w-px bg-border" aria-hidden />
+        {layout === 'page' ? (
+          <button
+            type="button"
+            onClick={() => {
+              useMoreAppsStore.getState().setActiveTab('dev-apps');
+              navigate('/more-apps');
+            }}
+            className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            开发应用
+          </button>
+        ) : null}
+        {layout === 'page' ? <div className="h-4 w-px bg-border" aria-hidden /> : null}
         <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">{appName}</h1>
         <AppDevPageTypeBadge pageType={pageType} />
         <div className="flex-1" />
@@ -411,13 +418,9 @@ export default function AppDevWorkbench() {
               'inline-flex h-7 items-center rounded-md border px-2 text-[11px]',
               stoStatusTone,
             )}
-            title={
-              stoStatus?.bound
-                ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
-                : '未绑定 STO 应用'
-            }
-          >
-            {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
+            title={stoStatusTitle}
+            >
+            {stoStatusLabel}
           </span>
         ) : null}
 
@@ -439,7 +442,7 @@ export default function AppDevWorkbench() {
             variant="ghost"
             size="sm"
             className="h-7 gap-1 px-2 text-xs"
-            disabled={!stoStatus?.available || !stoStatus?.bound}
+            disabled={!stoCloudPipelineReady}
             onClick={() => setCommitOpen(true)}
           >
             提交
@@ -497,6 +500,8 @@ export default function AppDevWorkbench() {
       </header>
 
       <AppDevSplitBody
+        defaultPercent={layout === 'ide' ? APP_DEV_IDE_CHAT_SPLIT_DEFAULT : undefined}
+        storageKey={layout === 'ide' ? APP_DEV_IDE_CHAT_SPLIT_STORAGE_KEY : undefined}
         chat={
           appDevSessionKey
             ? (
@@ -522,6 +527,7 @@ export default function AppDevWorkbench() {
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
+          initialMode={layout === 'ide' ? 'code' : 'preview'}
         />
       </AppDevSplitBody>
 
@@ -551,7 +557,7 @@ export default function AppDevWorkbench() {
         appName={appName}
         workspaceId={workspaceId}
         pageType={pageType ?? 'site'}
-        applicationId={stoStatus?.applicationId}
+        appCode={stoStatus?.appCode}
         onCancel={() => setDeployOpen(false)}
         onConfirm={handleDeploy}
       />

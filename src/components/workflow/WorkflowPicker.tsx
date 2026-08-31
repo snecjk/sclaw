@@ -104,10 +104,11 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     }, [fetchLocalSkills, isSlashMode, mySkills.length, open, refetch, skillsLoading]);
 
     useLayoutEffect(() => {
-      if (!open || (!anchorRef?.current && !(isSlashMode && composerRef?.current))) {
+      if (!open) {
         setPosition(null);
         return;
       }
+      if (!anchorRef && !(isSlashMode && composerRef)) return;
 
       const updatePosition = () => {
         const rect = (isSlashMode ? composerRef?.current?.getBoundingClientRect() : null)
@@ -124,9 +125,11 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       };
 
       updatePosition();
+      const retryId = window.requestAnimationFrame(updatePosition);
       window.addEventListener('resize', updatePosition);
       window.addEventListener('scroll', updatePosition, true);
       return () => {
+        cancelAnimationFrame(retryId);
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition, true);
       };
@@ -163,6 +166,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     );
 
     if (!open) return null;
+    if ((anchorRef || composerRef) && !position) return null;
 
     const setRefs = (node: HTMLDivElement | null) => {
       localRef.current = node;
@@ -295,7 +299,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       <div
         ref={setRefs}
         className={cn(
-          'z-50 flex max-h-[272px] flex-col overflow-hidden rounded-[18px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_0_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
+          'z-[100001] flex max-h-[272px] flex-col overflow-hidden rounded-[18px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_0_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
           position
             ? 'fixed'
             : 'absolute left-0 bottom-full mb-2 w-[280px]',

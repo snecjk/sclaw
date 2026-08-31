@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildScheduledTaskGroupDisplayName,
-  getGroupFirstTriggeredAtMs,
   getSessionActivityMs,
   getSessionFirstTriggerMs,
   deriveGroupFirstTriggeredFromSessions,
@@ -17,6 +16,48 @@ describe('scheduled-task-group-name', () => {
     expect(looksLikeTechnicalTaskGroupLabel(key, key)).toBe(true);
     expect(looksLikeTechnicalTaskGroupLabel('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).toBe(true);
     expect(looksLikeTechnicalTaskGroupLabel('测试')).toBe(false);
+  });
+
+  it('treats agent brand names as non-human task group titles', () => {
+    expect(looksLikeTechnicalTaskGroupLabel('SClaw')).toBe(true);
+    expect(looksLikeTechnicalTaskGroupLabel('StoClaw')).toBe(true);
+    expect(looksLikeTechnicalTaskGroupLabel('sclaw')).toBe(true);
+  });
+
+  it('skips agent brand displayName and uses catalog/session label', () => {
+    expect(resolveCronGroupNameFromSession({
+      key: 'agent:main:cron:job-uuid:2026-06-25',
+      label: '日报生成',
+      displayName: 'SClaw',
+    })).toBe('日报生成');
+  });
+
+  it('buildScheduledTaskGroupDisplayName ignores SClaw when nameMaps are empty', () => {
+    const name = buildScheduledTaskGroupDisplayName(
+      'cron',
+      'job-uuid',
+      [{
+        key: 'agent:main:cron:job-uuid:2026-06-25',
+        label: '日报生成',
+        displayName: 'SClaw',
+      }],
+      { cron: new Map(), sto: new Map(), claude: new Map() },
+    );
+    expect(name).toBe('日报生成');
+  });
+
+  it('buildScheduledTaskGroupDisplayName falls back when only agent brand is available', () => {
+    const name = buildScheduledTaskGroupDisplayName(
+      'cron',
+      'job-uuid',
+      [{
+        key: 'agent:main:cron:job-uuid:2026-06-25',
+        displayName: 'SClaw',
+        label: 'SClaw',
+      }],
+      { cron: new Map(), sto: new Map(), claude: new Map() },
+    );
+    expect(name).toBe('定时任务 job-uuid');
   });
 
   it('extracts STO task name from dated agent label', () => {
@@ -49,6 +90,26 @@ describe('scheduled-task-group-name', () => {
       },
     );
     expect(name).toBe('日报生成');
+  });
+
+  it('prefers refreshed nameMaps over stale catalog/session title after rename', () => {
+    const sessions = [{
+      key: 'agent:main:cron:job-uuid:2026-06-25',
+      label: '旧任务名',
+      displayName: '旧任务名',
+    }];
+    const staleMaps = {
+      cron: new Map([['job-uuid', '旧任务名']]),
+      sto: new Map<number, string>(),
+      claude: new Map<string, string>(),
+    };
+    const refreshedMaps = {
+      cron: new Map([['job-uuid', '新任务名']]),
+      sto: new Map<number, string>(),
+      claude: new Map<string, string>(),
+    };
+    expect(buildScheduledTaskGroupDisplayName('cron', 'job-uuid', sessions, staleMaps)).toBe('旧任务名');
+    expect(buildScheduledTaskGroupDisplayName('cron', 'job-uuid', sessions, refreshedMaps)).toBe('新任务名');
   });
 
   it('buildScheduledTaskGroupDisplayName keeps user names that start with 定时任务', () => {

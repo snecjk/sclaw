@@ -87,8 +87,6 @@ function handleCanonicalChatEvent(event: CanonicalChatEvent): void {
           }, {
             sessionKey: event.sessionKey,
             agentId: getAgentIdFromSessionKey(event.sessionKey),
-          }).then(() => {
-            void chatModule.useChatStore.getState().loadHistory(true, true, event.sessionKey);
           });
         }
         return;
@@ -170,6 +168,14 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
             set({ lastError: payload.message || 'Gateway error' });
           }));
           if (projectionUnsubscribe) unsubscribers.push(projectionUnsubscribe);
+          unsubscribers.push(subscribeHostEvent<{ sessionKey: string; turnIndex: number }>(
+            'turn-token:updated',
+            (payload) => {
+              void import('@/lib/turn-token-live').then(({ markLiveTurnToken }) => {
+                markLiveTurnToken(payload.sessionKey, payload.turnIndex);
+              }).catch(() => {});
+            },
+          ));
           unsubscribers.push(subscribeHostEvent<{ channelId?: string; status?: string }>(
             'gateway:channel-status',
             (update) => {

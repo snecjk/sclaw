@@ -15,6 +15,9 @@ import { Button } from '@/components/ui/button';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
 import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
+import { useAiResourceAdmin } from '@/hooks/use-ai-resource-admin';
+import { useTurnTokenUsage } from '@/hooks/use-turn-token-usage';
+import { TurnTokenMeta } from '@/components/chat/TurnTokenMeta';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
@@ -23,10 +26,12 @@ import {
   isLastUserMessage,
   isMessageInCurrentUserTurn,
   isTurnDisplayAssistantMessage,
+  getTurnIndexForAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
 import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/pages/Chat/turn-lifecycle';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
+import type { TurnTokenUsage } from '../../../shared/turn-token';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import {
@@ -66,6 +71,10 @@ import {
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
 import type { WorkflowExecutionState } from '@/types/workflow';
+import {
+  foldToolList,
+  resolveTurnToolCount,
+} from './thinking/fold-turn-tools';
 
 const EMPTY_WORKFLOW_CARD_STATES: Record<string, WorkflowExecutionState> = {};
 import {
@@ -77,6 +86,13 @@ import { applyDisplayNameHints, dedupeAttachedFiles, mergePreviewFileLists, norm
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
+import { FlowCard } from '@/components/flow-card/FlowCard';
+import { extractFlowCard } from '@/lib/flow-card-patch';
+import {
+  hasOpenFlowCardFence,
+  isFlowCardCompanionText,
+  stripFlowCardCompanionText,
+} from '@/lib/flow-card-marker';
 import { PARAMETER_FORM_USE_FLOAT_DOCK } from '@/components/parameter-form/constants';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import {
@@ -102,14 +118,22 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
-import { QuickInputIcon, WorkflowNodesIcon } from '@/components/icons/composer-toolbar-icons';
+import { QuickInputIcon } from '@/components/icons/composer-toolbar-icons';
 import { SaveAsQuickInputButton } from '@/components/quick-input/SaveAsQuickInputButton';
 import {
   buildConversationShareDialogDraft,
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
-
-const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
+import { CHAT_EDIT_DRAFT_EVENT } from '@/components/input-composer';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
+import {
+  parseWorkflowRunDisplayText,
+  prepareGatewayTextForComposerSynth,
+  serializePersistedComposerSegmentsToActionText,
+  synthesizeComposerSegments,
+  UserComposerSegmentsContent,
+  UserWorkflowMessageTag,
+} from '@/components/input-composer/user-composer-segments';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -130,7 +154,14 @@ interface ChatMessageProps {
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
-  onEditMessage?: (text: string, skillMeta?: SkillMeta) => void;
+  onEditMessage?: (
+    text: string,
+    skillMeta?: SkillMeta,
+    options?: {
+      segments?: PersistedComposerSegment[];
+      attachments?: AttachedFileMeta[];
+    },
+  ) => void;
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
   hideThinkingPanel?: boolean;
@@ -177,14 +208,9 @@ export const ChatMessage = memo(function ChatMessage({
   const isSystem = role === 'system';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
   const text = extractText(message);
-  const skillMeta = message._skillMeta;
+  const skillMeta = message._skillMeta ?? message._skillMetas?.[0];
   const hasText = text.trim().length > 0;
   const showUserSkillBubble = isUser && Boolean(skillMeta);
-  /** Text for copy/share on a user bubble (skill title + body); see helper. */
-  const userActionText = useMemo(
-    () => resolveUserBubbleActionText(text, skillMeta),
-    [text, skillMeta],
-  );
   const [systemExpanded, setSystemExpanded] = useState(false);
   const images = extractImages(message);
   const tools = extractToolUse(message);
@@ -199,6 +225,33 @@ export const ChatMessage = memo(function ChatMessage({
     () => dedupeAttachedFiles(message._attachedFiles || []),
     [message._attachedFiles],
   );
+  const composerSegmentsForRender = useMemo(() => {
+    if (!isUser) return null;
+    // 优先已回写 / hydrate 的 segments；否则尽量用仍含 bake 的原文重建（extractText 会剥掉占位符）。
+    if (message._composerSegments?.length) {
+      return message._composerSegments;
+    }
+    const raw = typeof message.content === 'string'
+      ? message.content
+      : extractPlainTextFromContent(message.content);
+    const hasBake = /\[文件:\s*[^\]]*\]|\[技能:\s*[^\]]*\]|帮我执行\s*id\s*为/.test(raw);
+    return synthesizeComposerSegments(
+      message,
+      hasBake ? prepareGatewayTextForComposerSynth(raw, skillMeta) : text,
+      skillMeta,
+      attachedFiles,
+    );
+  }, [isUser, message, text, skillMeta, attachedFiles]);
+  /** 复制 / 保存快捷输入：有 segments 时按 chip 原位展开，避免空位与技能名前置 */
+  const userActionText = useMemo(
+    () => (
+      composerSegmentsForRender?.length
+        ? serializePersistedComposerSegmentsToActionText(composerSegmentsForRender)
+        : resolveUserBubbleActionText(text, skillMeta)
+    ),
+    [composerSegmentsForRender, text, skillMeta],
+  );
+  const useSegmentBubble = isUser && Boolean(composerSegmentsForRender?.length);
   const messageIndex = useMemo(
     () => (message.id ? sessionMessages.findIndex((m) => m.id === message.id) : -1),
     [message.id, sessionMessages],
@@ -217,6 +270,7 @@ export const ChatMessage = memo(function ChatMessage({
     (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
   );
   const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
   const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
   const workflowCard = null;
   const isWorkflowCompletionMessage = false;
@@ -229,6 +283,11 @@ export const ChatMessage = memo(function ChatMessage({
       getMessageText: extractPlainTextFromContent,
     });
   }, [isUser, message, pendingWorkflow, sessionMessages, sessionKey]);
+
+  const flowCard = useMemo(() => {
+    if (isUser) return null;
+    return extractFlowCard(message);
+  }, [isUser, message]);
 
   useEffect(() => {
     if (!parameterForm || parameterForm.formContext.source !== 'workflow') return;
@@ -389,8 +448,18 @@ export const ChatMessage = memo(function ChatMessage({
     );
   const showAssistantParamsFold =
     !isUser && workflowCard !== null && /参数已确认/.test(text);
-  const assistantBubbleText =
-    (showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text)) || isWorkflowCompletionMessage ? '' : text;
+  // flow_card 已承载文案时，不再另开灰色 Markdown 气泡（避免空壳 / ".." 残片）
+  const assistantBubbleText = (() => {
+    if (flowCard) return '';
+    const rawMessageText = extractPlainTextFromContent(message.content);
+    if (hasOpenFlowCardFence(rawMessageText)) return '';
+    const withoutCompanion = stripFlowCardCompanionText(text);
+    if (isStreaming && isFlowCardCompanionText(text)) return '';
+    if ((showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text)) || isWorkflowCompletionMessage) {
+      return '';
+    }
+    return withoutCompanion;
+  })();
   const showAssistantTextBubble = assistantBubbleText.trim().length > 0;
   const assistantCopyShareContent = useMemo(
     () => {
@@ -413,6 +482,20 @@ export const ChatMessage = memo(function ChatMessage({
   const { sending, pendingFinal, activeRunId, lastUserMessageAt } = useChatSessionRuntimeView(sessionKey);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
+  );
+  const isAiResourceAdmin = useAiResourceAdmin();
+  const isClaudeSession = useMemo(
+    () => sessions.find((session) => session.key === sessionKey)?.engineType === 'claude',
+    [sessions, sessionKey],
+  );
+  const assistantTurnIndex = useMemo(() => {
+    if (isUser || !isLastAssistantInTurn) return -1;
+    return getTurnIndexForAssistantMessage(message, sessionMessages);
+  }, [isUser, isLastAssistantInTurn, message, sessionMessages]);
+  const turnTokenUsage = useTurnTokenUsage(
+    sessionKey,
+    assistantTurnIndex,
+    isAiResourceAdmin && isClaudeSession && assistantTurnIndex >= 0,
   );
   const isInCurrentUserTurn = isMessageInCurrentUserTurn(message, sessionMessages);
   const isLastUserInTurn = isUser && isLastUserMessage(message, sessionMessages);
@@ -459,6 +542,7 @@ export const ChatMessage = memo(function ChatMessage({
   const hasAssistantMetaContent =
     showAssistantTextBubble
     || workflowCard !== null
+    || flowCard !== null
     || previewFiles.length > 0
     || showAssistantParamsFold;
   /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间（TurnLifecycle.canShowMeta） */
@@ -470,7 +554,7 @@ export const ChatMessage = memo(function ChatMessage({
   });
   /** 用户参数摘要卡由同轮最后一条助手消息统一展示 meta，避免出现在「参数已确认」上方 */
   const showUserMessageMeta =
-    (hasText || Boolean(skillMeta))
+    (hasText || Boolean(skillMeta) || useSegmentBubble)
     && !showUserParamsFold
     // A background workflow can keep the turn non-terminal after the assistant
     // has acknowledged the start. Keep user shortcuts available in that state;
@@ -535,10 +619,12 @@ export const ChatMessage = memo(function ChatMessage({
     setShareDraft(null);
   }, [setShareDialogOpen, setShareDraft, t]);
 
-  // Never render tool result messages in chat UI
+  // Never render tool result messages in chat UI.
+  // 仅工作流 / 仅 chip 时 content 为空，但 _composerSegments 仍应出气泡（乐观更新同理）。
   if (isToolResult || (
     !hasText
     && !skillMeta
+    && !useSegmentBubble
     && !showThinkingPanel
     && images.length === 0
     && visibleTools.length === 0
@@ -547,6 +633,7 @@ export const ChatMessage = memo(function ChatMessage({
     && !hasStreamingToolStatus
     && !parameterForm
     && !workflowCard
+    && !flowCard
     && !showAssistantParamsFold
     && !showAssistantParamsPanel
   )) {
@@ -694,7 +781,7 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — images above text for user, file cards below */}
-        {isUser && hasRenderableFiles && (
+        {isUser && hasRenderableFiles && !useSegmentBubble && (
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
@@ -731,11 +818,12 @@ export const ChatMessage = memo(function ChatMessage({
         ) : null}
 
         {/* Main text bubble */}
-        {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? (hasText || showUserSkillBubble) : showAssistantTextBubble) ? (
+        {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? (hasText || showUserSkillBubble || useSegmentBubble) : showAssistantTextBubble) ? (
           isUser ? (
             <MessageBubble
               text={text}
               skillMeta={skillMeta}
+              composerSegments={composerSegmentsForRender ?? undefined}
               isUser={isUser}
               isStreaming={isStreaming}
               onPreviewFile={onPreviewFile}
@@ -782,6 +870,8 @@ export const ChatMessage = memo(function ChatMessage({
             }}
           />
         ) : null}
+
+        {flowCard ? <FlowCard card={flowCard} /> : null}
 
         {/* Images from content blocks — assistant messages (below text) */}
         {!isUser && images.length > 0 && (
@@ -844,6 +934,7 @@ export const ChatMessage = memo(function ChatMessage({
           <AssistantMessageMetaRow
             copyShareContent={assistantCopyShareContent}
             timestamp={message.timestamp}
+            turnTokenUsage={turnTokenUsage}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
             onShare={openConversationShare}
           />
@@ -854,6 +945,8 @@ export const ChatMessage = memo(function ChatMessage({
             copyText={userActionText}
             editText={text}
             skillMeta={skillMeta}
+            composerSegments={composerSegmentsForRender ?? undefined}
+            attachedFiles={attachedFiles}
             timestamp={message.timestamp}
             onEditMessage={onEditMessage}
             onShare={openConversationShare}
@@ -907,9 +1000,21 @@ function ToolStatusBar({
     summary?: string;
   }>;
 }) {
+  const { t } = useTranslation('chat');
+  const sessionKey = useChatStore((state) => state.currentSessionKey);
+  const toolEventCount = useChatSessionRuntimeView(sessionKey).toolEventCount;
+  const folded = foldToolList(tools);
+  const displayCount = resolveTurnToolCount(toolEventCount, folded.totalToolCount);
+  const showCollapsedSummary =
+    folded.hiddenToolCount > 0 || displayCount > folded.totalToolCount;
   return (
     <div className="w-full space-y-1">
-      {tools.map((tool) => {
+      {showCollapsedSummary ? (
+        <p className="text-sm leading-5 text-muted-foreground">
+          {t('streaming.collapsedSummaryToolsOnly', { toolCount: displayCount })}
+        </p>
+      ) : null}
+      {folded.visible.map((tool) => {
         const duration = formatDuration(tool.durationMs);
         const isRunning = tool.status === 'running';
         const isError = tool.status === 'error';
@@ -943,18 +1048,26 @@ function UserMessageMetaRow({
   copyText,
   editText,
   skillMeta,
+  composerSegments,
+  attachedFiles,
   timestamp,
   onEditMessage,
   onShare,
 }: {
-  /** Combined skill title + body, used for copy/share. */
   copyText: string;
-  /** Raw user-typed body, restored into the composer on edit. */
   editText: string;
-  /** Skill token to re-insert into the composer on edit, if any. */
   skillMeta?: SkillMeta;
+  composerSegments?: PersistedComposerSegment[];
+  attachedFiles?: AttachedFileMeta[];
   timestamp?: number;
-  onEditMessage?: (text: string, skillMeta?: SkillMeta) => void;
+  onEditMessage?: (
+    text: string,
+    skillMeta?: SkillMeta,
+    options?: {
+      segments?: PersistedComposerSegment[];
+      attachments?: AttachedFileMeta[];
+    },
+  ) => void;
   onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
@@ -972,14 +1085,36 @@ function UserMessageMetaRow({
   }, [copyText, t]);
 
   const editAgain = useCallback(() => {
+    const editOptions = composerSegments?.length
+      ? {
+        segments: composerSegments,
+        attachments: attachedFiles,
+      }
+      : undefined;
     if (onEditMessage) {
-      onEditMessage(editText, skillMeta);
+      onEditMessage(editText, skillMeta, editOptions);
       return;
     }
     window.dispatchEvent(
-      new CustomEvent(CHAT_EDIT_DRAFT_EVENT, { detail: { text: editText, skill: skillMeta } }),
+      new CustomEvent(CHAT_EDIT_DRAFT_EVENT, {
+        detail: {
+          text: editText,
+          skill: skillMeta,
+          segments: composerSegments,
+          attachments: attachedFiles?.map((file) => ({
+            id: crypto.randomUUID(),
+            fileName: file.fileName,
+            mimeType: file.mimeType,
+            fileSize: file.fileSize,
+            preview: file.preview,
+            filePath: file.filePath,
+            stagedPath: file.filePath,
+            status: file.filePath ? 'ready' : 'error',
+          })),
+        },
+      }),
     );
-  }, [onEditMessage, editText, skillMeta]);
+  }, [attachedFiles, composerSegments, editText, onEditMessage, skillMeta]);
 
   return (
     <div className={cn('flex select-none items-center gap-2', HOVER_REVEAL_CLASS)}>
@@ -1035,11 +1170,13 @@ function UserMessageMetaRow({
 function AssistantMessageMetaRow({
   copyShareContent,
   timestamp,
+  turnTokenUsage,
   onCopyDebugSnapshot,
   onShare,
 }: {
   copyShareContent: { text: string; files: AttachedFileMeta[] };
   timestamp?: number;
+  turnTokenUsage?: TurnTokenUsage | null;
   onCopyDebugSnapshot?: () => Promise<void> | void;
   onShare?: () => void;
 }) {
@@ -1102,6 +1239,7 @@ function AssistantMessageMetaRow({
           <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
         </Button>
       ) : null}
+      {turnTokenUsage ? <TurnTokenMeta usage={turnTokenUsage} /> : null}
       {timestamp ? (
         <span className="text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}
@@ -1119,54 +1257,6 @@ function previewUrlTransform(url: string): string {
 }
 
 // ── Message Bubble ──────────────────────────────────────────────
-
-interface WorkflowRunDisplayMeta {
-  workflowId: string;
-  workflowName: string;
-  /** 标签前的用户文案 */
-  beforeText?: string;
-  /** 标签后的用户文案（如「帮我执行这个工作流」） */
-  accompanyingText?: string;
-}
-
-function parseWorkflowRunDisplayText(text: string): WorkflowRunDisplayMeta | null {
-  const trimmed = text.trim();
-  // 允许执行指令前后保留用户原文，气泡按「前文 + 标签 + 后文」还原。
-  const execMatch = trimmed.match(
-    /^(.*?)帮我执行\s*id\s*为\s*[:：]?\s*([A-Za-z0-9_-]+)\s*的工作流\s*(?:【([^】]*)】)?\s*([\s\S]*)$/,
-  );
-  if (!execMatch) return null;
-
-  const beforeText = (execMatch[1] ?? '').trim() || undefined;
-  const workflowId = execMatch[2]?.trim();
-  if (!workflowId) return null;
-
-  const bracketName = (execMatch[3] ?? '').trim();
-  let accompanyingText = (execMatch[4] ?? '').trim() || undefined;
-  let workflowName = bracketName || workflowId;
-
-  if (!bracketName && accompanyingText) {
-    // 兼容旧格式：无【】时整段视为名称
-    workflowName = accompanyingText;
-    accompanyingText = undefined;
-  }
-
-  return { workflowId, workflowName, beforeText, accompanyingText };
-}
-
-function UserWorkflowMessageTag({ workflowName }: { workflowName: string }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-0.5 rounded-[4px] bg-[#EEF3FF] px-1 py-0.5 align-middle',
-        'text-[12px] font-medium leading-4 text-[#4E6FFF]',
-      )}
-    >
-      <WorkflowNodesIcon className="h-3 w-3 shrink-0 text-current" />
-      <span className="workflow-token-label">{workflowName}</span>
-    </span>
-  );
-}
 
 /** 技能标签按输入框里的落点渲染；无位置信息时退回正文最前。 */
 function UserSkillBubbleContent({
@@ -1191,6 +1281,7 @@ function UserSkillBubbleContent({
 function MessageBubble({
   text,
   skillMeta,
+  composerSegments,
   isUser,
   isStreaming,
   replyStreamKey = 'assistant-reply',
@@ -1200,6 +1291,7 @@ function MessageBubble({
 }: {
   text: string;
   skillMeta?: { slug: string; title: string };
+  composerSegments?: PersistedComposerSegment[];
   isUser: boolean;
   isStreaming: boolean;
   /** 流式正文打字机 reset key（message id） */
@@ -1286,8 +1378,10 @@ function MessageBubble({
       )}
     >
       {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
-          {userWorkflowDisplay ? (
+        <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-8 text-foreground">
+          {composerSegments?.length ? (
+            <UserComposerSegmentsContent segments={composerSegments} />
+          ) : userWorkflowDisplay ? (
             <>
               {userWorkflowDisplay.beforeText ? (
                 <>

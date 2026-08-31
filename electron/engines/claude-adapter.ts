@@ -7,6 +7,9 @@ import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
+import { isAppDevSessionKey, resolveAppDevSourceRoot } from '../../shared/app-dev-session';
+import { captureClaudeTurnTokenUsage } from '../services/turn-token-capture';
+import { LIVE_CLAUDE_MESSAGE_CAP, capWindow, truncateToolPayload } from '../../shared/chat-tool-payload';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, patchEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -25,6 +28,9 @@ import {
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
+import { logUserSend } from '../../shared/user-send-log';
+import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
+import { sliceHistoryPage } from '../../shared/chat-history-page';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -53,6 +59,34 @@ const CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS = 400;
 const CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS = 4_096;
 
 const activeClaudeQueries = new Map<string, ActiveClaudeQuery>();
+type ClaudeConsumeTiming = {
+  launchStartedAt: number;
+  queryCreatedAt: number;
+  mode: 'new' | 'resume' | 'recovery';
+};
+
+function logClaudeQueryTiming(
+  stage: string,
+  input: {
+    sessionKey: string;
+    runId: string;
+    launchStartedAt: number;
+    stageStartedAt?: number;
+    mode?: ClaudeConsumeTiming['mode'];
+    details?: Record<string, unknown>;
+  },
+): void {
+  const now = Date.now();
+  logger.info('[claude-adapter][query-timing]', {
+    stage,
+    sessionKey: input.sessionKey,
+    runId: input.runId,
+    mode: input.mode,
+    stageMs: input.stageStartedAt === undefined ? undefined : now - input.stageStartedAt,
+    totalMs: now - input.launchStartedAt,
+    ...input.details,
+  });
+}
 const liveClaudeMessages = new Map<string, Array<{
   id: string;
   role: 'user' | 'assistant' | 'toolresult';
@@ -63,6 +97,13 @@ const liveClaudeMessages = new Map<string, Array<{
   toolName?: string;
   receivedAt: number;
 }>>();
+
+type LiveClaudeMessage = NonNullable<ReturnType<typeof liveClaudeMessages.get>>[number];
+
+function setLiveClaudeMessages(sessionKey: string, entries: LiveClaudeMessage[]): void {
+  liveClaudeMessages.set(sessionKey, capWindow(entries, LIVE_CLAUDE_MESSAGE_CAP));
+}
+
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
 
 /**
@@ -108,19 +149,23 @@ function toEpochMs(value: unknown): number | undefined {
   return undefined;
 }
 
-/** Last message timestamp in a Claude transcript — used for sidebar sort, not read time. */
-function resolveClaudeTranscriptActivityMs(
-  messages: Array<{ timestamp?: number }>,
-): number {
-  let lastAt = 0;
-  for (const message of messages) {
-    const ts = typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)
-      ? message.timestamp
-      : 0;
-    if (ts > lastAt) lastAt = ts;
-  }
-  return lastAt;
-}
+// Legacy SQLite activity repair (disabled 2026-08-27):
+// SQLite session metadata has been the production source of truth long enough that
+// history reads must no longer derive or mutate sidebar activity. Keeping this code
+// commented preserves the old algorithm for a future explicit, low-priority Doctor
+// repair command; it must not be restored to listSessions/getHistory hot paths.
+// function resolveClaudeTranscriptActivityMs(
+//   messages: Array<{ timestamp?: number }>,
+// ): number {
+//   let lastAt = 0;
+//   for (const message of messages) {
+//     const ts = typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)
+//       ? message.timestamp
+//       : 0;
+//     if (ts > lastAt) lastAt = ts;
+//   }
+//   return lastAt;
+// }
 
 function isPathWithinDirectory(targetPath: string, rootPath: string): boolean {
   const resolvedRoot = resolve(rootPath);
@@ -139,6 +184,21 @@ function getAdditionalDirectories(cwd: string, media: Array<{ filePath: string }
     }
   }
   return [...directories];
+}
+
+function mergeAppDevAdditionalDirectories(
+  sessionKey: string,
+  cwd: string,
+  extra: string[] = [],
+): string[] | undefined {
+  const directories = new Set(extra.map((dir) => resolve(dir)));
+  if (isAppDevSessionKey(sessionKey)) {
+    const appRoot = resolveAppDevSourceRoot(cwd);
+    if (appRoot) directories.add(resolve(appRoot));
+  }
+  directories.delete(resolve(cwd));
+  const list = [...directories];
+  return list.length > 0 ? list : undefined;
 }
 
 function toClaudePromptStream(message: SDKUserMessage): AsyncIterable<SDKUserMessage> {
@@ -231,7 +291,7 @@ function formatClaudeError(error: unknown): string {
 
 function cacheClaudeErrorMessage(sessionKey: string, error: unknown): void {
   const current = liveClaudeMessages.get(sessionKey) ?? [];
-  liveClaudeMessages.set(sessionKey, [
+  setLiveClaudeMessages(sessionKey, [
     ...current,
     {
       id: randomUUID(),
@@ -409,38 +469,45 @@ type ClaudeDisplayMessage = {
   toolName?: string;
 };
 
-async function resolveClaudeListedActivityMs(
-  entry: EngineSessionRegistryEntry,
-): Promise<number | undefined> {
-  if (!entry.cwd) return entry.updatedAt;
-
-  const sessionIds = [
-    ...(entry.archivedClaudeSessionIds ?? []),
-    ...(entry.sessionId ? [entry.sessionId] : []),
-  ];
-  if (sessionIds.length === 0) return entry.updatedAt;
-
-  let lastAt = 0;
-  for (const sdkSessionId of sessionIds) {
-    try {
-      const batch = await loadPersistedClaudeMessagesForSdkSession(sdkSessionId, entry.cwd);
-      for (const message of batch) {
-        const ts = typeof message.timestamp === 'number' ? message.timestamp : 0;
-        if (ts > lastAt) lastAt = ts;
-      }
-    } catch {
-      // ignore per-session transcript read failures
-    }
-  }
-
-  for (const message of liveClaudeMessages.get(entry.sessionKey) ?? []) {
-    const ts = message.timestamp ?? 0;
-    if (ts > lastAt) lastAt = ts;
-  }
-
-  if (lastAt > 0) return lastAt;
-  return entry.updatedAt;
-}
+// Legacy list-time transcript healing (disabled 2026-08-27):
+// This used to scan every Claude transcript whenever sessions.list refreshed the
+// sidebar. All SDK transcript reads share claudeConfigEnvQueue with interactive
+// query creation, so a completed turn could enqueue enough reads to delay the next
+// user turn by tens of seconds. SQLite already stores and sorts updatedAt; any future
+// transcript reconciliation belongs in an explicit Doctor/background maintenance
+// task and must never run from listSessions().
+// async function resolveClaudeListedActivityMs(
+//   entry: EngineSessionRegistryEntry,
+// ): Promise<number | undefined> {
+//   if (!entry.cwd) return entry.updatedAt;
+//
+//   const sessionIds = [
+//     ...(entry.archivedClaudeSessionIds ?? []),
+//     ...(entry.sessionId ? [entry.sessionId] : []),
+//   ];
+//   if (sessionIds.length === 0) return entry.updatedAt;
+//
+//   let lastAt = 0;
+//   for (const sdkSessionId of sessionIds) {
+//     try {
+//       const batch = await loadPersistedClaudeMessagesForSdkSession(sdkSessionId, entry.cwd);
+//       for (const message of batch) {
+//         const ts = typeof message.timestamp === 'number' ? message.timestamp : 0;
+//         if (ts > lastAt) lastAt = ts;
+//       }
+//     } catch {
+//       // Ignore per-session transcript read failures.
+//     }
+//   }
+//
+//   for (const message of liveClaudeMessages.get(entry.sessionKey) ?? []) {
+//     const ts = message.timestamp ?? 0;
+//     if (ts > lastAt) lastAt = ts;
+//   }
+//
+//   if (lastAt > 0) return lastAt;
+//   return entry.updatedAt;
+// }
 
 async function loadPersistedClaudeMessagesForSdkSession(
   sdkSessionId: string,
@@ -532,6 +599,7 @@ async function consumePendingHistoryBridgeAppend(sessionKey: string): Promise<st
 }
 
 async function buildHistory(sessionKey: string, sessionId: string, cwd: string): Promise<EngineHistoryResult> {
+  const historyStartedAt = Date.now();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   const archivedIds = entry?.archivedClaudeSessionIds ?? [];
   const sessionIdsToLoad = [
@@ -541,7 +609,16 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
 
   const persistedById = new Map<string, ClaudeDisplayMessage>();
   for (const sdkSessionId of sessionIdsToLoad) {
+    const transcriptReadStartedAt = Date.now();
     const batch = await loadPersistedClaudeMessagesForSdkSession(sdkSessionId, cwd);
+    logger.info('[claude-adapter][transcript-timing]', {
+      stage: 'sdk_session_messages_read',
+      sessionKey,
+      isCurrentSession: sdkSessionId === sessionId,
+      messageCount: batch.length,
+      stageMs: Date.now() - transcriptReadStartedAt,
+      totalMs: Date.now() - historyStartedAt,
+    });
     for (const message of batch) {
       if (message.id && !persistedById.has(message.id)) {
         persistedById.set(message.id, message);
@@ -582,20 +659,35 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
       toolName,
     }));
 
-  const transcriptActivityAt = resolveClaudeTranscriptActivityMs(mergedMessages);
-  await upsertEngineSessionRegistryEntry({
+  // Legacy read-time metadata repair (disabled 2026-08-27):
+  // getHistory is now side-effect free. Activity is written when a real user/SDK
+  // message is processed, and SQLite is the sidebar ordering source of truth.
+  // Re-enabling this block would make a read mutate activity and could reintroduce
+  // transcript/interactive-query queue contention. Preserve it only as reference
+  // for a future explicit Doctor repair command.
+  // const transcriptActivityAt = resolveClaudeTranscriptActivityMs(mergedMessages);
+  // await upsertEngineSessionRegistryEntry({
+  //   sessionKey,
+  //   sessionId: sessionId || entry?.sessionId,
+  //   cwd,
+  //   agentId: extractAgentId(sessionKey),
+  //   engineType: 'claude',
+  //   ...(transcriptActivityAt > 0 ? { updatedAt: transcriptActivityAt } : {}),
+  //   model: entry?.model,
+  //   provider: entry?.provider,
+  //   accountId: entry?.accountId,
+  //   archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
+  //   pendingHistoryBridge: entry?.pendingHistoryBridge,
+  // });
+
+  logger.info('[claude-adapter][transcript-timing]', {
+    stage: 'history_built',
     sessionKey,
-    sessionId: sessionId || entry?.sessionId,
-    cwd,
-    agentId: extractAgentId(sessionKey),
-    engineType: 'claude',
-    // Never bump activity on read — sidebar order must reflect last message time only.
-    ...(transcriptActivityAt > 0 ? { updatedAt: transcriptActivityAt } : {}),
-    model: entry?.model,
-    provider: entry?.provider,
-    accountId: entry?.accountId,
-    archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
-    pendingHistoryBridge: entry?.pendingHistoryBridge,
+    persistedMessageCount: persistedMessages.length,
+    cachedMessageCount: cachedMessages.length,
+    mergedMessageCount: mergedMessages.length,
+    isQueryActive: activeClaudeQueries.has(sessionKey),
+    totalMs: Date.now() - historyStartedAt,
   });
 
   return {
@@ -603,6 +695,12 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     thinkingLevel: null,
     isRunning: activeClaudeQueries.has(sessionKey),
     runtimeResult: claudeRuntimeResults.get(sessionKey) ?? null,
+    fingerprint: buildChatHistoryFingerprint({
+      messages: mergedMessages,
+      persistedCount: persistedMessages.length,
+      liveCount: cachedMessages.length,
+      archivedIds,
+    }),
   };
 }
 
@@ -650,8 +748,15 @@ export async function consumeClaudeQuery(
     suppressMissingConversationFailure?: boolean;
     suppressStartedEvent?: boolean;
     initialSeq?: number;
+    timing?: ClaudeConsumeTiming;
   },
 ): Promise<void> {
+  const iterationStartedAt = Date.now();
+  const timing = recoveryOptions?.timing ?? {
+    launchStartedAt: iterationStartedAt,
+    queryCreatedAt: iterationStartedAt,
+    mode: 'new' as const,
+  };
   let title: string | undefined;
   let seq = recoveryOptions?.initialSeq ?? 0;
   let seenResult = false;
@@ -678,6 +783,7 @@ export async function consumeClaudeQuery(
   let pendingToolInputDeltaTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingToolInputDelta = false;
   let lastToolInputDeltaAt = 0;
+  let firstSdkMessageSeen = false;
 
   const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
@@ -737,6 +843,13 @@ export async function consumeClaudeQuery(
   };
 
   try {
+    logClaudeQueryTiming('iterator_started', {
+      sessionKey,
+      runId,
+      launchStartedAt: timing.launchStartedAt,
+      stageStartedAt: timing.queryCreatedAt,
+      mode: timing.mode,
+    });
     // Mirror the OpenClaw Gateway's 'started' event so the renderer adopts the
     // runId/sending state immediately, before the first token arrives.
     if (!recoveryOptions?.suppressStartedEvent) {
@@ -744,6 +857,20 @@ export async function consumeClaudeQuery(
     }
 
     for await (const message of query) {
+      if (!firstSdkMessageSeen) {
+        firstSdkMessageSeen = true;
+        logClaudeQueryTiming('first_sdk_message', {
+          sessionKey,
+          runId,
+          launchStartedAt: timing.launchStartedAt,
+          stageStartedAt: iterationStartedAt,
+          mode: timing.mode,
+          details: {
+            messageType: typeof message.type === 'string' ? message.type : 'unknown',
+            messageSubtype: typeof message.subtype === 'string' ? message.subtype : undefined,
+          },
+        });
+      }
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
 
       if (message.type === 'system') {
@@ -832,6 +959,22 @@ export async function consumeClaudeQuery(
       }
 
       if (message.type === 'result') {
+        if (!seenResult) {
+          logClaudeQueryTiming('first_result_message', {
+            sessionKey,
+            runId,
+            launchStartedAt: timing.launchStartedAt,
+            stageStartedAt: iterationStartedAt,
+            mode: timing.mode,
+          });
+        }
+        captureClaudeTurnTokenUsage({
+          sessionKey,
+          resultMessage: message,
+          model: typeof (message as { model?: unknown }).model === 'string'
+            ? (message as { model: string }).model
+            : undefined,
+        });
         flushPendingToolInputDelta();
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
@@ -877,7 +1020,7 @@ export async function consumeClaudeQuery(
             const nextEntry = {
               id: typeof message.uuid === 'string' ? message.uuid : randomUUID(),
               role: 'toolresult' as const,
-              content: workflowToolResult.content,
+              content: truncateToolPayload(workflowToolResult.content),
               timestamp: toEpochMs(message.timestamp) ?? Date.now(),
               toolCallId: workflowToolResult.toolCallId,
               toolName: workflowToolResult.toolName,
@@ -887,9 +1030,9 @@ export async function consumeClaudeQuery(
             const existingIndex = current.findIndex((entry) => entry.id === nextEntry.id);
             if (existingIndex >= 0) {
               current[existingIndex] = nextEntry;
-              liveClaudeMessages.set(sessionKey, [...current]);
+              setLiveClaudeMessages(sessionKey, [...current]);
             } else {
-              liveClaudeMessages.set(sessionKey, [...current, nextEntry]);
+              setLiveClaudeMessages(sessionKey, [...current, nextEntry]);
             }
           }
           continue;
@@ -902,7 +1045,7 @@ export async function consumeClaudeQuery(
         const nextEntry = {
           id: typeof liveMessage.uuid === 'string' ? liveMessage.uuid : randomUUID(),
           role: liveMessage.type,
-          content: toRawContentFromClaudeMessage(liveMessage.message),
+          content: truncateToolPayload(toRawContentFromClaudeMessage(liveMessage.message)),
           timestamp: toEpochMs(message.timestamp) ?? Date.now(),
           receivedAt: Date.now(),
         };
@@ -910,9 +1053,9 @@ export async function consumeClaudeQuery(
         const existingIndex = current.findIndex((entry) => entry.id === nextEntry.id);
         if (existingIndex >= 0) {
           current[existingIndex] = nextEntry;
-          liveClaudeMessages.set(sessionKey, [...current]);
+          setLiveClaudeMessages(sessionKey, [...current]);
         } else {
-          liveClaudeMessages.set(sessionKey, [...current, nextEntry]);
+          setLiveClaudeMessages(sessionKey, [...current, nextEntry]);
         }
 
         // Emit a 'final' event for complete assistant messages so the renderer
@@ -956,6 +1099,14 @@ export async function consumeClaudeQuery(
       // stream_event messages, which `continue` above.
       await onMessage?.(message);
     }
+    logClaudeQueryTiming('iterator_eof', {
+      sessionKey,
+      runId,
+      launchStartedAt: timing.launchStartedAt,
+      stageStartedAt: iterationStartedAt,
+      mode: timing.mode,
+      details: { seenResult, completionEmitted, pendingTaskCount: pendingTaskIds.size },
+    });
   } catch (error) {
     errorThrown = true;
     if (!(
@@ -969,6 +1120,14 @@ export async function consumeClaudeQuery(
     flushPendingToolInputDelta();
     clearPendingToolInputDelta();
     activeClaudeQueries.delete(sessionKey);
+    logClaudeQueryTiming('active_query_removed', {
+      sessionKey,
+      runId,
+      launchStartedAt: timing.launchStartedAt,
+      stageStartedAt: iterationStartedAt,
+      mode: timing.mode,
+      details: { seenResult, completionEmitted, errorThrown },
+    });
     // Some SDK task modes settle the outstanding task and then close the
     // iterator without producing another result. At iterator EOF all observed
     // tasks are terminal, so finalize the already-seen result here.
@@ -1025,6 +1184,7 @@ async function startClaudeQuery(
     permissionProfile?: EnginePermissionProfile;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
+  const launchStartedAt = Date.now();
   try {
     const existing = await ensureClaudeRegistryEntry(sessionKey);
     logger.info('[claude-adapter] ensureClaudeRegistryEntry', existing);
@@ -1051,6 +1211,14 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
+    const queryMode = existing?.sessionId ? 'resume' as const : 'new' as const;
+    logClaudeQueryTiming('launch_prepared', {
+      sessionKey,
+      runId,
+      launchStartedAt,
+      mode: queryMode,
+      details: { hasExistingSession: Boolean(existing?.sessionId) },
+    });
     const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
@@ -1061,15 +1229,24 @@ async function startClaudeQuery(
     const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
-    logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
-    const userPromptPreview =
-      typeof prompt === 'string'
-        ? prompt
-        : '(stream/non-string prompt)';
+    logger.info('[claude-adapter][prompt] final systemPromptAppend', {
+      sessionKey,
+      systemPromptAppendChars: systemPromptAppend.length,
+    });
     logger.info('[claude-adapter][prompt] user message', {
       sessionKey,
       userPromptChars: typeof prompt === 'string' ? prompt.length : null,
-      userPrompt: userPromptPreview,
+    });
+    const userMessageForLog = typeof prompt === 'string'
+      ? prompt
+      : (options?.userPrompt ?? '(stream/non-string prompt)');
+    logUserSend({
+      engine: 'claude',
+      sessionKey,
+      message: userMessageForLog,
+      messageLength: userMessageForLog.length,
+      systemPromptAppend: systemPromptAppend || null,
+      systemPromptAppendLength: systemPromptAppend.length,
     });
     // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
     // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。
@@ -1092,7 +1269,11 @@ async function startClaudeQuery(
       // consumer loop can forward text deltas to the renderer in real time.
       includePartialMessages: true,
       settings: launchSelection.model ? { model: launchSelection.model } : undefined,
-      additionalDirectories: options?.additionalDirectories,
+      additionalDirectories: mergeAppDevAdditionalDirectories(
+        sessionKey,
+        cwd,
+        options?.additionalDirectories ?? [],
+      ),
       pathToClaudeCodeExecutable: sharedRuntime.pathToClaudeCodeExecutable,
       hooks: runtimeOptions.hooks,
       mcpServers: runtimeOptions.mcpServers,
@@ -1108,6 +1289,13 @@ async function startClaudeQuery(
         }
         : undefined,
     };
+    const queryCreateStartedAt = Date.now();
+    logClaudeQueryTiming('query_create_started', {
+      sessionKey,
+      runId,
+      launchStartedAt,
+      mode: queryMode,
+    });
     const query = await createClaudeQuery({
       prompt,
       options: existing?.sessionId
@@ -1119,6 +1307,14 @@ async function startClaudeQuery(
           ...queryBaseOptions,
           sessionId,
         },
+    }, { sessionKey, runId, mode: queryMode });
+    const queryCreatedAt = Date.now();
+    logClaudeQueryTiming('query_created', {
+      sessionKey,
+      runId,
+      launchStartedAt,
+      stageStartedAt: queryCreateStartedAt,
+      mode: queryMode,
     });
 
     activeClaudeQueries.set(sessionKey, {
@@ -1127,7 +1323,15 @@ async function startClaudeQuery(
       sessionId,
       sessionKey,
     });
+    logClaudeQueryTiming('active_query_registered', {
+      sessionKey,
+      runId,
+      launchStartedAt,
+      stageStartedAt: queryCreatedAt,
+      mode: queryMode,
+    });
 
+    const registryUpsertStartedAt = Date.now();
     await upsertEngineSessionRegistryEntry({
       sessionKey,
       sessionId,
@@ -1140,6 +1344,13 @@ async function startClaudeQuery(
       accountId: launchSelection.accountId,
       archivedClaudeSessionIds: existing?.archivedClaudeSessionIds,
       pendingHistoryBridge: existing?.pendingHistoryBridge,
+    });
+    logClaudeQueryTiming('session_registry_upserted', {
+      sessionKey,
+      runId,
+      launchStartedAt,
+      stageStartedAt: registryUpsertStartedAt,
+      mode: queryMode,
     });
 
     const consumeWithMissingSessionRecovery = async (): Promise<void> => {
@@ -1154,6 +1365,7 @@ async function startClaudeQuery(
           undefined,
           {
             suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof prompt === 'string',
+            timing: { launchStartedAt, queryCreatedAt, mode: queryMode },
           },
         );
       } catch (error) {
@@ -1189,6 +1401,7 @@ async function startClaudeQuery(
             .filter(Boolean)
             .join('\n\n');
           const recoverySessionId = randomUUID();
+          const recoveryQueryCreateStartedAt = Date.now();
           const recoveryQuery = await createClaudeQuery({
             prompt,
             options: {
@@ -1202,6 +1415,14 @@ async function startClaudeQuery(
                 }
                 : undefined,
             },
+          }, { sessionKey, runId, mode: 'recovery' });
+          const recoveryQueryCreatedAt = Date.now();
+          logClaudeQueryTiming('recovery_query_created', {
+            sessionKey,
+            runId,
+            launchStartedAt,
+            stageStartedAt: recoveryQueryCreateStartedAt,
+            mode: 'recovery',
           });
           activeClaudeQueries.set(sessionKey, {
             close: () => recoveryQuery.close(),
@@ -1223,7 +1444,15 @@ async function startClaudeQuery(
             options?.eventSink ?? null,
             runId,
             undefined,
-            { suppressStartedEvent: true, initialSeq: 1 },
+            {
+              suppressStartedEvent: true,
+              initialSeq: 1,
+              timing: {
+                launchStartedAt,
+                queryCreatedAt: recoveryQueryCreatedAt,
+                mode: 'recovery',
+              },
+            },
           );
           return;
         }
@@ -1231,6 +1460,13 @@ async function startClaudeQuery(
       }
     };
 
+    logClaudeQueryTiming('consumer_scheduled', {
+      sessionKey,
+      runId,
+      launchStartedAt,
+      stageStartedAt: queryCreatedAt,
+      mode: queryMode,
+    });
     void consumeWithMissingSessionRecovery().catch((error) => {
       logger.error('Claude query failed:', error);
       cacheClaudeErrorMessage(sessionKey, error);
@@ -1300,20 +1536,39 @@ export const claudeAdapter: EngineAdapter = {
   },
 
   async inspectRun(_ctx, params) {
+    const inspectionStartedAt = Date.now();
     const active = activeClaudeQueries.get(params.sessionKey);
-    if (active) return { status: 'active', runId: active.runId };
+    if (active) {
+      logger.info('[claude-adapter][transcript-timing]', {
+        stage: 'inspect_skipped_active_query',
+        sessionKey: params.sessionKey,
+        runId: active.runId,
+        stageMs: Date.now() - inspectionStartedAt,
+      });
+      return { status: 'active', runId: active.runId };
+    }
     const entry = await getEngineSessionRegistryEntry(params.sessionKey);
     if (!entry?.cwd || (!entry.sessionId && !(entry.archivedClaudeSessionIds?.length))) {
       return { status: 'not_started', runId: params.runId ?? undefined };
     }
     try {
       const history = await buildHistory(params.sessionKey, entry.sessionId ?? '', entry.cwd);
-      return inspectTranscript({
+      const inspection = inspectTranscript({
         messages: history.messages,
         startedAt: params.startedAt,
         isRunning: history.isRunning,
         runId: params.runId,
       });
+      logger.info('[claude-adapter][transcript-timing]', {
+        stage: 'inspect_completed',
+        sessionKey: params.sessionKey,
+        runId: params.runId ?? undefined,
+        status: inspection.status,
+        messageCount: history.messages.length,
+        hasTranscriptRevision: Boolean(inspection.transcriptRevision),
+        stageMs: Date.now() - inspectionStartedAt,
+      });
+      return inspection;
     } catch (error) {
       return { status: 'unknown', runId: params.runId ?? undefined, reason: String(error) };
     }
@@ -1327,35 +1582,32 @@ export const claudeAdapter: EngineAdapter = {
       .filter(Boolean)
       .join('\n\n') || undefined;
     if (memorySystemPrompt) {
-      logger.info(`[agent-memory][claude] systemPromptAppend after memory injection:\n${systemPromptAppend}`);
+      logger.info('[agent-memory][claude] systemPromptAppend after memory injection', {
+        sessionKey: params.sessionKey,
+        memoryChars: memorySystemPrompt.length,
+        systemPromptAppendChars: systemPromptAppend?.length ?? 0,
+      });
     }
     return { ...params, systemPromptAppend };
   },
 
   async listSessions() {
-    await ensureClaudeRuntimeReady();
+    // Legacy runtime preparation (disabled 2026-08-27): sessions.list is a pure
+    // SQLite metadata query and must not initialize or sanitize Claude SDK state.
+    // await ensureClaudeRuntimeReady();
     const entries = await listEngineSessionRegistryEntries('claude');
-    const sessions: EngineSessionSummary[] = await Promise.all(
-      entries.map(async (entry) => {
-        const updatedAt = await resolveClaudeListedActivityMs(entry);
-        if (updatedAt && updatedAt !== entry.updatedAt) {
-          void upsertEngineSessionRegistryEntry({
-            ...entry,
-            updatedAt,
-          }).catch((error) => {
-            logger.warn('Failed to heal Claude session updatedAt on list:', error);
-          });
-        }
-        return {
-          key: entry.sessionKey,
-          label: entry.title,
-          displayName: entry.title,
-          updatedAt,
-          model: entry.model,
-          engineType: 'claude' as const,
-        };
-      }),
-    );
+    // SQLite session_engine_bindings is already ordered by updated_at DESC and
+    // catalog_sessions mirrors that activity. A list operation must remain a
+    // metadata-only DB read; never scan SDK transcripts here because those reads
+    // share the same global config environment queue as interactive Claude queries.
+    const sessions: EngineSessionSummary[] = entries.map((entry) => ({
+      key: entry.sessionKey,
+      label: entry.title,
+      displayName: entry.title,
+      updatedAt: entry.updatedAt,
+      model: entry.model,
+      engineType: 'claude' as const,
+    }));
     return { success: true, result: { sessions } };
   },
 
@@ -1374,7 +1626,28 @@ export const claudeAdapter: EngineAdapter = {
         entry.sessionId ?? '',
         entry.cwd,
       );
-      return { success: true, result };
+      const page = sliceHistoryPage(result.messages as Array<{ id?: string }>, {
+        limit: params.limit,
+        beforeId: params.beforeId,
+      });
+      logger.info('[claude-adapter][transcript-timing]', {
+        stage: 'history_page',
+        sessionKey: params.sessionKey,
+        totalCount: page.totalCount,
+        pageCount: page.messages.length,
+        hasMore: page.hasMore,
+        beforeId: params.beforeId ?? null,
+        limit: params.limit,
+      });
+      return {
+        success: true,
+        result: {
+          ...result,
+          messages: page.messages,
+          hasMore: page.hasMore,
+          totalCount: page.totalCount,
+        },
+      };
     } catch (error) {
       return { success: false, error: String(error) };
     }

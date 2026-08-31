@@ -2,10 +2,17 @@
  * Guest webview preload source (CommonJS).
  * Written to userData at runtime — avoids adding a separate Vite preload entry.
  */
-export const JSBRIDGE_GUEST_PRELOAD_CJS = String.raw`/* sto-claw jsbridge guest preload */
-const { contextBridge, ipcRenderer } = require('electron');
+import { SCLAW_EMBED_BROWSER_XHR_PATCH_SCRIPT } from './sclaw-embed-browser-xhr-patch';
 
-const PROTOCOL = 'stoclaw-bridge/v1';
+export const JSBRIDGE_GUEST_PRELOAD_CJS =
+  `/* sto-claw jsbridge guest preload */
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// Best-effort main-world patch; Main CDP inject is authoritative (runs before page JS).
+webFrame.executeJavaScript(${JSON.stringify(SCLAW_EMBED_BROWSER_XHR_PATCH_SCRIPT)});
+
+`
+  + String.raw`const PROTOCOL = 'stoclaw-bridge/v1';
 const VERSION = '1.0.0';
 const pending = new Map();
 const eventListeners = new Map();

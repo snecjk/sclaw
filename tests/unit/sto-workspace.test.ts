@@ -17,51 +17,41 @@ describe('sto workspace fields', () => {
     expect(extractStoWorkspaceFields({
       success: true,
       data: {
-        applicationId: 'app_xxx',
-        applicationUid: '01Kabc',
-        applicationCode: 'test081115',
-        status: 'ACTIVE',
+        appCode: 'app_xxx',
+        status: 'ready',
         headCommitSha: 'deadbeef',
       },
     })).toEqual({
-      applicationId: 'app_xxx',
-      applicationUid: '01Kabc',
-      applicationCode: 'test081115',
-      status: 'ACTIVE',
+      appCode: 'app_xxx',
+      status: 'ready',
       baseCommitSha: 'deadbeef',
     });
   });
 
-  it('allows write when status is ACTIVE or missing, not FAILED', () => {
-    expect(isStoWorkspaceWritableStatus('ACTIVE')).toBe(true);
+  it('allows write when status is ready or missing, not failed/archived', () => {
+    expect(isStoWorkspaceWritableStatus('ready')).toBe(true);
     expect(isStoWorkspaceWritableStatus(undefined)).toBe(true);
-    expect(isStoWorkspaceWritableStatus('FAILED')).toBe(false);
-    expect(isStoWorkspaceWritableStatus('CREATING')).toBe(false);
+    expect(isStoWorkspaceWritableStatus('failed')).toBe(false);
+    expect(isStoWorkspaceWritableStatus('archived')).toBe(false);
+    expect(isStoWorkspaceWritableStatus('creating')).toBe(false);
   });
 
-  it('does not write FAILED apps and keeps first-create null baselines', () => {
+  it('does not write failed apps and keeps first-create null baselines', () => {
     expect(buildStoWorkspaceFile({
       workspacePath: '/tmp/app',
-      registryUrl: 'https://zc-hybrid-test.sto.cn/',
-      fields: { applicationId: 'app_xxx', status: 'FAILED' },
+      fields: { appCode: 'app_xxx', status: 'failed' },
     })).toBeNull();
 
     expect(buildStoWorkspaceFile({
       workspacePath: '/tmp/app',
-      registryUrl: 'https://zc-hybrid-test.sto.cn/',
       fields: {
-        applicationId: 'app_xxx',
-        applicationUid: '01Kabc',
-        applicationCode: 'test081115',
-        status: 'ACTIVE',
+        appCode: 'app_xxx',
+        status: 'ready',
       },
     })).toEqual({
-      version: 1,
+      version: 2,
       workspacePath: '/tmp/app',
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
-      applicationId: 'app_xxx',
-      applicationUid: '01Kabc',
-      applicationCode: 'test081115',
+      appCode: 'app_xxx',
       baseRevisionId: null,
       baseCommitSha: null,
       baseSourceSha256: null,
@@ -71,12 +61,9 @@ describe('sto workspace fields', () => {
 
   it('preserves existing baseline when new extract has no revision', () => {
     const existing = parseStoWorkspaceFile({
-      version: 1,
+      version: 2,
       workspacePath: '/old/path',
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
-      applicationId: 'app_xxx',
-      applicationUid: '01Kabc',
-      applicationCode: 'test081115',
+      appCode: 'app_xxx',
       baseRevisionId: 'rev-1',
       baseCommitSha: 'abc123',
       baseSourceSha256: 'sha',
@@ -84,28 +71,25 @@ describe('sto workspace fields', () => {
     });
     expect(buildStoWorkspaceFile({
       workspacePath: '/new/path',
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
-      fields: { applicationId: 'app_xxx', status: 'ACTIVE' },
+      fields: { appCode: 'app_xxx', status: 'ready' },
       existing,
     })?.baseRevisionId).toBe('rev-1');
   });
 
   it('lets clone payload fill gaps from cloud list without wiping revision', () => {
     const merged = mergeStoWorkspaceFields(
-      { applicationId: 'app_xxx' },
+      { appCode: 'app_xxx' },
       {
-        applicationId: 'app_xxx',
-        applicationCode: 'test081115',
-        status: 'ACTIVE',
+        appCode: 'app_xxx',
+        status: 'ready',
         baseRevisionId: 'rev-1',
         baseCommitSha: 'abc123',
       },
-      extractStoWorkspaceFields({ applicationId: 'app_xxx', status: 'ACTIVE' }),
+      extractStoWorkspaceFields({ appCode: 'app_xxx', status: 'ready' }),
     );
     expect(merged).toEqual({
-      applicationId: 'app_xxx',
-      applicationCode: 'test081115',
-      status: 'ACTIVE',
+      appCode: 'app_xxx',
+      status: 'ready',
       baseRevisionId: 'rev-1',
       baseCommitSha: 'abc123',
     });
@@ -113,12 +97,9 @@ describe('sto workspace fields', () => {
 
   it('serializes only binding fields', () => {
     const text = serializeStoWorkspaceFile({
-      version: 1,
+      version: 2,
       workspacePath: '/tmp/app',
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
-      applicationId: 'app_xxx',
-      applicationUid: '01Kabc',
-      applicationCode: 'test081115',
+      appCode: 'app_xxx',
       baseRevisionId: null,
       baseCommitSha: 'deadbeef',
       baseSourceSha256: null,
@@ -126,9 +107,28 @@ describe('sto workspace fields', () => {
     });
     expect(text).not.toContain('stoToken');
     expect(JSON.parse(text)).toMatchObject({
-      applicationId: 'app_xxx',
+      appCode: 'app_xxx',
       baseRevisionId: null,
       mergeParentRevisionId: null,
+    });
+  });
+
+  it('migrates legacy v1 workspace to v2 appCode', () => {
+    const parsed = parseStoWorkspaceFile({
+      version: 1,
+      workspacePath: '/tmp/app',
+      registryUrl: 'https://example.com',
+      applicationId: 'app_legacy',
+      applicationCode: 'app_legacy',
+      baseRevisionId: 'rev-1',
+      baseCommitSha: 'sha',
+      baseSourceSha256: null,
+      mergeParentRevisionId: null,
+    });
+    expect(parsed).toMatchObject({
+      version: 2,
+      appCode: 'app_legacy',
+      baseRevisionId: 'rev-1',
     });
   });
 });
@@ -138,34 +138,30 @@ describe('writeStoWorkspaceBinding', () => {
     const appPath = await mkdtemp(join(tmpdir(), 'sto-workspace-'));
     const written = await writeStoWorkspaceBinding({
       appPath,
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
       payload: {
         data: {
-          applicationId: 'app_xxx',
-          applicationUid: '01Kabc',
-          applicationCode: 'test081115',
-          status: 'ACTIVE',
+          appCode: 'app_xxx',
+          status: 'ready',
           headCommitSha: 'deadbeef',
         },
       },
     });
-    expect(written?.applicationId).toBe('app_xxx');
+    expect(written?.appCode).toBe('app_xxx');
     expect(written?.baseRevisionId).toBeNull();
     expect(written?.baseCommitSha).toBe('deadbeef');
 
     const raw = JSON.parse(
       await readFile(join(appPath, '.sto', 'workspace.json'), 'utf8'),
-    ) as { workspacePath: string; applicationId: string };
-    expect(raw.applicationId).toBe('app_xxx');
+    ) as { workspacePath: string; appCode: string };
+    expect(raw.appCode).toBe('app_xxx');
     expect(raw.workspacePath).toBe(await realpath(appPath));
   });
 
-  it('skips FAILED status', async () => {
+  it('skips failed status', async () => {
     const appPath = await mkdtemp(join(tmpdir(), 'sto-workspace-failed-'));
     const written = await writeStoWorkspaceBinding({
       appPath,
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
-      payload: { applicationId: 'app_xxx', status: 'FAILED' },
+      payload: { appCode: 'app_xxx', status: 'failed' },
     });
     expect(written).toBeNull();
     await expect(readFile(join(appPath, '.sto', 'workspace.json'), 'utf8')).rejects.toThrow();
@@ -175,12 +171,9 @@ describe('writeStoWorkspaceBinding', () => {
     const appPath = await mkdtemp(join(tmpdir(), 'sto-workspace-clone-'));
     await mkdir(join(appPath, '.sto'));
     await writeFile(join(appPath, '.sto', 'workspace.json'), serializeStoWorkspaceFile({
-      version: 1,
+      version: 2,
       workspacePath: appPath,
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
-      applicationId: 'app_xxx',
-      applicationUid: '01Kabc',
-      applicationCode: 'test081115',
+      appCode: 'app_xxx',
       baseRevisionId: 'rev-cli',
       baseCommitSha: 'sha-cli',
       baseSourceSha256: 'src-cli',
@@ -189,15 +182,13 @@ describe('writeStoWorkspaceBinding', () => {
 
     const written = await writeStoWorkspaceBinding({
       appPath,
-      registryUrl: 'https://zc-hybrid-test.sto.cn',
-      fallback: { applicationId: 'app_xxx' },
+      fallback: { appCode: 'app_xxx' },
       cloud: {
-        applicationId: 'app_xxx',
-        applicationCode: 'test081115',
-        status: 'ACTIVE',
+        appCode: 'app_xxx',
+        status: 'ready',
       },
     });
     expect(written?.baseRevisionId).toBe('rev-cli');
-    expect(written?.applicationCode).toBe('test081115');
+    expect(written?.appCode).toBe('app_xxx');
   });
 });

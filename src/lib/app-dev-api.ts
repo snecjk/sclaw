@@ -151,7 +151,7 @@ export interface DevAppSummary {
   projectType: string;
   createdAt: string;
   localReady: boolean;
-  applicationId?: string;
+  appCode?: string;
   availability?: 'local' | 'remote-only' | 'path-missing';
   previewUrl?: string;
   gitlabProjectId?: string;
@@ -294,10 +294,10 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
 }
 
 export async function cloneDevApp(input: {
-  applicationId: string;
+  appCode: string;
   applicationName?: string;
   parentDir: string;
-}): Promise<{ workspaceId: string; appPath: string; workspaceName: string; applicationId: string }> {
+}): Promise<{ workspaceId: string; appPath: string; workspaceName: string; appCode: string }> {
   return hostApiFetch('/api/app-dev/apps/clone', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -307,7 +307,7 @@ export async function cloneDevApp(input: {
 }
 
 export async function deleteDevApp(input: {
-  applicationId?: string;
+  appCode?: string;
   workspaceId?: string;
   deleteLocal?: boolean;
 }): Promise<{ offline: boolean; deletedLocal: boolean; deletedFiles: boolean; appPath: string }> {
@@ -315,7 +315,7 @@ export async function deleteDevApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      applicationId: input.applicationId,
+      appCode: input.appCode,
       workspaceId: input.workspaceId,
       deleteLocal: input.deleteLocal === true,
     }),
@@ -572,7 +572,7 @@ export interface StoAppStatus {
   bound: boolean;
   syncState: 'unbound' | 'synced' | 'local-changes' | 'remote-ahead' | 'merge-required' | 'unknown';
   syncLabel: string;
-  applicationId?: string;
+  appCode?: string;
   applicationName?: string;
   revisionId?: string;
   devCommitSha?: string;
@@ -627,14 +627,14 @@ export type CodeDeployEnv = 'daily' | 'stage' | 'online';
 export async function deployStoApp(input: {
   workspaceId: string;
   env: CodeDeployEnv;
-  applicationId?: string;
+  appCode?: string;
   requestId?: string;
   deploymentVersion?: string;
   /** Commit message used by sto-app push before create. */
   pushMessage?: string;
 }): Promise<{
   success: boolean;
-  applicationId: string;
+  appCode: string;
   env: CodeDeployEnv;
   pushed?: boolean;
   data: unknown;
@@ -647,7 +647,11 @@ export async function deployStoApp(input: {
   });
 }
 
-export async function refreshStoAppDeploy(deploymentId: string): Promise<{
+export async function refreshStoAppDeploy(input: {
+  deploymentId: string;
+  workspaceId?: string;
+  appCode?: string;
+}): Promise<{
   success: boolean;
   deploymentId: string;
   data: unknown;
@@ -655,7 +659,7 @@ export async function refreshStoAppDeploy(deploymentId: string): Promise<{
   return hostApiFetch('/api/app-dev/sto-app/deploy/refresh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deploymentId }),
+    body: JSON.stringify(input),
     ...APP_DEV_LONG_RUNNING,
   });
 }

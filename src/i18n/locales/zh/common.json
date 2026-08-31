@@ -14,6 +14,7 @@
         "cronTasks": "定时任务",
         "myTasks": "自动化",
         "dataCenter": "数据中心",
+        "learningCenter": "学习中心",
         "skills": "技能·连接器",
         "moreApps": "应用广场",
         "workflow": "工作流",
@@ -51,7 +52,9 @@
         "channelSource": {
             "dingtalk": "钉钉",
             "wechat": "微信",
-            "app": "App"
+            "wecom": "企业微信",
+            "app": "App",
+            "qq": "QQ"
         },
         "compactAccountMenu": "账户与设置",
         "supportGroup": {

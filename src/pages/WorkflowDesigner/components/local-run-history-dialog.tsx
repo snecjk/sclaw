@@ -1,7 +1,7 @@
-import * as Dialog from '@radix-ui/react-dialog';
 import { AlertCircle, CheckCircle2, Circle, CircleDot, Clock3, History, RotateCcw, X, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { listLocalWorkflowRuns, type LocalWorkflowRunSummary } from '@/lib/workflow-api';
 import { cn } from '@/lib/utils';
 import { subscribeHostEvent } from '@/lib/host-events';
@@ -72,34 +72,50 @@ export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose,
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="no-drag fixed inset-0 z-[120] bg-slate-950/30 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content className="no-drag fixed left-1/2 top-1/2 z-[121] flex max-h-[min(680px,calc(100vh-3rem))] w-[640px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-modal focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
-          <header className="flex items-start justify-between border-b border-border px-6 py-5">
-            <div className="min-w-0">
-              <Dialog.Title className="flex items-center gap-2 text-base font-semibold text-foreground"><History className="h-4 w-4" />本地运行记录</Dialog.Title>
-              <Dialog.Description className="mt-1 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-                <span className="truncate">{workflowName || '当前工作流'}</span>
-                {workflowId ? (
-                  <span className="inline-flex min-w-0 shrink items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px]">
-                    <span className="shrink-0">工作流 ID</span>
-                    <code className="truncate font-mono text-foreground" title={workflowId}>{workflowId}</code>
-                  </span>
-                ) : null}
-              </Dialog.Description>
-            </div>
-            <Dialog.Close asChild><button type="button" aria-label="关闭本地运行记录" className="-mr-2 -mt-1 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></Dialog.Close>
-          </header>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-            {loading && runs.length === 0 ? <RunHistorySkeleton /> : null}
-            {!loading && error ? <ErrorState message={error} onRetry={() => void loadRuns()} /> : null}
-            {!loading && !error && runs.length === 0 ? <EmptyState /> : null}
-            {!error && runs.length > 0 ? <ol className="space-y-1">{runs.map((run, index) => <RunHistoryItem key={run.runId} run={run} latest={index === 0} busy={selectingRunId === run.runId} onClick={() => void handleSelect(run.runId)} />)}</ol> : null}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Sheet open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <SheetContent
+        side="right"
+        className="no-drag flex w-full flex-col gap-0 border-l border-border bg-background p-0 text-foreground sm:max-w-[min(500px,100vw)]"
+      >
+        <header
+          data-testid="local-run-history-header"
+          className="flex h-[52px] shrink-0 items-center justify-between px-3"
+        >
+          <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
+            <History className="h-4 w-4" aria-hidden />
+            本地运行记录
+          </SheetTitle>
+          <SheetDescription className="sr-only">
+            查看当前工作流保存在本机的运行记录
+          </SheetDescription>
+          <button
+            type="button"
+            aria-label="关闭本地运行记录"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </header>
+
+        <div className="mx-3 mb-2 flex min-w-0 items-center gap-2 rounded-[10px] border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate">{workflowName || '当前工作流'}</span>
+          {workflowId ? (
+            <span className="inline-flex min-w-0 max-w-[65%] shrink items-center gap-1 rounded-md bg-background px-2 py-1 text-[11px]">
+              <span className="shrink-0">工作流 ID</span>
+              <code className="truncate font-mono text-foreground" title={workflowId}>{workflowId}</code>
+            </span>
+          ) : null}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
+          {loading && runs.length === 0 ? <RunHistorySkeleton /> : null}
+          {!loading && error ? <ErrorState message={error} onRetry={() => void loadRuns()} /> : null}
+          {!loading && !error && runs.length === 0 ? <EmptyState /> : null}
+          {!error && runs.length > 0 ? <ol className="space-y-1">{runs.map((run, index) => <RunHistoryItem key={run.runId} run={run} latest={index === 0} busy={selectingRunId === run.runId} onClick={() => void handleSelect(run.runId)} />)}</ol> : null}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

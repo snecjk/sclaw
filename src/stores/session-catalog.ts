@@ -34,6 +34,7 @@ let bootstrapInFlight: Promise<void> | null = null;
 
 function filterTaskCatalogSessions(rows: CatalogSessionDto[]): CatalogSessionDto[] {
   // 只保留 dated cron/claude_task；过滤历史 run/base，同日去重。
+  // 不按 title 过滤：无标题真实会话由渲染层按标题回落链判定可见性。
   return filterTaskSidebarCatalogRows(rows);
 }
 
@@ -42,7 +43,7 @@ interface SessionCatalogState {
   workspaces: WorkspaceDto[];
   selectedProjectId: string | null;
   catalogSessions: CatalogSessionDto[];
-  /** Sidebar「任务」：dated 的 cron / claude_task（已滤历史 run/base） */
+  /** Sidebar「任务」：dated 的 cron / claude_task（已滤历史 run/base；空壳由渲染层按标题回落过滤） */
   taskCatalogSessions: CatalogSessionDto[];
   allCatalogByKey: Record<string, CatalogSessionMeta>;
   sessionWorkspaceByKey: Record<string, string>;

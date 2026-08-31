@@ -1,13 +1,15 @@
 /**
- * ChatPreviewHeaderTabs — ContentHeader 预览列 tab 行（☰ 在左 + tab，与右侧 icon 同栏）
+ * ChatPreviewHeaderTabs — ContentHeader 预览列统一 tab 行
  *
- * 左缘与下方 stoPreviewContentShellClass 对齐（共用三栏 grid 预览列宽）。
+ * 文件产物 + 业务网页混排（对齐 Kimi Work 预览面板），☰ 溢出菜单在左，
+ * tab 带类型图标 + 关闭钮，与右侧操作 icon 同一 44px 行。
  */
 import {
   X,
   FileText,
   FileCode,
   File,
+  Globe,
   Menu,
   Presentation,
   Table2,
@@ -27,15 +29,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { AttachedFileMeta } from '@/stores/chat';
+import type { ChatPreviewTab } from '@/hooks/use-chat-preview-panel';
 
 export interface ChatPreviewHeaderTabsProps {
-  /** 当前可见的产物列表 */
-  files: AttachedFileMeta[];
-  activeFilePath: string | null;
-  onSelectFile: (filePath: string) => void;
-  /** 关闭单个产物 tab */
-  onDismissFile?: (filePath: string) => void;
+  /** 统一 tab 序列（文件产物 + 业务网页） */
+  tabs: ChatPreviewTab[];
+  activeTabId: string | null;
+  onSelectTab: (tabId: string) => void;
+  /** 关闭单个 tab */
+  onDismissTab?: (tabId: string) => void;
   className?: string;
 }
 
@@ -55,21 +57,29 @@ function fileIcon(mimeType: string) {
   return File;
 }
 
+function tabIcon(tab: ChatPreviewTab) {
+  return tab.kind === 'browser' ? Globe : fileIcon(tab.file.mimeType);
+}
+
+function tabLabel(tab: ChatPreviewTab): string {
+  return tab.kind === 'browser' ? tab.tab.title : tab.file.fileName;
+}
+
 function truncateTabLabel(name: string, maxLen = 8): string {
   if (name.length <= maxLen) return name;
   return `${name.slice(0, maxLen)}...`;
 }
 
 export function ChatPreviewHeaderTabs({
-  files,
-  activeFilePath,
-  onSelectFile,
-  onDismissFile,
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onDismissTab,
   className,
 }: ChatPreviewHeaderTabsProps) {
   const { t } = useTranslation('chat');
 
-  if (files.length === 0) return null;
+  if (tabs.length === 0) return null;
 
   const overflowMenu = (
     <DropdownMenu>
@@ -83,15 +93,15 @@ export function ChatPreviewHeaderTabs({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-60 overflow-y-auto">
-        {files.map((file) => {
-          const Icon = fileIcon(file.mimeType);
+        {tabs.map((tab) => {
+          const Icon = tabIcon(tab);
           return (
             <DropdownMenuItem
-              key={file.filePath ?? file.fileName}
-              onClick={() => file.filePath && onSelectFile(file.filePath)}
+              key={tab.id}
+              onClick={() => onSelectTab(tab.id)}
             >
               <Icon className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="truncate">{file.fileName}</span>
+              <span className="truncate">{tabLabel(tab)}</span>
             </DropdownMenuItem>
           );
         })}
@@ -104,19 +114,20 @@ export function ChatPreviewHeaderTabs({
       {overflowMenu}
 
       <div className={contentHeaderPreviewTabsWrapClass}>
-        {files.map((file) => {
-          if (!file.filePath) return null;
-          const isActive = file.filePath === activeFilePath;
+        {tabs.map((tab) => {
+          const Icon = tabIcon(tab);
+          const isActive = tab.id === activeTabId;
           return (
-            <div key={file.filePath} className={stoPreviewArtifactTabClass(isActive)}>
+            <div key={tab.id} className={stoPreviewArtifactTabClass(isActive)}>
+              <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
               <button
                 type="button"
                 className={cn(contentHeaderPreviewArtifactTabBtnClass, 'truncate')}
-                onClick={() => onSelectFile(file.filePath!)}
+                onClick={() => onSelectTab(tab.id)}
               >
-                {truncateTabLabel(file.fileName)}
+                {truncateTabLabel(tabLabel(tab))}
               </button>
-              {onDismissFile ? (
+              {onDismissTab ? (
                 <button
                   type="button"
                   className={cn(
@@ -126,7 +137,7 @@ export function ChatPreviewHeaderTabs({
                   aria-label={t('preview.dismissTab')}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onDismissFile(file.filePath!);
+                    onDismissTab(tab.id);
                   }}
                 >
                   <X className="h-3 w-3" aria-hidden />

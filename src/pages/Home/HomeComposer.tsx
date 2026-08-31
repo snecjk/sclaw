@@ -15,7 +15,6 @@ import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selecto
 import { useMessageQueueStore } from '@/stores/message-queue';
 import { cn } from '@/lib/utils';
 import {
-  chatComposerHomeStackShellClass,
   stoChatShellHomeClass,
   stoHeroInputShellClass,
   stoParameterFormDockLayout,
@@ -31,7 +30,6 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import type { AgentSummary } from '@/types/agent';
 import { homeHubFooterDisclaimerClass } from './home-hub-surface-styles';
-import { HomeProjectWorkPicker } from './HomeProjectWorkPicker';
 
 export interface HomeComposerProps {
   /** 一次性填入输入框的种子文案 */
@@ -74,6 +72,10 @@ export interface HomeComposerProps {
   hideDingTalkMention?: boolean;
   /** 应用开发工作台：接口清单 */
   showInterfaceCatalog?: boolean;
+  /** Embed / 业务场景快捷 pill */
+  composerScenarioActions?: import('../../../shared/embed-composer-actions').EmbedComposerAction[];
+  /** 应用广场窄栏：工具收起到下拉 */
+  toolbarToolsLayout?: 'inline' | 'dropdown';
   /** 可选覆盖默认内联引擎/模型工具栏 */
   toolbarSelectors?: ReactNode;
 }
@@ -93,6 +95,8 @@ export function HomeComposer({
   showProjectPicker = false,
   hideDingTalkMention = false,
   showInterfaceCatalog = false,
+  composerScenarioActions,
+  toolbarToolsLayout,
   toolbarSelectors,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
@@ -153,6 +157,7 @@ export function HomeComposer({
     seedSkillSlug,
     placeholder: placeholder ?? (placeholderKey ? t(placeholderKey) : undefined),
     engineType: resolvedEngineType,
+    className: cn('px-0 pb-0 pt-0', stoChatShellHomeClass),
   });
 
   return (
@@ -167,28 +172,17 @@ export function HomeComposer({
         className={cn(stoChatShellHomeClass, 'px-0')}
       />
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
-        {showProjectPicker ? (
-          <div className={chatComposerHomeStackShellClass}>
-            <ChatInput
-              {...inputProps}
-              composerLayout="home"
-              toolbarInlineSelectors={inlineToolbarSelectors}
-              engineType={resolvedEngineType}
-              hideDingTalkMention={hideDingTalkMention}
-              showInterfaceCatalog={showInterfaceCatalog}
-            />
-            <HomeProjectWorkPicker />
-          </div>
-        ) : (
-          <ChatInput
-            {...inputProps}
-            composerLayout="home"
-            toolbarInlineSelectors={inlineToolbarSelectors}
-            engineType={resolvedEngineType}
-            hideDingTalkMention={hideDingTalkMention}
-            showInterfaceCatalog={showInterfaceCatalog}
-          />
-        )}
+        <ChatInput
+          {...inputProps}
+          composerLayout="home"
+          toolbarInlineSelectors={inlineToolbarSelectors}
+          engineType={resolvedEngineType}
+          showProjectPicker={showProjectPicker}
+          hideDingTalkMention={hideDingTalkMention}
+          showInterfaceCatalog={showInterfaceCatalog}
+          composerScenarioActions={composerScenarioActions}
+          toolbarToolsLayout={toolbarToolsLayout}
+        />
       </section>
       {showDisclaimer ? (
         <p

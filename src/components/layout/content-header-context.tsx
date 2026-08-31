@@ -68,6 +68,7 @@ function resolveDefaultTitle(pathname: string, t: (key: string) => string): stri
   if (pathname.startsWith('/more-apps')) return t('common:sidebar.moreApps');
   if (pathname.startsWith('/models')) return t('common:sidebar.models');
   if (pathname.startsWith('/data-center')) return t('common:sidebar.dataCenter');
+  if (pathname.startsWith('/learning-center')) return t('common:sidebar.learningCenter');
   if (pathname.startsWith('/agents')) return t('common:sidebar.agents');
   if (pathname.startsWith('/channels')) return t('common:sidebar.channels');
   if (pathname.startsWith('/settings')) return t('common:sidebar.settings');

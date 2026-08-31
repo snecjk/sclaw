@@ -64,6 +64,37 @@ export function isCodeDeployInProgress(raw: unknown): boolean {
   return Boolean(status) && !TERMINAL.has(status);
 }
 
+/** DevOps pipeline labels that mean "not started yet", not a real failure. */
+const PENDING_PIPELINE_LABELS = new Set([
+  '待执行',
+  '排队中',
+  '等待执行',
+  'queued',
+  'pending',
+  'waiting',
+]);
+
+/**
+ * memory-center `refresh_pipeline` sometimes copies the DevOps stage name
+ * ("待执行") into failure_message and marks the deployment failed in a few seconds.
+ * Treat that as still in progress so the UI keeps polling / we can retry.
+ */
+export function isSpuriousPendingDeployFailure(
+  fields: Pick<CodeDeployRecordFields, 'status' | 'failureMessage'>,
+): boolean {
+  if (!isCodeDeployFailed(fields.status)) return false;
+  const message = fields.failureMessage?.trim() ?? '';
+  if (!message) return false;
+  return PENDING_PIPELINE_LABELS.has(message) || PENDING_PIPELINE_LABELS.has(message.toLowerCase());
+}
+
+export function isCodeDeploySettled(
+  fields: Pick<CodeDeployRecordFields, 'status' | 'failureMessage'>,
+): boolean {
+  if (isSpuriousPendingDeployFailure(fields)) return false;
+  return isCodeDeployTerminal(fields.status);
+}
+
 export interface CodeDeployRecordFields {
   deploymentId?: string;
   applicationId?: string;
@@ -101,8 +132,11 @@ export function unwrapCodeDeployPayload(data: unknown): unknown {
 function hasDeployRecordShape(row: Record<string, unknown>): boolean {
   return (
     row.deploymentId != null
+    || row.deployment_id != null
     || row.status != null
     || (row.applicationId != null && row.env != null)
+    || (row.application_id != null && row.env != null)
+    || (row.app_code != null && row.env != null)
   );
 }
 
@@ -113,10 +147,29 @@ function unwrapFromCliResult(result: unknown): unknown | undefined {
   return unwrapCodeDeployPayload(body);
 }
 
-function asTrimmedString(value: unknown): string | undefined {
-  if (typeof value === 'string' && value.trim()) return value.trim();
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+function asTrimmedString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
   return undefined;
+}
+
+/** Extract `dep_*` deployment id embedded in downstream error text. */
+export function extractDeploymentIdFromText(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  const match = trimmed.match(/dep_[a-f0-9]{32}/i);
+  return match?.[0];
+}
+
+export function formatCodeDeployImmediateFailureMessage(fields: CodeDeployRecordFields): string {
+  const label = codeDeployStatusLabel(fields.status);
+  const parts: string[] = [];
+  if (fields.failureMessage) parts.push(fields.failureMessage);
+  if (fields.failureStage) parts.push(`阶段：${fields.failureStage}`);
+  if (parts.length > 0) return parts.join(' · ');
+  return `发布失败：${label}`;
 }
 
 export function pickCodeDeployFields(data: unknown): CodeDeployRecordFields {
@@ -124,16 +177,16 @@ export function pickCodeDeployFields(data: unknown): CodeDeployRecordFields {
   if (!unwrapped || typeof unwrapped !== 'object' || Array.isArray(unwrapped)) return {};
   const row = unwrapped as Record<string, unknown>;
   return {
-    deploymentId: asTrimmedString(row.deploymentId),
-    applicationId: asTrimmedString(row.applicationId),
+    deploymentId: asTrimmedString(row.deploymentId, row.deployment_id),
+    applicationId: asTrimmedString(row.applicationId, row.application_id, row.appCode, row.app_code),
     env: asTrimmedString(row.env),
     status: asTrimmedString(row.status),
-    failureStage: asTrimmedString(row.failureStage),
-    failureMessage: asTrimmedString(row.failureMessage),
-    resourcePages: row.resourcePages,
-    pipelineInstanceId: asTrimmedString(row.pipelineInstanceId),
-    deploymentVersion: asTrimmedString(row.deploymentVersion) ?? asTrimmedString(row.version),
-    revisionId: asTrimmedString(row.revisionId),
+    failureStage: asTrimmedString(row.failureStage, row.failure_stage),
+    failureMessage: asTrimmedString(row.failureMessage, row.failure_message),
+    resourcePages: row.resourcePages ?? row.resource_pages,
+    pipelineInstanceId: asTrimmedString(row.pipelineInstanceId, row.pipeline_instance_id),
+    deploymentVersion: asTrimmedString(row.deploymentVersion, row.deployment_version, row.version),
+    revisionId: asTrimmedString(row.revisionId, row.revision_id),
   };
 }
 

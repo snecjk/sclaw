@@ -19,6 +19,7 @@ import {
   Check,
   LayoutGrid,
   Database,
+  BookOpen,
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
@@ -45,7 +46,7 @@ import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { useChatRuntimeIndicators } from '@/stores/chat/runtime-selectors';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAuthStore, isSiteUser } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -85,6 +86,10 @@ import {
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
 import {
+  resolveCatalogRowTaskName,
+  resolveTaskSidebarRowTitles,
+} from '@/stores/chat/session-list-merge';
+import {
   fetchTaskGroupFirstTriggeredMap,
   isTaskGroupFirstTriggerOptimisticallyCleared,
   rememberOptimisticTaskGroupFirstTriggered,
@@ -98,6 +103,7 @@ import {
 } from '@/lib/task-group-first-trigger-delete';
 import { resolveTaskGroupKeyFromSessionKey, stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
+import { useCronStore } from '@/stores/cron';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import {
   type SidebarSubitemDeletePayload,
@@ -116,6 +122,7 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
+import { pageLearningDomains } from '@/lib/learning-center-api';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -197,7 +204,7 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
-  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
+  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0';
 /**
  * 任务二级子项容器 — 与项目二级水平对齐：
  * 层级竖线 25px（滚动区 8 + ml 17）；选中背景起点 32px（17 + 1px 边框 + pl-1.5）；
@@ -716,10 +723,47 @@ export function Sidebar() {
   const isGatewayRunning = gatewayStatus.state === 'running';
 
   const authUser = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLogout = useAuthStore((s) => s.logout);
-  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
-  const isSite =
-    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
+  const learningCenterAccountKey = isAuthenticated && authUser
+    ? [authUser.userName, authUser.companyCode, authUser.departmentCode, authUser.categoryCode].join('\u0000')
+    : null;
+  const [learningCenterAccess, setLearningCenterAccess] = useState({
+    accountKey: null as string | null,
+    visible: false,
+  });
+  const learningCenterVisible = learningCenterAccountKey !== null
+    && learningCenterAccess.accountKey === learningCenterAccountKey
+    && learningCenterAccess.visible;
+
+  useEffect(() => {
+    let active = true;
+
+    if (!learningCenterAccountKey) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void pageLearningDomains({ pageNum: 1, pageSize: 1 })
+      .then((page) => {
+        if (active) {
+          setLearningCenterAccess({
+            accountKey: learningCenterAccountKey,
+            visible: page.items.length > 0,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLearningCenterAccess({ accountKey: learningCenterAccountKey, visible: false });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [learningCenterAccountKey]);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -748,7 +792,11 @@ export function Sidebar() {
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [taskListShowAll, setTaskListShowAll] = useState(false);
   const [taskGroupFirstTriggeredAt, setTaskGroupFirstTriggeredAt] = useState<Record<string, number>>({});
-  const scheduledTaskNameMaps = useScheduledTaskNameMaps(!sidebarCollapsed, sessions.length);
+  const nameMapsRefreshKey = useCronStore((s) => s.nameMapsRefreshKey);
+  const scheduledTaskNameMaps = useScheduledTaskNameMaps(
+    !sidebarCollapsed,
+    sessions.length + nameMapsRefreshKey,
+  );
   const stoEntriesByTask = useStoTaskSubitemsStore((s) => s.entriesByTask);
   const stoSessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   /** 任务组多开：Record 与项目同构；模块收起不清空 */
@@ -1097,16 +1145,24 @@ export function Sidebar() {
   );
 
   // 「任务」：catalog dated cron/claude_task（历史 run/base 已在 store 侧滤掉）。
+  // 行标题在渲染层回落：catalog 标题 → 引擎 label/displayName → 任务定义名；
+  // 三者都无人读标题的才是真正的空壳行，在此过滤（存量无标题真实会话不受影响）。
   const taskListScheduledSessions = useMemo(() => {
     const byKey = new Map(visibleSessions.map((session) => [session.key, session]));
-    return taskCatalogSessions.map((row) => {
+    return taskCatalogSessions.flatMap((row) => {
       const existing = byKey.get(row.sessionKey);
-      const title = row.title?.trim() || undefined;
+      const titles = resolveTaskSidebarRowTitles({
+        catalogTitle: row.title,
+        engineLabel: existing?.label,
+        engineDisplayName: existing?.displayName,
+        taskName: resolveCatalogRowTaskName(row, scheduledTaskNameMaps),
+      });
+      if (!titles) return [];
       const activityMs = row.lastActivityAt ? Date.parse(row.lastActivityAt) : undefined;
-      return {
+      return [{
         key: row.sessionKey,
-        label: existing?.label ?? title,
-        displayName: existing?.displayName ?? title,
+        label: titles.label,
+        displayName: titles.displayName,
         updatedAt: existing?.updatedAt
           ?? (typeof activityMs === 'number' && Number.isFinite(activityMs) ? activityMs : undefined),
         engineType: existing?.engineType
@@ -1114,9 +1170,9 @@ export function Sidebar() {
         model: existing?.model,
         thinkingLevel: existing?.thinkingLevel,
         spawnedBy: existing?.spawnedBy,
-      };
+      }];
     });
-  }, [taskCatalogSessions, visibleSessions]);
+  }, [taskCatalogSessions, visibleSessions, scheduledTaskNameMaps]);
 
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(
@@ -1685,14 +1741,14 @@ export function Sidebar() {
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
       { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
+      { to: '/learning-center', icon: <BookOpen className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.learningCenter') },
     ];
     return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
       primaryMyData: sidebarVis.primaryMyData,
-      siteDepartmentTypesLoaded: siteDepartmentTypes !== null,
-      isSite,
+      learningCenterVisible,
       isProduction: getCurrentEnvConfig().isProduction,
     }));
-  }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
+  }, [learningCenterVisible, sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },

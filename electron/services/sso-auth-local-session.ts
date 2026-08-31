@@ -81,9 +81,11 @@ export class SsoAuthLocalSessionStore {
     const pageType = marker?.pageType === 'assets' ? 'assets' : 'site';
     const workspace = await readJson(join(appPath, '.sto', 'workspace.json'));
     const applicationId = (
-      typeof workspace?.applicationId === 'string' && workspace.applicationId.trim()
-        ? workspace.applicationId.trim()
-        : `local:${workspaceId}`
+      typeof workspace?.appCode === 'string' && workspace.appCode.trim()
+        ? workspace.appCode.trim()
+        : typeof workspace?.applicationId === 'string' && workspace.applicationId.trim()
+          ? workspace.applicationId.trim()
+          : `local:${workspaceId}`
     );
     const session: SsoAuthLocalSession = {
       workspaceId,

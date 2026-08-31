@@ -1,5 +1,7 @@
 import type { RawMessage, WorkflowContextBlock } from './types';
 import type { SclawBrowserEmbedContextBlock } from '@/lib/sclaw-browser-embed-context';
+import type { SkillMeta } from '@/types/skill-meta';
+import { hasQuoteAssistantSkill } from '../../../shared/quote-embed-app';
 
 export interface PreparedSendContext {
   messageWithContext: string;
@@ -12,6 +14,7 @@ export async function prepareSendContext(input: {
   messages: RawMessage[];
   workflowContext?: WorkflowContextBlock | null;
   embedBrowserContext?: SclawBrowserEmbedContextBlock | null;
+  skillMetas?: SkillMeta[];
   clearPendingWorkflow: () => void;
 }): Promise<PreparedSendContext> {
   const {
@@ -19,6 +22,7 @@ export async function prepareSendContext(input: {
     embedBrowserContext: embedBrowserContextInput,
     messages,
     sessionKey,
+    skillMetas,
     trimmedText,
     workflowContext,
   } = input;
@@ -93,8 +97,10 @@ export async function prepareSendContext(input: {
     appendSclawBrowserEmbedContext,
     stripSclawBrowserEmbedContextForDisplay,
   } = await import('@/lib/sclaw-browser-embed-context');
+  const quoteSkillActive = hasQuoteAssistantSkill(skillMetas);
   const messageWithEmbedContext = appendSclawBrowserEmbedContext(textForGateway, embedBrowserContext, {
     longSessionNotice: embedLongSessionNotice,
+    quoteSkillActive,
   });
   const messageWithContext = appendWorkflowContext(messageWithEmbedContext, workflowContext);
   const displayText = stripSclawBrowserEmbedContextForDisplay(

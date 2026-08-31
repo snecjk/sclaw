@@ -11,6 +11,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import sidebarPinIcon from '@/assets/icons/sidebar-pin.svg';
 import sidebarUnpinIcon from '@/assets/icons/sidebar-unpin.svg';
+import { SidebarChannelSourceBadge } from '@/components/layout/sidebar-channel-source-badge';
+import type { SidebarChannelSource } from '@/lib/session-channel-source';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +34,7 @@ export interface SidebarRecentSessionRowTrailingProps {
   sessionKey: string;
   isActive?: boolean;
   isPinned: boolean;
+  channelSource?: SidebarChannelSource | null;
   showUnreadDot?: boolean;
   /** 运行中或失败（与未读互斥；用于决定 idle 槽显示状态还是置顶钉） */
   hasStatusMarker?: boolean;
@@ -45,6 +48,7 @@ export function SidebarRecentSessionRowTrailing({
   sessionKey,
   isActive = false,
   isPinned,
+  channelSource = null,
   showUnreadDot = false,
   hasStatusMarker = false,
   onPin,
@@ -53,35 +57,41 @@ export function SidebarRecentSessionRowTrailing({
   className,
 }: SidebarRecentSessionRowTrailingProps) {
   const { t } = useTranslation('common');
+  const showSourceAndPin = Boolean(channelSource && isPinned);
 
   return (
     <div
       className={cn(
         sidebarSingleActionTrailingSlotClass,
-        'flex items-center justify-end',
+        'right-1 flex items-center justify-center',
+        showSourceAndPin && 'w-[58px]',
         className,
       )}
     >
       <div
         className={cn(
-          'pointer-events-none flex h-5 w-full items-center justify-end gap-1',
+          'pointer-events-none grid h-5 w-full items-center justify-items-center',
+          showSourceAndPin ? 'grid-cols-[28px_28px] gap-0.5' : 'grid-cols-1',
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
-        {showUnreadDot ? (
+        {channelSource ? <SidebarChannelSourceBadge source={channelSource} className="ml-0" /> : null}
+        {channelSource && isPinned ? (
+          <img src={sidebarPinIcon} alt="" className="h-4 w-4 shrink-0" aria-hidden />
+        ) : !channelSource && showUnreadDot ? (
           <span
             className={cn(sidebarUnreadDotClass, 'shrink-0')}
             aria-label={t('sidebar.sessionUnread')}
           />
-        ) : hasStatusMarker ? (
+        ) : !channelSource && hasStatusMarker ? (
           <SidebarRecentSessionStatus sessionKey={sessionKey} />
-        ) : isPinned ? (
+        ) : !channelSource && isPinned ? (
           <img src={sidebarPinIcon} alt="" className="h-4 w-4 shrink-0" aria-hidden />
         ) : null}
       </div>
       <div
         className={cn(
-          'absolute inset-y-0 right-0 flex w-7 items-center justify-end',
+          'absolute inset-y-0 right-0 flex w-7 items-center justify-center',
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
           'rounded-md',
           isActive

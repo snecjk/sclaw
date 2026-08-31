@@ -75,3 +75,8 @@ nul
 /.codegraph/
 outputs/
 .tmp/
+
+plans/
+openspec/
+.roo/
+docs/superpowers/

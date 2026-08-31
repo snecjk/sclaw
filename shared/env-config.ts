@@ -104,7 +104,6 @@ export function getStoPolicyReportApiHostForAppEnv(env: AppEnvironment): string 
 export function getStoPolicyReportApiHost(): string {
   return getStoPolicyReportApiHostForAppEnv(getAppEnv());
 }
-
 /**
  * STO 代码应用（code-applications）策略域 Host。
  * 测试环境契约：https://zc-hybrid-test.sto.cn/sto-policy/api/v1/code-applications
@@ -125,3 +124,4 @@ export function getStoPolicyHybridApiHostForSsoEnv(ssoEnv: string): string {
 export function getStoPolicyHybridApiHost(): string {
   return getStoPolicyHybridApiHostForAppEnv(getAppEnv());
 }
+

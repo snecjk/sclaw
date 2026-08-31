@@ -19,6 +19,7 @@ import {
   takePendingModelCalls,
   takePendingModelEnded,
 } from "./run-id-cache.js";
+import { logFinanceCliAfter, logFinanceCliBefore } from "./finance-cli-debug-log.js";
 import { pickToolResult } from "./tool-result-extract.js";
 import { resolveLastTurnRunIdForSync } from "./transcript-sync.js";
 import type { TelemetryEnvelope } from "./types.js";
@@ -441,6 +442,12 @@ export function registerAgentTelemetry(api: OpenClawPluginApi): void {
           params: toolParams,
           command: event.command,
         });
+        logFinanceCliBefore(api.logger, {
+          toolName: event.toolName,
+          toolCallId,
+          params: toolParams,
+          command: event.command,
+        });
       },
       { priority: -100 },
     );
@@ -450,24 +457,37 @@ export function registerAgentTelemetry(api: OpenClawPluginApi): void {
     api.on(
       "after_tool_call",
       (event, ctx) => {
+        const rawEvent =
+          event && typeof event === "object" ? (event as Record<string, unknown>) : undefined;
+        const toolCallId = event.toolCallId ?? ctx.toolCallId;
+        const mergedParams = mergeToolParams(
+          toolCallId,
+          event.params ?? (rawEvent ? pickToolParams(rawEvent) : undefined),
+        );
+        const toolResult =
+          (event as { result?: unknown }).result ??
+          (rawEvent ? pickToolResult(rawEvent) : undefined);
+        // Debug log even when telemetry correlation is missing.
+        logFinanceCliAfter(api.logger, {
+          toolName: event.toolName,
+          toolCallId,
+          params: mergedParams,
+          command: event.command,
+          result: toolResult,
+          error: event.error ?? null,
+          durationMs: event.durationMs,
+          rawEvent,
+        });
+
         const correlation = requireCorrelation(ctx, event);
         if (!correlation) {
           api.logger.warn?.(`[${TAG}] skip after_tool_call: missing sessionId/runId`);
           return;
         }
         bindRunIdFromToolHook(pipeline, ctx);
-        correlation.toolCallId = event.toolCallId ?? ctx.toolCallId;
+        correlation.toolCallId = toolCallId;
         correlation.toolName = event.toolName;
-        const rawEvent =
-          event && typeof event === "object" ? (event as Record<string, unknown>) : undefined;
-        const mergedParams = mergeToolParams(
-          correlation.toolCallId,
-          event.params ?? (rawEvent ? pickToolParams(rawEvent) : undefined),
-        );
         const hasError = Boolean(event.error);
-        const toolResult =
-          (event as { result?: unknown }).result ??
-          (rawEvent ? pickToolResult(rawEvent) : undefined);
         pipeline.emit({
           nativeHook: "after_tool_call",
           correlation,

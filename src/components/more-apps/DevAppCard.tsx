@@ -53,7 +53,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
 
   const localReady = app.localReady && Boolean(app.workspaceId);
   const availability = app.availability ?? (localReady ? 'local' : 'remote-only');
-  const isCloudApp = Boolean(app.applicationId);
+  const isCloudApp = Boolean(app.appCode);
   const canDelete = isCloudApp || Boolean(app.workspaceId);
 
   const handleEdit = () => {
@@ -66,8 +66,8 @@ export function DevAppCard({ app }: DevAppCardProps) {
 
   const handleClone = async () => {
     if (cloning) return;
-    if (!app.applicationId) {
-      toast.error('缺少云端应用 ID，无法拉取');
+    if (!app.appCode) {
+      toast.error('缺少 appCode，无法拉取');
       return;
     }
     setCloning(true);
@@ -79,7 +79,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
         return;
       }
       const result = await cloneDevApp({
-        applicationId: app.applicationId,
+        appCode: app.appCode,
         applicationName: app.name,
         parentDir,
       });
@@ -120,7 +120,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
 
   const handleDelete = async () => {
     if (deleting) return;
-    if (!app.applicationId && !app.workspaceId) {
+    if (!app.appCode && !app.workspaceId) {
       toast.error('无法删除该应用');
       return;
     }
@@ -128,7 +128,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
     try {
       const shouldDeleteLocal = deleteLocal && Boolean(app.appPath || app.workspaceId);
       const result = await deleteDevApp({
-        applicationId: app.applicationId,
+        appCode: app.appCode,
         workspaceId: app.workspaceId,
         deleteLocal: shouldDeleteLocal,
       });

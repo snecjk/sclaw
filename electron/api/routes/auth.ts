@@ -13,7 +13,7 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
-import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
+import { runAuthenticatedSetup, type AuthenticatedSetupResult } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
 import { activateUserWorkspace, getCurrentActiveUserCode, syncMountPointToUser } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
@@ -69,10 +69,28 @@ function toAccessCheckPayload(result: ClientSiteAccessCheckResult) {
   };
 }
 
+/** 已认证入口：认领 + startScheduler。幂等，login / session/commit / 切号共用。 */
+async function notifyScheduleTasksAuthenticated(userCode: string | undefined, context: string): Promise<void> {
+  const code = userCode?.trim();
+  if (!code) return;
+  try {
+    const { getScheduledTaskService } = await import('../../scheduled-tasks/scheduled-task-service');
+    getScheduledTaskService().onUserAuthenticated(code);
+  } catch (err) {
+    logger.warn(`[auth] schedule-tasks on ${context} failed:`, err);
+  }
+}
+
 async function clearAuthAfterAccessDenied(): Promise<void> {
   await clearAuthUser();
   void removeSsoAuthFromOpenClaw();
   void removeStoDynamicRoutePluginFromOpenClaw();
+  try {
+    const { getScheduledTaskService } = await import('../../scheduled-tasks/scheduled-task-service');
+    getScheduledTaskService().stopScheduler();
+  } catch {
+    // ignore
+  }
 }
 
 /**
@@ -255,6 +273,7 @@ export async function handleAuthRoutes(
       stoSyncService.startPeriodicSync();
       scheduleSclawHubReconnect(ctx);
       schedulePostLoginInitialization(user, ctx);
+      await notifyScheduleTasksAuthenticated(user.code, 'login');
 
       sendJson(res, 200, {
         success: true,
@@ -310,6 +329,12 @@ export async function handleAuthRoutes(
       await clearAuthUser();
       clearInferenceRuntimeConfigCache();
       disconnectSclawHubOnLogout();
+      try {
+        const { getScheduledTaskService } = await import('../../scheduled-tasks/scheduled-task-service');
+        getScheduledTaskService().stopScheduler();
+      } catch (err) {
+        logger.warn('[auth] stopScheduler on logout failed:', err);
+      }
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch((err) =>
         logger.warn('STO dynamic route plugin cleanup on logout failed:', err),
@@ -429,6 +454,7 @@ export async function handleAuthRoutes(
 
       schedulePostLoginBackgroundWork(body.user, ctx);
       scheduleSclawHubReconnect(ctx);
+      await notifyScheduleTasksAuthenticated(body.user.code, 'session/commit');
 
       sendJson(res, 200, {
         success: true,
@@ -527,6 +553,7 @@ export async function handleAuthRoutes(
 
       schedulePostLoginBackgroundWork(newUser, ctx);
       scheduleSclawHubReconnect(ctx);
+      await notifyScheduleTasksAuthenticated(newUser.code, 'account-switch');
 
       sendJson(res, 200, {
         success: true,
@@ -575,6 +602,7 @@ export async function handleAuthRoutes(
 
       schedulePostLoginBackgroundWork(origin, ctx);
       scheduleSclawHubReconnect(ctx);
+      await notifyScheduleTasksAuthenticated(origin.code, 'account-switch/back');
 
       sendJson(res, 200, {
         success: true,

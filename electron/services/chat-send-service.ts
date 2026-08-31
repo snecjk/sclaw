@@ -1,5 +1,5 @@
 import type { GatewayManager } from '../gateway/manager';
-import type { AgentEngineType, EngineSendParams } from '../engines/types';
+import type { AgentEngineType, EngineSendParams, EngineSendWithMediaParams } from '../engines/types';
 import { runIdempotentChatSend } from '../api/routes/chat-send-idempotency';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
 import { agentMemoryContextService } from './agent-memory-context-service';
@@ -13,6 +13,12 @@ export type MainChatSendInput = EngineSendParams & {
   /** User-visible text before memory/system prompt decoration. */
   displayText?: string;
   engineType: AgentEngineType;
+  memoryPolicy?: {
+    skipRead?: boolean;
+    skipWrite?: boolean;
+  };
+  /** 定时任务等：真实挂载的本地文件（透传到 sendMessageWithMedia） */
+  media?: EngineSendWithMediaParams['media'];
 };
 
 export function runMainChatSend(
@@ -46,21 +52,27 @@ export function runMainChatSend(
         error: runtime.error ?? `IDEMPOTENT_REPLAY_${runtime.phase.toUpperCase()}`,
       };
     }
-    const memory = await agentMemoryContextService.prepare(input.sourceText?.trim() || input.message);
+    const skipRead = input.memoryPolicy?.skipRead === true;
+    const skipWrite = input.memoryPolicy?.skipWrite === true;
+    const memory = skipRead
+      ? { injectedExecutionMemories: [] }
+      : await agentMemoryContextService.prepare(input.sourceText?.trim() || input.message);
     const coordinator = getMemoryTurnCoordinator(gatewayManager);
-    coordinator.begin({
-      sessionKey: input.sessionKey,
-      idempotencyKey: input.idempotencyKey,
-      engineType: input.engineType,
-      memories: memory.injectedExecutionMemories,
-    });
+    if (!skipWrite) {
+      coordinator.begin({
+        sessionKey: input.sessionKey,
+        idempotencyKey: input.idempotencyKey,
+        engineType: input.engineType,
+        memories: memory.injectedExecutionMemories,
+      });
+    }
 
     const prepared = prepareMemoryInjection(input, memory);
 
     try {
       const result = await dispatch(prepared);
       if (!result.success) {
-        coordinator.reject(input.sessionKey, input.idempotencyKey);
+        if (!skipWrite) coordinator.reject(input.sessionKey, input.idempotencyKey);
         await runtimeSupervisor.rejected({
           sessionKey: input.sessionKey,
           idempotencyKey: input.idempotencyKey,
@@ -68,11 +80,13 @@ export function runMainChatSend(
         });
         return result;
       }
-      await coordinator.bind({
-        sessionKey: input.sessionKey,
-        idempotencyKey: input.idempotencyKey,
-        runId: result.result?.runId,
-      });
+      if (!skipWrite) {
+        await coordinator.bind({
+          sessionKey: input.sessionKey,
+          idempotencyKey: input.idempotencyKey,
+          runId: result.result?.runId,
+        });
+      }
       await runtimeSupervisor.accepted({
         sessionKey: input.sessionKey,
         idempotencyKey: input.idempotencyKey,
@@ -82,7 +96,7 @@ export function runMainChatSend(
       });
       return result;
     } catch (error) {
-      coordinator.reject(input.sessionKey, input.idempotencyKey);
+      if (!skipWrite) coordinator.reject(input.sessionKey, input.idempotencyKey);
       await runtimeSupervisor.rejected({
         sessionKey: input.sessionKey,
         idempotencyKey: input.idempotencyKey,

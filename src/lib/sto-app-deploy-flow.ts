@@ -1,8 +1,8 @@
 import {
   codeDeployStatusLabel,
   formatCodeDeployFailurePrompt,
+  isCodeDeploySettled,
   isCodeDeploySuccess,
-  isCodeDeployTerminal,
   pickCodeDeployFields,
   type CodeDeployRecordFields,
 } from '../../shared/code-deploy-status';
@@ -44,6 +44,8 @@ async function pollDeployUntilTerminal(
   options?: {
     intervalMs?: number;
     timeoutMs?: number;
+    workspaceId?: string;
+    appCode?: string;
     onProgress?: (fields: CodeDeployRecordFields) => void;
     initialData?: unknown;
   },
@@ -72,13 +74,17 @@ async function pollDeployUntilTerminal(
     };
   };
 
-  if (isCodeDeployTerminal(latestFields.status)) {
+  if (isCodeDeploySettled(latestFields)) {
     return toOutcome(latestFields, latestData);
   }
 
   while (Date.now() - startedAt < timeoutMs) {
     await sleep(intervalMs);
-    const refreshed = await refreshStoAppDeploy(deploymentId);
+    const refreshed = await refreshStoAppDeploy({
+      deploymentId,
+      workspaceId: options?.workspaceId,
+      appCode: options?.appCode,
+    });
     latestData = refreshed.data;
     latestFields = {
       ...latestFields,
@@ -90,7 +96,7 @@ async function pollDeployUntilTerminal(
     };
     options?.onProgress?.(latestFields);
 
-    if (!isCodeDeployTerminal(latestFields.status)) continue;
+    if (!isCodeDeploySettled(latestFields)) continue;
     return toOutcome(latestFields, latestData);
   }
 
@@ -107,7 +113,7 @@ async function pollDeployUntilTerminal(
 export async function runStoAppDeployFlow(input: {
   workspaceId: string;
   env: CodeDeployEnv;
-  applicationId?: string;
+  appCode?: string;
   deploymentVersion?: string;
   appName?: string;
   onProgress?: (progress: {
@@ -123,12 +129,12 @@ export async function runStoAppDeployFlow(input: {
   input.onProgress?.({
     phase: 'pushing',
     label: '正在提交代码…',
-    fields: { env: input.env, applicationId: input.applicationId },
+    fields: { env: input.env, appCode: input.appCode },
   });
   const created = await deployStoApp({
     workspaceId: input.workspaceId,
     env: input.env,
-    applicationId: input.applicationId,
+    appCode: input.appCode,
     deploymentVersion: input.deploymentVersion,
     pushMessage,
   });
@@ -143,7 +149,7 @@ export async function runStoAppDeployFlow(input: {
     ...createdFields,
     deploymentId,
     env: createdFields.env ?? input.env,
-    applicationId: createdFields.applicationId ?? input.applicationId,
+    appCode: createdFields.appCode ?? created.appCode ?? input.appCode,
   };
   input.onProgress?.({
     phase: 'polling',
@@ -152,6 +158,8 @@ export async function runStoAppDeployFlow(input: {
   });
 
   return pollDeployUntilTerminal(deploymentId, {
+    workspaceId: input.workspaceId,
+    appCode: initialFields.applicationId ?? input.appCode,
     initialData: created.data,
     onProgress: (fields) => {
       input.onProgress?.({

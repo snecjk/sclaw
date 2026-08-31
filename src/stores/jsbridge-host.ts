@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 
 export interface JsBridgeDialogState {
   kind: 'alert' | 'confirm';
@@ -10,10 +11,17 @@ export interface JsBridgeDialogState {
   resolve: (value: boolean) => void;
 }
 
-interface ComposerSeedEntry {
+export interface ComposerSeedEntry {
   text: string;
   token: string;
   send: boolean;
+  segments?: PersistedComposerSegment[];
+}
+
+interface ComposerSeedInput {
+  text: string;
+  segments?: PersistedComposerSegment[];
+  send?: boolean;
 }
 
 interface JsBridgeHostState {
@@ -25,19 +33,20 @@ interface JsBridgeHostState {
   showConfirm: (input: Omit<JsBridgeDialogState, 'kind' | 'resolve'>) => Promise<boolean>;
   closeDialog: (confirmed: boolean) => void;
 
-  setEmbedComposerSeed: (runtimeId: string, text: string, send?: boolean) => string;
+  setEmbedComposerSeed: (runtimeId: string, input: ComposerSeedInput) => string;
   consumeEmbedComposerSeed: (runtimeId: string, token: string) => ComposerSeedEntry | null;
 
-  setMainComposerSeed: (text: string, send?: boolean) => string;
+  setMainComposerSeed: (input: ComposerSeedInput) => string;
   consumeMainComposerSeed: (token: string) => ComposerSeedEntry | null;
   peekMainComposerSeed: () => ComposerSeedEntry | null;
 }
 
-function makeSeed(text: string, send = false): ComposerSeedEntry {
+function makeSeed(input: ComposerSeedInput): ComposerSeedEntry {
   return {
-    text,
+    text: input.text,
+    segments: input.segments,
     token: `seed-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-    send,
+    send: input.send === true,
   };
 }
 
@@ -79,8 +88,8 @@ export const useJsBridgeHostStore = create<JsBridgeHostState>((set, get) => ({
     dialog.resolve(confirmed);
   },
 
-  setEmbedComposerSeed: (runtimeId, text, send = false) => {
-    const entry = makeSeed(text, send);
+  setEmbedComposerSeed: (runtimeId, input) => {
+    const entry = makeSeed(input);
     set((state) => ({
       embedComposerSeedByRuntimeId: {
         ...state.embedComposerSeedByRuntimeId,
@@ -101,8 +110,8 @@ export const useJsBridgeHostStore = create<JsBridgeHostState>((set, get) => ({
     return entry;
   },
 
-  setMainComposerSeed: (text, send = false) => {
-    const entry = makeSeed(text, send);
+  setMainComposerSeed: (input) => {
+    const entry = makeSeed(input);
     set({ mainComposerSeed: entry });
     return entry.token;
   },

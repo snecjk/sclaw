@@ -196,6 +196,8 @@
     "downloadArtifact": "Download artifact",
     "expandProcess": "Expand execution process",
     "collapseProcess": "Collapse execution process",
+    "expandNodeDetail": "Expand {{name}} details",
+    "collapseNodeDetail": "Collapse {{name}} details",
     "cancelRun": "Cancel run",
     "cancelling": "Cancelling",
     "continueRun": "Continue run",

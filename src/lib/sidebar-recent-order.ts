@@ -6,13 +6,15 @@ import {
 import type { ChatSession } from '@/stores/chat/types';
 import { isAppDevSessionKey } from '@/lib/app-dev-session';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
+import { isBridgeAiChatSessionKey } from '../../shared/bridge-ai-session';
 
 export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
   return !isAnyCronSessionKey(sessionKey)
     && !parseClaudeScheduledTaskRunSessionKey(sessionKey)
     && !parseClaudeScheduledTaskSessionKey(sessionKey)
     && !isAppDevSessionKey(sessionKey)
-    && !isSclawBrowserEmbedChatSessionKey(sessionKey);
+    && !isSclawBrowserEmbedChatSessionKey(sessionKey)
+    && !isBridgeAiChatSessionKey(sessionKey);
 }
 
 export function getSessionActivityForSort(

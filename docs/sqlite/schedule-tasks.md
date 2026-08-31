@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS schedule_tasks (
   created_at           TEXT NOT NULL,
   updated_at           TEXT NOT NULL,
   deleted_at           TEXT,
-  version              INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  -- version 列已在云端同步迁移中 DROP，见 docs/定时任务云端同步与历史归属.md §3.5
   created_by           TEXT,
   updated_by           TEXT
 );
@@ -132,7 +132,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_task_runs_idem
 | `last_scheduled_for` | 上次调度目标 | `TEXT` | 是 | `NULL` | |
 | `last_recovered_at` | 上次恢复 | `TEXT` | 是 | `NULL` | |
 | `cron_expr_snapshot` | cron 快照 | `TEXT` | 是 | `NULL` | 算 next_run_at 时所用 cronExpr；编辑后重算依据 |
-| `created_at` / `updated_at` / `deleted_at` / `version` / `created_by` / `updated_by` | — | — | — | — | 见 [_shared-fields.md](./_shared-fields.md) |
+| `created_at` / `updated_at` / `deleted_at` / `created_by` / `updated_by` | — | — | — | — | 见 [_shared-fields.md](./_shared-fields.md) |
+| `sync_status` | 出队状态 | `TEXT` | 否 | `'pending'` | 仅 `pending` / `done`；见云端同步策略 |
+| `remote_version` | 云端 version 镜像 | `INTEGER` | 是 | `NULL` | 只来自接口；本地任务表无 `version` 列 |
+
+> 本地 `schedule_tasks` **无** `version` 列（同步迁移 DROP）。内容修订号只在云端 `schedule_tasks_cloud.version`。`schedule_task_runs.version` 仍为 run 行字段，与云端任务无关。
 
 ---
 
@@ -164,6 +168,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_task_runs_idem
 | `idx_schedule_tasks_enabled_due` | schedule_tasks | `enabled, next_run_at` | `deleted_at IS NULL` | scheduler tick 取 due 任务 |
 | `idx_schedule_tasks_engine` | schedule_tasks | `engine_type` | `deleted_at IS NULL` | 按引擎过滤 |
 | `idx_schedule_tasks_agent` | schedule_tasks | `agent_id` | `deleted_at IS NULL` | 按 agent 过滤 |
+| `idx_schedule_tasks_sync_pending` | schedule_tasks | `created_by, sync_status` | `sync_status = 'pending'` | 云端出队 |
 | `idx_schedule_task_runs_task_created` | schedule_task_runs | `task_id, created_at DESC` | `deleted_at IS NULL` | MyTask 最近运行状态 |
 | `idx_schedule_task_runs_idem` (UNIQUE) | schedule_task_runs | `task_id, idempotency_key` | `deleted_at IS NULL` | 单飞去重 |
 

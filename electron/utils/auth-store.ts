@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { getOpenClawConfigDir, ensureDir } from './paths';
 import { logger } from './logger';
 import { getCurrentEnvConfig } from '../../shared/env-config';
+import { normalizeSsoRoleCodes } from '../../shared/sso-roles';
 
 export type SsoEnvironment =
   | 'daily-external'
@@ -32,6 +33,8 @@ export interface SsoUserInfo {
   departmentName: string;
   categoryCode: string; // 用户类别编码：独立网点、承包区等
   isAdministrator: boolean;
+  /** SSO 角色编码列表（getRoles=true 时由登录接口填充） */
+  roles?: string[];
   loginMode: string;
   openId: string;
   signature: string;
@@ -54,6 +57,9 @@ export interface AuthState {
 type JsonObject = Record<string, unknown>;
 
 const SYSTEM_CODE = 'sto_claw';
+// Invalidates in-flight work created by a previous login, logout, or switch.
+// This stays process-local because every launch establishes a fresh runtime session.
+let authSessionGeneration = 0;
 
 function createDefaultAuthState(): AuthState {
   return {
@@ -133,6 +139,11 @@ export async function getAuthState(): Promise<AuthState> {
         departmentName: String(userInfo.DepartmentName ?? ''),
         categoryCode: String(userInfo.CategoryCode ?? ''),
         isAdministrator: Boolean(userInfo.IsAdministrator ?? false),
+        roles: normalizeSsoRoleCodes(
+          Array.isArray(saiAuth.Roles)
+            ? saiAuth.Roles
+            : (Array.isArray(userInfo.Roles) ? userInfo.Roles : []),
+        ),
         loginMode: String(userInfo.LoginMode ?? ''),
         openId: String(userInfo.OpenId ?? ''),
         signature: String(userInfo.Signature ?? ''),
@@ -159,7 +170,25 @@ export async function getAuthState(): Promise<AuthState> {
   };
 }
 
+export interface AuthSessionSnapshot {
+  key: string;
+}
+
+/** Returns a non-loggable comparison key for async work tied to the current login. */
+export async function getAuthSessionSnapshot(): Promise<AuthSessionSnapshot> {
+  const [state, origin] = await Promise.all([getAuthState(), getImpersonationOrigin()]);
+  const user = state.user;
+  return {
+    key: `${authSessionGeneration}:${state.ssoEnvironment}:${user?.id || user?.code || 'anonymous'}:${user?.stoToken ?? ''}:${origin?.id || origin?.code || ''}:${origin?.stoToken ?? ''}`,
+  };
+}
+
+export async function isAuthSessionCurrent(snapshot: AuthSessionSnapshot): Promise<boolean> {
+  return (await getAuthSessionSnapshot()).key === snapshot.key;
+}
+
 export async function setAuthUser(user: SsoUserInfo): Promise<void> {
+  authSessionGeneration++;
   // Primary storage: ~/.sai/sso-auth.json
   await syncSsoAuthToSaiCli(user);
   
@@ -181,6 +210,7 @@ export async function setAuthUser(user: SsoUserInfo): Promise<void> {
 }
 
 export async function clearAuthUser(): Promise<void> {
+  authSessionGeneration++;
   const store = await getAuthStore();
   const previousUser = store.get('user', null) as SsoUserInfo | null;
   logger.info('Clear auth user...');
@@ -192,6 +222,58 @@ export async function clearAuthUser(): Promise<void> {
   }).catch(() => {});
   await removeSsoAuthFromSaiCli(previousUser);
   await removeSsoAuthFromOpenClaw();
+}
+
+/**
+ * 一次性强制重登：存量 sai 的 Code 曾是登录名，发版不会自动改写。
+ * 键已 true 则跳过。以后别的 SSO 修复必须换新键名，勿复用。
+ * 判定 / 清理抛异常时不打标（异常上抛），留给下次启动重试——clearAuth 幂等。
+ * 注意：常规登出在 sai 文件与本地会话不匹配时会保留该文件，而 getAuthState
+ * 以 sai 文件为首要数据源——文件还在就等于没登出。因此默认路径在 clearAuth 后
+ * 强制删除 sai 文件，删不掉则上抛不打标，避免「打了标但没生效」的静默失效。
+ */
+export const SSO_CODE_FIELD_RELOGIN_DONE_KEY = 'ssoCodeFieldReloginDone';
+
+export interface SsoCodeFieldReloginStore {
+  get(key: string): unknown;
+  set(key: string, value: unknown): void;
+}
+
+export async function ensureSsoCodeFieldReloginOnce(options?: {
+  store?: SsoCodeFieldReloginStore;
+  isLoggedIn?: () => Promise<boolean>;
+  clearAuth?: () => Promise<void>;
+  /** 登出后确保 sai 文件已删除；默认在真实 clearAuth 路径下强制删除，失败上抛不打标。 */
+  enforceSaiFileRemoval?: () => Promise<void>;
+}): Promise<{ skipped: boolean; cleared: boolean }> {
+  const store = options?.store ?? (await getAuthStore());
+  if (store.get(SSO_CODE_FIELD_RELOGIN_DONE_KEY) === true) {
+    return { skipped: true, cleared: false };
+  }
+  let cleared = false;
+  const loggedIn = options?.isLoggedIn
+    ? await options.isLoggedIn()
+    : (await getAuthState()).isAuthenticated;
+  if (loggedIn) {
+    await (options?.clearAuth ?? clearAuthUser)();
+    const enforceSaiFileRemoval = options?.enforceSaiFileRemoval
+      ?? (options?.clearAuth ? undefined : forceRemoveSaiCliSsoAuthFile);
+    await enforceSaiFileRemoval?.();
+    cleared = true;
+  }
+  store.set(SSO_CODE_FIELD_RELOGIN_DONE_KEY, true);
+  return { skipped: false, cleared };
+}
+
+async function forceRemoveSaiCliSsoAuthFile(): Promise<void> {
+  const filePath = join(homedir(), '.sai', 'sso-auth.json');
+  try {
+    await unlink(filePath);
+    logger.info('[auth] Force removed ~/.sai/sso-auth.json for code-field relogin');
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
 }
 
 export async function getImpersonationOrigin(): Promise<SsoUserInfo | null> {
@@ -368,13 +450,14 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
     stoToken: user.stoToken,
     expiresAt: user.stoTokenExpiresAt,
     userId: user.id,
+    Roles: user.roles ?? [],
     userInfo: {
       ...existingUserInfo,
       Id: user.id,
       UserName: user.userName,
       RealName: user.realName,
       NickName: user.realName,
-      Code: user.userName,
+      Code: user.code,
       CompanyId: user.companyId,
       CompanyCode: user.companyCode,
       CompanyName: user.companyName,
@@ -383,6 +466,7 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
       DepartmentName: user.departmentName,
       CategoryCode: user.categoryCode,
       IsAdministrator: user.isAdministrator,
+      Roles: user.roles ?? [],
       LoginMode: user.loginMode,
       OpenId: user.openId,
       Signature: user.signature,

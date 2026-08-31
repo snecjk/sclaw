@@ -13,6 +13,7 @@ import {
 } from '@/stores/app-plaza-shell';
 import { bindAppNavigate, unbindAppNavigate } from '@/lib/app-navigate';
 import { closeSclawBrowser } from '@/lib/open-sclaw-browser';
+import { useAppPlazaSidebarCollapse } from '@/hooks/use-app-plaza-sidebar-collapse';
 import { useSclawBrowserChatShortcut } from '@/components/sclaw-browser/use-sclaw-browser-chat-shortcut';
 import { useSclawBrowserDevToolsShortcut } from '@/components/sclaw-browser/use-sclaw-browser-devtools-shortcut';
 import { useSclawBrowserOpenUrl } from '@/components/sclaw-browser/use-sclaw-browser-open-url';
@@ -28,6 +29,11 @@ export function AppPlazaShell() {
   const browserTabs = useAppPlazaShellStore((s) => s.browserTabs);
   const devAppTabs = useAppPlazaShellStore((s) => s.devAppTabs);
   const toggleChatPanel = useAppPlazaShellStore((s) => s.toggleChatPanel);
+  const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
+  const viewingSpecificApp = Boolean(
+    routeActive && activeBrowser && activeBrowser.status !== 'blank',
+  );
+  useAppPlazaSidebarCollapse(viewingSpecificApp);
 
   useEffect(() => {
     setRouteActive(routeActive);
@@ -49,7 +55,6 @@ export function AppPlazaShell() {
 
   useEffect(() => installJsBridgeHostListeners(), []);
 
-  const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
   const activeDevApp = devAppTabs.find((t) => t.id === activeTabId);
   const isHomeActive = activeTabId === APP_PLAZA_HOME_TAB_ID;
   const chatShortcutEnabled = routeActive && activeBrowser?.status === 'live';

@@ -41,7 +41,7 @@ export const handleUiConfirm: BridgeHandlerFn = async ({ request }) => {
   });
 };
 
-export const handleUiOpenDrawer: BridgeHandlerFn = async ({ request }) => {
+export const handleUiOpenDrawer: BridgeHandlerFn = async ({ session, request }) => {
   const params = request.params as { kind?: string } | undefined;
   const kind = readText(params?.kind) || 'chat';
   if (kind !== 'chat') {
@@ -50,6 +50,7 @@ export const handleUiOpenDrawer: BridgeHandlerFn = async ({ request }) => {
   return createHostActionEnvelope({
     type: 'ui.openDrawer',
     kind: 'chat',
+    // Bind to this guest's App Plaza tab so Host opens the right-side embed chat session.
     runtimeId: session.runtimeId,
   });
 };

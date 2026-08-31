@@ -4,6 +4,7 @@ import { isCapability } from '../../../shared/jsbridge/capabilities';
 import { getJsBridgeGuestPreloadPath, getJsBridgeGuestPreloadUrl } from '../../utils/jsbridge-guest-preload-path';
 import {
   dispatchBridgeInvoke,
+  emitBridgeEvent,
   grantBridgeConsent,
   grantCapabilityToSession,
   listBridgeConsents,
@@ -95,5 +96,24 @@ export function registerJsBridgeIpcHandlers(): void {
     if (!appId || !isCapability(capability)) return { ok: false };
     await revokeBridgeConsent(appId, capability as Capability);
     return { ok: true };
+  });
+
+  ipcMain.handle('bridge:emitEvent', async (_, payload: {
+    runtimeId?: string;
+    webContentsId?: number;
+    sessionId?: string;
+    name?: string;
+    eventPayload?: unknown;
+  }) => {
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
+    if (!name) return { ok: false, delivered: false };
+    const delivered = emitBridgeEvent({
+      runtimeId: typeof payload?.runtimeId === 'string' ? payload.runtimeId : undefined,
+      webContentsId: typeof payload?.webContentsId === 'number' ? payload.webContentsId : undefined,
+      sessionId: typeof payload?.sessionId === 'string' ? payload.sessionId : undefined,
+      name,
+      payload: payload?.eventPayload,
+    });
+    return { ok: true, delivered };
   });
 }

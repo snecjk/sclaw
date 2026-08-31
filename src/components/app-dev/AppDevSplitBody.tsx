@@ -6,8 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
 import { useAppDevSplitResize } from '@/hooks/use-app-dev-split-resize';
 import {
+  APP_DEV_CHAT_SPLIT_DEFAULT,
   APP_DEV_CHAT_SPLIT_MAX,
   APP_DEV_CHAT_SPLIT_MIN,
+  APP_DEV_CHAT_SPLIT_STORAGE_KEY,
   appDevSplitRowClass,
   readStoredAppDevChatSplitPercent,
   writeStoredAppDevChatSplitPercent,
@@ -18,19 +20,25 @@ interface AppDevSplitBodyProps {
   chat: ReactNode;
   children: ReactNode;
   chatOpen?: boolean;
+  defaultPercent?: number;
+  storageKey?: string;
 }
 
 export function AppDevSplitBody({
   chat,
   children,
   chatOpen = true,
+  defaultPercent = APP_DEV_CHAT_SPLIT_DEFAULT,
+  storageKey = APP_DEV_CHAT_SPLIT_STORAGE_KEY,
 }: AppDevSplitBodyProps) {
   const { t } = useTranslation('chat');
-  const [chatSplitPercent, setChatSplitPercent] = useState(readStoredAppDevChatSplitPercent);
+  const [chatSplitPercent, setChatSplitPercent] = useState(() => (
+    readStoredAppDevChatSplitPercent(storageKey, defaultPercent)
+  ));
   const persistPercent = useCallback((percent: number) => {
     setChatSplitPercent(percent);
-    writeStoredAppDevChatSplitPercent(percent);
-  }, []);
+    writeStoredAppDevChatSplitPercent(percent, storageKey, defaultPercent);
+  }, [defaultPercent, storageKey]);
   const {
     splitRowRef,
     chatPanelRef,

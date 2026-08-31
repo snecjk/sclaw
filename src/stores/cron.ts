@@ -20,6 +20,8 @@ interface CronState {
   jobs: ScheduleTask[];
   loading: boolean;
   error: string | null;
+  /** 传给 Sidebar `useScheduledTaskNameMaps` 的 refreshKey 增量；改名后 +1。 */
+  nameMapsRefreshKey: number;
 
   fetchJobs: () => Promise<void>;
   createJob: (input: CreateScheduleTaskInput) => Promise<ScheduleTask>;
@@ -28,12 +30,14 @@ interface CronState {
   toggleJob: (id: string, enabled: boolean) => Promise<void>;
   triggerJob: (id: string) => Promise<(ScheduleTaskRunRecord & TaskTriggerExecutionMeta) | void>;
   setJobs: (jobs: ScheduleTask[]) => void;
+  bumpNameMapsRefreshKey: () => void;
 }
 
 export const useCronStore = create<CronState>((set) => ({
   jobs: [],
   loading: false,
   error: null,
+  nameMapsRefreshKey: 0,
 
   fetchJobs: async () => {
     set({ loading: true, error: null });
@@ -129,4 +133,7 @@ export const useCronStore = create<CronState>((set) => ({
   },
 
   setJobs: (jobs) => set({ jobs }),
+
+  bumpNameMapsRefreshKey: () =>
+    set((state) => ({ nameMapsRefreshKey: state.nameMapsRefreshKey + 1 })),
 }));

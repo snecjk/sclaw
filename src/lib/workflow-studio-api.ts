@@ -92,11 +92,12 @@ export async function createWorkflowStudio(
 export async function cacheAiWorkflowPrompt(
   prompt: string,
   workflowId?: string,
+  replaceInitialDraft = false,
 ): Promise<string> {
   const json = await hostApiFetch<unknown>('/workflow/v1/ai-builder/prompt-cache', {
     method: 'POST',
     headers: studioHeaders(),
-    body: JSON.stringify({ prompt, workflowId }),
+    body: JSON.stringify({ prompt, workflowId, replaceInitialDraft }),
   });
   const data = parseStudioJson<{ promptCacheId: string } | undefined>(json);
   if (!data?.promptCacheId) {

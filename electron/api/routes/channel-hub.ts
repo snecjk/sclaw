@@ -16,6 +16,7 @@ import {
   hubBindStatus,
   hubClaimBind,
   hubCreateBind,
+  hubDisableChannel,
   hubPollBind,
   hubRegisterDesktop,
   hubUnbindRemote,
@@ -118,15 +119,14 @@ export async function handleChannelHubRoutes(
     }
 
     if (url.pathname === '/api/channels/hub/dingtalk/bind/unbind' && req.method === 'POST') {
-      try {
-        if (resolveSclawHubBaseUrl()) {
-          await hubUnbindRemote();
-        }
-      } catch (error) {
-        logger.warn('[ChannelHub] remote unbind failed', error);
+      if (resolveSclawHubBaseUrl()) {
+        await hubUnbindRemote();
       }
-      getSclawHubClient().disconnect();
       await revokeDingTalkHubBind();
+      const mobile = await getChannelConnection('mobile');
+      if (!mobile || mobile.bindStatus !== 'bound') {
+        getSclawHubClient().disconnect();
+      }
       sendJson(res, 200, { success: true });
       return true;
     }
@@ -220,6 +220,9 @@ export async function handleChannelHubRoutes(
     }
 
     if (url.pathname === '/api/channels/hub/mobile/bind/disable' && req.method === 'POST') {
+      if (resolveSclawHubBaseUrl()) {
+        await hubDisableChannel('mobile');
+      }
       await disableMobileAppBind();
       const dingTalk = await getChannelConnection('dingtalk');
       // 无钉钉绑定时可断开共用 WS；仍有钉钉则保持

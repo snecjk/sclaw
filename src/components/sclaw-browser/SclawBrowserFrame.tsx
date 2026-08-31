@@ -1,5 +1,8 @@
 /**
  * Drawer content frame — Electron webview (first-party cookies) or dev iframe.
+ *
+ * Guest JSBridge preload must be attached before the first real navigation;
+ * otherwise `window.stoClaw` is never injected.
  */
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
@@ -9,7 +12,10 @@ import {
   bindSclawBrowserWebContents,
   updateSclawBrowserPageState,
 } from '@/lib/sclaw-browser-host-api';
-import { resolveSclawEmbedWindowOpenAction } from '../../../shared/sclaw-embed-browser-window-open';
+import {
+  isSclawEmbedSameFrameWindowOpen,
+  resolveSclawEmbedWindowOpenAction,
+} from '../../../shared/sclaw-embed-browser-window-open';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { PREVIEW_NETWORK_CAPTURE_SCRIPT } from '@/lib/app-dev-preview-console';
 import { getJsBridgeGuestPreloadUrl } from '@/lib/jsbridge/host-api';
@@ -141,6 +147,23 @@ function isEmbedWebviewPageUrl(pageUrl: string): boolean {
   }
 }
 
+async function bindEmbedWebContentsWithRetry(input: {
+  runtimeId: string;
+  webContentsId: number;
+  pageUrl: string;
+}): Promise<Awaited<ReturnType<typeof bindSclawBrowserWebContents>>> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await bindSclawBrowserWebContents(input);
+    if (result.ok) return result;
+    if (attempt < 7) {
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 40 * (attempt + 1));
+      });
+    }
+  }
+  return { ok: false };
+}
+
 export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowserFrameProps>(
   function SclawBrowserFrame(
     {
@@ -216,6 +239,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       };
     }, []);
 
+    // Track dom-ready separately — getWebContentsId() can succeed before dom-ready,
+    // but loadURL still throws until the event has fired.
     useEffect(() => {
       if (!isElectron || !preloadReady) return;
       navigateGuest(url);
@@ -335,13 +360,12 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
 
         boundToPage = true;
         injectNetworkCapture();
-
+        registerSclawBrowserWebview(el);
         markPolicyAuthedFromUrl(pageUrl);
         onPageUrlRef.current?.(pageUrl);
 
         if (embedRuntimeId) {
-          registerSclawBrowserWebview(el);
-          void bindSclawBrowserWebContents({
+          void bindEmbedWebContentsWithRetry({
             runtimeId: embedRuntimeId,
             webContentsId,
             pageUrl,
@@ -383,11 +407,26 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       };
 
       const onNewWindow = (event: Event) => {
-        const detail = event as Event & { url?: string; preventDefault?: () => void };
-        detail.preventDefault?.();
+        const detail = event as Event & {
+          url?: string;
+          frameName?: string;
+          preventDefault?: () => void;
+        };
         const rawUrl = typeof detail.url === 'string' ? detail.url.trim() : '';
         if (!rawUrl) return;
         const action = resolveSclawEmbedWindowOpenAction(rawUrl);
+        if (isSclawEmbedSameFrameWindowOpen(detail.frameName)) {
+          detail.preventDefault?.();
+          if (action.kind === 'open-tab') {
+            try {
+              void el.loadURL?.(action.url);
+            } catch {
+              // best-effort
+            }
+          }
+          return;
+        }
+        detail.preventDefault?.();
         if (action.kind !== 'open-tab') return;
         if (onOpenWindowRef.current) {
           onOpenWindowRef.current(action.url);
@@ -446,7 +485,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         boundToPage = false;
         domReadyRef.current = false;
         launchedSrcRef.current = null;
-        if (active && embedRuntimeId) registerSclawBrowserWebview(null);
+        if (active) registerSclawBrowserWebview(null);
         el.removeEventListener('dom-ready', onDomReady);
         el.removeEventListener('did-navigate', onNavigate);
         el.removeEventListener('did-navigate-in-page', onNavigate);

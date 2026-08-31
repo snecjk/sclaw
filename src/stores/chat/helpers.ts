@@ -876,6 +876,11 @@ function looksLikeTechnicalSessionDisplay(value: string): boolean {
   return /^agent:[^:]+:.+/.test(value.trim());
 }
 
+/** Agent/product identity (sessions.list displayName) — not a real chat or task title. */
+function isAgentBrandSessionLabel(value: string): boolean {
+  return /^(SClaw|StoClaw)$/i.test(value.trim());
+}
+
 /** Strip displayName when it is identical to the key or looks like an internal session id. */
 function sanitizeSessionDisplayField(
   sessionKey: string,
@@ -885,6 +890,8 @@ function sanitizeSessionDisplayField(
   if (!d) return undefined;
   if (d === sessionKey) return undefined;
   if (looksLikeTechnicalSessionDisplay(d)) return undefined;
+  // Main session may show the agent name; other sessions must not inherit it.
+  if (!sessionKey.endsWith(':main') && isAgentBrandSessionLabel(d)) return undefined;
   return d;
 }
 
@@ -923,6 +930,7 @@ export {
   setLastChatEventAt,
   getLastChatEventAt,
   looksLikeTechnicalSessionDisplay,
+  isAgentBrandSessionLabel,
   sanitizeSessionDisplayField,
   mergeSessionLastActivity,
 };

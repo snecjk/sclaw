@@ -1,5 +1,6 @@
 import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { SkillMeta } from '@/types/skill-meta';
 
 export interface SendMessageOptions {
@@ -21,8 +22,16 @@ export interface SendMessageOptions {
   workflowContext?: WorkflowContextBlock | null;
   /** Hidden embed-browser page snapshot for in-app preview chat */
   embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
-  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
+  /** @deprecated 单技能兼容；正式坐标为 skillMetas，仅作派生 */
   skillMeta?: SkillMeta;
+  /** 多技能元数据（正式坐标；存在时优先于 skillMeta） */
+  skillMetas?: SkillMeta[];
+  /** 按 segment 顺序的多工作流元数据 */
+  workflows?: Array<{ id: string; name: string; source?: string }>;
+  /** 预烘焙的 Gateway 消息正文（技能 prompt + 工作流执行句已应用） */
+  gatewayText?: string;
+  /** 本地乐观 / 编辑往返用的 segments */
+  composerSegments?: PersistedComposerSegment[];
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */
@@ -70,13 +79,15 @@ export interface RawMessage {
   _attachedFiles?: AttachedFileMeta[];
   /** Local-only: skill plaza tag metadata for user message bubble rendering */
   _skillMeta?: SkillMeta;
-  /** Local-only: the optimistic bubble was synthesized from a scheduled-task dispatch event. */
-  _scheduledTaskOptimistic?: boolean;
+  /** 仅本地：行内 segment 气泡用的多技能元数据 */
+  _skillMetas?: SkillMeta[];
+  /** 仅本地：有序 composer segments，用于行内气泡渲染 / 编辑往返 */
+  _composerSegments?: PersistedComposerSegment[];
 }
 
 /** Content block inside a message */
 export interface ContentBlock {
-  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card' | 'parameter_form' | 'workflow_context';
+  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card' | 'flow_card' | 'parameter_form' | 'workflow_context';
   text?: string;
   thinking?: string;
   source?: { type: string; media_type?: string; data?: string; url?: string };
@@ -92,6 +103,14 @@ export interface ContentBlock {
   runId?: string;
   /** Shared by workflow_card and workflow_context blocks */
   templateName?: string;
+  /** flow_card block fields */
+  cardId?: string;
+  domain?: string;
+  phase?: string;
+  title?: string;
+  body?: string;
+  hint?: string;
+  actions?: import('../../../shared/flow-card-protocol').FlowCardAction[];
   /** Parameter form block fields */
   formId?: string;
   formConfig?: import('@/types/user-form').UserFormConfig;
@@ -219,6 +238,7 @@ export interface ChatState {
   }) => Promise<boolean>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
+  loadOlderHistory: (sessionKey?: string, options?: { drain?: boolean }) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: (sessionKey?: string) => Promise<boolean>;
   toggleThinking: () => void;

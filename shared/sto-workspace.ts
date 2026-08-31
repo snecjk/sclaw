@@ -1,19 +1,16 @@
 /**
  * SClaw local workspace binding: `<appRoot>/.sto/workspace.json`.
- * Field names match sto-app CLI workspace.ts. Never persist tokens.
+ * v2 uses `appCode` as the cloud primary key. Never persist tokens.
  */
 
-import type { CodeApplicationRecord } from './code-application-catalog';
+import type { SiteAppRecord } from './site-app-catalog';
 
 export const STO_WORKSPACE_RELATIVE = '.sto/workspace.json';
 
 export interface StoWorkspaceFile {
-  version: 1;
+  version: 2;
   workspacePath: string;
-  registryUrl: string;
-  applicationId: string;
-  applicationUid: string;
-  applicationCode: string;
+  appCode: string;
   baseRevisionId: string | null;
   baseCommitSha: string | null;
   baseSourceSha256: string | null;
@@ -21,9 +18,7 @@ export interface StoWorkspaceFile {
 }
 
 export interface StoWorkspaceFields {
-  applicationId?: string;
-  applicationUid?: string;
-  applicationCode?: string;
+  appCode?: string;
   status?: string;
   baseRevisionId?: string | null;
   baseCommitSha?: string | null;
@@ -52,34 +47,36 @@ function unwrapRecord(json: unknown): Record<string, unknown> | null {
 
 export function isStoWorkspaceWritableStatus(status?: string): boolean {
   if (!status?.trim()) return true;
-  const normalized = status.trim().toUpperCase();
-  if (normalized === 'FAILED') return false;
-  return normalized === 'ACTIVE';
+  const normalized = status.trim().toLowerCase();
+  if (normalized === 'failed' || normalized === 'archived') return false;
+  return normalized === 'active' || normalized === 'ready';
 }
 
 export function extractStoWorkspaceFields(json: unknown): StoWorkspaceFields {
   const row = unwrapRecord(json);
   if (!row) return {};
   const fields: StoWorkspaceFields = {};
-  const applicationId = pickString(row.applicationId, row.appId, row.application_id, row.id);
-  const applicationUid = pickString(row.applicationUid, row.appUid, row.uid);
-  const applicationCode = pickString(row.applicationCode, row.appCode, row.code);
+  const appCode = pickString(row.appCode, row.app_code, row.applicationCode, row.code);
   const status = pickString(row.status);
-  const baseRevisionId = pickString(row.baseRevisionId, row.headRevisionId, row.revisionId);
+  const baseRevisionId = pickString(
+    row.baseRevisionId,
+    row.headRevisionId,
+    row.head_revision_id,
+    row.revisionId,
+  );
   const baseCommitSha = pickString(
     row.baseCommitSha,
     row.headCommitSha,
+    row.head_commit_sha,
     row.commitSha,
-    row.devCommitSha,
   );
   const baseSourceSha256 = pickString(
     row.baseSourceSha256,
     row.sourceSha256,
+    row.head_source_sha256,
     row.headSourceSha256,
   );
-  if (applicationId) fields.applicationId = applicationId;
-  if (applicationUid) fields.applicationUid = applicationUid;
-  if (applicationCode) fields.applicationCode = applicationCode;
+  if (appCode) fields.appCode = appCode;
   if (status) fields.status = status;
   if (baseRevisionId) fields.baseRevisionId = baseRevisionId;
   if (baseCommitSha) fields.baseCommitSha = baseCommitSha;
@@ -93,9 +90,7 @@ export function mergeStoWorkspaceFields(
   const merged: StoWorkspaceFields = {};
   for (const part of parts) {
     if (!part) continue;
-    if (part.applicationId) merged.applicationId = part.applicationId;
-    if (part.applicationUid) merged.applicationUid = part.applicationUid;
-    if (part.applicationCode) merged.applicationCode = part.applicationCode;
+    if (part.appCode) merged.appCode = part.appCode;
     if (part.status) merged.status = part.status;
     if (part.baseRevisionId !== undefined) merged.baseRevisionId = part.baseRevisionId;
     if (part.baseCommitSha !== undefined) merged.baseCommitSha = part.baseCommitSha;
@@ -104,20 +99,52 @@ export function mergeStoWorkspaceFields(
   return merged;
 }
 
+function parseLegacyV1Workspace(row: Record<string, unknown>): StoWorkspaceFile | null {
+  const workspacePath = pickString(row.workspacePath);
+  const appCode = pickString(row.appCode, row.app_code, row.applicationCode, row.applicationId);
+  if (!workspacePath || !appCode) return null;
+  return {
+    version: 2,
+    workspacePath,
+    appCode,
+    baseRevisionId: pickString(row.baseRevisionId) ?? null,
+    baseCommitSha: pickString(row.baseCommitSha) ?? null,
+    baseSourceSha256: pickString(row.baseSourceSha256) ?? null,
+    mergeParentRevisionId: pickString(row.mergeParentRevisionId) ?? null,
+  };
+}
+
 export function parseStoWorkspaceFile(raw: unknown): StoWorkspaceFile | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const row = raw as Record<string, unknown>;
-  const applicationId = pickString(row.applicationId);
+  const version = row.version;
   const workspacePath = pickString(row.workspacePath);
-  const registryUrl = pickString(row.registryUrl);
-  if (!applicationId || !workspacePath || !registryUrl) return null;
+  if (!workspacePath) return null;
+
+  if (version === 2) {
+    const appCode = pickString(row.appCode, row.app_code);
+    if (!appCode) return null;
+    return {
+      version: 2,
+      workspacePath,
+      appCode,
+      baseRevisionId: pickString(row.baseRevisionId) ?? null,
+      baseCommitSha: pickString(row.baseCommitSha) ?? null,
+      baseSourceSha256: pickString(row.baseSourceSha256) ?? null,
+      mergeParentRevisionId: pickString(row.mergeParentRevisionId) ?? null,
+    };
+  }
+
+  if (version === 1) {
+    return parseLegacyV1Workspace(row);
+  }
+
+  const appCode = pickString(row.appCode, row.app_code, row.applicationCode);
+  if (!appCode) return parseLegacyV1Workspace(row);
   return {
-    version: 1,
+    version: 2,
     workspacePath,
-    registryUrl,
-    applicationId,
-    applicationUid: pickString(row.applicationUid) ?? '',
-    applicationCode: pickString(row.applicationCode) ?? '',
+    appCode,
     baseRevisionId: pickString(row.baseRevisionId) ?? null,
     baseCommitSha: pickString(row.baseCommitSha) ?? null,
     baseSourceSha256: pickString(row.baseSourceSha256) ?? null,
@@ -127,12 +154,9 @@ export function parseStoWorkspaceFile(raw: unknown): StoWorkspaceFile | null {
 
 export function serializeStoWorkspaceFile(file: StoWorkspaceFile): string {
   const payload: StoWorkspaceFile = {
-    version: 1,
+    version: 2,
     workspacePath: file.workspacePath,
-    registryUrl: file.registryUrl,
-    applicationId: file.applicationId,
-    applicationUid: file.applicationUid,
-    applicationCode: file.applicationCode,
+    appCode: file.appCode,
     baseRevisionId: file.baseRevisionId,
     baseCommitSha: file.baseCommitSha,
     baseSourceSha256: file.baseSourceSha256,
@@ -141,42 +165,31 @@ export function serializeStoWorkspaceFile(file: StoWorkspaceFile): string {
   return `${JSON.stringify(payload, null, 2)}\n`;
 }
 
-export function codeApplicationToWorkspaceFields(
-  cloud?: CodeApplicationRecord,
-): StoWorkspaceFields | undefined {
+export function siteAppToWorkspaceFields(cloud?: SiteAppRecord): StoWorkspaceFields | undefined {
   if (!cloud) return undefined;
   return {
-    applicationId: cloud.applicationId,
-    applicationUid: cloud.applicationUid,
-    applicationCode: cloud.applicationCode,
+    appCode: cloud.appCode,
     status: cloud.status,
     baseRevisionId: cloud.headRevisionId,
     baseCommitSha: cloud.headCommitSha,
-    baseSourceSha256: cloud.sourceSha256,
   };
 }
 
 export function buildStoWorkspaceFile(input: {
   workspacePath: string;
-  registryUrl: string;
   fields: StoWorkspaceFields;
   existing?: StoWorkspaceFile | null;
 }): StoWorkspaceFile | null {
-  const applicationId = input.fields.applicationId || input.existing?.applicationId;
-  if (!applicationId) return null;
+  const appCode = input.fields.appCode || input.existing?.appCode;
+  if (!appCode) return null;
   if (!isStoWorkspaceWritableStatus(input.fields.status)) return null;
-
-  const registryUrl = input.registryUrl.replace(/\/+$/, '');
   return {
-    version: 1,
+    version: 2,
     workspacePath: input.workspacePath,
-    registryUrl,
-    applicationId,
-    applicationUid: input.fields.applicationUid || input.existing?.applicationUid || '',
-    applicationCode: input.fields.applicationCode || input.existing?.applicationCode || '',
+    appCode,
     baseRevisionId: input.fields.baseRevisionId ?? input.existing?.baseRevisionId ?? null,
     baseCommitSha: input.fields.baseCommitSha ?? input.existing?.baseCommitSha ?? null,
     baseSourceSha256: input.fields.baseSourceSha256 ?? input.existing?.baseSourceSha256 ?? null,
-    mergeParentRevisionId: null,
+    mergeParentRevisionId: input.existing?.mergeParentRevisionId ?? null,
   };
 }

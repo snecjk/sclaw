@@ -34,7 +34,6 @@ export async function readStoWorkspaceFile(appPath: string): Promise<StoWorkspac
 
 export async function writeStoWorkspaceBinding(input: {
   appPath: string;
-  registryUrl: string;
   payload?: unknown;
   cloud?: StoWorkspaceFields;
   fallback?: StoWorkspaceFields;
@@ -44,10 +43,10 @@ export async function writeStoWorkspaceBinding(input: {
     input.cloud,
     extractStoWorkspaceFields(input.payload),
   );
-  if (!fields.applicationId || !isStoWorkspaceWritableStatus(fields.status)) {
+  if (!fields.appCode || !isStoWorkspaceWritableStatus(fields.status)) {
     logger.warn(
       `[sto-workspace] skip write appPath=${input.appPath} ` +
-      `applicationId=${fields.applicationId ?? '-'} status=${fields.status ?? '-'}`,
+      `appCode=${fields.appCode ?? '-'} status=${fields.status ?? '-'}`,
     );
     return null;
   }
@@ -56,12 +55,11 @@ export async function writeStoWorkspaceBinding(input: {
   const existing = await readStoWorkspaceFile(workspacePath);
   const next = buildStoWorkspaceFile({
     workspacePath,
-    registryUrl: input.registryUrl,
     fields,
     existing,
   });
   if (!next) {
-    logger.warn(`[sto-workspace] skip write missing applicationId appPath=${workspacePath}`);
+    logger.warn(`[sto-workspace] skip write missing appCode appPath=${workspacePath}`);
     return null;
   }
 
@@ -71,9 +69,7 @@ export async function writeStoWorkspaceBinding(input: {
   await writeFile(tmp, serializeStoWorkspaceFile(next), 'utf8');
   await rename(tmp, path);
   logger.info(
-    `[sto-workspace] wrote ${path} applicationId=${next.applicationId} ` +
-    `uid=${next.applicationUid || '-'} code=${next.applicationCode || '-'} ` +
-    `revision=${next.baseRevisionId ?? 'null'}`,
+    `[sto-workspace] wrote ${path} appCode=${next.appCode} revision=${next.baseRevisionId ?? 'null'}`,
   );
   return next;
 }

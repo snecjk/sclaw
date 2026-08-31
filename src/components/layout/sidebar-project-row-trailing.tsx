@@ -28,8 +28,8 @@ export interface SidebarProjectRowTrailingProps {
   className?: string;
 }
 
-/** 容纳「新建对话」+「更多」两个 28px 按钮 */
-const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-[56px]';
+/** 容纳两个 28px 按钮及中间 2px 间距，与分区标题 actions 完全同宽。 */
+const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-[58px]';
 const SIDEBAR_TOOLTIP_CLASS = cn(
   'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
   'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
@@ -56,7 +56,8 @@ export function SidebarProjectRowTrailing({
   return (
     <div
       className={cn(
-        'absolute right-[10px] top-1/2 flex -translate-y-1/2 items-center justify-end',
+        // 与分区标题 actions 的 pr-1 对齐，使上下两列 28px 图标共用中心线。
+        'absolute right-1 top-1/2 flex -translate-y-1/2 items-center justify-end',
         SIDEBAR_ROW_TRAILING_W_CLASS,
         className,
       )}
@@ -80,13 +81,13 @@ export function SidebarProjectRowTrailing({
               className={cn(
                 'order-2 flex h-7 w-7 items-center justify-center rounded-md',
                 sidebarTextIconClass,
-                'hover:bg-black/[0.04]',
+                'outline-none hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
               )}
             >
               <img
                 src={sidebarProjectNewChatIcon}
                 alt=""
-                className="h-4 w-4"
+                className="h-[18px] w-[18px]"
                 aria-hidden
               />
             </button>
@@ -105,10 +106,10 @@ export function SidebarProjectRowTrailing({
               className={cn(
                 'order-1 flex h-7 w-7 items-center justify-center rounded-md',
                 sidebarTextIconClass,
-                'hover:bg-black/[0.04]',
+                'outline-none hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
               )}
             >
-              <MoreHorizontal className="h-4 w-4" aria-hidden />
+              <MoreHorizontal className="h-[18px] w-[18px]" aria-hidden />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={sidebarRecentMenuContentClass}>

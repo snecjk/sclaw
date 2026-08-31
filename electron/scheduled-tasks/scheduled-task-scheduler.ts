@@ -37,6 +37,9 @@ export interface ScheduledTaskDispatcher {
   dispatch(params: { task: ScheduleTask; run: ScheduleTaskRun }): Promise<void>;
 }
 
+/** 云端出队：与 cron 同一 tick，fire-and-forget，不得阻塞 claim/dispatch。 */
+export type ScheduledTaskPushTick = () => void;
+
 const noopDispatcher: ScheduledTaskDispatcher = {
   async dispatch({ task }) {
     logger.info('[scheduled-task] dispatch skipped (no executor registered)', {
@@ -49,12 +52,21 @@ export class ScheduledTaskScheduler {
   private isRunning = false;
   private timer: NodeJS.Timeout | null = null;
   private canReapRun: ((run: ScheduleTaskRun) => Promise<boolean>) | null = null;
+  private pushTick: ScheduledTaskPushTick | null = null;
+  private cronTicksCompleted = 0;
+  /** 当前登录工号；有值时 tick / 清扫只处理该用户任务。null 时 list 全表（迁移 / 单测）。 */
+  private ownerUserCode: string | null = null;
 
   constructor(
     private readonly taskRepo: ScheduleTaskRepository = new ScheduleTaskRepository(),
     private readonly runRepo: ScheduleTaskRunRepository = new ScheduleTaskRunRepository(),
     private dispatcher: ScheduledTaskDispatcher = noopDispatcher,
     private readonly tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
+    /**
+     * 到期点落后超过该窗口则丢弃不补跑（休眠唤醒 / 长时间卡顿），
+     * 与启动期 discardMissedOnStartup 对齐。默认 max(2×tick, 60s)。
+     */
+    private readonly staleGraceMs: number = Math.max(tickIntervalMs * 2, 60_000),
   ) {}
 
   /**
@@ -72,9 +84,32 @@ export class ScheduledTaskScheduler {
     this.canReapRun = inspector;
   }
 
+  /** 注册云端出队。tick 内 cron 之后 fire-and-forget；首轮 tick 不出队。 */
+  setPushTick(pushTick: ScheduledTaskPushTick | null): void {
+    this.pushTick = pushTick;
+  }
+
+  /**
+   * 设置调度归属过滤。已认证 start 时写入工号；登出 clear 为 null。
+   * 有工号时只调度该用户任务，避免切号后执行他人 cron。
+   */
+  setOwnerUserCode(userCode: string | null): void {
+    const code = userCode?.trim() || null;
+    this.ownerUserCode = code;
+  }
+
+  /** 列出本轮调度候选：有 owner 则按 created_by 过滤，否则全表。 */
+  private async listScheduleTasks(): Promise<ScheduleTask[]> {
+    if (this.ownerUserCode) {
+      return this.taskRepo.list({ createdBy: this.ownerUserCode, limit: 10_000 });
+    }
+    return this.taskRepo.list({ limit: 10_000 });
+  }
+
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
+    this.cronTicksCompleted = 0;
     this.scheduleNextTick(0);
   }
 
@@ -93,7 +128,7 @@ export class ScheduledTaskScheduler {
    * disabled 任务置 `next_run_at = null`。
    */
   async refreshSchedule(now: Date = new Date()): Promise<ScheduledTaskScheduleSnapshot[]> {
-    const tasks = await this.taskRepo.list({});
+    const tasks = await this.listScheduleTasks();
     const snapshots: ScheduledTaskScheduleSnapshot[] = [];
 
     for (const task of tasks) {
@@ -134,7 +169,7 @@ export class ScheduledTaskScheduler {
    * 执行时间的任务才正常执行。
    */
   async discardMissedOnStartup(now: Date = new Date()): Promise<boolean> {
-    const tasks = await this.taskRepo.list({});
+    const tasks = await this.listScheduleTasks();
     const advancedTaskIds: string[] = [];
     let changed = false;
 
@@ -152,8 +187,13 @@ export class ScheduledTaskScheduler {
     }
 
     // running run 已由 ChatRuntimeSupervisor 恢复并对账；这里只清理从未 dispatch
-    // 的 queued lease，避免重启把仍在执行的任务误标 cancelled。
-    const cancelled = await this.runRepo.cancelAllQueuedRuns();
+    // 的 queued lease。有 owner 时只清本用户任务，避免切号误伤他人已 claim 的 queued。
+    const cancelled = this.ownerUserCode
+      ? await this.runRepo.cancelQueuedRunsForTaskIds(
+          tasks.map((task) => task.id),
+          this.ownerUserCode,
+        )
+      : await this.runRepo.cancelAllQueuedRuns();
     if (cancelled > 0) {
       changed = true;
     }
@@ -191,7 +231,12 @@ export class ScheduledTaskScheduler {
 
     for (const run of activeRuns) {
       if (run.status !== 'running' || run.startedAt == null) continue;
-      const task = tasksById.get(run.taskId);
+      // 切号后 schedule 列表只有当前用户；仍要能 reap 他人已挂起的 running（释放单飞）。
+      let task = tasksById.get(run.taskId);
+      if (!task) {
+        task = (await this.taskRepo.getById(run.taskId, { includeDeleted: true })) ?? undefined;
+        if (task) tasksById.set(task.id, task);
+      }
       if (!task || task.timeoutSec == null) continue;
 
       const startedMs = new Date(run.startedAt).getTime();
@@ -218,6 +263,8 @@ export class ScheduledTaskScheduler {
         runId: run.runId,
         startedAt: run.startedAt,
         timeoutSec: task.timeoutSec,
+        ownerUserCode: this.ownerUserCode,
+        taskCreatedBy: task.createdBy,
       });
     }
     return reaped;
@@ -225,11 +272,12 @@ export class ScheduledTaskScheduler {
 
   /**
    * 单次扫描：对每个 due 的 enabled 任务 claim 一次（单飞）、推进 `next_run_at`、
-   * fire-and-forget dispatch。busy（已有 active run）时丢弃该 missed-busy 瞬间、
-   * 推进到 now 之后（不堆积）。not-due 且 `next_run_at` 为空时补算（兜底新建任务）。
+   * fire-and-forget dispatch。到期点落后超过 `staleGraceMs` 时丢弃不补跑（休眠唤醒）。
+   * busy（已有 active run）时丢弃该 missed-busy 瞬间、推进到 now 之后（不堆积）。
+   * not-due 且 `next_run_at` 为空时补算（兜底新建任务）。
    */
   async tick(now: Date = new Date()): Promise<void> {
-    const tasks = await this.taskRepo.list({});
+    const tasks = await this.listScheduleTasks();
 
     // 先于 claim：释放挂起的 stale running run，避免 getActiveRun 永久阻塞
     // 到期任务的后续触发（引擎回调丢失时 status lease 无法自愈）。
@@ -239,7 +287,8 @@ export class ScheduledTaskScheduler {
       if (!task.enabled) continue;
 
       const currentNext = task.nextRunAt ?? computeNextRunAt(task.cronExpr, now);
-      const due = new Date(currentNext).getTime() <= now.getTime();
+      const dueAtMs = new Date(currentNext).getTime();
+      const due = dueAtMs <= now.getTime();
 
       if (!due) {
         if (task.nextRunAt == null) {
@@ -248,6 +297,24 @@ export class ScheduledTaskScheduler {
             cronExprSnapshot: task.cronExpr,
           });
         }
+        continue;
+      }
+
+      // 休眠唤醒 / 卡顿导致到期点过旧：丢掉这一拍，推到 now 之后，不补跑。
+      const lateMs = now.getTime() - dueAtMs;
+      if (lateMs > this.staleGraceMs) {
+        const nextNext = computeNextRunAt(task.cronExpr, now);
+        await this.taskRepo.updateScheduleState(task.id, {
+          nextRunAt: nextNext,
+          lastRecoveredAt: now.toISOString(),
+          cronExprSnapshot: task.cronExpr,
+        });
+        logger.info('[scheduled-task] tick skipped stale due slot', {
+          taskId: task.id,
+          scheduledFor: currentNext,
+          lateMs,
+          staleGraceMs: this.staleGraceMs,
+        });
         continue;
       }
 
@@ -314,6 +381,7 @@ export class ScheduledTaskScheduler {
         status: 'queued',
         idempotencyKey: this.buildIdempotencyKey(task.id, params.triggerSource, params.scheduledFor),
         attempt: 1,
+        actor: this.ownerUserCode ?? task.createdBy,
       });
     } catch (error) {
       logger.warn('[scheduled-task] claimRun lost race or conflict', {
@@ -357,6 +425,15 @@ export class ScheduledTaskScheduler {
       } catch (error) {
         logger.warn('[scheduled-task] scheduler tick failed', error);
       } finally {
+        this.cronTicksCompleted += 1;
+        // 首轮 tick 只做 cron；出队等下一次 tick（认证入口禁止立刻 push）
+        if (this.cronTicksCompleted > 1 && this.pushTick) {
+          try {
+            this.pushTick();
+          } catch (error) {
+            logger.warn('[scheduled-task] push tick schedule failed', error);
+          }
+        }
         this.scheduleNextTick(this.tickIntervalMs);
       }
     }, delayMs);

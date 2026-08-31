@@ -64,7 +64,7 @@ export const SAI_REGISTRY_REQUEST_TIMEOUT_MS = 60_000;
 /** list / discover 子进程超时：略高于注册中心 HTTP 超时。 */
 export const SAI_LIST_SPAWN_TIMEOUT_MS = 75_000;
 
-function runSai(
+export function runSai(
   args: string[],
   timeoutMs = 30000,
   options?: { registryRequestTimeoutMs?: number },
@@ -298,127 +298,6 @@ export async function saiExecute(
   return runSai(args, 60000);
 }
 
-export type CodeDeployEnv = 'daily' | 'stage' | 'online';
-
-function saiCodeDeployError(message: string): SaiCliResult {
-  return { ok: false, error: message, exitCode: 1 };
-}
-
-/**
- * Deploy a STO code app via policy CLI:
- * `sai-cli policy code-deploy create --env ... --applicationId ...`
- */
-export async function saiCodeDeployCreate(input: {
-  env: CodeDeployEnv;
-  applicationId: string;
-  requestId?: string;
-  deploymentVersion?: string;
-}): Promise<SaiCliResult> {
-  const applicationId = input.applicationId.trim();
-  const env = input.env;
-  if (!applicationId) return saiCodeDeployError('缺少 applicationId');
-  if (env !== 'daily' && env !== 'stage' && env !== 'online') {
-    return saiCodeDeployError('env 必须是 daily / stage / online');
-  }
-
-  const args = [
-    'policy',
-    'code-deploy',
-    'create',
-    '--env',
-    env,
-    '--applicationId',
-    applicationId,
-  ];
-  if (input.requestId?.trim()) {
-    args.push('--requestId', input.requestId.trim());
-  }
-  if (input.deploymentVersion?.trim()) {
-    args.push('--deploymentVersion', input.deploymentVersion.trim());
-  }
-
-  logger.info(
-    `[sai-cli] action=code-deploy-create env=${env} applicationId=${applicationId} ` +
-    `requestId=${input.requestId?.trim() || '-'} deploymentVersion=${input.deploymentVersion?.trim() || '-'}`,
-  );
-  const result = await runSai(args, 120_000);
-  logger.info(
-    `[sai-cli] action=code-deploy-create done ok=${result.ok} exitCode=${result.exitCode} ` +
-    `error=${result.error ?? '-'}`,
-  );
-  if (result.ok) {
-    const preview = (() => {
-      try {
-        return JSON.stringify(result.data)?.slice(0, 500) ?? '-';
-      } catch {
-        return '-';
-      }
-    })();
-    logger.info(`[sai-cli] action=code-deploy-create dataPreview=${preview}`);
-  }
-  return result;
-}
-
-/** Sync latest DevOps pipeline status into the local deploy record. */
-export async function saiCodeDeployRefresh(input: {
-  deploymentId: string;
-}): Promise<SaiCliResult> {
-  const deploymentId = input.deploymentId.trim();
-  if (!deploymentId) return saiCodeDeployError('缺少 deploymentId');
-
-  logger.info(`[sai-cli] action=code-deploy-refresh deploymentId=${deploymentId}`);
-  const result = await runSai(
-    ['policy', 'code-deploy', 'refresh', '--deploymentId', deploymentId],
-    120_000,
-  );
-  logger.info(
-    `[sai-cli] action=code-deploy-refresh done ok=${result.ok} exitCode=${result.exitCode} ` +
-    `error=${result.error ?? '-'}`,
-  );
-  return result;
-}
-
-/** Read local cached deploy detail (does not refresh from DevOps). */
-export async function saiCodeDeployDetail(input: {
-  deploymentId: string;
-}): Promise<SaiCliResult> {
-  const deploymentId = input.deploymentId.trim();
-  if (!deploymentId) return saiCodeDeployError('缺少 deploymentId');
-  return runSai(
-    ['policy', 'code-deploy', 'detail', '--deploymentId', deploymentId],
-    60_000,
-  );
-}
-
-export async function saiCodeDeployList(input: {
-  applicationId: string;
-  limit?: number;
-}): Promise<SaiCliResult> {
-  const applicationId = input.applicationId.trim();
-  if (!applicationId) return saiCodeDeployError('缺少 applicationId');
-  const args = ['policy', 'code-deploy', 'list', '--applicationId', applicationId];
-  if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-    args.push('--limit', String(Math.max(1, Math.min(100, Math.floor(input.limit)))));
-  }
-  return runSai(args, 60_000);
-}
-
-export async function saiCodeDeployRetry(input: {
-  deploymentId: string;
-}): Promise<SaiCliResult> {
-  const deploymentId = input.deploymentId.trim();
-  if (!deploymentId) return saiCodeDeployError('缺少 deploymentId');
-  logger.info(`[sai-cli] action=code-deploy-retry deploymentId=${deploymentId}`);
-  const result = await runSai(
-    ['policy', 'code-deploy', 'retry', '--deploymentId', deploymentId],
-    120_000,
-  );
-  logger.info(
-    `[sai-cli] action=code-deploy-retry done ok=${result.ok} exitCode=${result.exitCode} ` +
-    `error=${result.error ?? '-'}`,
-  );
-  return result;
-}
 
 // ── Installation detection ──────────────────────────────────────────────────
 
@@ -731,12 +610,5 @@ export async function autoInstallSaiCliIfNeeded(
   };
 }
 
+/** Long-running sai-cli commands (siteapp source upload/download). */
 export const SAI_POLICY_TIMEOUT_MS = 180_000;
-
-/** Run sai-cli with JSON output; default 180s for upload/download. */
-export async function runSaiPolicy(
-  args: string[],
-  timeoutMs = SAI_POLICY_TIMEOUT_MS,
-): Promise<SaiCliResult> {
-  return runSai([...args, '-f', 'json'], timeoutMs);
-}

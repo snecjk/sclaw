@@ -4,6 +4,9 @@ import {
   filterTaskSidebarCatalogRows,
   mergeEngineAndCatalogScheduledTaskSessions,
   omitSupersededCronDatedAgentTwins,
+  preferCatalogTaskTitle,
+  resolveCatalogRowTaskName,
+  resolveTaskSidebarRowTitles,
 } from '@/stores/chat/session-list-merge';
 
 describe('appendPendingLocalVirtualTaskSessions', () => {
@@ -100,6 +103,28 @@ describe('mergeEngineAndCatalogScheduledTaskSessions', () => {
     });
   });
 
+  it('keeps catalog title when engine displayName is the agent brand', () => {
+    const merged = mergeEngineAndCatalogScheduledTaskSessions(
+      [{
+        key: 'agent:main:cron:job-1:2026-07-24',
+        displayName: 'SClaw',
+        label: 'SClaw',
+      }],
+      [{
+        sessionKey: 'agent:main:cron:job-1:2026-07-24',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: '日报',
+        lastActivityAt: '2026-07-24T01:00:00.000Z',
+      }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      displayName: '日报',
+      label: '日报',
+    });
+  });
+
   it('lets engine fields win but keeps catalog displayName when engine omits it', () => {
     const merged = mergeEngineAndCatalogScheduledTaskSessions(
       [{
@@ -164,6 +189,23 @@ describe('mergeEngineAndCatalogScheduledTaskSessions', () => {
   });
 });
 
+describe('preferCatalogTaskTitle', () => {
+  it('prefers catalog task title over engine agent brand', () => {
+    expect(preferCatalogTaskTitle('日报', 'SClaw')).toBe('日报');
+    expect(preferCatalogTaskTitle(' 周报 ', 'StoClaw')).toBe('周报');
+  });
+
+  it('falls back to a human engine label when catalog title is missing', () => {
+    expect(preferCatalogTaskTitle(null, '周报')).toBe('周报');
+    expect(preferCatalogTaskTitle('SClaw', '周报')).toBe('周报');
+  });
+
+  it('drops agent brand when neither side has a human title', () => {
+    expect(preferCatalogTaskTitle('SClaw', 'SClaw')).toBeUndefined();
+    expect(preferCatalogTaskTitle(null, 'SClaw')).toBeUndefined();
+  });
+});
+
 describe('filterTaskSidebarCatalogRows', () => {
   it('keeps one dated row per task+day (latest activity)', () => {
     const filtered = filterTaskSidebarCatalogRows([
@@ -171,21 +213,147 @@ describe('filterTaskSidebarCatalogRows', () => {
         sessionKey: 'agent:main:cron:job-1:2026-07-24',
         sessionType: 'cron',
         taskId: 'job-1',
+        title: '客户成本分析',
         lastActivityAt: '2026-07-24T10:00:00.000Z',
       },
       {
         sessionKey: 'agent:ops:cron:job-1:2026-07-24',
         sessionType: 'cron',
         taskId: 'job-1',
+        title: '客户成本分析',
         lastActivityAt: '2026-07-24T12:00:00.000Z',
       },
       {
         sessionKey: 'agent:main:cron:job-1:run:x',
         sessionType: 'cron',
         taskId: 'job-1',
+        title: '客户成本分析',
         lastActivityAt: '2026-07-24T13:00:00.000Z',
       },
     ]);
     expect(filtered.map((r) => r.sessionKey)).toEqual(['agent:ops:cron:job-1:2026-07-24']);
+  });
+
+  it('keeps dated rows without a human title (visibility is decided by the render layer)', () => {
+    // 无标题可能来自迁移/绑定路径的存量真实会话，store 层滤掉会让其彻底不可达；
+    // 空壳判定下沉到渲染层（catalog 标题 → 引擎 label → 任务定义名回落）。
+    const filtered = filterTaskSidebarCatalogRows([
+      {
+        sessionKey: 'agent:main:cron:job-1:2026-08-07',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: null,
+        lastActivityAt: '2026-08-07T01:00:00.000Z',
+      },
+      {
+        sessionKey: 'agent:main:cron:job-1:2026-08-08',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: 'SClaw',
+        lastActivityAt: '2026-08-08T01:00:00.000Z',
+      },
+      {
+        sessionKey: 'agent:main:cron:job-1:2026-08-06',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: '客户成本分析',
+        lastActivityAt: '2026-08-06T01:00:00.000Z',
+      },
+    ]);
+    expect(filtered.map((r) => r.sessionKey)).toEqual([
+      'agent:main:cron:job-1:2026-08-07',
+      'agent:main:cron:job-1:2026-08-08',
+      'agent:main:cron:job-1:2026-08-06',
+    ]);
+  });
+});
+
+describe('resolveTaskSidebarRowTitles', () => {
+  it('prefers the catalog title over engine values and the task name', () => {
+    expect(resolveTaskSidebarRowTitles({
+      catalogTitle: '日报',
+      engineLabel: 'SClaw',
+      engineDisplayName: 'SClaw',
+      taskName: '任务定义名',
+    })).toEqual({ label: '日报', displayName: '日报' });
+  });
+
+  it('falls back to human engine values when the catalog title is missing or technical', () => {
+    expect(resolveTaskSidebarRowTitles({
+      catalogTitle: null,
+      engineLabel: '引擎标签',
+      engineDisplayName: '引擎显示名',
+      taskName: '任务定义名',
+    })).toEqual({ label: '引擎标签', displayName: '引擎显示名' });
+    expect(resolveTaskSidebarRowTitles({
+      catalogTitle: 'SClaw',
+      engineLabel: '引擎标签',
+    })).toEqual({ label: '引擎标签', displayName: undefined });
+  });
+
+  it('falls back to the task definition name when catalog and engine have no human title', () => {
+    expect(resolveTaskSidebarRowTitles({
+      catalogTitle: null,
+      engineLabel: 'SClaw',
+      engineDisplayName: undefined,
+      taskName: '客户成本分析',
+    })).toEqual({ label: '客户成本分析', displayName: '客户成本分析' });
+  });
+
+  it('keeps a user-chosen task name even when it matches the agent brand', () => {
+    expect(resolveTaskSidebarRowTitles({
+      catalogTitle: null,
+      engineLabel: 'SClaw',
+      engineDisplayName: 'SClaw',
+      taskName: 'SClaw',
+    })).toEqual({ label: 'SClaw', displayName: 'SClaw' });
+  });
+
+  it('returns undefined for true empty shells (no human title anywhere)', () => {
+    expect(resolveTaskSidebarRowTitles({
+      catalogTitle: null,
+      engineLabel: 'SClaw',
+      engineDisplayName: undefined,
+      taskName: undefined,
+    })).toBeUndefined();
+    expect(resolveTaskSidebarRowTitles({
+      catalogTitle: 'SClaw',
+      engineLabel: 'SClaw',
+      engineDisplayName: 'StoClaw',
+      taskName: undefined,
+    })).toBeUndefined();
+  });
+});
+
+describe('resolveCatalogRowTaskName', () => {
+  const nameMaps = {
+    cron: new Map([['job-1', '日报任务']]),
+    claude: new Map([['t1', '周报任务']]),
+  };
+
+  it('resolves cron rows by taskId, falling back to the parsed jobId', () => {
+    expect(resolveCatalogRowTaskName({
+      sessionKey: 'agent:main:cron:job-1:2026-08-07',
+      sessionType: 'cron',
+      taskId: 'job-1',
+    }, nameMaps)).toBe('日报任务');
+    expect(resolveCatalogRowTaskName({
+      sessionKey: 'agent:main:cron:job-1:2026-08-07',
+      sessionType: 'cron',
+      taskId: null,
+    }, nameMaps)).toBe('日报任务');
+  });
+
+  it('resolves claude_task rows by taskId and returns undefined for unknown tasks', () => {
+    expect(resolveCatalogRowTaskName({
+      sessionKey: 'claude-task:t1:2026-08-07',
+      sessionType: 'claude_task',
+      taskId: 't1',
+    }, nameMaps)).toBe('周报任务');
+    expect(resolveCatalogRowTaskName({
+      sessionKey: 'claude-task:unknown:2026-08-07',
+      sessionType: 'claude_task',
+      taskId: 'unknown',
+    }, nameMaps)).toBeUndefined();
   });
 });

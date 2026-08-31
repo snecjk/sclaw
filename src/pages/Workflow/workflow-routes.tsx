@@ -154,6 +154,10 @@ function WorkflowEditorSession({
   useWorkflowEditorContentHeader({
     workflowId,
     onBack,
+    backDisabled: embeddedTryRun.confirmOpen
+      || embeddedTryRun.requestInFlight
+      || tryRun.isStartupDialogOpen
+      || (tryRun.isStarting && !tryRun.runId),
     prompt,
     promptCacheId,
     enabled: !embeddedHeaderOwned && !embeddedHeaderNegotiating,
@@ -251,9 +255,11 @@ function WorkflowGenerateRoute() {
     })
       .then(async (created) => {
         try {
-          const cachedId = await cacheAiWorkflowPrompt(prompt, created.id);
+          const cachedId = await cacheAiWorkflowPrompt(prompt, created.id, true);
           const params = new URLSearchParams({ id: created.id, promptCacheId: cachedId });
-          navigate(`/workflow/generate?${params.toString()}`, { replace: true, state: { prompt } });
+          // 缓存命中时不再通过路由 state 透传 prompt，确保记忆中心先取回
+          // replaceInitialDraft 标识，再发起自动提交。
+          navigate(`/workflow/generate?${params.toString()}`, { replace: true });
         } catch {
           const params = new URLSearchParams({ id: created.id });
           navigate(`/workflow/generate?${params.toString()}`, { replace: true, state: { prompt } });

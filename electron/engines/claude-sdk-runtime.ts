@@ -23,6 +23,12 @@ import { resolveAvailableClaudeModel } from './claude-model-selection';
 type ClaudeAgentSdk = typeof import('@anthropic-ai/claude-agent-sdk');
 export type ClaudeQueryInput = Parameters<ClaudeAgentSdk['query']>[0];
 
+export interface ClaudeQueryDiagnostics {
+  sessionKey: string;
+  runId: string;
+  mode: 'new' | 'resume' | 'recovery';
+}
+
 export interface ClaudeLaunchSelection {
   accountId: string;
   fallbackApplied: boolean;
@@ -221,12 +227,37 @@ export async function prepareClaudeRuntime(input: {
   };
 }
 
-export async function createClaudeQuery(input: ClaudeQueryInput) {
+export async function createClaudeQuery(
+  input: ClaudeQueryInput,
+  diagnostics?: ClaudeQueryDiagnostics,
+) {
+  const requestedAt = Date.now();
+  const logTiming = (stage: string, stageStartedAt = requestedAt) => {
+    if (!diagnostics) return;
+    logger.info('[claude-runtime][query-timing]', {
+      stage,
+      sessionKey: diagnostics.sessionKey,
+      runId: diagnostics.runId,
+      mode: diagnostics.mode,
+      stageMs: Date.now() - stageStartedAt,
+      totalMs: Date.now() - requestedAt,
+    });
+  };
+
   await ensureClaudeRuntimeReady();
-  return withClaudeConfigDirEnv(async () => {
+  logTiming('runtime_ready');
+  const query = await withClaudeConfigDirEnv(async () => {
+    logTiming('config_env_entered');
+    const sdkLoadStartedAt = Date.now();
     const sdk = await loadClaudeAgentSdk();
-    return sdk.query(input);
+    logTiming('sdk_loaded', sdkLoadStartedAt);
+    const sdkQueryStartedAt = Date.now();
+    const createdQuery = sdk.query(input);
+    logTiming('sdk_query_returned', sdkQueryStartedAt);
+    return createdQuery;
   });
+  logTiming('config_env_released');
+  return query;
 }
 
 export async function getClaudeSessionMessages(sessionId: string, cwd: string) {

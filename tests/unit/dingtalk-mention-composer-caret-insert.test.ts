@@ -90,7 +90,7 @@ describe('composer token 光标处插入', () => {
     expect(snapshot.skillOffset).toBe('查看一下'.length);
   });
 
-  it('替换标签时新标签落在当前光标处，且旧标签被移除', () => {
+  it('appends a second skill at caret without removing the first', () => {
     const { root, textNode } = mountEditor('查看一下这个技能');
     placeCaret(textNode, 0);
     insertSkillSpan(root, 'transit-rate', '中转费率查询');
@@ -101,9 +101,11 @@ describe('composer token 光标处插入', () => {
     insertSkillSpan(root, 'site-quote', '网点面单报价');
 
     const snapshot = serializeMentionEditor(root);
-    expect(root.querySelectorAll(SKILL_SPAN_SELECTOR)).toHaveLength(1);
-    expect(snapshot.skill?.slug).toBe('site-quote');
-    expect(snapshot.skillOffset).toBe('查看一下这个技能'.length);
+    expect(root.querySelectorAll(SKILL_SPAN_SELECTOR)).toHaveLength(2);
+    expect(snapshot.skills).toHaveLength(2);
+    expect(snapshot.skill?.slug).toBe('transit-rate');
+    expect(snapshot.skills[1]?.slug).toBe('site-quote');
+    expect(snapshot.skillOffset).toBe(0);
   });
 
   it('显式传入下标时按下标落位（编辑重发还原）', () => {
@@ -186,7 +188,7 @@ describe('composer token 光标处插入', () => {
     expect(snapshot.plainText.startsWith('查看一下这个工作流')).toBe(true);
   });
 
-  it('技能与工作流互斥时，替换发生在光标处', () => {
+  it('skill and workflow coexist when inserted at caret', () => {
     const { root, textNode } = mountEditor('查看一下这个技能');
     placeCaret(textNode, textNode.length);
     insertSkillSpan(root, 'transit-rate', '中转费率查询');
@@ -196,10 +198,12 @@ describe('composer token 光标处插入', () => {
     insertWorkflowSpan(root, 'wf_a', '测试环境-html工作流', 'mine');
 
     const snapshot = serializeMentionEditor(root);
-    expect(root.querySelectorAll(SKILL_SPAN_SELECTOR)).toHaveLength(0);
+    expect(root.querySelectorAll(SKILL_SPAN_SELECTOR)).toHaveLength(1);
     expect(root.querySelectorAll(WORKFLOW_SPAN_SELECTOR)).toHaveLength(1);
-    expect(snapshot.skill).toBeUndefined();
-    expect(snapshot.skillOffset).toBeUndefined();
+    expect(snapshot.skill?.slug).toBe('transit-rate');
+    expect(snapshot.skillOffset).toBe('查看一下这个技能'.length);
     expect(snapshot.workflowId).toBe('wf_a');
+    expect(snapshot.skills).toHaveLength(1);
+    expect(snapshot.workflows).toHaveLength(1);
   });
 });

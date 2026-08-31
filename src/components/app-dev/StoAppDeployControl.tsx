@@ -118,7 +118,7 @@ export function StoAppDeployControl({
               ? '点击查看最近一次发布结果'
               : canDeploy
                 ? '先提交代码，再发起发布'
-                : '需先绑定 STO 应用后再发布'
+                : '当前无法发布（sai-cli 不可用或非云端建站应用）'
         }
         onClick={handleClick}
       >
@@ -171,8 +171,8 @@ export function StoAppDeployControl({
             <StatusRow label="deploymentId" mono>
               {job.fields.deploymentId || '-'}
             </StatusRow>
-            <StatusRow label="applicationId" mono>
-              {job.fields.applicationId || '-'}
+            <StatusRow label="appCode" mono>
+              {job.fields.appCode || '-'}
             </StatusRow>
             {job.fields.pipelineInstanceId ? (
               <StatusRow label="流水线">{job.fields.pipelineInstanceId}</StatusRow>

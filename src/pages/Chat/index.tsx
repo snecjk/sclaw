@@ -4,7 +4,7 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -14,11 +14,11 @@ import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
-import { collectSearchableChatMessages, findChatMessageSearchTarget, resolveChatMessageSearchKey } from './chat-message-search';
+import { collectSearchableChatMessages, findChatMessageSearchTarget } from './chat-message-search';
+import { ChatStaticItemsList, type ChatStaticItemsListHandle } from '@/components/chat/ChatStaticItemsList';
 import { useChatDisplay } from './use-chat-display';
-import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
+import { resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from './ChatSearchBar';
@@ -56,7 +56,6 @@ import { myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { useVoiceLoopStore } from '@/stores/voice-loop';
-import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import {
   EMPTY_WORKFLOW_CHAT_CARD_REFS,
   useWorkflowChatCardsStore,
@@ -66,6 +65,8 @@ import {
   workflowAnchorRepairRevision,
 } from '@/lib/workflow-chat-card-registration';
 import { getCurrentChatDisplayMessages, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
+
 export function Chat() {
   const navigate = useNavigate();
   const { t } = useTranslation('chat');
@@ -74,14 +75,17 @@ export function Chat() {
 
   const messages = useCurrentChatDisplayMessages();
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  useQuoteFlowCardSessionSync(currentSessionKey, messages);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
   const loading = useChatStore((s) => s.loading);
   const {
     sending,
     pendingFinal,
+    transcriptPending,
     lastEventAt: canonicalLastEventAt,
     lastUserMessageAt,
+    turnAnchorAt,
     streamingMessage,
     streamingMessages,
     streamingToolResults,
@@ -119,6 +123,12 @@ export function Chat() {
   const [editDraft, setEditDraft] = useState<{
     text: string;
     skill?: import('@/types/skill-meta').SkillMeta;
+    segments?: import('@/lib/dingtalk-mention-composer').PersistedComposerSegment[];
+    attachments?: Array<Partial<import('./ChatInput').FileAttachment> & {
+      id: string;
+      fileName: string;
+      mimeType: string;
+    }>;
     version: number;
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,6 +138,7 @@ export function Chat() {
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
+  const staticItemsListRef = useRef<ChatStaticItemsListHandle>(null);
   useNativeScrollbarActivity(scrollRef);
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -145,16 +156,6 @@ export function Chat() {
   );
   const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
-  const composerStatusText = currentEngineType === 'claude'
-    ? t('composer.claudeReadyDetail')
-    : t('composer.gatewayStatus', {
-        state: gatewayStatus.state === 'running'
-          ? t('composer.gatewayConnected')
-          : gatewayStatus.state,
-        port: gatewayStatus.port,
-        pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
-      });
-  const composerStatusTone = currentEngineType === 'claude' || isGatewayRunning ? 'ready' : 'warning';
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -204,6 +205,7 @@ export function Chat() {
     messages,
     sending,
     pendingFinal,
+    transcriptPending,
     showThinking,
     workflowCards,
     lastChatEventAt,
@@ -212,7 +214,7 @@ export function Chat() {
     streamingMessages,
     streamingToolResults,
     streamingTools,
-    lastUserMessageAt,
+    turnAnchorAt,
   });
 
   const streamContentKey = useMemo(
@@ -226,6 +228,7 @@ export function Chat() {
         streamingToolResults.length,
         streamingTools.length,
         pendingFinal ? 1 : 0,
+        transcriptPending ? 1 : 0,
         shouldRenderStreaming ? 1 : 0,
       ].join(':'),
     [
@@ -237,6 +240,7 @@ export function Chat() {
       streamingToolResults.length,
       streamingTools.length,
       pendingFinal,
+      transcriptPending,
       shouldRenderStreaming,
     ],
   );
@@ -289,6 +293,11 @@ export function Chat() {
 
   useEffect(() => {
     if (!isSearchOpen) return;
+    void useChatStore.getState().loadOlderHistory(currentSessionKey, { drain: true });
+  }, [isSearchOpen, currentSessionKey]);
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
 
     const contentElement = contentRef.current;
     if (!contentElement) {
@@ -321,6 +330,9 @@ export function Chat() {
   );
 
   const scrollToMessageMatch = useCallback((searchKey: string, behavior: ScrollBehavior = 'smooth') => {
+    stopScroll();
+    if (staticItemsListRef.current?.scrollToSearchKey(searchKey, behavior)) return;
+
     const container = scrollRef.current;
     const contentElement = contentRef.current;
     if (!container || !contentElement) return;
@@ -328,7 +340,6 @@ export function Chat() {
     const target = findChatMessageSearchTarget(contentElement, searchKey);
     if (!target) return;
 
-    stopScroll();
     const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
     container.scrollBy({ top: delta, behavior });
   }, [contentRef, scrollRef, stopScroll]);
@@ -366,6 +377,7 @@ export function Chat() {
     workflowSource?: string | null,
     workflowName?: string | null,
     skillMeta?: import('@/types/skill-meta').SkillMeta,
+    extras?: import('./ChatInput').ChatSendExtras,
   ) => {
     beginSendScroll();
     const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
@@ -378,6 +390,10 @@ export function Chat() {
       workflowSource,
       workflowName,
       skillMeta,
+      skillMetas: extras?.skillMetas,
+      workflows: extras?.workflows,
+      composerSegments: extras?.composerSegments,
+      gatewayText: extras?.gatewayText,
     });
   }, [beginSendScroll]);
 
@@ -388,9 +404,19 @@ export function Chat() {
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
     skillMeta?: import('@/types/skill-meta').SkillMeta,
+    extras?: import('./ChatInput').ChatSendExtras,
   ) => {
     const { currentSessionKey } = useChatStore.getState();
-    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId, skillMeta);
+    useMessageQueueStore.getState().enqueue(
+      currentSessionKey,
+      text,
+      attachments,
+      targetAgentId,
+      dingTalkMentions,
+      workflowId,
+      skillMeta,
+      extras,
+    );
   }, []);
 
   // Stop: suppress the auto-send that the abort's sending→false would otherwise trigger,
@@ -408,10 +434,32 @@ export function Chat() {
   }, [abortRun, activeTurn?.turnStableKey]);
 
   const handleEditMessage = useCallback(
-    (text: string, skillMeta?: import('@/types/skill-meta').SkillMeta) => {
+    (
+      text: string,
+      skillMeta?: import('@/types/skill-meta').SkillMeta,
+      options?: {
+        segments?: import('@/lib/dingtalk-mention-composer').PersistedComposerSegment[];
+        attachments?: import('@/stores/chat').AttachedFileMeta[];
+      },
+    ) => {
       const trimmed = text.trim();
-      if (!trimmed && !skillMeta) return;
-      setEditDraft({ text: trimmed, skill: skillMeta, version: Date.now() });
+      if (!trimmed && !skillMeta && !options?.segments?.length) return;
+      setEditDraft({
+        text: trimmed,
+        skill: skillMeta,
+        segments: options?.segments,
+        attachments: options?.attachments?.map((file) => ({
+          id: crypto.randomUUID(),
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          fileSize: file.fileSize,
+          preview: file.preview,
+          filePath: file.filePath,
+          stagedPath: file.filePath,
+          status: file.filePath ? 'ready' as const : 'error' as const,
+        })),
+        version: Date.now(),
+      });
     },
     [],
   );
@@ -434,18 +482,18 @@ export function Chat() {
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,
-    activePreviewFilePath,
-    setActivePreviewFilePath,
-    previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
     openPreviewPanel,
     closePreviewPanel,
     expandPreview,
     restorePreview,
-    dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
+    previewTabs,
+    activePreviewTabId,
+    selectPreviewTab,
+    dismissPreviewTab,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
@@ -543,21 +591,21 @@ export function Chat() {
 
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && previewableFiles.length > 0 ? (
+      showPreviewPanel && previewTabs.length > 0 ? (
         <ChatPreviewHeaderTabs
-          files={previewableFiles}
-          activeFilePath={activePreviewFilePath}
-          onSelectFile={setActivePreviewFilePath}
-          onDismissFile={dismissPreviewFile}
+          tabs={previewTabs}
+          activeTabId={activePreviewTabId}
+          onSelectTab={selectPreviewTab}
+          onDismissTab={dismissPreviewTab}
         />
       ) : null
     ),
     [
       showPreviewPanel,
-      previewableFiles,
-      activePreviewFilePath,
-      setActivePreviewFilePath,
-      dismissPreviewFile,
+      previewTabs,
+      activePreviewTabId,
+      selectPreviewTab,
+      dismissPreviewTab,
     ],
   );
 
@@ -631,58 +679,24 @@ export function Chat() {
             <WelcomeScreen />
           ) : (
             <>
-              {staticItems.map((item) => {
-                if (item.type === 'workflow-run') {
-                  return (
-                    <WorkflowCard
-                      key={item.key}
-                      runId={item.card.runId}
-                      templateName={item.card.title}
-                      paramsSummary={item.card.paramsSummary}
-                      onPreviewArtifact={openArtifactPreview}
-                      onCreateScheduledTask={openWorkflowCronTaskModal}
-                      onOpenWorkflow={openWorkflowList}
-                    />
-                  );
-                }
-                if (item.type === 'assistant-turn') {
-                  return (
-                    <AssistantTurnMessage
-                      key={item.key}
-                      sessionMessages={messages}
-                      turnMessages={item.messages}
-                      turnToolResults={item.toolResults}
-                      precedingUserMessage={item.precedingUserMessage}
-                      turnStableKey={item.key}
-                      showThinking={showThinking}
-                      matchedMessageKeys={matchedMessageKeys}
-                      activeMessageKey={activeSearchMatch?.key ?? null}
-                      onPreviewFile={openArtifactPreview}
-                      onCreateScheduledTask={openWorkflowCronTaskModal}
-                      onEditMessage={handleEditMessage}
-                    />
-                  );
-                }
-                const searchMessageKey = resolveChatMessageSearchKey(
-                  item.message.id,
-                  `single:${item.key}`,
-                );
-                return (
-                  <ChatMessage
-                    key={item.key}
-                    message={item.message}
-                    sessionMessages={messages}
-                    showThinking={showThinking}
-                    searchMessageKey={searchMessageKey}
-                    isSearchMatch={matchedMessageKeys.has(searchMessageKey)}
-                    isSearchActive={searchMessageKey === activeSearchMatch?.key}
-                    onPreviewFile={openArtifactPreview}
-                    onCreateScheduledTask={openWorkflowCronTaskModal}
-                    onEditMessage={handleEditMessage}
-                    isTurnDisplayReply={isAssistantRole(item.message.role)}
-                  />
-                );
-              })}
+              <ChatStaticItemsList
+                ref={staticItemsListRef}
+                items={staticItems}
+                messages={messages}
+                showThinking={showThinking}
+                scrollRef={scrollRef}
+                variant="page"
+                forceFullRender={isSearchOpen}
+                matchedMessageKeys={matchedMessageKeys}
+                activeSearchMessageKey={activeSearchMatch?.key ?? null}
+                onPreviewFile={openArtifactPreview}
+                onCreateScheduledTask={openWorkflowCronTaskModal}
+                onEditMessage={handleEditMessage}
+                onOpenWorkflow={openWorkflowList}
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory(currentSessionKey);
+                }}
+              />
 
               {activeTurn ? (
                 <AssistantTurnMessage
@@ -774,8 +788,6 @@ export function Chat() {
         sending={sending}
         isEmpty={isEmpty}
         engineType={currentEngineType}
-        statusText={composerStatusText}
-        statusTone={composerStatusTone}
         editDraft={editDraft}
         onEditDraftApplied={handleEditDraftApplied}
         composerLayout="home"
@@ -814,8 +826,9 @@ export function Chat() {
             />
           ) : null}
           <ChatPreviewPanel
-            files={previewableFiles}
-            activeFilePath={activePreviewFilePath}
+            tabs={previewTabs}
+            activeTabId={activePreviewTabId}
+            sessionKey={currentSessionKey}
             showEditWorkflow={showEditWorkflow}
             workflowId={sessionWorkflowId}
             onEditWorkflow={openWorkflowPreview}

@@ -5,6 +5,7 @@ import {
   DingTalkMentionEditor,
   type DingTalkMentionEditorHandle,
 } from '@/components/dingtalk/DingTalkMentionEditor';
+import { serializeMentionEditor } from '@/lib/dingtalk-mention-composer';
 
 function expectNoInlineHeight(editor: HTMLElement): void {
   expect(editor.style.height).toBe('');
@@ -119,7 +120,8 @@ describe('DingTalkMentionEditor seedText', () => {
     const editor = screen.getByRole('textbox');
 
     // 多行 Unicode 完整保留（含换行），填充后聚焦
-    expect(editor.textContent).toBe(`${prompt} `);
+    expect(serializeMentionEditor(editor).plainText).toBe(`${prompt} `);
+    expect(editor.querySelectorAll('br').length).toBe(1);
     expect(document.activeElement).toBe(editor);
     const seeded = onSnapshotChange.mock.calls.at(-1)?.[0];
     expect(seeded?.plainText.trim()).toBe(prompt);
@@ -214,8 +216,7 @@ describe('DingTalkMentionEditor CSS auto-height (no JS inline height)', () => {
     const editor = screen.getByRole('textbox');
     expectNoInlineHeight(editor);
     expect(editor.querySelector('.workflow-token')).not.toBeNull();
-    // skill/workflow are mutually exclusive in the composer
-    expect(editor.querySelector('.skill-token')).toBeNull();
+    expect(editor.querySelector('.skill-token')).not.toBeNull();
 
     const snapshot = editorRef.current?.getSnapshot();
     expect(snapshot?.isEmpty).toBe(false);

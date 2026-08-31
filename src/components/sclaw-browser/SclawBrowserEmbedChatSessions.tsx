@@ -1,7 +1,7 @@
 /**
  * New chat + history picker for embed-browser AI assistant header.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Check, ChevronDown, History, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -55,6 +55,17 @@ export function SclawBrowserEmbedChatSessions(props: SclawBrowserEmbedChatSessio
   const deleteChatSession = props.deleteChatSession ?? overlayDelete;
   const refreshChatSessions = props.refreshChatSessions ?? overlayRefresh;
   const [open, setOpen] = useState(false);
+  const keepOpenOnDeleteRef = useRef(false);
+  const keepOpenTimerRef = useRef<number | null>(null);
+
+  function markKeepOpenOnDelete() {
+    keepOpenOnDeleteRef.current = true;
+    if (keepOpenTimerRef.current != null) window.clearTimeout(keepOpenTimerRef.current);
+    keepOpenTimerRef.current = window.setTimeout(() => {
+      keepOpenOnDeleteRef.current = false;
+      keepOpenTimerRef.current = null;
+    }, 400);
+  }
 
   return (
     <div className="sclaw-browser-embed-chat__sessions">
@@ -71,6 +82,7 @@ export function SclawBrowserEmbedChatSessions(props: SclawBrowserEmbedChatSessio
       <DropdownMenu
         open={open}
         onOpenChange={(next) => {
+          if (!next && keepOpenOnDeleteRef.current) return;
           setOpen(next);
           if (next) refreshChatSessions();
         }}
@@ -107,12 +119,10 @@ export function SclawBrowserEmbedChatSessions(props: SclawBrowserEmbedChatSessio
                   key={item.key}
                   className={cn('group flex items-start gap-2 pr-1', active && 'bg-accent')}
                   onSelect={(event) => {
-                    const target = event.target as HTMLElement | null;
-                    if (target?.closest('[data-embed-session-delete]')) {
-                      event.preventDefault();
-                      return;
-                    }
+                    event.preventDefault();
+                    if (keepOpenOnDeleteRef.current) return;
                     switchChatSession(item.key);
+                    setOpen(false);
                   }}
                 >
                   <Check
@@ -131,10 +141,15 @@ export function SclawBrowserEmbedChatSessions(props: SclawBrowserEmbedChatSessio
                     className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-70 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                     title={t('moreApps.embedChat.deleteSession', { defaultValue: '删除对话' })}
                     aria-label={t('moreApps.embedChat.deleteSession', { defaultValue: '删除对话' })}
-                    onPointerDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => {
+                      markKeepOpenOnDelete();
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
+                      markKeepOpenOnDelete();
                       void deleteChatSession(item.key);
                     }}
                   >

@@ -82,6 +82,7 @@ const electronAPI = {
         'window:close',
         'window:isMaximized',
         'window:isFullScreen',
+        'window:setMinimumSize',
         // Settings
         'settings:get',
         'settings:set',
@@ -89,6 +90,7 @@ const electronAPI = {
         'settings:getAll',
         'settings:reset',
         'usage:recentTokenHistory',
+        'turn-token:get',
         // Update
         'update:status',
         'update:version',
@@ -182,6 +184,10 @@ const electronAPI = {
         'sprite:getSessionContext',
         'sprite:pushSessionContext',
         'sprite:showMainWindow',
+        'app-dev-ide:open',
+        'app-dev-ide:focus',
+        'app-dev-ide:isOpen',
+        'app-dev-ide:listOpen',
         // Float Icon
         'floaticon:toggleSprite',
         'floaticon:setPosition',
@@ -219,6 +225,7 @@ const electronAPI = {
         'bridge:listConsents',
         'bridge:revokeApp',
         'bridge:revokeCapability',
+        'bridge:emitEvent',
       ];
 
       if (validChannels.includes(channel)) {
@@ -267,6 +274,7 @@ const electronAPI = {
         'startup-progress',
         'auth:token-expired',
         'sto:models-synced',
+        'turn-token:updated',
         'workflow:status-update',
         'workflow:completion-open',
         'workflow:event',
@@ -278,6 +286,7 @@ const electronAPI = {
         'jsbridge:open-tab',
         'jsbridge:close-tab',
         'jsbridge:toast',
+        'app-dev-ide:ownership',
       ];
 
       if (validChannels.includes(channel)) {

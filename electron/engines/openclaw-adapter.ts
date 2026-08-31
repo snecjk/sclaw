@@ -21,6 +21,7 @@ import {
   prependSystemPromptAppend,
   wrapScheduledTaskSystemPromptAppend,
 } from '../../shared/system-prompt-append';
+import { logUserSend } from '../../shared/user-send-log';
 import { hasPendingRuntimeToolUse, hasRuntimeAssistantOutput, inspectTranscript, runtimeRecord } from './chat-runtime-inspection';
 
 const VISION_MIME_TYPES = new Set([
@@ -229,7 +230,12 @@ export const openClawAdapter: EngineAdapter = {
     let message = prependAgentMemoryBlock(params.message, memory.execution, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
     message = prependAgentMemoryBlock(message, memory.preference, AGENT_MEMORY_CONTEXT_MARKER);
     if (memory.preference || memory.execution) {
-      logger.info(`[agent-memory][openclaw] message after memory injection:\n${message}`);
+      logger.info('[agent-memory][openclaw] message after memory injection', {
+        sessionKey: params.sessionKey,
+        messageChars: message.length,
+        preferenceChars: memory.preference?.length ?? 0,
+        executionChars: memory.execution?.length ?? 0,
+      });
     }
     return { ...params, message };
   },
@@ -320,11 +326,18 @@ export const openClawAdapter: EngineAdapter = {
           sessionKey,
           appendChars: params.systemPromptAppend.trim().length,
           messageChars: message.length,
-          systemPromptAppend: params.systemPromptAppend,
-          userMessageBeforeMerge: params.message,
-          finalUserMessage: message,
+          userMessageChars: params.message.length,
         });
       }
+      logUserSend({
+        engine: 'openclaw',
+        sessionKey,
+        message,
+        messageLength: message.length,
+        systemPromptAppend: params.systemPromptAppend ?? null,
+        systemPromptAppendLength: params.systemPromptAppend?.trim().length ?? 0,
+        idempotencyKey: params.idempotencyKey,
+      });
       const rpcParams: Record<string, unknown> = {
         sessionKey,
         message,
@@ -352,9 +365,7 @@ export const openClawAdapter: EngineAdapter = {
           sessionKey,
           appendChars: params.systemPromptAppend.trim().length,
           messageChars: message.length,
-          systemPromptAppend: params.systemPromptAppend,
-          userMessageBeforeMerge: params.message,
-          finalUserMessage: message,
+          userMessageChars: params.message.length,
         });
       }
       const imageAttachments: Array<Record<string, unknown>> = [];
@@ -375,6 +386,17 @@ export const openClawAdapter: EngineAdapter = {
       if (fileReferences.length > 0) {
         message = message ? `${message}\n\n${fileReferences.join('\n')}` : fileReferences.join('\n');
       }
+
+      logUserSend({
+        engine: 'openclaw',
+        sessionKey: params.sessionKey,
+        message,
+        messageLength: message.length,
+        systemPromptAppend: params.systemPromptAppend ?? null,
+        systemPromptAppendLength: params.systemPromptAppend?.trim().length ?? 0,
+        idempotencyKey: params.idempotencyKey,
+        attachmentCount: params.media?.length ?? 0,
+      });
 
       const rpcParams: Record<string, unknown> = {
         sessionKey: params.sessionKey,

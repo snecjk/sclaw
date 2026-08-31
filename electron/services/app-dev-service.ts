@@ -29,15 +29,7 @@ import { KeyedGenerationTracker, OperationCanceledError } from './keyed-single-f
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
 import { cloneStoApp } from './sto-app-service';
-import {
-  createCodeApplication,
-  waitForActiveCodeApplication,
-} from './code-collab-service';
-import {
-  listCodeApplications,
-  offlineCodeApplication,
-  resolveCodeApplicationPolicyOrigin,
-} from './code-application-api';
+import { archiveSiteApp, enrichSiteAppRecord, getSiteApp, listSiteApps } from './site-app-api';
 import {
   getStoAppBindingByWorkspaceId,
   listStoAppBindings,
@@ -45,15 +37,15 @@ import {
   removeStoAppBindingByWorkspaceId,
   upsertStoAppBinding,
 } from './sto-app-binding-store';
-import { writeStoWorkspaceBinding } from './sto-workspace-store';
+import { readStoWorkspaceFile, writeStoWorkspaceBinding } from './sto-workspace-store';
 import {
-  normalizeCodeApplicationPageType,
-  type CodeApplicationPageType,
-  type CodeApplicationRecord,
-} from '../../shared/code-application-catalog';
+  normalizeSiteAppPageType,
+  type SiteAppPageType,
+  type SiteAppRecord,
+} from '../../shared/site-app-catalog';
 import {
   STO_WORKSPACE_RELATIVE,
-  codeApplicationToWorkspaceFields,
+  siteAppToWorkspaceFields,
 } from '../../shared/sto-workspace';
 import {
   appTemplatePackageManager,
@@ -104,7 +96,7 @@ export interface AppDevMarker {
   createdAt: string;
   /** `imported` = local folder import; `created` = 新建站 / clone from cloud. */
   source?: AppDevSource;
-  pageType?: CodeApplicationPageType;
+  pageType?: SiteAppPageType;
   templateId?: string;
   templateVersion?: string;
   packageOssKey?: string;
@@ -120,17 +112,17 @@ export interface DevAppSummary {
   createdAt: string;
   /** Local path exists and marker is present. */
   localReady: boolean;
-  applicationId?: string;
+  appCode?: string;
   /** Cloud list authority states for this device. */
   availability: 'local' | 'remote-only' | 'path-missing';
-  /** Cloud preview page URL from code-applications list. */
+  /** Cloud preview page URL from site-apps list. */
   previewUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
   listError?: string;
   source?: AppDevSource;
   gitRepo?: boolean;
-  pageType: CodeApplicationPageType;
+  pageType: SiteAppPageType;
 }
 
 export function appDevMarkerPath(appPath: string): string {
@@ -145,6 +137,11 @@ function hasStoWorkspaceFile(appPath: string): boolean {
   return existsSync(join(appPath, STO_WORKSPACE_RELATIVE));
 }
 
+async function readBoundAppCode(appPath: string): Promise<string> {
+  const sto = await readStoWorkspaceFile(appPath);
+  return sto?.appCode?.trim() ?? '';
+}
+
 export function hasGitRepo(appPath: string): boolean {
   return existsSync(join(appPath, '.git'));
 }
@@ -154,14 +151,14 @@ async function readAppDevMarkerFields(appPath: string): Promise<{
   createdAt: string;
   name?: string;
   source?: AppDevSource;
-  pageType: CodeApplicationPageType;
+  pageType: SiteAppPageType;
   kind: AppDevMarker['kind'];
 }> {
   let projectType = 'frontend';
   let createdAt = '';
   let name: string | undefined;
   let source: AppDevSource | undefined;
-  let pageType: CodeApplicationPageType = 'site';
+  let pageType: SiteAppPageType = 'site';
   let kind: AppDevMarker['kind'] = 'app-dev';
   try {
     const raw = JSON.parse(await readFile(appDevMarkerPath(appPath), 'utf8')) as Partial<AppDevMarker>;
@@ -169,7 +166,7 @@ async function readAppDevMarkerFields(appPath: string): Promise<{
     if (typeof raw.createdAt === 'string' && raw.createdAt.trim()) createdAt = raw.createdAt;
     if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
     if (raw.source === 'created' || raw.source === 'imported') source = raw.source;
-    pageType = normalizeCodeApplicationPageType(raw.pageType);
+    pageType = normalizeSiteAppPageType(raw.pageType);
     if (raw.kind === 'app-template') kind = raw.kind;
   } catch {
     // ignore
@@ -212,9 +209,150 @@ export async function listLocalOnlyDevApps(input: {
   return apps;
 }
 
-async function stoWorkspaceRegistryUrl(): Promise<string> {
-  return resolveCodeApplicationPolicyOrigin();
+function dedupeSiteAppRecords(items: SiteAppRecord[]): SiteAppRecord[] {
+  const map = new Map<string, SiteAppRecord>();
+  for (const item of items) {
+    const prev = map.get(item.appCode);
+    if (!prev) {
+      map.set(item.appCode, item);
+      continue;
+    }
+    const prevArchived = prev.status?.trim().toLowerCase() === 'archived';
+    const curArchived = item.status?.trim().toLowerCase() === 'archived';
+    if (prevArchived && !curArchived) map.set(item.appCode, item);
+  }
+  return [...map.values()];
 }
+
+function normalizeDevAppListName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function preferDevAppSummary(left: DevAppSummary, right: DevAppSummary): DevAppSummary {
+  if (left.localReady && !right.localReady) return left;
+  if (right.localReady && !left.localReady) return right;
+  if (left.workspaceId && !right.workspaceId) return left;
+  if (right.workspaceId && !left.workspaceId) return right;
+  if (left.createdAt !== right.createdAt) {
+    return left.createdAt.localeCompare(right.createdAt) >= 0 ? left : right;
+  }
+  return left;
+}
+
+function listIdentityKey(app: Pick<DevAppSummary, 'name' | 'pageType'>): string {
+  return `${normalizeDevAppListName(app.name)}:${app.pageType ?? 'site'}`;
+}
+
+/**
+ * Align cloud list + local list to one card per local project.
+ * Extra Site Apps created for the same folder/name (retry / first-push leftovers)
+ * must not become a second “仅云端” card.
+ */
+export function collapseDevAppsSharingLocalIdentity(apps: DevAppSummary[]): DevAppSummary[] {
+  const picked: DevAppSummary[] = [];
+  const usedWorkspaceIds = new Set<string>();
+  const usedPaths = new Set<string>();
+
+  const ordered = [...apps].sort((a, b) => {
+    if (a.localReady !== b.localReady) return a.localReady ? -1 : 1;
+    return preferDevAppSummary(a, b) === a ? -1 : 1;
+  });
+
+  for (const app of ordered) {
+    const workspaceId = app.workspaceId?.trim() ?? '';
+    const path = app.appPath?.trim() ? resolve(app.appPath.trim()) : '';
+    const workspaceTaken = Boolean(workspaceId) && usedWorkspaceIds.has(workspaceId);
+    const pathTaken = Boolean(path) && usedPaths.has(path);
+    if (workspaceTaken || pathTaken) continue;
+    picked.push(app);
+    if (workspaceId) usedWorkspaceIds.add(workspaceId);
+    if (path) usedPaths.add(path);
+  }
+
+  const localProjectKeys = new Set(
+    picked.filter((app) => app.localReady).map((app) => listIdentityKey(app)),
+  );
+  return picked.filter((app) => {
+    if (app.localReady) return true;
+    return !localProjectKeys.has(listIdentityKey(app));
+  });
+}
+
+function mergeCloudWithLocalDevApp(cloud: DevAppSummary, local: DevAppSummary): DevAppSummary {
+  return {
+    ...cloud,
+    workspaceId: local.workspaceId,
+    appPath: local.appPath,
+    localReady: true,
+    availability: 'local',
+    projectType: local.projectType ?? cloud.projectType,
+    source: local.source ?? cloud.source,
+    gitRepo: local.gitRepo ?? cloud.gitRepo,
+    createdAt: local.createdAt || cloud.createdAt,
+  };
+}
+
+/** Merge cloud + local-only rows and drop duplicates (same appCode / workspace / path). */
+export function mergeAndDedupeDevApps(
+  cloudApps: DevAppSummary[],
+  localApps: DevAppSummary[],
+): DevAppSummary[] {
+  const byAppCode = new Map<string, DevAppSummary>();
+  for (const app of cloudApps) {
+    if (!app.appCode) continue;
+    const prev = byAppCode.get(app.appCode);
+    byAppCode.set(app.appCode, prev ? preferDevAppSummary(prev, app) : app);
+  }
+
+  const consumedWorkspaceIds = new Set<string>();
+  const result: DevAppSummary[] = [];
+
+  for (const cloud of byAppCode.values()) {
+    if (cloud.localReady) {
+      if (cloud.workspaceId) consumedWorkspaceIds.add(cloud.workspaceId);
+      result.push(cloud);
+      continue;
+    }
+    const match = localApps.find((local) => {
+      if (local.appCode) return false;
+      if (!local.localReady || !local.workspaceId) return false;
+      if (consumedWorkspaceIds.has(local.workspaceId)) return false;
+      return normalizeDevAppListName(local.name) === normalizeDevAppListName(cloud.name)
+        && (local.pageType ?? 'site') === (cloud.pageType ?? 'site');
+    });
+    if (match) {
+      consumedWorkspaceIds.add(match.workspaceId);
+      result.push(mergeCloudWithLocalDevApp(cloud, match));
+    } else {
+      result.push(cloud);
+    }
+  }
+
+  const seenWorkspaceIds = new Set(
+    result.map((app) => app.workspaceId).filter((id): id is string => Boolean(id)),
+  );
+  const seenPaths = new Set(
+    result
+      .map((app) => app.appPath?.trim())
+      .filter((path): path is string => Boolean(path))
+      .map((path) => resolve(path)),
+  );
+
+  for (const local of localApps) {
+    if (local.workspaceId && consumedWorkspaceIds.has(local.workspaceId)) continue;
+    if (local.workspaceId && seenWorkspaceIds.has(local.workspaceId)) continue;
+    const path = local.appPath?.trim();
+    if (path && seenPaths.has(resolve(path))) continue;
+    result.push(local);
+    if (local.workspaceId) seenWorkspaceIds.add(local.workspaceId);
+    if (path) seenPaths.add(resolve(path));
+  }
+
+  return collapseDevAppsSharingLocalIdentity(result).sort(
+    (a, b) => b.createdAt.localeCompare(a.createdAt),
+  );
+}
+
 
 
 /**
@@ -280,7 +418,7 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 <!-- /sclaw-app-dev-context -->`;
 }
 
-function buildAppTemplateAgentsContextBlock(vars: { name: string; pageType: CodeApplicationPageType }): string {
+function buildAppTemplateAgentsContextBlock(vars: { name: string; pageType: SiteAppPageType }): string {
   return `<!-- sclaw-app-dev-context -->
 你正在维护一个名为「${vars.name}」的 SClaw ${vars.pageType === 'site' ? '独立站点' : '托管应用'}模板。
 
@@ -300,7 +438,7 @@ async function writeAppDevBootstrap(
     name: string;
     projectType: string;
     source?: AppDevSource;
-    pageType?: CodeApplicationPageType;
+    pageType?: SiteAppPageType;
     templateId?: string;
     templateVersion?: string;
     packageOssKey?: string;
@@ -333,7 +471,7 @@ async function writeAppDevBootstrap(
         marker.source = existing.source;
       }
       if (!marker.pageType && existing.pageType) {
-        marker.pageType = normalizeCodeApplicationPageType(existing.pageType);
+        marker.pageType = normalizeSiteAppPageType(existing.pageType);
       }
       if (!marker.templateId && typeof existing.templateId === 'string') {
         marker.templateId = existing.templateId;
@@ -355,7 +493,7 @@ async function writeAppDevBootstrap(
 
   const agentsPath = join(sclawDir, 'AGENTS.md');
   const contextBlock = marker.kind === 'app-template'
-    ? buildAppTemplateAgentsContextBlock({ name: vars.name, pageType: normalizeCodeApplicationPageType(vars.pageType) })
+    ? buildAppTemplateAgentsContextBlock({ name: vars.name, pageType: normalizeSiteAppPageType(vars.pageType) })
     : buildAppDevAgentsContextBlock({ name: vars.name });
   if (existsSync(agentsPath)) {
     let content = await readFile(agentsPath, 'utf8');
@@ -555,7 +693,7 @@ export interface CreateUserAppInput {
   /** 'frontend' | 'fullstack' — same template in MVP (backend placeholder). */
   projectType?: string;
   /** Cloud application publishing mode. Defaults to site for older clients. */
-  pageType?: CodeApplicationPageType;
+  pageType?: SiteAppPageType;
   /** Selected ACTIVE template and its immutable version. */
   templateId: string;
   templateVersion: string;
@@ -808,7 +946,7 @@ export async function publishAppTemplateWorkspace(input: {
 export async function createUserApp(input: CreateUserAppInput): Promise<CreateUserAppResult> {
   const name = input.name.trim();
   if (!name) throw new Error('应用名称不能为空');
-  const pageType = normalizeCodeApplicationPageType(input.pageType);
+  const pageType = normalizeSiteAppPageType(input.pageType);
   const templateId = input.templateId?.trim();
   const templateVersion = input.templateVersion?.trim();
   if (!templateId || !templateVersion) throw new Error('请选择应用模板');
@@ -866,29 +1004,10 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     packageEtag: templateMeta.packageEtag,
   });
 
-  let createdApplicationId: string | undefined;
-  const created = await createCodeApplication({
-    applicationName: name,
-    description: `${name} 应用`,
-    pageType,
-  });
-  const active = created.status?.trim().toUpperCase() === 'ACTIVE'
-    ? created
-    : await waitForActiveCodeApplication(created.applicationId);
-  createdApplicationId = active.applicationId;
   logger.info(
-    `[app-dev] code-application create linked name=${name} appPath=${appPath} ` +
-    `applicationId=${createdApplicationId} status=${active.status ?? '-'}`,
+    `[app-dev] createUserApp local scaffold ready name=${name} appPath=${appPath} ` +
+    `pageType=${pageType} (cloud app deferred until first push)`,
   );
-  const workspaceFile = await writeStoWorkspaceBinding({
-    appPath,
-    registryUrl: await stoWorkspaceRegistryUrl(),
-    cloud: codeApplicationToWorkspaceFields(active),
-    fallback: { applicationId: createdApplicationId, status: 'ACTIVE' },
-  });
-  if (!workspaceFile) {
-    throw new Error('云端应用已创建，但未能写入 .sto/workspace.json');
-  }
 
   // Ensure openspec exists even if an older template missed it; bake default assist skills.
   try {
@@ -911,13 +1030,6 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const workspaceId: string = workspace.id;
   await writeAppDevWorkspaceId(appPath, workspaceId);
 
-  await upsertStoAppBinding({
-    applicationId: createdApplicationId,
-    applicationName: name,
-    localPath: appPath,
-    workspaceId,
-  }).catch((err) => logger.warn('[app-dev] binding upsert after create failed:', err));
-
   logger.info(`[app-dev] createUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath}`);
 
   setStatus(workspaceId, { appPath, phase: 'created', progress: 0 });
@@ -932,7 +1044,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
 
 /**
  * Import an existing local app folder into 开发应用.
- * Local-only: does not create a cloud code-application, upload source, or publish.
+ * Local-only: does not create a cloud site app, upload source, or publish.
  */
 export async function importUserApp(input: {
   appPath: string;
@@ -1004,23 +1116,23 @@ export async function importUserApp(input: {
 
 /** List development apps: cloud apps plus local-only imports (no submit/publish). */
 export async function listDevApps(): Promise<DevAppSummary[]> {
-  let listed: CodeApplicationRecord[] = [];
+  let listed: SiteAppRecord[] = [];
   try {
-    listed = await listCodeApplications();
+    listed = dedupeSiteAppRecords(await listSiteApps());
   } catch (error) {
     logger.warn('[app-dev] listDevApps cloud list failed, showing local apps only:', error);
   }
 
   const bindings = await listStoAppBindings();
-  const bindingById = new Map(bindings.map((b) => [b.applicationId, b]));
+  const bindingByCode = new Map(bindings.map((b) => [b.appCode, b]));
   const workspaces = await listUserWorkspaces();
   const workspaceById = new Map(workspaces.map((w) => [w.id, w]));
   const claimedWorkspaceIds = new Set<string>();
   const claimedPaths = new Set<string>();
 
-  const apps: DevAppSummary[] = [];
+  const cloudApps: DevAppSummary[] = [];
   for (const cloud of listed) {
-    const binding = bindingById.get(cloud.applicationId);
+    const binding = bindingByCode.get(cloud.appCode);
     let localPath = binding?.localPath?.trim() ?? '';
     let workspaceId = binding?.workspaceId?.trim() ?? '';
 
@@ -1032,26 +1144,53 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
       }
     }
 
+    if (localPath && existsSync(localPath)) {
+      const ownerCode = await readBoundAppCode(localPath);
+      if (ownerCode && ownerCode !== cloud.appCode) {
+        await removeStoAppBinding(cloud.appCode).catch(() => undefined);
+        localPath = '';
+        workspaceId = '';
+      }
+    }
+
+    if (localPath && claimedPaths.has(resolve(localPath))) {
+      localPath = '';
+      workspaceId = '';
+    }
+    if (workspaceId && claimedWorkspaceIds.has(workspaceId)) {
+      localPath = '';
+      workspaceId = '';
+    }
+
     // Only auto-match local folders that already have a STO workspace file.
     // Imported apps must stay local-only and must not bind by name.
     if (!localPath) {
       const match = workspaces.find((w) => {
-        if (!isAppDevWorkspaceRoot(w.rootPath) || !hasStoWorkspaceFile(w.rootPath)) return false;
+        if (!w.rootPath || !isAppDevWorkspaceRoot(w.rootPath) || !hasStoWorkspaceFile(w.rootPath)) {
+          return false;
+        }
+        if (claimedWorkspaceIds.has(w.id) || claimedPaths.has(resolve(w.rootPath))) return false;
         return w.name === cloud.applicationName || w.rootPath.endsWith(`${sep}${cloud.applicationName}`);
       });
       if (match) {
-        localPath = match.rootPath;
-        workspaceId = match.id;
+        const ownerCode = await readBoundAppCode(match.rootPath);
+        if (!ownerCode || ownerCode === cloud.appCode) {
+          localPath = match.rootPath;
+          workspaceId = match.id;
+        }
       }
     }
 
     const pathOk = Boolean(localPath) && existsSync(localPath);
     const markerOk = pathOk && isAppDevWorkspaceRoot(localPath);
+    const isArchived = cloud.status?.trim().toLowerCase() === 'archived';
+    if (isArchived && !pathOk) continue;
+
     if (workspaceId) claimedWorkspaceIds.add(workspaceId);
     if (pathOk) claimedPaths.add(resolve(localPath));
     if (pathOk && workspaceId) {
       await upsertStoAppBinding({
-        applicationId: cloud.applicationId,
+        appCode: cloud.appCode,
         applicationName: cloud.applicationName,
         localPath,
         workspaceId,
@@ -1069,14 +1208,14 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         }
       }
       const ws = workspaceById.get(workspaceId);
-      apps.push({
+      cloudApps.push({
         workspaceId,
-        name: cloud.applicationName || ws?.name || cloud.applicationId,
+        name: cloud.applicationName || ws?.name || cloud.appCode,
         appPath: localPath,
         projectType: fields.projectType,
         createdAt: fields.createdAt || cloud.createdAt || ws?.createdAt || new Date().toISOString(),
         localReady: true,
-        applicationId: cloud.applicationId,
+        appCode: cloud.appCode,
         availability: 'local',
         previewUrl: cloud.previewUrl,
         gitlabProjectId: cloud.gitlabProjectId,
@@ -1088,14 +1227,14 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
       continue;
     }
 
-      apps.push({
+      cloudApps.push({
         workspaceId: workspaceId || '',
         name: cloud.applicationName,
         appPath: localPath || '',
         projectType: 'frontend',
         createdAt: cloud.createdAt || binding?.updatedAt || new Date().toISOString(),
         localReady: false,
-        applicationId: cloud.applicationId,
+        appCode: cloud.appCode,
         availability: pathOk ? 'path-missing' : 'remote-only',
         previewUrl: cloud.previewUrl,
         gitlabProjectId: cloud.gitlabProjectId,
@@ -1104,43 +1243,49 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
       });
     }
 
-  apps.push(...await listLocalOnlyDevApps({
+  const localApps = await listLocalOnlyDevApps({
     workspaces,
     claimedWorkspaceIds,
     claimedPaths,
-  }));
+  });
 
-  const sorted = apps.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const sorted = mergeAndDedupeDevApps(cloudApps, localApps);
   logger.info(
     `[app-dev] listDevApps count=${sorted.length} apps=${JSON.stringify(
       sorted.map((app) => ({
         name: app.name,
-        applicationId: app.applicationId,
+        appCode: app.appCode,
         availability: app.availability,
         localReady: app.localReady,
         workspaceId: app.workspaceId,
+        previewUrl: app.previewUrl,
       })),
     )}`,
   );
   return sorted;
 }
 
-/** Resolve cloud code-application for a local workspace via binding, then list name/path. */
+/** Resolve cloud site-app for a local workspace via binding, then list name/path. */
 export async function resolveCloudAppForWorkspace(
   workspaceId: string,
   appPath?: string,
-): Promise<CodeApplicationRecord | null> {
+): Promise<SiteAppRecord | null> {
   const id = workspaceId.trim();
   if (!id) return null;
 
-  const listed = await listCodeApplications().catch(() => [] as CodeApplicationRecord[]);
-  if (listed.length === 0) return null;
-
   const binding = await getStoAppBindingByWorkspaceId(id);
-  if (binding?.applicationId) {
-    const matched = listed.find((item) => item.applicationId === binding.applicationId);
-    if (matched) return matched;
+  if (binding?.appCode) {
+    try {
+      return await enrichSiteAppRecord(await getSiteApp(binding.appCode));
+    } catch {
+      const listed = await listSiteApps().catch(() => [] as SiteAppRecord[]);
+      const matched = listed.find((item) => item.appCode === binding.appCode);
+      if (matched) return await enrichSiteAppRecord(matched);
+    }
   }
+
+  const listed = await listSiteApps().catch(() => [] as SiteAppRecord[]);
+  if (listed.length === 0) return null;
 
   const workspaces = await listUserWorkspaces();
   const workspace = workspaces.find((item) => item.id === id);
@@ -1153,14 +1298,14 @@ export async function resolveCloudAppForWorkspace(
 
   if (matched && path && existsSync(path)) {
     await upsertStoAppBinding({
-      applicationId: matched.applicationId,
+      appCode: matched.appCode,
       applicationName: matched.applicationName,
       localPath: path,
       workspaceId: id,
     }).catch(() => undefined);
   }
 
-  return matched;
+  return matched ? await enrichSiteAppRecord(matched) : null;
 }
 
 /**
@@ -1225,19 +1370,19 @@ export async function listDevAppWorkspaceIds(): Promise<string[]> {
  * Target path = parentDir / sanitize(name). Must be empty or non-existent.
  */
 export async function cloneDevApp(input: {
-  applicationId: string;
+  appCode: string;
   applicationName?: string;
   parentDir: string;
-}): Promise<CreateUserAppResult & { applicationId: string }> {
-  const applicationId = input.applicationId.trim();
-  if (!applicationId) throw new Error('缺少 applicationId');
+}): Promise<CreateUserAppResult & { appCode: string }> {
+  const appCode = input.appCode.trim();
+  if (!appCode) throw new Error('缺少 appCode');
   const parentDir = resolve(input.parentDir.trim());
   if (!parentDir || !existsSync(parentDir) || !statSync(parentDir).isDirectory()) {
     throw new Error('请选择有效的父目录');
   }
 
-  const name = (input.applicationName?.trim() || applicationId).trim();
-  const folderName = sanitizePackageName(name) || applicationId;
+  const name = (input.applicationName?.trim() || appCode).trim();
+  const folderName = sanitizePackageName(name) || appCode;
   const appPath = join(parentDir, folderName);
   if (existsSync(appPath)) {
     const contents = await readdir(appPath).catch(() => []);
@@ -1246,20 +1391,20 @@ export async function cloneDevApp(input: {
     }
   }
 
-  const cloned = await cloneStoApp(applicationId, appPath);
+  const cloned = await cloneStoApp(appCode, appPath);
 
-  let cloud: CodeApplicationRecord | undefined;
+  let cloud: SiteAppRecord | undefined;
   try {
-    cloud = (await listCodeApplications()).find((item) => item.applicationId === applicationId);
+    cloud = await getSiteApp(appCode);
   } catch (err) {
-    logger.warn('[app-dev] list after clone skipped:', err);
+    logger.warn('[app-dev] detail after clone skipped:', err);
+    cloud = (await listSiteApps()).find((item) => item.appCode === appCode);
   }
   const workspaceFile = await writeStoWorkspaceBinding({
     appPath,
-    registryUrl: await stoWorkspaceRegistryUrl(),
     payload: cloned.json,
-    cloud: codeApplicationToWorkspaceFields(cloud),
-    fallback: { applicationId, status: 'ACTIVE' },
+    cloud: siteAppToWorkspaceFields(cloud),
+    fallback: { appCode, status: cloud?.status ?? 'ready' },
   });
   if (!workspaceFile) {
     throw new Error('拉取成功但未能写入 .sto/workspace.json');
@@ -1284,7 +1429,7 @@ export async function cloneDevApp(input: {
   await writeAppDevWorkspaceId(appPath, workspaceId);
 
   await upsertStoAppBinding({
-    applicationId,
+    appCode,
     applicationName: name,
     localPath: appPath,
     workspaceId,
@@ -1299,7 +1444,7 @@ export async function cloneDevApp(input: {
     workspaceId,
     appPath,
     workspaceName: workspace.name ?? name,
-    applicationId,
+    appCode,
   };
 }
 
@@ -1310,13 +1455,13 @@ export async function cloneDevApp(input: {
 async function removeLocalDevAppCheckout(
   workspaceId: string,
   deleteFiles: boolean,
-  applicationId: string,
+  appCode: string,
   gatewayManager?: GatewayManager | null,
 ): Promise<{ deletedLocal: boolean; deletedFiles: boolean; appPath: string }> {
   const { getWorkspaceRootPath } = await import('./session-catalog-service');
   const appPath = await getWorkspaceRootPath(workspaceId);
-  if (applicationId) {
-    await removeStoAppBinding(applicationId).catch(() => undefined);
+  if (appCode) {
+    await removeStoAppBinding(appCode).catch(() => undefined);
   }
   await removeStoAppBindingByWorkspaceId(workspaceId).catch(() => undefined);
 
@@ -1359,37 +1504,38 @@ async function removeLocalDevAppCheckout(
  */
 export async function deleteDevApp(
   input: {
-    applicationId?: string;
+    appCode?: string;
     workspaceId?: string;
     deleteLocal?: boolean;
   },
   gatewayManager?: GatewayManager | null,
 ): Promise<{ offline: boolean; deletedLocal: boolean; deletedFiles: boolean; appPath: string }> {
-  const applicationId = input.applicationId?.trim() ?? '';
+  const appCode = input.appCode?.trim() ?? '';
   let workspaceId = input.workspaceId?.trim() ?? '';
-  if (!applicationId && !workspaceId) {
+  if (!appCode && !workspaceId) {
     throw new Error('缺少应用标识');
   }
 
   let offline = false;
-  if (applicationId) {
-    await offlineCodeApplication(applicationId);
+  if (appCode) {
+    await archiveSiteApp(appCode);
     offline = true;
   }
 
-  if (!workspaceId && applicationId) {
-    const binding = (await listStoAppBindings()).find((item) => item.applicationId === applicationId);
+  if (!workspaceId && appCode) {
+    const binding = (await listStoAppBindings()).find((item) => item.appCode === appCode);
     workspaceId = binding?.workspaceId?.trim() ?? '';
   }
 
-  // Cloud-only offline: keep the local workspace unless the user asked to delete it.
-  if (applicationId && !input.deleteLocal) {
+  // Cloud-only archive: keep local files unless user opted in; drop stale binding.
+  if (appCode && !input.deleteLocal) {
+    await removeStoAppBinding(appCode).catch(() => undefined);
     return { offline: true, deletedLocal: false, deletedFiles: false, appPath: '' };
   }
 
   if (!workspaceId) {
-    if (applicationId) {
-      await removeStoAppBinding(applicationId).catch(() => undefined);
+    if (appCode) {
+      await removeStoAppBinding(appCode).catch(() => undefined);
     }
     return { offline, deletedLocal: false, deletedFiles: false, appPath: '' };
   }
@@ -1397,7 +1543,7 @@ export async function deleteDevApp(
   const removed = await removeLocalDevAppCheckout(
     workspaceId,
     input.deleteLocal === true,
-    applicationId,
+    appCode,
     gatewayManager,
   );
   return { offline, ...removed };

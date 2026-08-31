@@ -90,7 +90,11 @@
     "toolbar": {
       "searchSrOnly": "定期タスク名を検索",
       "searchPlaceholder": "タスク名を検索",
-      "sortAria": "並べ替え"
+      "sortAria": "並べ替え",
+      "pullFromCloud": "クラウドから同期",
+      "pulling": "同期中…",
+      "pullSuccess": "クラウドから同期しました",
+      "pullFailed": "クラウド同期に失敗しました"
     },
     "recordToolbar": {
       "searchSrOnly": "実行記録のタスク名を検索",
@@ -135,19 +139,14 @@
       "workflowLabel": "関連ワークフロー",
       "workflowPlaceholder": "選択",
       "workflowEmpty": "使用可能なワークフローがありません",
-      "instructionsLabel": "SClawに何をさせますか…",
-      "instructionsPlaceholder": "SClawに何をさせますか…",
+      "instructionsLabel": "タスク内容",
+      "instructionsPlaceholder": "SClawに任せたいことを書いてください...\n- 開始時間やリマインドを指定できます。例：「毎営業日9:00に開始し、完了したら通知」\n- 結果を共有できます。例：「@DingTalkの連絡先またはグループに送信」。完了後、結果が自動送信されます",
       "instructionsRequired": "SClawにさせる内容を説明してください",
       "workflowAutoHint": "関連ワークフロー — 説明は自動生成されます",
-      "beautifyAria": "AIでタスク説明を美化",
-      "beautifyButton": "AI美化",
-      "beautifying": "美化中…",
-      "beautifyNoChange": "説明は十分に整理されています",
-      "beautifyFallback": "モデルが利用できないため、基本ルールで最適化しました",
-      "beautifySuccess": "タスク説明を美化しました",
-      "beautifySuccessWithModel": "AI美化完了（{{model}}）",
-      "beautifyFailed": "AI美化に失敗しました。後でもう一度お試しください",
       "scheduleLabel": "スケジュール",
+      "resultSaveToLabel": "タスク結果の保存先",
+      "myArtifactLabel": "自分の成果物",
+      "sharedArtifactLabel": "拠点共有成果物",
       "recipientsLabel": "送信対象",
       "recipientsPlaceholder": "@ を入力して連絡先・グループを検索（複数選択可）",
       "recipientsHint": "タスク完了後、選択した対象に結果を自動送信",
@@ -186,7 +185,14 @@
       "everyDay": "毎日",
       "workday": "営業日",
       "pleaseSelect": "選択",
-      "monthDay": "{{day}}日"
+      "monthDay": "{{day}}日",
+      "monthLastDay": "当月の最終自然日",
+      "monthDaysRequired": "日付または当月の最終自然日を1つ以上選択してください",
+      "shortMonthSkipHint": "一部の月に存在しない日付はスキップされます",
+      "addTime": "時刻を追加",
+      "removeTime": "この時刻を削除",
+      "timesRequired": "実行時刻を1つ以上選択してください",
+      "tooComplexToEdit": "この予定は UI で編集できません。タスクを作り直してください。"
     },
     "sort": {
       "createdDesc": "作成日（最新）",

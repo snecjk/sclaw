@@ -9,6 +9,7 @@ import { join, extname, basename, dirname } from 'node:path';
 import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
+import { omitUnchangedHistoryMessages, readClientHistoryFingerprint } from '../engines/history-rpc-result';
 import type { AgentEngineType } from '../engines/types';
 import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
@@ -55,6 +56,7 @@ import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
 import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
+import { getTurnTokenService } from '../services/turn-token-service';
 import { getProviderService } from '../services/providers/provider-service';
 import {
   getOpenClawProviderKey,
@@ -92,7 +94,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   getSpriteWindow?: () => BrowserWindow | null,
   getFloatIconWindow?: () => BrowserWindow | null,
-  getMainWindow?: () => BrowserWindow | null,
+  _getMainWindow?: () => BrowserWindow | null,
 ): void {
   // Catch embed webview window.open as early as guest WebContents are created.
   void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
@@ -100,6 +102,9 @@ export function registerIpcHandlers(
   });
   void import('./services/sclaw-embed-browser-guest-preferences').then(({ installSclawEmbedBrowserGuestPreferencesHook }) => {
     installSclawEmbedBrowserGuestPreferencesHook();
+  });
+  void import('./services/sclaw-embed-browser-session').then(({ installSclawEmbedBrowserSessionHooks }) => {
+    installSclawEmbedBrowserSessionHooks();
   });
 
   // Unified request protocol (non-breaking: legacy channels remain available)
@@ -113,9 +118,6 @@ export function registerIpcHandlers(
   // Gateway handlers
   registerGatewayHandlers(
     gatewayManager,
-    getMainWindow ?? (() => mainWindow),
-    getSpriteWindow,
-    getFloatIconWindow,
   );
 
   // ClawHub handlers
@@ -165,6 +167,8 @@ export function registerIpcHandlers(
 
   // Sprite handlers (desktop sprite session context bridge)
   registerSpriteHandlers(mainWindow);
+
+  registerAppDevIdeHandlers();
 
   // Float icon handlers (desktop floating launcher)
   registerFloatIconHandlers(getFloatIconWindow);
@@ -882,23 +886,12 @@ function registerLogHandlers(): void {
  */
 function registerGatewayHandlers(
   gatewayManager: GatewayManager,
-  getMainWindow: () => BrowserWindow | null,
-  getSpriteWindow?: () => BrowserWindow | null,
-  getFloatIconWindow?: () => BrowserWindow | null,
 ): void {
-  // Helper: broadcast an event to all renderer windows (main + sprite + float-icon)
+  // Helper: broadcast an event to all renderer windows
   const broadcast = (channel: string, ...args: unknown[]) => {
-    const mainWindow = getMainWindow();
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      safeWebContentsSend(mainWindow.webContents, channel, ...args);
-    }
-    const sprite = getSpriteWindow?.();
-    if (sprite && !sprite.isDestroyed()) {
-      safeWebContentsSend(sprite.webContents, channel, ...args);
-    }
-    const floatIcon = getFloatIconWindow?.();
-    if (floatIcon && !floatIcon.isDestroyed()) {
-      safeWebContentsSend(floatIcon.webContents, channel, ...args);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      safeWebContentsSend(win.webContents, channel, ...args);
     }
   };
   type GatewayHttpProxyRequest = {
@@ -1004,20 +997,71 @@ function registerGatewayHandlers(
       }
 
       if (method === 'chat.history') {
+        const perfStart = Date.now();
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           limit?: number;
+          beforeId?: string;
           engineType?: AgentEngineType;
+          clientFingerprint?: unknown;
         };
-        const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
+        const engineType = parseEngineType(body.engineType);
+        const adapter = await getAdapterForSession(body.sessionKey ?? '', engineType);
+        const beforeId = typeof body.beforeId === 'string' && body.beforeId ? body.beforeId : undefined;
+        const getStart = Date.now();
         const result = await adapter.getHistory(
           { gatewayManager },
-          { sessionKey: body.sessionKey ?? '', limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000 },
+          {
+            sessionKey: body.sessionKey ?? '',
+            limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000,
+            beforeId,
+          },
         );
+        const getMs = Date.now() - getStart;
         if (!result.success) {
+          logger.info('[chat-history-perf]', {
+            stage: 'ipc.rpc.failed',
+            sessionKey: body.sessionKey ?? '',
+            engineType: body.engineType ?? adapter.type,
+            getMs,
+            totalMs: Date.now() - perfStart,
+            error: result.error || 'chat.history failed',
+          });
           return { success: false, error: result.error || 'chat.history failed' };
         }
-        return { success: true, result: sanitizeMemoryFromChatPayload(result.result) };
+        const historyResult = omitUnchangedHistoryMessages({
+          engineType: adapter.type,
+          result: result.result ?? { messages: [] },
+          clientFingerprint: readClientHistoryFingerprint(body.clientFingerprint),
+          beforeId,
+        });
+        const sanitizeStart = Date.now();
+        const payload = sanitizeMemoryFromChatPayload(historyResult);
+        const sanitizeMs = Date.now() - sanitizeStart;
+        const messages = (payload as { messages?: unknown[] } | null)?.messages;
+        const messageCount = Array.isArray(messages) ? messages.length : 0;
+        let payloadBytes = 0;
+        try {
+          payloadBytes = JSON.stringify(payload).length;
+        } catch {
+          payloadBytes = 0;
+        }
+        logger.info('[chat-history-perf]', {
+          stage: 'ipc.rpc.done',
+          sessionKey: body.sessionKey ?? '',
+          engineType: adapter.type,
+          getMs,
+          sanitizeMs,
+          totalMs: Date.now() - perfStart,
+          messageCount,
+          payloadBytes,
+          unchanged: Boolean(historyResult.unchanged),
+          hasClientFingerprint: Boolean(readClientHistoryFingerprint(body.clientFingerprint)),
+          hasMore: Boolean(historyResult.hasMore),
+          totalCount: historyResult.totalCount ?? messageCount,
+          beforeId: beforeId ?? null,
+        });
+        return { success: true, result: payload };
       }
 
       if (method === 'chat.send') {
@@ -2206,6 +2250,13 @@ function registerUsageHandlers(): void {
       : undefined;
     return await getRecentTokenUsageHistory(safeLimit);
   });
+
+  ipcMain.handle('turn-token:get', async (_, sessionKey: unknown, turnIndex: unknown) => {
+    if (typeof sessionKey !== 'string' || typeof turnIndex !== 'number' || !Number.isFinite(turnIndex)) {
+      return null;
+    }
+    return getTurnTokenService().get(sessionKey, Math.max(0, Math.floor(turnIndex)));
+  });
 }
 /**
  * Window control handlers (for custom title bar on Windows)
@@ -2236,6 +2287,18 @@ function registerWindowHandlers(): void {
 
   ipcMain.handle('window:isFullScreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false;
+  });
+
+  ipcMain.handle('window:setMinimumSize', (event, size?: { width?: number; height?: number }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const minWidth = Math.max(960, Math.round(Number(size?.width) || 960));
+    const minHeight = Math.max(640, Math.round(Number(size?.height) || 640));
+    win.setMinimumSize(minWidth, minHeight);
+    const [width, height] = win.getSize();
+    if (width < minWidth || height < minHeight) {
+      win.setSize(Math.max(width, minWidth), Math.max(height, minHeight));
+    }
   });
 }
 
@@ -2274,6 +2337,37 @@ function registerSpriteHandlers(mainWindow: BrowserWindow): void {
       mainWindow.show();
       mainWindow.focus();
     }
+  });
+}
+
+function registerAppDevIdeHandlers(): void {
+  ipcMain.handle('app-dev-ide:open', async (_event, input: unknown) => {
+    const payload = input && typeof input === 'object' ? input as { workspaceId?: unknown; title?: unknown } : {};
+    const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId.trim() : '';
+    if (!workspaceId) throw new Error('workspaceId 不能为空');
+    const title = typeof payload.title === 'string' ? payload.title : undefined;
+    const { openAppDevIdeWindow } = await import('./app-dev-ide-window');
+    openAppDevIdeWindow({ workspaceId, title });
+    return { ok: true };
+  });
+
+  ipcMain.handle('app-dev-ide:focus', async (_event, workspaceId: unknown) => {
+    const id = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+    if (!id) return false;
+    const { focusAppDevIdeWindow } = await import('./app-dev-ide-window');
+    return focusAppDevIdeWindow(id);
+  });
+
+  ipcMain.handle('app-dev-ide:isOpen', async (_event, workspaceId: unknown) => {
+    const id = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+    if (!id) return false;
+    const { isAppDevIdeOpen } = await import('./app-dev-ide-window');
+    return isAppDevIdeOpen(id);
+  });
+
+  ipcMain.handle('app-dev-ide:listOpen', async () => {
+    const { listOpenAppDevIdeWorkspaceIds } = await import('./app-dev-ide-window');
+    return listOpenAppDevIdeWorkspaceIds();
   });
 }
 
@@ -2847,13 +2941,21 @@ function registerSessionHandlers(): void {
     const webContentsId = typeof payload?.webContentsId === 'number' ? payload.webContentsId : 0;
     if (!runtimeId || !webContentsId) return { ok: false };
     const { bindSclawEmbedBrowserWebContents } = await import('./services/sclaw-embed-browser-runtime');
-    const meta = await bindSclawEmbedBrowserWebContents({
-      runtimeId,
-      webContentsId,
-      pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
-      pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
-    });
-    return { ok: true, meta };
+    try {
+      const meta = await bindSclawEmbedBrowserWebContents({
+        runtimeId,
+        webContentsId,
+        pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
+        pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
+      });
+      return { ok: true, meta };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Embed browser runtime not found')) {
+        return { ok: false, error: message };
+      }
+      throw error;
+    }
   });
 
   ipcMain.handle('sclaw-browser:updatePageState', async (_, payload: {

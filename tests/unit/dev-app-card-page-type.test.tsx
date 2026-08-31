@@ -39,7 +39,7 @@ function app(pageType: 'site' | 'assets'): DevAppSummary {
     createdAt: '2026-08-21T00:00:00.000Z',
     localReady: true,
     availability: 'local',
-    applicationId: `app-${pageType}`,
+    appCode: `app_${pageType}`,
     previewUrl: 'https://preview.example.cn',
     pageType,
   };
@@ -64,5 +64,24 @@ describe('DevAppCard page type', () => {
       ctrlKey: false,
     });
     expect(screen.queryByText('系统浏览器打开')).not.toBeInTheDocument();
+  });
+
+  it('shows delete for cloud-only apps with appCode', async () => {
+    render(<DevAppCard app={{
+      workspaceId: '',
+      name: 'remote app',
+      appPath: '',
+      projectType: 'frontend',
+      createdAt: '2026-08-21T00:00:00.000Z',
+      localReady: false,
+      availability: 'remote-only',
+      appCode: 'app_remote',
+      pageType: 'site',
+    }} />);
+    fireEvent.pointerDown(screen.getByRole('button', { name: '更多操作' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(await screen.findByText('删除应用')).toBeInTheDocument();
   });
 });

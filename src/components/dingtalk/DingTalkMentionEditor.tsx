@@ -12,6 +12,7 @@ import {
   clearMentionEditor,
   detectActiveMentionTrigger,
   insertAtTriggerCharacter,
+  insertAttachmentSpan,
   insertMentionAtTrigger,
   insertSaiInterfaceSpan,
   insertSkillSpan,
@@ -19,8 +20,14 @@ import {
   insertWorkflowSpan,
   consumeSkillTriggerText,
   consumeSlashTriggerText,
+  ensureTrailingCaretAnchor,
+  focusMentionEditorAtEnd,
+  insertLineBreakAtCaret,
+  readAttachmentIdFromSpan,
   readCaretPlainTextOffset,
   MENTION_SPAN_SELECTOR,
+  ATTACHMENT_SPAN_SELECTOR,
+  removeAttachmentSpan,
   removeMentionBeforeCaret,
   removeMentionSpan,
   removeSkillSpan,
@@ -29,32 +36,19 @@ import {
   serializeMentionEditor,
   setMentionEditorMentions,
   setMentionEditorPlainText,
+  setMentionEditorSegments,
+  updateAttachmentSpanStatus,
   type ActiveMentionTrigger,
+  type AttachmentLookupEntry,
+  type ComposerSegment,
   type MentionComposerSnapshot,
 } from '@/lib/dingtalk-mention-composer';
 import { resolveSkillFromPlaza, resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 
-function focusEditorAtEnd(root: HTMLElement): void {
-  root.focus();
-
-  const selection = window.getSelection();
-  if (!selection) return;
-
-  const range = document.createRange();
-  const lastChild = root.lastChild;
-  if (lastChild?.nodeType === Node.TEXT_NODE) {
-    range.setStart(lastChild, lastChild.textContent?.length ?? 0);
-  } else {
-    range.selectNodeContents(root);
-    range.collapse(false);
-  }
-  range.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
 export interface DingTalkMentionEditorHandle {
   focus: () => void;
+  /** 聚焦并把光标放到文末（fillComposer / seedText / 学习中心回填） */
+  focusAtEnd: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
   readSkillMeta: () => SkillMeta | undefined;
@@ -68,6 +62,17 @@ export interface DingTalkMentionEditorHandle {
   insertSaiInterface: (path: string, name: string) => void;
   /** 打开浮层前保存光标，避免点击列表后插入跑到末尾 */
   rememberCaret: () => void;
+  insertAttachment: (
+    att: { id: string; fileName: string; mimeType: string; fileSize?: number; status?: 'staging' | 'ready' | 'error'; preview?: string | null },
+    plainTextOffset?: number,
+  ) => void;
+  removeAttachment: (attachmentId: string) => void;
+  updateAttachmentStatus: (
+    attachmentId: string,
+    status: 'staging' | 'ready' | 'error',
+    extras?: { stagedPath?: string; error?: string },
+  ) => void;
+  setSegments: (segments: ComposerSegment[], attachmentsById?: Record<string, AttachmentLookupEntry>) => void;
   /** @returns 触发符原位置下标；未消费时返回 null */
   consumeSkillInlineTrigger: (query?: string) => number | null;
   /** @returns `/` 原位置下标；未消费时返回 null */
@@ -75,8 +80,17 @@ export interface DingTalkMentionEditorHandle {
   removeSkill: () => void;
   /** 记录当前光标位置，供工具栏/浮层选中后恢复插入点 */
   saveCaret: () => void;
+  /**
+   * 当前（或上次保存的）光标在 plainText 中的下标。
+   * slash / skill 内联 query 需相对光标截取，失焦点选浮层时回退到 lastCaret。
+   */
+  getCaretPlainTextOffset: () => number | null;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
+  /** 任务描述换行：插入 `<br>` 而不是 Chrome 的 DIV */
+  insertLineBreak: () => void;
+  /** contenteditable 根节点，供 @ 浮层光标定位 */
+  getEditorElement: () => HTMLElement | null;
 }
 
 interface DingTalkMentionEditorProps {
@@ -96,6 +110,8 @@ interface DingTalkMentionEditorProps {
   seedSkillSlug?: string;
   /** 为 @ 标签显示删除按钮（用于定时任务发送对象等场景） */
   removableMentions?: boolean;
+  /** 用户点击附件 chip 的 × 时回调（供注册表同步清理） */
+  onAttachmentRemove?: (attachmentId: string) => void;
 }
 
 export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, DingTalkMentionEditorProps>(
@@ -115,6 +131,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       seedText,
       seedSkillSlug,
       removableMentions = false,
+      onAttachmentRemove,
     },
     ref,
   ) {
@@ -157,6 +174,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     const syncFromDom = useCallback((syncTrigger = true) => {
       const root = editorRef.current;
       if (!root) return;
+      ensureTrailingCaretAnchor(root);
       const snapshot = serializeMentionEditor(root);
       onSnapshotChange?.(snapshot);
       if (!syncTrigger) return;
@@ -174,6 +192,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
     useImperativeHandle(ref, () => ({
       focus: () => editorRef.current?.focus(),
+      focusAtEnd: () => {
+        const root = editorRef.current;
+        if (!root) return;
+        focusMentionEditorAtEnd(root);
+      },
       clear: () => {
         const root = editorRef.current;
         if (!root) return;
@@ -183,7 +206,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       },
       getSnapshot: () => {
         const root = editorRef.current;
-        if (!root) return { plainText: '', mentions: [], isEmpty: true };
+        if (!root) return { plainText: '', segments: [], mentions: [], skills: [], workflows: [], attachmentIds: [], isEmpty: true };
         return serializeMentionEditor(root);
       },
       readSkillMeta: () => {
@@ -241,10 +264,36 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         captureCaretOffset();
       },
       rememberCaret,
+      insertAttachment: (att, plainTextOffset) => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertAttachmentSpan(root, att, resolveInsertOffset(plainTextOffset));
+        syncFromDom();
+        captureCaretOffset();
+      },
+      removeAttachment: (attachmentId) => {
+        const root = editorRef.current;
+        if (!root) return;
+        removeAttachmentSpan(root, attachmentId);
+        syncFromDom();
+      },
+      updateAttachmentStatus: (attachmentId, status, extras) => {
+        const root = editorRef.current;
+        if (!root) return;
+        updateAttachmentSpanStatus(root, attachmentId, status, extras);
+        syncFromDom(false);
+      },
+      setSegments: (segments, attachmentsById) => {
+        const root = editorRef.current;
+        if (!root) return;
+        setMentionEditorSegments(root, segments, attachmentsById);
+        syncFromDom();
+      },
       consumeSkillInlineTrigger: (query) => {
         const root = editorRef.current;
         if (!root) return null;
-        const offset = consumeSkillTriggerText(root, query);
+        const caret = readCaretPlainTextOffset(root) ?? lastCaretOffsetRef.current;
+        const offset = consumeSkillTriggerText(root, query, caret);
         if (offset !== null) {
           syncFromDom();
         }
@@ -253,7 +302,8 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       consumeSlashTrigger: (query) => {
         const root = editorRef.current;
         if (!root) return null;
-        const offset = consumeSlashTriggerText(root, query);
+        const caret = readCaretPlainTextOffset(root) ?? lastCaretOffsetRef.current;
+        const offset = consumeSlashTriggerText(root, query, caret);
         if (offset !== null) {
           syncFromDom();
         }
@@ -268,6 +318,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       saveCaret: () => {
         captureCaretOffset();
       },
+      getCaretPlainTextOffset: () => {
+        const root = editorRef.current;
+        if (!root) return lastCaretOffsetRef.current;
+        return readCaretPlainTextOffset(root) ?? lastCaretOffsetRef.current;
+      },
       openMentionPicker: () => {
         const root = editorRef.current;
         if (!root) return;
@@ -276,6 +331,14 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         onTriggerChange?.(detectActiveMentionTrigger(root));
       },
+      insertLineBreak: () => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertLineBreakAtCaret(root);
+        syncFromDom();
+        captureCaretOffset();
+      },
+      getEditorElement: () => editorRef.current,
     }), [captureCaretOffset, onTriggerChange, rememberCaret, removableMentions, resolveInsertOffset, syncFromDom]);
 
     useEffect(() => {
@@ -295,7 +358,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         if (lastAppliedSeedRef.current === trimmed) return;
         lastAppliedSeedRef.current = trimmed;
         setMentionEditorPlainText(root, `${trimmed} `);
-        focusEditorAtEnd(root);
+        focusMentionEditorAtEnd(root);
         syncFromDom();
         return;
       }
@@ -333,6 +396,8 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
     const handleInput = useCallback((event: React.FormEvent<HTMLDivElement>) => {
       const nativeEvent = event.nativeEvent as InputEvent;
+      // 先记下光标：slash/skill 内联 query 依赖 caret；onTextInput 可能同步打开浮层并触发 query 计算
+      captureCaretOffset();
       if (typeof nativeEvent.data === 'string' && nativeEvent.data.length > 0) {
         onTextInput?.(nativeEvent.data);
       }
@@ -341,21 +406,41 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       captureCaretOffset();
     }, [captureCaretOffset, onTextInput, rememberCaret, syncFromDom]);
 
-    const handleMentionRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const handleTokenRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('[data-mention-remove]')) return;
+
+      if (target.closest('[data-mention-remove]')) {
+        if (!removableMentions) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const root = editorRef.current;
+        const span = target.closest(MENTION_SPAN_SELECTOR);
+        if (!root || !(span instanceof HTMLSpanElement)) return;
+
+        removeMentionSpan(root, span);
+        syncFromDom();
+        root.focus();
+        return;
+      }
+
+      if (!target.closest('[data-attachment-remove]')) return;
 
       event.preventDefault();
       event.stopPropagation();
 
       const root = editorRef.current;
-      const span = target.closest(MENTION_SPAN_SELECTOR);
+      const span = target.closest(ATTACHMENT_SPAN_SELECTOR);
       if (!root || !(span instanceof HTMLSpanElement)) return;
 
-      removeMentionSpan(root, span);
+      const attachmentId = readAttachmentIdFromSpan(span);
+      removeAttachmentSpan(root, attachmentId ?? '');
+      if (attachmentId) {
+        onAttachmentRemove?.(attachmentId);
+      }
       syncFromDom();
       root.focus();
-    }, [syncFromDom]);
+    }, [onAttachmentRemove, removableMentions, syncFromDom]);
 
     const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Backspace' && !isComposingRef.current) {
@@ -385,8 +470,9 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         suppressContentEditableWarning
         data-placeholder={placeholder}
         className={cn(
-          'dingtalk-mention-editor min-h-[42px] max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words',
-          'text-[15px] leading-6 text-foreground outline-none',
+          'dingtalk-mention-editor min-h-[42px] max-h-[200px] cursor-text overflow-y-auto whitespace-pre-wrap break-words',
+          // leading-8（32px）+ 标签 h-6（24px）+ align-top/mt-1 → 与文字垂直居中，行间距约 8px
+          'text-[14px] leading-8 text-foreground outline-none',
           'empty:before:text-muted-foreground/55 empty:before:content-[attr(data-placeholder)]',
           className,
         )}
@@ -394,8 +480,9 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         onPaste={onPaste}
-        onMouseDown={removableMentions ? handleMentionRemove : undefined}
-        onClick={() => {
+        onMouseDown={handleTokenRemove}
+        onClick={(event) => {
+          handleTokenRemove(event);
           rememberCaret();
           syncFromDom();
           captureCaretOffset();

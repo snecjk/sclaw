@@ -43,6 +43,7 @@ import {
   workflowPageRootClass,
 } from '@/lib/surfaces';
 import { toast } from 'sonner';
+import { hostApiFetch } from '@/lib/host-api';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
 import {
@@ -74,6 +75,13 @@ import { useWorkflowUiStore } from '@/stores/workflow-ui';
 
 /** 将 ScheduleTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
+  const segments = Array.isArray(task.extra?.composerSegments)
+    ? (task.extra!.composerSegments as Array<{ type?: string }>)
+    : [];
+  const hasWorkflow = segments.some((seg) => seg?.type === 'workflow')
+    || Boolean(task.workflowCode); // 迁移前短暂兼容列
+  const hasSkill = segments.some((seg) => seg?.type === 'skill')
+    || Boolean(task.skillCode);
   return {
     id: task.id,
     name: task.name,
@@ -81,7 +89,8 @@ function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
     cronExpr: task.cronExpr,
     enabled: task.enabled,
     nextRunAt: task.nextRunAt ?? null,
-    workflowCode: task.workflowCode || undefined,
+    hasWorkflow,
+    hasSkill,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     agentId: task.agentId,
@@ -142,6 +151,7 @@ export default function MyTask() {
     toggleJob,
     deleteJob,
     triggerJob,
+    bumpNameMapsRefreshKey,
   } = useCronStore();
 
   // ── Agent 配置 ──
@@ -182,6 +192,26 @@ export default function MyTask() {
     name: string;
     message: string;
   } | null>(null);
+  const [hasCloudUpdates, setHasCloudUpdates] = useState(false);
+  const [pulling, setPulling] = useState(false);
+
+  const handlePullFromCloud = async () => {
+    if (pulling) return;
+    setPulling(true);
+    try {
+      await hostApiFetch('/api/scheduled-tasks/cloud/pull', { method: 'POST' });
+      await fetchJobs();
+      const status = await hostApiFetch<{ hasCloudUpdates?: boolean }>(
+        '/api/scheduled-tasks/cloud/sync-status',
+      );
+      setHasCloudUpdates(Boolean(status?.hasCloudUpdates));
+      toast.success(t('myTask.toolbar.pullSuccess'));
+    } catch {
+      toast.error(t('myTask.toolbar.pullFailed'));
+    } finally {
+      setPulling(false);
+    }
+  };
 
   const handleSectionChange = (section: MyTaskSection) => {
     if (section === 'workflow') {
@@ -204,6 +234,22 @@ export default function MyTask() {
     fetchJobs().catch(() => {});
   }, [activeSection, fetchJobs]);
 
+  // 仅进入 MyTask 定时任务分区时请求一次 sync-status
+  useEffect(() => {
+    if (activeSection !== 'tasks') return;
+    let cancelled = false;
+    void hostApiFetch<{ hasCloudUpdates?: boolean }>('/api/scheduled-tasks/cloud/sync-status')
+      .then((status) => {
+        if (!cancelled) setHasCloudUpdates(Boolean(status?.hasCloudUpdates));
+      })
+      .catch(() => {
+        if (!cancelled) setHasCloudUpdates(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection]);
+
   // ── 切换到执行记录 Tab 时串行加载 3 个状态桶 ──
   useEffect(() => {
     if (activeSection !== 'tasks' || activeView !== 'records') return;
@@ -214,37 +260,6 @@ export default function MyTask() {
     // fetchRecords 是 Zustand 稳定引用，仅在视图或状态切换时触发
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, activeView, recordStatus]);
-
-  // ── 任务视图轮询：到点后端会推进 nextRunAt，需及时拉取以重启倒计时。
-  //     仅在页面可见时轮询；切回可见时立即补一次，避免长时间隐藏后数据陈旧 ──
-  useEffect(() => {
-    if (activeSection !== 'tasks') return;
-    let timer: number | null = null;
-    const POLL_INTERVAL = 60_000;
-    const poll = async () => {
-      try {
-        if (document.visibilityState === 'visible' && activeView === 'tasks') {
-          await fetchJobs();
-        }
-      } catch {
-        // 轮询失败静默忽略，下一轮重试
-      } finally {
-        timer = window.setTimeout(poll, POLL_INTERVAL);
-      }
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        if (timer) window.clearTimeout(timer);
-        timer = window.setTimeout(poll, 0);
-      }
-    };
-    timer = window.setTimeout(poll, POLL_INTERVAL);
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      if (timer) window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [activeSection, activeView, fetchJobs]);
 
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
@@ -349,8 +364,9 @@ export default function MyTask() {
 
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
-      const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
-      const isClaude = input.engineType === 'claude';
+      const engineType = editingJob?.engineType ?? input.engineType;
+      const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, engineType);
+      const isClaude = engineType === 'claude';
       try {
         if (isClaude && !selectedAgent?.id) {
           throw new Error(
@@ -359,13 +375,15 @@ export default function MyTask() {
               : t('myTask.error.claudeAgentNoWorkspaceCreate'),
           );
         }
-        // 统一模型：prompt 干净（执行期由 executor 烘焙 dingtalk），dingtalkRecipients 走列。
+        // prompt 干净；技能/工作流/收件人只进 extra.composerSegments；附件由 service 持久化。
         const base = {
           name: input.name,
           cronExpr: input.schedule,
           prompt: input.message,
-          dingtalkRecipients: input.dingTalkMentions ?? null,
-          workflowCode: input.workflowCode ?? null,
+          dingtalkRecipients: null,
+          skillCode: null,
+          workflowCode: null,
+          extra: input.extra ?? null,
           myArtifactFolderPath: input.myArtifactFolderPath ?? null,
           sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };
@@ -375,6 +393,7 @@ export default function MyTask() {
               permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
             }
           : {};
+        const nameChanged = Boolean(editingJob && input.name !== editingJob.name);
         if (editingJob) {
           await updateJob(editingJob.id, {
             ...base,
@@ -392,6 +411,7 @@ export default function MyTask() {
           toast.success(t('myTask.toast.created'));
         }
         await fetchJobs().catch(() => {});
+        if (nameChanged) bumpNameMapsRefreshKey();
       } catch (err) {
         const errStr = String(err);
         toast.error(errStr);
@@ -410,7 +430,7 @@ export default function MyTask() {
         throw err;
       }
     },
-    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs]
+    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs, bumpNameMapsRefreshKey, t]
   );
 
   const handleDelete = useCallback(() => {
@@ -524,7 +544,22 @@ export default function MyTask() {
                 <ViewTabs activeView={activeView} onViewChange={setActiveView} />
 
                 {isTasksView ? (
-                  <TaskToolbar sortValue={sortValue} onSortChange={setSortValue} />
+                  <div className="ml-auto flex shrink-0 items-center gap-3">
+                    {hasCloudUpdates ? (
+                      <button
+                        type="button"
+                        disabled={pulling}
+                        onClick={() => void handlePullFromCloud()}
+                        className="inline-flex h-8 items-center rounded-[8px] border border-border bg-background px-3 text-[13px] text-foreground hover:bg-muted disabled:opacity-60"
+                      >
+                        {pulling ? t('myTask.toolbar.pulling') : t('myTask.toolbar.pullFromCloud')}
+                      </button>
+                    ) : null}
+                    <TaskToolbar
+                      sortValue={sortValue}
+                      onSortChange={setSortValue}
+                    />
+                  </div>
                 ) : (
                   <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
                 )}
