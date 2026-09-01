@@ -27,6 +27,14 @@ body {
   background: var(--sto-color-bg-layout);
 }
 
+.app-menu-state {
+  display: flex;
+  min-height: calc(100vh - var(--sto-shell-topbar));
+  align-items: center;
+  justify-content: center;
+  padding: var(--sto-space-6);
+}
+
 .app-header {
   display: flex;
   align-items: center;
