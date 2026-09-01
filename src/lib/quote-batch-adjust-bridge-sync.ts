@@ -2,6 +2,7 @@
  * Batch-adjust bridge push — independent of flow_card preview / params-content diff.
  *
  * Agent 将会话侧整理好的 CLI 入参写在消息里的 `batchAdjustParams`（常为 flow_card.data）；
+ * 支持嵌套 `objectList` 或 CLI `--objectListJson` 字符串。
  * 平台解析该结构后直接推送 `batch-adjust.params-ready`。
  * 按「产出该参数的助手消息」去重：同一条消息重复 sync 不推；新消息即使参数完全相同也再推
  * （覆盖用户「原样再推一次」）。

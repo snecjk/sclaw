@@ -7,6 +7,7 @@
  * - 已进入会话：仅由 HomeMainConversation 内嵌渲染（footer 不要再挂一份）
  */
 import { useCallback, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -21,7 +22,7 @@ import {
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
+import { ChatEngineModelCascade } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
@@ -45,6 +46,8 @@ export interface HomeComposerProps {
     workflowName?: string | null,
     skillMeta?: SkillMeta,
   ) => void;
+  /** Return true to consume a local command before it is sent to the agent. */
+  onBeforeSend?: (text: string) => boolean;
   onQueue?: (
     text: string,
     attachments?: FileAttachment[],
@@ -65,16 +68,23 @@ export interface HomeComposerProps {
   footerAlign?: 'center' | 'right';
   /** 新对话落地页：输入框下展示「进入项目工作」选择条 */
   showProjectPicker?: boolean;
+  /** 应用开发工作台：隐藏 @ */
+  hideDingTalkMention?: boolean;
+  /** 应用开发工作台：接口清单 */
+  showInterfaceCatalog?: boolean;
   /** Embed / 业务场景快捷 pill */
   composerScenarioActions?: import('../../../shared/embed-composer-actions').EmbedComposerAction[];
   /** 应用广场窄栏：工具收起到下拉 */
   toolbarToolsLayout?: 'inline' | 'dropdown';
+  /** 可选覆盖默认内联引擎/模型工具栏 */
+  toolbarSelectors?: ReactNode;
 }
 
 export function HomeComposer({
   seedText,
   seedSkillSlug,
   onSend,
+  onBeforeSend,
   onQueue,
   placeholder,
   placeholderKey,
@@ -83,8 +93,11 @@ export function HomeComposer({
   showDisclaimer = true,
   footerAlign = 'center',
   showProjectPicker = false,
+  hideDingTalkMention = false,
+  showInterfaceCatalog = false,
   composerScenarioActions,
   toolbarToolsLayout,
+  toolbarSelectors,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
   const agents = useAgentsStore((s) => s.agents);
@@ -114,15 +127,27 @@ export function HomeComposer({
     { messageCount: messagesLength },
   );
 
-  const inlineToolbarSelectors = (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
-      <ChatModelSelector variant="inline" className="min-w-max shrink-0" />
-    </div>
+  const inlineToolbarSelectors = toolbarSelectors ?? (
+    <ChatEngineModelCascade className="min-w-0 max-w-full" />
   );
 
+  const sendMessage = onSend ?? handleHubSend;
   const inputProps = useChatInputBindings({
-    onSend: onSend ?? handleHubSend,
+    onSend: onBeforeSend
+      ? (text, attachments, targetAgentId, dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta) => {
+          if (onBeforeSend(text)) return;
+          sendMessage(
+            text,
+            attachments,
+            targetAgentId,
+            dingTalkMentions,
+            workflowId,
+            workflowSource,
+            workflowName,
+            skillMeta,
+          );
+        }
+      : sendMessage,
     onQueue: onQueue ?? handleHubQueue,
     variant: 'embedded',
     seedText,
@@ -150,6 +175,8 @@ export function HomeComposer({
           toolbarInlineSelectors={inlineToolbarSelectors}
           engineType={resolvedEngineType}
           showProjectPicker={showProjectPicker}
+          hideDingTalkMention={hideDingTalkMention}
+          showInterfaceCatalog={showInterfaceCatalog}
           composerScenarioActions={composerScenarioActions}
           toolbarToolsLayout={toolbarToolsLayout}
         />

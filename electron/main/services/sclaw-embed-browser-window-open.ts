@@ -8,6 +8,8 @@
 import { app, BrowserWindow, webContents, type WebContents } from 'electron';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
 import {
+  isSclawEmbedDeferredWindowOpenUrl,
+  isSclawEmbedHttpUrl,
   isSclawEmbedSameFrameWindowOpen,
   resolveSclawEmbedWindowOpenAction,
 } from '../../../shared/sclaw-embed-browser-window-open';
@@ -16,6 +18,8 @@ import { logger } from '../../utils/logger';
 
 const runtimeByWebContentsId = new Map<number, string>();
 const handlerAttachedIds = new Set<number>();
+const childWatchAttachedIds = new Set<number>();
+const DEFERRED_CHILD_TIMEOUT_MS = 15_000;
 let hookInstalled = false;
 
 function isEmbedBrowserWebview(wc: WebContents): boolean {
@@ -49,8 +53,6 @@ function resolveHostWebContents(guest: WebContents): WebContents | null {
 
 function notifyOpenUrl(url: string, runtimeId: string | null, guest: WebContents): void {
   const target = resolveHostWebContents(guest);
-  // TEMP-DIAG: trace window.open forwarding
-  logger.info(`[SclawEmbedBrowser][diag] notifyOpenUrl url=${url} runtimeId=${runtimeId ?? 'null'} target=${target && !target.isDestroyed() ? target.id : 'none'}`);
   if (!target || target.isDestroyed()) return;
   target.send('sclaw-browser:open-url', {
     url,
@@ -58,18 +60,99 @@ function notifyOpenUrl(url: string, runtimeId: string | null, guest: WebContents
   });
 }
 
+function stealChildNavigation(parent: WebContents, child: BrowserWindow, navUrl: string): boolean {
+  if (child.isDestroyed() || parent.isDestroyed()) return false;
+  const action = resolveSclawEmbedWindowOpenAction(navUrl);
+  if (action.kind === 'download') {
+    try {
+      parent.downloadURL(action.url);
+    } catch {
+      // best-effort
+    }
+    try {
+      child.close();
+    } catch {
+      // best-effort
+    }
+    return true;
+  }
+  if (action.kind !== 'open-tab') return false;
+  notifyOpenUrl(action.url, runtimeByWebContentsId.get(parent.id) ?? null, parent);
+  try {
+    child.close();
+  } catch {
+    // best-effort
+  }
+  return true;
+}
+
+/** Capture the real URL after window.open('') / about:blank, then fold it into a plaza tab. */
+function watchDeferredChildWindow(parent: WebContents, child: BrowserWindow): void {
+  if (child.isDestroyed() || parent.isDestroyed()) return;
+  const childWc = child.webContents;
+  let stolen = false;
+
+  const steal = (navUrl: string) => {
+    if (stolen) return;
+    if (!isSclawEmbedHttpUrl(navUrl)) return;
+    stolen = stealChildNavigation(parent, child, navUrl);
+  };
+
+  const onWillNavigate = (event: { preventDefault: () => void }, navUrl: string) => {
+    if (!isSclawEmbedHttpUrl(navUrl)) return;
+    event.preventDefault();
+    steal(navUrl);
+  };
+
+  childWc.on('will-navigate', onWillNavigate);
+  childWc.on('will-redirect', onWillNavigate);
+  childWc.on('did-navigate', (_event, navUrl) => steal(navUrl));
+  childWc.on('did-navigate-in-page', (_event, navUrl) => steal(navUrl));
+  childWc.on('did-finish-load', () => {
+    try {
+      steal(childWc.getURL());
+    } catch {
+      // best-effort
+    }
+  });
+
+  setTimeout(() => {
+    if (stolen || child.isDestroyed()) return;
+    try {
+      child.close();
+    } catch {
+      // best-effort
+    }
+  }, DEFERRED_CHILD_TIMEOUT_MS);
+}
+
+function deferredWindowOpenAllow() {
+  return {
+    action: 'allow' as const,
+    overrideBrowserWindowOptions: {
+      show: false,
+      width: 1,
+      height: 1,
+      webPreferences: {
+        partition: SCLAW_EMBED_BROWSER_PARTITION,
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    },
+  };
+}
+
 function applyWindowOpenHandler(wc: WebContents): void {
   if (wc.isDestroyed()) return;
   const webContentsId = wc.id;
-  if (handlerAttachedIds.has(webContentsId)) return;
+  const alreadyAttached = handlerAttachedIds.has(webContentsId);
 
   void ensureSclawEmbedBrowserXhrPatch(wc);
 
   wc.setWindowOpenHandler(({ url, frameName }) => {
     if (wc.isDestroyed()) return { action: 'deny' };
     const action = resolveSclawEmbedWindowOpenAction(url);
-    // TEMP-DIAG: trace every intercepted window.open
-    logger.info(`[SclawEmbedBrowser][diag] window.open intercepted wc=${webContentsId} url=${url} frameName=${frameName ?? ''} action=${action.kind}`);
     if (isSclawEmbedSameFrameWindowOpen(frameName)) {
       if (action.kind === 'download') {
         try {
@@ -81,8 +164,6 @@ function applyWindowOpenHandler(wc: WebContents): void {
       }
       if (action.kind === 'open-tab') {
         try {
-          // TEMP-DIAG
-          logger.info(`[SclawEmbedBrowser][diag] same-frame loadURL wc=${webContentsId} url=${action.url}`);
           void wc.loadURL(action.url);
         } catch {
           // best-effort
@@ -99,20 +180,32 @@ function applyWindowOpenHandler(wc: WebContents): void {
       return { action: 'deny' };
     }
     if (action.kind === 'open-tab') {
-      const runtimeId = runtimeByWebContentsId.get(webContentsId) ?? null;
-      notifyOpenUrl(action.url, runtimeId, wc);
+      notifyOpenUrl(action.url, runtimeByWebContentsId.get(webContentsId) ?? null, wc);
       return { action: 'deny' };
+    }
+    if (isSclawEmbedDeferredWindowOpenUrl(url)) {
+      return deferredWindowOpenAllow();
     }
     return { action: 'deny' };
   });
 
   handlerAttachedIds.add(webContentsId);
-  // TEMP-DIAG: confirm handler attach
-  logger.info(`[SclawEmbedBrowser][diag] window-open handler attached wc=${webContentsId}`);
-  wc.once('destroyed', () => {
-    handlerAttachedIds.delete(webContentsId);
-    runtimeByWebContentsId.delete(webContentsId);
-  });
+
+  if (!childWatchAttachedIds.has(webContentsId)) {
+    childWatchAttachedIds.add(webContentsId);
+    wc.on('did-create-window', (child) => {
+      watchDeferredChildWindow(wc, child);
+    });
+  }
+
+  if (!alreadyAttached) {
+    logger.info(`[SclawEmbedBrowser] window-open handler attached wc=${webContentsId}`);
+    wc.once('destroyed', () => {
+      handlerAttachedIds.delete(webContentsId);
+      childWatchAttachedIds.delete(webContentsId);
+      runtimeByWebContentsId.delete(webContentsId);
+    });
+  }
 }
 
 /** Install once: catch every embed webview as soon as it is created. */
@@ -127,8 +220,9 @@ export function installSclawEmbedBrowserWindowOpenHook(): void {
       applyWindowOpenHandler(wc);
     };
 
-    // Type/partition are usually ready immediately; also retry on dom-ready.
-    void Promise.resolve().then(tryAttach);
+    // Must attach synchronously — a microtask can miss the first window.open.
+    tryAttach();
+    wc.once('did-start-loading', tryAttach);
     wc.once('dom-ready', tryAttach);
   });
 }
@@ -143,8 +237,6 @@ export function attachSclawEmbedBrowserWindowOpenHandler(
 
   const wc = webContents.fromId(webContentsId);
   if (!wc || wc.isDestroyed()) return;
-  // Force re-apply so a prior deny-only detach cannot stick.
-  handlerAttachedIds.delete(webContentsId);
   applyWindowOpenHandler(wc);
 }
 
@@ -153,22 +245,10 @@ export function detachSclawEmbedBrowserWindowOpenHandler(
 ): void {
   if (!webContentsId) return;
   runtimeByWebContentsId.delete(webContentsId);
-  if (!handlerAttachedIds.has(webContentsId)) return;
-
-  const wc = webContents.fromId(webContentsId);
-  if (wc && !wc.isDestroyed()) {
-    // TEMP-DIAG: trace silent deny-all replacement
-    logger.info(`[SclawEmbedBrowser][diag] window-open handler DETACHED (deny-all) wc=${webContentsId}`);
-    wc.setWindowOpenHandler(({ url }) => {
-      logger.info(`[SclawEmbedBrowser][diag] deny-all handler intercepted wc=${webContentsId} url=${url}`);
-      return { action: 'deny' };
-    });
-  }
-  handlerAttachedIds.delete(webContentsId);
+  // Keep the forwarding handler on a still-alive guest. Replacing it with
+  // deny-all races remounts and silently drops window.open.
 }
 
 export function detachAllSclawEmbedBrowserWindowOpenHandlers(): void {
-  for (const webContentsId of [...handlerAttachedIds]) {
-    detachSclawEmbedBrowserWindowOpenHandler(webContentsId);
-  }
+  runtimeByWebContentsId.clear();
 }

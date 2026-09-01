@@ -2,7 +2,7 @@
  * Chrome-like tab strip — favicon comes from the page (page-favicon-updated), like Chrome.
  */
 import { useState } from 'react';
-import { Globe, Home, Plus, X } from 'lucide-react';
+import { Code2, Globe, Home, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
@@ -52,9 +52,11 @@ export function AppPlazaTabStrip() {
   const { t } = useTranslation('common');
   const activeTabId = useAppPlazaShellStore((s) => s.activeTabId);
   const browserTabs = useAppPlazaShellStore((s) => s.browserTabs);
+  const devAppTabs = useAppPlazaShellStore((s) => s.devAppTabs);
   const selectTab = useAppPlazaShellStore((s) => s.selectTab);
   const addBlankTab = useAppPlazaShellStore((s) => s.addBlankTab);
   const closeBrowserTab = useAppPlazaShellStore((s) => s.closeBrowserTab);
+  const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
   const { snapshot, setUserCollapsed } = useAppShellLayout();
   const canUserRestoreSidebar = snapshot.canUserRestoreSidebar;
   const windowsChromeOwner = useWindowsChromeOwner();
@@ -117,6 +119,36 @@ export function AppPlazaTabStrip() {
             onClick={(event) => {
               event.stopPropagation();
               closeBrowserTab(tab.id);
+            }}
+          >
+            <X className="h-3 w-3" aria-hidden />
+          </span>
+        </button>
+      ))}
+
+      {devAppTabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={activeTabId === tab.id}
+          className={cn(
+            'app-plaza-tab',
+            activeTabId === tab.id && 'app-plaza-tab--active',
+          )}
+          onClick={() => selectTab(tab.id)}
+          title={tab.title}
+        >
+          <Code2 className="app-plaza-tab__icon-svg" aria-hidden />
+          <span className="app-plaza-tab__label">{tab.title}</span>
+          <span
+            role="button"
+            tabIndex={-1}
+            className="app-plaza-tab__close"
+            aria-label={t('moreApps.browserTabs.close', { defaultValue: '关闭页签' })}
+            onClick={(event) => {
+              event.stopPropagation();
+              closeDevAppTab(tab.id);
             }}
           >
             <X className="h-3 w-3" aria-hidden />

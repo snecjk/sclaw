@@ -4,7 +4,7 @@
  * - `collapsible`：助手消息内独立 tool 块，可折叠（默认）
  * - `readonly` + `thinkingProcess`：思考面板内可折叠只读块（对齐 sai-desktop）
  */
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -136,7 +136,7 @@ function ToolCallContent({
   );
 }
 
-export function ChatToolCallCard({
+export const ChatToolCallCard = memo(function ChatToolCallCard({
   name,
   displayName,
   input,
@@ -291,4 +291,4 @@ export function ChatToolCallCard({
       {open ? <ToolCallContent input={input} hasLeadingOffset /> : null}
     </div>
   );
-}
+});

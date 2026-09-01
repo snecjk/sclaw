@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createFlowCardBlock } from '../../shared/flow-card-protocol';
 import {
   filterQuoteFlowCardActions,
+  isQuoteReuploadAction,
   isQuoteSubmitAction,
   normalizeQuoteFlowCard,
   shouldHideQuoteSubmitActions,
@@ -13,6 +14,14 @@ const submitAction = {
   variant: 'primary' as const,
   kind: 'chat.sendMessage' as const,
   params: { text: '提交报价', skillSlugs: ['quote-assistant'] },
+};
+
+const reuploadAction = {
+  id: 'reupload',
+  label: '重新上传报价表',
+  variant: 'secondary' as const,
+  kind: 'composer.openFilePicker' as const,
+  params: { accept: '.xlsx,.xls,.csv', multiple: false },
 };
 
 const openDetailAction = {
@@ -27,6 +36,8 @@ describe('flow-card-quote-actions', () => {
   it('detects quote submit actions', () => {
     expect(isQuoteSubmitAction(submitAction)).toBe(true);
     expect(isQuoteSubmitAction(openDetailAction)).toBe(false);
+    expect(isQuoteReuploadAction(reuploadAction)).toBe(true);
+    expect(isQuoteReuploadAction(submitAction)).toBe(false);
   });
 
   it('hides submit after submitted phase', () => {
@@ -53,16 +64,21 @@ describe('flow-card-quote-actions', () => {
     expect(filterQuoteFlowCardActions(card, card.actions ?? [])).toEqual([openDetailAction]);
   });
 
-  it('keeps submit on ready_to_save card', () => {
+  it('hides submit and re-upload on ready_to_save and prompts chat submit', () => {
     const card = createFlowCardBlock({
       cardId: 'quote-active',
       domain: 'quote',
       phase: 'ready_to_save',
+      body: '报价对象 王豪生 校验通过。',
       data: { validationOutcome: 'pass', ossKey: 'vip/osstmp/x' },
-      actions: [submitAction],
+      actions: [submitAction, reuploadAction, openDetailAction],
     });
-    expect(shouldHideQuoteSubmitActions(card)).toBe(false);
-    expect(filterQuoteFlowCardActions(card, card.actions ?? [])).toEqual([submitAction]);
+    expect(shouldHideQuoteSubmitActions(card)).toBe(true);
+    expect(filterQuoteFlowCardActions(card, card.actions ?? [])).toEqual([openDetailAction]);
+    const normalized = normalizeQuoteFlowCard(card);
+    expect(normalized.actions).toEqual([openDetailAction]);
+    expect(normalized.body).toContain('请在下方对话框输入「提交报价」');
+    expect(normalized.body).toContain('重新上传报价表');
   });
 
   it('hides submit on editing card with quoteId even without previewMode', () => {

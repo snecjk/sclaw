@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   listMissingBatchAdjustFields,
+  parseBatchAdjustDraft,
   parseBatchAdjustParams,
+  parseCliJsonArray,
   serializeBatchAdjustObjectListJson,
 } from '../../shared/quote-batch-adjust';
 
@@ -30,6 +32,61 @@ describe('quote-batch-adjust', () => {
     });
     expect(params?.objectList).toHaveLength(1);
     expect(params?.objectList[0]?.items[0]?.adjustValue).toBe('0.2');
+  });
+
+  it('parses CLI objectListJson string', () => {
+    const objectList = [{
+      objectName: '王豪生',
+      sceneType: 'CUSTOMER',
+      startDate: '2026-08-01',
+      endDate: '2026-12-31',
+      items: [{
+        areaDetail: 'ALL',
+        startWeight: '0',
+        startWeightMark: '<',
+        endWeight: '1',
+        endWeightMark: '<=',
+        adjustType: 'ADD',
+        adjustValue: '0.5',
+      }],
+    }];
+    const params = parseBatchAdjustParams({
+      freightFeeType: 'BASE_FREIGHT_FEE',
+      objectListJson: JSON.stringify(objectList),
+    });
+    expect(params?.objectList[0]?.objectName).toBe('王豪生');
+    expect(params?.objectList[0]?.items[0]?.adjustValue).toBe('0.5');
+  });
+
+  it('parses double-encoded objectListJson', () => {
+    const objectList = [{
+      objectName: 'ALL',
+      sceneType: 'CUSTOMER',
+      startDate: '2026-08-01',
+      endDate: '2026-12-31',
+      items: [{
+        areaDetail: 'ALL',
+        startWeight: '0',
+        startWeightMark: '<',
+        endWeight: '1',
+        endWeightMark: '<=',
+        adjustType: 'ADD',
+        adjustValue: '0.5',
+      }],
+    }];
+    const params = parseBatchAdjustParams({
+      objectListJson: JSON.stringify(JSON.stringify(objectList)),
+    });
+    expect(params?.objectList[0]?.objectName).toBe('ALL');
+  });
+
+  it('parses quotationListJson for draft / save', () => {
+    const quotationList = [{ quoteId: 'Q-1', objectName: '王豪生' }];
+    const draft = parseBatchAdjustDraft({
+      quotationListJson: JSON.stringify(quotationList),
+    });
+    expect(draft?.quotationList).toEqual(quotationList);
+    expect(parseCliJsonArray('not-json')).toBeNull();
   });
 
   it('serializes objectListJson for CLI', () => {

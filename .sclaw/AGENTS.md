@@ -47,6 +47,7 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
   - Do not add new direct `window.electron.ipcRenderer.invoke(...)` calls in pages/components; expose them through host-api/api-client instead.
   - Do not call Gateway HTTP endpoints directly from renderer (`fetch('http://127.0.0.1:18789/...')` etc.). Use Main-process proxy channels (`hostapi:fetch`, `gateway:httpProxy`) to avoid CORS/env drift.
   - Transport policy is Main-owned and fixed as `WS -> HTTP -> IPC fallback`; renderer should not implement protocol switching UI/business logic.
+- **App Plaza embed browser tools**: `bridge_*` execution is always Main Host API (`:3210`) → `sclaw-embed-bridge-driver` → `__stoEmbedBridge` inject script for clicks. OpenClaw registers `sto-browser-bridge` Gateway plugin; Claude Agent registers in-process MCP `sto-browser-tool` via `claude-runtime-extensions.ts`. Do not duplicate click/fill handlers per engine; add thin adapters only.
 - **Comms-change checklist**: If your change touches communication paths (gateway events, runtime send/receive, delivery, or fallback), run `pnpm run comms:replay` and `pnpm run comms:compare` before pushing.
 - **Doc sync rule**: After any functional or architecture change, review `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` for required updates; if behavior/flows/interfaces changed, update docs in the same PR/commit.
 - **OpenSpec workflow**: This project uses OpenSpec (spec-driven schema) for change management. New features MUST follow the OpenSpec artifact workflow: proposal → design → specs → tasks → apply. See `openspec/config.yaml` for project-specific rules and `openspec/specs/` for capability standards. Example workflow available at `openspec/examples/example-chat-typing-indicator/`.
@@ -77,7 +78,7 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 ## 📁 项目目录说明（SClaw）
 
 - 当前 OpenClaw workspace（本目录）是用户项目内的 `.sclaw/`。
-- 用户真实项目根目录：`D:/code/sto-claw/`（相对本目录为 `../`）。
+- 用户真实项目根目录：`/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/`（相对本目录为 `../`）。
 - 读写业务代码、配置、资源时，请以项目根为准（使用 `../` 或绝对路径）。
 - OpenClaw bootstrap 文件（`AGENTS.md` / `SOUL.md` / `USER.md` 等）只应留在本目录，不要写回项目根。
 - 本地产物写入本目录下的 `./.claw-output/`，不要写到项目根或本目录根。
@@ -88,10 +89,10 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 
 本工作区生成的本地产物（HTML / 报告 / SQL / 代码 / 文档 / 表格等）**必须**写入：
 
-`D:/code/sto-claw/.sclaw/.claw-output/<文件名>`
+`/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/.sclaw/.claw-output/<文件名>`
 
-- ⛔ 禁止写入工作区根目录 `D:/code/sto-claw/.sclaw/`（不要把产物直接落在 workspace 根）
-- ⛔ 禁止写入用户项目根 `D:/code/sto-claw/`（业务目录，不是产物目录）
+- ⛔ 禁止写入工作区根目录 `/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/.sclaw/`（不要把产物直接落在 workspace 根）
+- ⛔ 禁止写入用户项目根 `/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/`（业务目录，不是产物目录）
 - ⛔ 禁止 `outputs/`、`output/`、桌面、Downloads、skill 目录或其他自定义目录
 - 目录 `.claw-output/` 通常已存在；若不存在先创建再写
 - 回复中的本地文件必须用绝对路径 Markdown 链接：`[文件名](file:///绝对路径)`

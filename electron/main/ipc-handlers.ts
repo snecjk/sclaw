@@ -9,6 +9,7 @@ import { join, extname, basename, dirname } from 'node:path';
 import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
+import { omitUnchangedHistoryMessages, readClientHistoryFingerprint } from '../engines/history-rpc-result';
 import type { AgentEngineType } from '../engines/types';
 import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
@@ -93,7 +94,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   getSpriteWindow?: () => BrowserWindow | null,
   getFloatIconWindow?: () => BrowserWindow | null,
-  getMainWindow?: () => BrowserWindow | null,
+  _getMainWindow?: () => BrowserWindow | null,
 ): void {
   // Catch embed webview window.open as early as guest WebContents are created.
   void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
@@ -117,9 +118,6 @@ export function registerIpcHandlers(
   // Gateway handlers
   registerGatewayHandlers(
     gatewayManager,
-    getMainWindow ?? (() => mainWindow),
-    getSpriteWindow,
-    getFloatIconWindow,
   );
 
   // ClawHub handlers
@@ -169,6 +167,8 @@ export function registerIpcHandlers(
 
   // Sprite handlers (desktop sprite session context bridge)
   registerSpriteHandlers(mainWindow);
+
+  registerAppDevIdeHandlers();
 
   // Float icon handlers (desktop floating launcher)
   registerFloatIconHandlers(getFloatIconWindow);
@@ -663,13 +663,31 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'discover') {
-            const payload = request.payload as { context?: string } | undefined;
-            data = await import('../utils/sai-cli').then((m) => m.saiDiscover(payload?.context));
+            const payload = request.payload as
+              | { query?: string; context?: string; limit?: number }
+              | undefined;
+            const query = payload?.query?.trim() || payload?.context?.trim() || '';
+            data = await import('../utils/sai-cli').then((m) =>
+              m.saiDiscover(query, { limit: payload?.limit }),
+            );
             break;
           }
           if (request.action === 'list') {
-            const payload = request.payload as { product?: string; module?: string } | undefined;
-            data = await import('../utils/sai-cli').then((m) => m.saiList(payload));
+            const payload = request.payload as
+              | {
+                  product?: string;
+                  module?: string;
+                  page?: number;
+                  pageSize?: number;
+                  /** 翻页拉全量，供接口清单使用 */
+                  all?: boolean;
+                }
+              | undefined;
+            data = await import('../utils/sai-cli').then((m) =>
+              payload?.all
+                ? m.saiListAll(payload)
+                : m.saiList(payload),
+            );
             break;
           }
           if (request.action === 'execute') {
@@ -868,23 +886,12 @@ function registerLogHandlers(): void {
  */
 function registerGatewayHandlers(
   gatewayManager: GatewayManager,
-  getMainWindow: () => BrowserWindow | null,
-  getSpriteWindow?: () => BrowserWindow | null,
-  getFloatIconWindow?: () => BrowserWindow | null,
 ): void {
-  // Helper: broadcast an event to all renderer windows (main + sprite + float-icon)
+  // Helper: broadcast an event to all renderer windows
   const broadcast = (channel: string, ...args: unknown[]) => {
-    const mainWindow = getMainWindow();
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      safeWebContentsSend(mainWindow.webContents, channel, ...args);
-    }
-    const sprite = getSpriteWindow?.();
-    if (sprite && !sprite.isDestroyed()) {
-      safeWebContentsSend(sprite.webContents, channel, ...args);
-    }
-    const floatIcon = getFloatIconWindow?.();
-    if (floatIcon && !floatIcon.isDestroyed()) {
-      safeWebContentsSend(floatIcon.webContents, channel, ...args);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      safeWebContentsSend(win.webContents, channel, ...args);
     }
   };
   type GatewayHttpProxyRequest = {
@@ -990,20 +997,75 @@ function registerGatewayHandlers(
       }
 
       if (method === 'chat.history') {
+        const perfStart = Date.now();
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           limit?: number;
+          beforeId?: string;
           engineType?: AgentEngineType;
+          clientFingerprint?: unknown;
         };
-        const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
+        const engineType = parseEngineType(body.engineType);
+        const adapter = await getAdapterForSession(body.sessionKey ?? '', engineType);
+        const beforeId = typeof body.beforeId === 'string' && body.beforeId ? body.beforeId : undefined;
+        const getStart = Date.now();
         const result = await adapter.getHistory(
           { gatewayManager },
-          { sessionKey: body.sessionKey ?? '', limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000 },
+          {
+            sessionKey: body.sessionKey ?? '',
+            limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000,
+            beforeId,
+          },
         );
+        const getMs = Date.now() - getStart;
         if (!result.success) {
+          logger.info('[chat-history-perf]', {
+            stage: 'ipc.rpc.failed',
+            sessionKey: body.sessionKey ?? '',
+            engineType: body.engineType ?? adapter.type,
+            getMs,
+            totalMs: Date.now() - perfStart,
+            error: result.error || 'chat.history failed',
+          });
           return { success: false, error: result.error || 'chat.history failed' };
         }
-        return { success: true, result: sanitizeMemoryFromChatPayload(result.result) };
+        const historyResult = omitUnchangedHistoryMessages({
+          engineType: adapter.type,
+          result: result.result ?? { messages: [] },
+          clientFingerprint: readClientHistoryFingerprint(body.clientFingerprint),
+          beforeId,
+        });
+        const sanitizeStart = Date.now();
+        const payload = sanitizeMemoryFromChatPayload(historyResult);
+        const sanitizeMs = Date.now() - sanitizeStart;
+        const messages = (payload as { messages?: unknown[] } | null)?.messages;
+        const messageCount = Array.isArray(messages) ? messages.length : 0;
+        // 全量 stringify 估算字节数是 O(payload) 的主进程主线程操作，
+        // 仅在显式开启 debug（SCLAW_CHAT_HISTORY_PERF_DEBUG=1）时计算。
+        let payloadBytes: number | null = null;
+        if (process.env.SCLAW_CHAT_HISTORY_PERF_DEBUG === '1') {
+          try {
+            payloadBytes = JSON.stringify(payload).length;
+          } catch {
+            payloadBytes = null;
+          }
+        }
+        logger.info('[chat-history-perf]', {
+          stage: 'ipc.rpc.done',
+          sessionKey: body.sessionKey ?? '',
+          engineType: adapter.type,
+          getMs,
+          sanitizeMs,
+          totalMs: Date.now() - perfStart,
+          messageCount,
+          payloadBytes,
+          unchanged: Boolean(historyResult.unchanged),
+          hasClientFingerprint: Boolean(readClientHistoryFingerprint(body.clientFingerprint)),
+          hasMore: Boolean(historyResult.hasMore),
+          totalCount: historyResult.totalCount ?? messageCount,
+          beforeId: beforeId ?? null,
+        });
+        return { success: true, result: payload };
       }
 
       if (method === 'chat.send') {
@@ -2279,6 +2341,37 @@ function registerSpriteHandlers(mainWindow: BrowserWindow): void {
       mainWindow.show();
       mainWindow.focus();
     }
+  });
+}
+
+function registerAppDevIdeHandlers(): void {
+  ipcMain.handle('app-dev-ide:open', async (_event, input: unknown) => {
+    const payload = input && typeof input === 'object' ? input as { workspaceId?: unknown; title?: unknown } : {};
+    const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId.trim() : '';
+    if (!workspaceId) throw new Error('workspaceId 不能为空');
+    const title = typeof payload.title === 'string' ? payload.title : undefined;
+    const { openAppDevIdeWindow } = await import('./app-dev-ide-window');
+    openAppDevIdeWindow({ workspaceId, title });
+    return { ok: true };
+  });
+
+  ipcMain.handle('app-dev-ide:focus', async (_event, workspaceId: unknown) => {
+    const id = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+    if (!id) return false;
+    const { focusAppDevIdeWindow } = await import('./app-dev-ide-window');
+    return focusAppDevIdeWindow(id);
+  });
+
+  ipcMain.handle('app-dev-ide:isOpen', async (_event, workspaceId: unknown) => {
+    const id = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+    if (!id) return false;
+    const { isAppDevIdeOpen } = await import('./app-dev-ide-window');
+    return isAppDevIdeOpen(id);
+  });
+
+  ipcMain.handle('app-dev-ide:listOpen', async () => {
+    const { listOpenAppDevIdeWorkspaceIds } = await import('./app-dev-ide-window');
+    return listOpenAppDevIdeWorkspaceIds();
   });
 }
 

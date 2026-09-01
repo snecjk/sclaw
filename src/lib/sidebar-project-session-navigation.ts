@@ -1,4 +1,5 @@
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
+import { isAppDevSessionKey } from '@/lib/app-dev-session';
 import { isProjectNewChatDraftKey } from '@/stores/chat/types';
 
 /** Stable creation-time descending order (newest first); invalid timestamps remain after dated projects. */
@@ -63,6 +64,7 @@ export function resolveSidebarProjectFocus(input: {
   }
 
   if (!currentSessionKey || currentSessionKey === defaultSessionKey) return null;
+  if (isAppDevSessionKey(currentSessionKey)) return null;
   const workspaceId = sessionWorkspaceByKey[currentSessionKey];
   if (!workspaceId || workspaceId === defaultWorkspaceId) return null;
   return { projectId: workspaceId, sessionKey: currentSessionKey };

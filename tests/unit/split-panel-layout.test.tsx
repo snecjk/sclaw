@@ -214,6 +214,25 @@ describe('SplitPanelResizeHandle', () => {
     expect(html).toContain('data-resizing="true"');
     expect(html).toContain('group-data-[resizing=true]:opacity-100');
   });
+
+  it('accepts an aria-label override for other split surfaces', () => {
+    const html = renderToStaticMarkup(
+      <I18nextProvider i18n={i18n}>
+        <SplitPanelResizeHandle
+          valuePercent={28}
+          minPercent={22}
+          maxPercent={55}
+          ariaLabel="调整会话宽度"
+          onResizeStart={() => {}}
+          onKeyboardAdjust={() => {}}
+        />
+      </I18nextProvider>,
+    );
+    expect(html).toContain('aria-label="调整会话宽度"');
+    expect(html).toContain('aria-valuenow="28"');
+    expect(html).toContain('aria-valuemin="22"');
+    expect(html).toContain('aria-valuemax="55"');
+  });
 });
 
 describe('Chat and Home resize wiring', () => {

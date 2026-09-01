@@ -1,0 +1,26 @@
+{
+  "version": "v1",
+  "actions": [
+    {
+      "actionId": "customer.list",
+      "title": "查询客户列表",
+      "description": "演示 action：无 url 时返回 mock；配置 url 后走真实请求",
+      "method": "GET",
+      "url": "",
+      "mockResponse": {
+        "ok": true,
+        "items": [
+          { "id": "C001", "name": "示例客户甲" },
+          { "id": "C002", "name": "示例客户乙" }
+        ]
+      }
+    },
+    {
+      "actionId": "app.navigate",
+      "title": "切换页面",
+      "description": "宿主内导航：context.pageId 对应 src/pages 注册表",
+      "method": "LOCAL",
+      "url": ""
+    }
+  ]
+}

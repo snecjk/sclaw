@@ -25,6 +25,7 @@ import { Setup } from './pages/Setup';
 import { Login } from './pages/Login';
 import { Sprite } from './pages/Sprite';
 import { FloatIcon } from './pages/FloatIcon';
+import AppDevIdePage from './pages/AppDev/AppDevIdePage';
 import { WorkflowTestPage } from './pages/Workflow';
 import { DataCenter } from './pages/DataCenter';
 import { ReportHistoryPage } from './pages/DataCenter/reports/ReportHistoryPage';
@@ -37,6 +38,7 @@ import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
+import { isAuxiliaryWindowPath } from './lib/auxiliary-window-route';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
@@ -161,7 +163,7 @@ function App() {
   // Also skip until isAuthInitialized is true — this prevents the persisted isAuthenticated=true
   // from bypassing login on reinstall before the main-process token-expiry check completes.
   useEffect(() => {
-    if (location.pathname === '/sprite' || location.pathname === '/float-icon') return;
+    if (isAuxiliaryWindowPath(location.pathname)) return;
     if (!isAuthInitialized) return;
     if (accessDenied && !location.pathname.startsWith('/login')) {
       navigate('/login');
@@ -286,7 +288,7 @@ function App() {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   useEffect(() => {
-    if (location.pathname === '/sprite' || location.pathname === '/float-icon') return;
+    if (isAuxiliaryWindowPath(location.pathname)) return;
     invokeIpc('sprite:pushSessionContext', {
       sessionKey: currentSessionKey,
       agentId: currentAgentId,
@@ -311,6 +313,7 @@ function App() {
 
             {/* Desktop float icon (floating launcher) */}
             <Route path="/float-icon" element={<FloatIcon />} />
+            <Route path="/app-dev-ide/:workspaceId" element={<AppDevIdePage />} />
 
             {/* Main application routes */}
             <Route element={<MainLayout />}>

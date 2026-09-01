@@ -13,6 +13,7 @@ import {
   parseBatchAdjustParams,
   parseBatchAdjustValidation,
   serializeBatchAdjustObjectListJson,
+  serializeQuotationListJson,
   type BatchAdjustParams,
 } from '../../shared/quote-batch-adjust';
 import { BRIDGE_EVENT_QUOTE, emitBridgeGuestEvent } from '@/lib/jsbridge/emit-guest-event';
@@ -111,6 +112,9 @@ function emitNotifyKind(
       emitQuoteChannel(runtimeId, QUOTE_BRIDGE_CHANNEL_BATCH_ADJUST_DRAFT_COMPLETE, {
         ...base,
         ...draft,
+        ...(draft.quotationList
+          ? { quotationListJson: serializeQuotationListJson(draft.quotationList) }
+          : {}),
       });
       break;
     }

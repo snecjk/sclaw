@@ -17,6 +17,7 @@ import {
   resolveSclawEmbedWindowOpenAction,
 } from '../../../shared/sclaw-embed-browser-window-open';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { PREVIEW_NETWORK_CAPTURE_SCRIPT } from '@/lib/app-dev-preview-console';
 import { getJsBridgeGuestPreloadUrl } from '@/lib/jsbridge/host-api';
 import {
   handleJsBridgeWebviewRequest,
@@ -25,10 +26,15 @@ import {
 
 const isElectron = Boolean(window.electron);
 
+const EMBED_WEBVIEW_PREFERENCES =
+  'contextIsolation=yes,nodeIntegration=no,sandbox=no,enableRemoteModule=no';
+
 export interface SclawBrowserFrameHandle {
   goBack: () => void;
   reload: () => void;
   canGoBack: () => boolean;
+  getURL: () => string;
+  loadURL: (nextUrl: string) => void;
 }
 
 interface SclawBrowserFrameProps {
@@ -57,6 +63,15 @@ interface SclawBrowserFrameProps {
    * Prefer Main setWindowOpenHandler → sclaw-browser:open-url for Electron 40+.
    */
   onOpenWindow?: (url: string) => void;
+  /**
+   * Guest console lines (Electron webview). Host should filter before surfacing.
+   */
+  onConsoleMessage?: (info: { level: number; message: string; sourceId?: string; line?: number }) => void;
+  /**
+   * When set, inject a silent fetch hook so network failures always reach
+   * console-message (page UI often swallows them; no Claw console module needed).
+   */
+  captureGuestNetworkFailures?: boolean;
 }
 
 export type SclawBrowserLifecycleType =
@@ -86,7 +101,9 @@ type EmbedWebviewElement = HTMLElement & {
   loadURL?: (url: string) => void;
   goBack?: () => void;
   reload?: () => void;
+  reloadIgnoringCache?: () => void;
   canGoBack?: () => boolean;
+  executeJavaScript?: (code: string, userGesture?: boolean) => Promise<unknown>;
   send?: (channel: string, ...args: unknown[]) => void;
   addEventListener: (type: string, listener: EventListener) => void;
   removeEventListener: (type: string, listener: EventListener) => void;
@@ -118,6 +135,25 @@ function safeGetWebviewUrl(el: EmbedWebviewElement, fallback: string): string {
 function safeCanGoBack(el: EmbedWebviewElement | null): boolean {
   try {
     return Boolean(el?.canGoBack?.());
+  } catch {
+    return false;
+  }
+}
+
+function safeLoadWebviewUrl(el: EmbedWebviewElement, nextUrl: string): boolean {
+  const trimmed = nextUrl.trim();
+  if (!trimmed) return false;
+  try {
+    if (typeof el.loadURL === 'function') {
+      void Promise.resolve(el.loadURL(trimmed)).catch(() => undefined);
+      return true;
+    }
+  } catch {
+    // Guest not attached / dom-ready not emitted yet.
+  }
+  try {
+    el.setAttribute('src', trimmed);
+    return true;
   } catch {
     return false;
   }
@@ -166,6 +202,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       onNavStateChange,
       onOpenWindow,
       onWebviewLifecycle,
+      onConsoleMessage,
+      captureGuestNetworkFailures = false,
     },
     ref,
   ) {
@@ -179,20 +217,25 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const [guestPreloadUrl, setGuestPreloadUrl] = useState<string | null>(null);
     const [preloadReady, setPreloadReady] = useState(!isElectron);
     const launchedSrcRef = useRef<string | null>(null);
-    /** True only after the guest webview has emitted dom-ready (required before loadURL). */
-    const webviewDomReadyRef = useRef(false);
+    const domReadyRef = useRef(false);
+    const pendingUrlRef = useRef(url);
     const onPageFaviconRef = useRef(onPageFavicon);
     const onPageTitleRef = useRef(onPageTitle);
     const onPageUrlRef = useRef(onPageUrl);
     const onNavStateChangeRef = useRef(onNavStateChange);
     const onOpenWindowRef = useRef(onOpenWindow);
     const onWebviewLifecycleRef = useRef(onWebviewLifecycle);
+    const onConsoleMessageRef = useRef(onConsoleMessage);
+    const captureNetworkRef = useRef(captureGuestNetworkFailures);
     onPageFaviconRef.current = onPageFavicon;
     onPageTitleRef.current = onPageTitle;
     onPageUrlRef.current = onPageUrl;
     onNavStateChangeRef.current = onNavStateChange;
     onOpenWindowRef.current = onOpenWindow;
     onWebviewLifecycleRef.current = onWebviewLifecycle;
+    onConsoleMessageRef.current = onConsoleMessage;
+    captureNetworkRef.current = captureGuestNetworkFailures;
+    pendingUrlRef.current = url;
 
     const emitWebviewLifecycle = (el: EmbedWebviewElement, event: SclawBrowserLifecycleEvent) => {
       onWebviewLifecycleRef.current?.({
@@ -200,6 +243,17 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         url: event.url ?? safeGetWebviewUrl(el, url),
         canGoBack: event.canGoBack ?? safeCanGoBack(el),
       });
+    };
+
+    const navigateGuest = (targetUrl: string, force = false): boolean => {
+      const el = webviewRef.current;
+      if (!el || !domReadyRef.current) return false;
+      const trimmed = targetUrl.trim();
+      if (!trimmed) return false;
+      if (!force && launchedSrcRef.current === trimmed) return true;
+      if (!safeLoadWebviewUrl(el, trimmed)) return false;
+      launchedSrcRef.current = trimmed;
+      return true;
     };
 
     useEffect(() => {
@@ -222,61 +276,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     // Track dom-ready separately — getWebContentsId() can succeed before dom-ready,
     // but loadURL still throws until the event has fired.
     useEffect(() => {
-      if (!isElectron || !preloadReady) {
-        webviewDomReadyRef.current = false;
-        return;
-      }
-
-      const el = webviewRef.current;
-      if (!el) return;
-
-      const onDomReady = () => {
-        webviewDomReadyRef.current = true;
-      };
-      el.addEventListener('dom-ready', onDomReady);
-      return () => {
-        webviewDomReadyRef.current = false;
-        el.removeEventListener('dom-ready', onDomReady);
-      };
-    }, [preloadReady]);
-
-    // Navigate only after guest preload is attached AND webview has emitted dom-ready.
-    // Calling loadURL before attach/dom-ready throws and crashes the App Plaza tree.
-    useEffect(() => {
       if (!isElectron || !preloadReady) return;
-      const el = webviewRef.current;
-      if (!el || !url || launchedSrcRef.current === url) return;
-
-      let cancelled = false;
-
-      const navigate = () => {
-        if (cancelled || !webviewDomReadyRef.current || launchedSrcRef.current === url) return;
-        try {
-          const result = el.loadURL?.(url);
-          launchedSrcRef.current = url;
-          void Promise.resolve(result).catch(() => {
-            // SSO skip-login 302 aborts the original loadURL; the follow-up navigation still proceeds.
-          });
-        } catch {
-          // Not attached / not dom-ready yet — wait for next dom-ready.
-          launchedSrcRef.current = null;
-        }
-      };
-
-      const onDomReady = () => {
-        navigate();
-      };
-
-      if (webviewDomReadyRef.current) {
-        navigate();
-      } else {
-        el.addEventListener('dom-ready', onDomReady);
-      }
-
-      return () => {
-        cancelled = true;
-        el.removeEventListener('dom-ready', onDomReady);
-      };
+      navigateGuest(url);
     }, [preloadReady, url]);
 
     useEffect(() => {
@@ -358,9 +359,31 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       },
       reload: () => {
         const el = webviewRef.current;
-        if (typeof el?.reload === 'function') {
-          el.reload();
-          return;
+        if (el) {
+          try {
+            if (typeof el.reloadIgnoringCache === 'function') {
+              el.reloadIgnoringCache();
+              return;
+            }
+          } catch {
+            // Guest may not be ready; fall through.
+          }
+          try {
+            if (typeof el.reload === 'function') {
+              el.reload();
+              return;
+            }
+          } catch {
+            // Fall through to loadURL.
+          }
+          try {
+            const current = safeGetWebviewUrl(el, url);
+            if (safeLoadWebviewUrl(el, current)) return;
+            el.setAttribute('src', current);
+            return;
+          } catch {
+            // Fall through to iframe path.
+          }
         }
         const iframe = iframeRef.current;
         if (iframe) {
@@ -372,10 +395,31 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         }
       },
       canGoBack: () => safeCanGoBack(webviewRef.current),
+      getURL: () => {
+        const el = webviewRef.current;
+        if (el) return safeGetWebviewUrl(el, url);
+        try {
+          return iframeRef.current?.contentWindow?.location.href ?? url;
+        } catch {
+          return url;
+        }
+      },
+      loadURL: (nextUrl: string) => {
+        const trimmed = nextUrl.trim();
+        if (!trimmed) return;
+        if (navigateGuest(trimmed, true)) return;
+        const el = webviewRef.current;
+        if (el) {
+          pendingUrlRef.current = trimmed;
+          return;
+        }
+        const iframe = iframeRef.current;
+        if (iframe) iframe.src = trimmed;
+      },
     }));
 
     useEffect(() => {
-      if (!isElectron || !preloadReady || !embedRuntimeId) {
+      if (!isElectron || !preloadReady) {
         if (active) registerSclawBrowserWebview(null);
         return;
       }
@@ -383,7 +427,18 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       const el = webviewRef.current;
       if (!el) return;
 
+      // Electron requires the allowpopups *attribute*; React booleans on <webview>
+      // can omit it, which silently blocks guest window.open.
+      el.setAttribute('allowpopups', 'true');
+
+      if (active && !embedRuntimeId) registerSclawBrowserWebview(null);
+
       let boundToPage = false;
+
+      const injectNetworkCapture = () => {
+        if (!captureNetworkRef.current) return;
+        void el.executeJavaScript?.(PREVIEW_NETWORK_CAPTURE_SCRIPT).catch(() => undefined);
+      };
 
       const onIpcMessage = (event: Event) => {
         const detail = event as Event & { channel?: string; args?: unknown[] };
@@ -401,20 +456,30 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         if (!isEmbedWebviewPageUrl(pageUrl)) return;
 
         boundToPage = true;
+        injectNetworkCapture();
         registerSclawBrowserWebview(el);
-
         markPolicyAuthedFromUrl(pageUrl);
-        void bindEmbedWebContentsWithRetry({
-          runtimeId: embedRuntimeId,
-          webContentsId,
-          pageUrl,
-        }).then((result) => {
-          if (result.meta?.bridgeBootstrap) {
-            pushJsBridgeInit(el, result.meta.bridgeBootstrap);
-          }
-        });
         onPageUrlRef.current?.(pageUrl);
+
+        if (embedRuntimeId) {
+          void bindEmbedWebContentsWithRetry({
+            runtimeId: embedRuntimeId,
+            webContentsId,
+            pageUrl,
+          }).then((result) => {
+            if (result.meta?.bridgeBootstrap) {
+              pushJsBridgeInit(el, result.meta.bridgeBootstrap);
+            }
+          });
+        }
+
         publishNavState();
+      };
+
+      const onDomReady = () => {
+        domReadyRef.current = true;
+        navigateGuest(pendingUrlRef.current);
+        bindAfterDomReady();
       };
 
       const onNavigate = () => {
@@ -426,9 +491,12 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           return;
         }
         markPolicyAuthedFromUrl(pageUrl);
-        void updateSclawBrowserPageState({ runtimeId: embedRuntimeId, pageUrl });
         onPageUrlRef.current?.(pageUrl);
+        if (embedRuntimeId) {
+          void updateSclawBrowserPageState({ runtimeId: embedRuntimeId, pageUrl });
+        }
         publishNavState();
+        injectNetworkCapture();
       };
 
       const onFinishLoad = () => {
@@ -458,24 +526,42 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         detail.preventDefault?.();
         if (action.kind !== 'open-tab') return;
         if (onOpenWindowRef.current) {
-          onOpenWindowRef.current(rawUrl);
+          onOpenWindowRef.current(action.url);
+          return;
         }
+        if (safeLoadWebviewUrl(el, action.url)) return;
+        el.setAttribute('src', action.url);
       };
 
       const onFaviconUpdated = (event: Event) => {
-        const detail = event as Event & { favicons?: string[] };
-        const favicon = Array.isArray(detail.favicons) ? detail.favicons[0] : undefined;
-        if (favicon) onPageFaviconRef.current?.(favicon);
+        const favicons = (event as Event & { favicons?: string[] }).favicons;
+        const first = favicons?.find((item) => typeof item === 'string' && item.trim());
+        if (first) onPageFaviconRef.current?.(first.trim());
       };
 
       const onTitleUpdated = (event: Event) => {
-        const detail = event as Event & { title?: string };
-        if (typeof detail.title === 'string' && detail.title.trim()) {
-          onPageTitleRef.current?.(detail.title.trim());
-        }
+        const nextTitle = (event as Event & { title?: string }).title?.trim();
+        if (nextTitle) onPageTitleRef.current?.(nextTitle);
       };
 
-      el.addEventListener('dom-ready', bindAfterDomReady);
+      const onConsoleMessage = (event: Event) => {
+        const detail = event as Event & {
+          level?: number;
+          message?: string;
+          sourceId?: string;
+          line?: number;
+        };
+        const message = typeof detail.message === 'string' ? detail.message : '';
+        if (!message.trim()) return;
+        onConsoleMessageRef.current?.({
+          level: typeof detail.level === 'number' ? detail.level : 3,
+          message,
+          sourceId: typeof detail.sourceId === 'string' ? detail.sourceId : undefined,
+          line: typeof detail.line === 'number' ? detail.line : undefined,
+        });
+      };
+
+      el.addEventListener('dom-ready', onDomReady);
       el.addEventListener('did-navigate', onNavigate);
       el.addEventListener('did-navigate-in-page', onNavigate);
       el.addEventListener('did-finish-load', onFinishLoad);
@@ -483,6 +569,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       el.addEventListener('new-window', onNewWindow);
       el.addEventListener('page-favicon-updated', onFaviconUpdated);
       el.addEventListener('page-title-updated', onTitleUpdated);
+      el.addEventListener('console-message', onConsoleMessage);
       el.addEventListener('ipc-message', onIpcMessage);
 
       window.requestAnimationFrame(() => {
@@ -493,8 +580,10 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
 
       return () => {
         boundToPage = false;
+        domReadyRef.current = false;
+        launchedSrcRef.current = null;
         if (active) registerSclawBrowserWebview(null);
-        el.removeEventListener('dom-ready', bindAfterDomReady);
+        el.removeEventListener('dom-ready', onDomReady);
         el.removeEventListener('did-navigate', onNavigate);
         el.removeEventListener('did-navigate-in-page', onNavigate);
         el.removeEventListener('did-finish-load', onFinishLoad);
@@ -502,6 +591,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         el.removeEventListener('new-window', onNewWindow);
         el.removeEventListener('page-favicon-updated', onFaviconUpdated);
         el.removeEventListener('page-title-updated', onTitleUpdated);
+        el.removeEventListener('console-message', onConsoleMessage);
         el.removeEventListener('ipc-message', onIpcMessage);
       };
     }, [embedRuntimeId, active, preloadReady, appId, bound]);
@@ -517,8 +607,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           ref={webviewRef as React.RefObject<HTMLElement>}
           src="about:blank"
           partition={SCLAW_EMBED_BROWSER_PARTITION}
-          allowpopups={true}
-          webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=no,enableRemoteModule=no"
+          allowpopups="true"
+          webpreferences={EMBED_WEBVIEW_PREFERENCES}
           preload={guestPreloadUrl ?? undefined}
           className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"
         />

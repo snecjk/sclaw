@@ -71,6 +71,10 @@ import {
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
 import type { WorkflowExecutionState } from '@/types/workflow';
+import {
+  foldToolList,
+  resolveTurnToolCount,
+} from './thinking/fold-turn-tools';
 
 const EMPTY_WORKFLOW_CARD_STATES: Record<string, WorkflowExecutionState> = {};
 import {
@@ -996,9 +1000,21 @@ function ToolStatusBar({
     summary?: string;
   }>;
 }) {
+  const { t } = useTranslation('chat');
+  const sessionKey = useChatStore((state) => state.currentSessionKey);
+  const toolEventCount = useChatSessionRuntimeView(sessionKey).toolEventCount;
+  const folded = foldToolList(tools);
+  const displayCount = resolveTurnToolCount(toolEventCount, folded.totalToolCount);
+  const showCollapsedSummary =
+    folded.hiddenToolCount > 0 || displayCount > folded.totalToolCount;
   return (
     <div className="w-full space-y-1">
-      {tools.map((tool) => {
+      {showCollapsedSummary ? (
+        <p className="text-sm leading-5 text-muted-foreground">
+          {t('streaming.collapsedSummaryToolsOnly', { toolCount: displayCount })}
+        </p>
+      ) : null}
+      {folded.visible.map((tool) => {
         const duration = formatDuration(tool.durationMs);
         const isRunning = tool.status === 'running';
         const isError = tool.status === 'error';

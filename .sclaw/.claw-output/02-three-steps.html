@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>02 · 三步总览</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1280px;
+            height: 720px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            display: flex;
+            flex-direction: column;
+            padding: 48px 60px;
+            position: relative;
+        }
+        .header {
+            margin-bottom: 40px;
+        }
+        .section-tag {
+            font-size: 13px;
+            color: #4a90d9;
+            font-weight: 600;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1a2332;
+            line-height: 1.3;
+        }
+        .title-line {
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, #4a90d9, #6ab0e8);
+            margin-top: 12px;
+            border-radius: 2px;
+        }
+        
+        /* 三步卡片 */
+        .steps-container {
+            display: flex;
+            gap: 24px;
+            flex: 1;
+            align-items: stretch;
+        }
+        
+        .step-card {
+            flex: 1;
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            border: 2px solid #e8ecf1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        .step-card.primary {
+            border-color: #4a90d9;
+            background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
+        }
+        
+        .step-number {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #4a90d9, #6ab0e8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+        
+        .step-card-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1a2332;
+            margin-bottom: 8px;
+        }
+        
+        .step-card-subtitle {
+            font-size: 14px;
+            color: #4a90d9;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        
+        .step-features {
+            list-style: none;
+            flex: 1;
+        }
+        
+        .step-features li {
+            font-size: 13px;
+            color: #4a5568;
+            line-height: 1.8;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f2f5;
+            position: relative;
+            padding-left: 20px;
+        }
+        
+        .step-features li:last-child {
+            border-bottom: none;
+        }
+        
+        .step-features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #34c759;
+            font-weight: 700;
+        }
+        
+        .highlight-box {
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: linear-gradient(90deg, rgba(74,144,217,0.1), rgba(74,144,217,0.05));
+            border-radius: 8px;
+            border-left: 3px solid #4a90d9;
+        }
+        
+        .highlight-box p {
+            font-size: 13px;
+            color: #2d3a4a;
+            font-weight: 600;
+        }
+        
+        /* 页脚 */
+        .footer {
+            position: absolute;
+            bottom: 24px;
+            left: 60px;
+            right: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .footer-left {
+            font-size: 12px;
+            color: #9aa5b3;
+        }
+        .footer-right {
+            font-size: 14px;
+            color: #9aa5b3;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="section-tag">02 · 三步总览</div>
+        <div class="title">用户只需三步，核心技术抓手全解析</div>
+        <div class="title-line"></div>
+    </div>
+    
+    <div class="steps-container">
+        <!-- 第一步：创建应用 -->
+        <div class="step-card primary">
+            <div class="step-number">1</div>
+            <div class="step-card-title">创建应用</div>
+            <div class="step-card-subtitle">Git 建仓管理代码</div>
+            <ul class="step-features">
+                <li>sai-cli 自动初始化工程</li>
+                <li>React + Vite 官方模板</li>
+                <li>Git 仓库自动创建与关联</li>
+                <li>代码版本管理全自动</li>
+                <li>冲突 AI 兜底，用户零感知</li>
+            </ul>
+            <div class="highlight-box">
+                <p>💡 用户全程不接触 Node、npm、commit、push 等技术概念</p>
+            </div>
+        </div>
+        
+        <!-- 第二步：生成功能 -->
+        <div class="step-card primary">
+            <div class="step-number">2</div>
+            <div class="step-card-title">生成功能</div>
+            <div class="step-card-subtitle">A2UI 驱动页面生成</div>
+            <ul class="step-features">
+                <li>自然语言描述需求</li>
+                <li>AI 输出页面 JSON 描述</li>
+                <li>A2UI 协议渲染成界面</li>
+                <li>内置组件库即插即用</li>
+                <li>实时预览，改坏可回滚</li>
+            </ul>
+            <div class="highlight-box">
+                <p>调用 STO 接口：AI 自动对接业务数据，页面即开即用</p>
+            </div>
+        </div>
+        
+        <!-- 第三步：发布应用 -->
+        <div class="step-card primary">
+            <div class="step-number">3</div>
+            <div class="step-card-title">发布应用</div>
+            <div class="step-card-subtitle">低成本自动化发布</div>
+            <ul class="step-features">
+                <li>一键推送 Git 仓库</li>
+                <li>DevOps 流水线自动构建</li>
+                <li>静态站点自动部署</li>
+                <li>域名自动分配</li>
+                <li>失败自动诊断修复</li>
+            </ul>
+            <div class="highlight-box">
+                <p>💰 零服务器成本：静态托管，按访问计费，无请求即休眠</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <div class="footer-left">应用广场 · 用户应用开发 · 周会同步</div>
+        <div class="footer-right">02</div>
+    </div>
+</body>
+</html>

@@ -81,6 +81,9 @@ describe('sclaw-browser-embed-context', () => {
     const text = buildSclawBrowserEmbedContextText(baseContext, { quoteSkillActive: true });
     expect(text).toContain('报价助手技能已激活');
     expect(text).toContain('调价上传弹窗');
+    expect(text).toContain('在 flow_card 上输出「提交报价」');
+    expect(text).toContain('--objectListJson');
+    expect(text).toContain('--quotationListJson');
     expect(text).not.toContain('ba_observe');
     expect(text).not.toContain('automationTools');
   });

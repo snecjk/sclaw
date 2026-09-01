@@ -266,4 +266,28 @@ describe('canonical chat client session reducer', () => {
     });
     expect(next).toBe(current);
   });
+
+  it('caps overlay tools at 80 while keeping a monotonic toolEventCount', () => {
+    let state = reduceSessionEvent(createClientSessionState(), event()).state;
+    for (let index = 0; index < 90; index += 1) {
+      state = reduceSessionEvent(state, event({
+        eventId: `tool-${index}`,
+        sequence: index + 2,
+        type: 'message.delta',
+        payload: {
+          role: 'assistant',
+          content: [{
+            type: 'tool_use',
+            id: `call-${index}`,
+            name: 'Bash',
+            input: { command: `echo ${index}` },
+          }],
+        },
+      })).state;
+    }
+    expect(state.overlay.streamingTools).toHaveLength(80);
+    expect(state.overlay.streamingTools[0]?.toolCallId).toBe('call-10');
+    expect(state.overlay.streamingTools[79]?.toolCallId).toBe('call-89');
+    expect(state.overlay.toolEventCount).toBe(90);
+  });
 });

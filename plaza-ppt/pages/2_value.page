@@ -1,0 +1,163 @@
+pageType: content
+background:
+  type: solid
+  color: $white
+elements:
+  - elementId: title
+    elementType: text
+    bounds: [40, 15, 880, 41]
+    content:
+      style: $title
+      align: [left, middle]
+      text: '<p><span style="font-size: 26px;"><span style="color: rgba(0, 0, 0, 0.9);"><span style="background-color: rgb(255, 255, 255);"><span style="font-family: -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, system-ui, Roboto, Arial, &quot;PingFang SC&quot;, &quot;Source Han Sans SC&quot;, &quot;Microsoft YaHei UI&quot;, &quot;Microsoft YaHei&quot;, &quot;Noto Sans CJK SC&quot;, sans-serif;">JSBridge 能力</span></span></span></span></p>'
+  - elementId: accent-line
+    elementType: shape
+    bounds: [40, 52, 50, 3]
+    shapeName: rect
+    fill: {type: solid, color: $accent}
+  - elementId: api-title
+    elementType: text
+    bounds: [40, 65, 430, 22]
+    content:
+      fontSize: 13
+      color: $primary
+      bold: true
+      align: [left, middle]
+      text: JSBridge 提供的核心 API
+  - elementId: api1
+    elementType: text
+    bounds: [40, 94, 430, 45]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><span style="font-family:monospace; color:$accent;">chat.sendMessage({ target: 'embed', text })</span></p>
+        <p>回填 + 直接发送，触发 AI 响应</p>
+  - elementId: api2
+    elementType: text
+    bounds: [40, 146, 430, 45]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><span style="font-family:monospace; color:$accent;">chat.fillComposer({ target: 'embed', text })</span></p>
+        <p>回填输入框，不自动发送，等用户确认</p>
+  - elementId: api3
+    elementType: text
+    bounds: [40, 198, 430, 45]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><span style="font-family:monospace; color:$accent;">chat.togglePanel() / ui.openDrawer()</span></p>
+        <p>开关右栏 AI 面板 / 打开 AI 抽屉</p>
+  - elementId: divider
+    elementType: shape
+    bounds: [490, 65, 1, 185]
+    shapeName: rect
+    fill: {type: solid, color: $border}
+  - elementId: cap-title
+    elementType: text
+    bounds: [510, 65, 410, 22]
+    content:
+      fontSize: 13
+      color: $primary
+      bold: true
+      align: [left, middle]
+      text: 业务页面因此具备的能力
+  - elementId: cap1-icon
+    elementType: icon
+    bounds: [510, 96, 16, 16]
+    iconName: fas:bolt
+    fill: {type: solid, color: $accent}
+  - elementId: cap1
+    elementType: text
+    bounds: [534, 94, 380, 40]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><strong>一键唤起 AI</strong></p>
+        <p>页面放个"问 AI"按钮，点击直接打开右栏并触发对话</p>
+  - elementId: cap2-icon
+    elementType: icon
+    bounds: [510, 142, 16, 16]
+    iconName: fas:upload
+    fill: {type: solid, color: $accent}
+  - elementId: cap2
+    elementType: text
+    bounds: [534, 140, 380, 40]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><strong>选中数据推给 AI</strong></p>
+        <p>表格里选中一行，点"分析"，AI 自动拿到上下文处理</p>
+  - elementId: cap3-icon
+    elementType: icon
+    bounds: [510, 188, 16, 16]
+    iconName: fas:wand-magic-sparkles
+    fill: {type: solid, color: $accent}
+  - elementId: cap3
+    elementType: text
+    bounds: [534, 186, 380, 40]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><strong>表单智能辅助</strong></p>
+        <p>用户填到一半，AI 根据上下文自动补全或校验建议</p>
+  - elementId: img1
+    elementType: image
+    bounds: [40, 270, 280, 120]
+    src: media/quote-main.png
+    fit: {mode: cover}
+    border: {style: solid, width: 1, color: $border}
+  - elementId: img2
+    elementType: image
+    bounds: [340, 270, 280, 120]
+    src: media/quote-process.png
+    fit: {mode: cover}
+    border: {style: solid, width: 1, color: $border}
+  - elementId: img3
+    elementType: image
+    bounds: [640, 270, 280, 120]
+    src: media/quote-result.png
+    fit: {mode: cover}
+    border: {style: solid, width: 1, color: $border}
+  - elementId: img-label
+    elementType: text
+    bounds: [40, 395, 880, 20]
+    content:
+      fontSize: 10
+      color: $muted
+      align: [center, middle]
+      text: 报价工作台已验证：打开页面 → 上传 Excel → AI 五步处理 → 确认保存
+  - elementId: cost-line
+    elementType: shape
+    bounds: [40, 425, 880, 1]
+    shapeName: rect
+    fill: {type: solid, color: $border}
+  - elementId: cost-text
+    elementType: text
+    bounds: [40, 435, 880, 40]
+    content:
+      fontSize: 13
+      color: $primary
+      bold: true
+      lineHeight: 1.5
+      align: [center, middle]
+      text: |
+        <p>接入成本：业务方自建 2-3 人月 → 调几个 JSBridge API，几小时完成</p>

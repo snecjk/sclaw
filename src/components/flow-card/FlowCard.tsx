@@ -243,11 +243,16 @@ export function FlowCard({ card }: FlowCardProps) {
         </div>
       ) : null}
 
-      {showProgress && progressSettled && (card.body || errorCount !== null) && card.phase !== 'validating' ? (
+      {showProgress && progressSettled && (card.body || card.hint || errorCount !== null) && card.phase !== 'validating' ? (
         <div className="mt-3 border-t border-[#EEF0F3] pt-2.5 dark:border-[var(--sto-border-default)]">
           {card.body ? (
             <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]">
               {renderInlineEmphasis(card.body)}
+            </p>
+          ) : null}
+          {card.hint ? (
+            <p className="m-0 mb-2 text-[12px] leading-[1.45] text-[#9CA3AF] last:mb-0">
+              {renderInlineEmphasis(card.hint)}
             </p>
           ) : null}
           {errorCount !== null ? (

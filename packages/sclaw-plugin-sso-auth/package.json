@@ -1,0 +1,67 @@
+{
+  "name": "@sto/sclaw-plugin-sso-auth",
+  "version": "0.1.4",
+  "maintainers": [
+    "1478512",
+    "1207669"
+  ],
+  "description": "Site SSO authentication plugin for SClaw applications",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist/**",
+    "sclaw/**",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js",
+      "require": "./dist/runtime.cjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js",
+      "require": "./dist/vite.cjs"
+    }
+  },
+  "sclaw": {
+    "manifest": "./sclaw/plugin.json"
+  },
+  "peerDependencies": {
+    "vite": ">=5.4 <8"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  },
+  "publishConfig": {
+    "registry": "http://snpm-registry.sto.cn"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --testTimeout=30000",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run test && npm run typecheck && npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

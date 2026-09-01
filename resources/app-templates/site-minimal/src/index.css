@@ -1,0 +1,288 @@
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: var(--sto-font-family);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--sto-color-bg-layout);
+  color: var(--sto-color-text);
+}
+
+.runtime-bootstrap-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: var(--sto-color-bg-layout);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  height: var(--sto-shell-topbar) !important;
+  padding-inline: var(--sto-space-4) !important;
+  line-height: var(--sto-shell-topbar) !important;
+  background: var(--sto-color-bg-container) !important;
+  border-bottom: var(--sto-border-width) solid var(--sto-color-border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sto-space-2);
+  min-width: 240px;
+  flex-shrink: 0;
+}
+
+.app-logo {
+  width: 68px;
+  height: 26px;
+  color: var(--sto-color-brand);
+  flex: 0 0 auto;
+}
+
+.app-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.app-brand-title { font-size: 26px !important; line-height: 26px !important; }
+.app-brand-sub { display: none; }
+
+.app-user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sto-space-2);
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: var(--sto-space-1) var(--sto-space-2);
+  border-radius: var(--sto-radius-sm);
+}
+
+.app-user-trigger:hover {
+  background: var(--sto-color-primary-soft);
+}
+
+.app-user-avatar { background: var(--sto-color-primary-action) !important; }
+
+.app-user-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+  max-width: 140px;
+}
+
+.app-user-name {
+  font-size: 14px;
+  color: var(--sto-color-text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.app-user-code {
+  font-size: 12px;
+  color: var(--sto-color-text-secondary);
+}
+
+.app-sider {
+  background: var(--sto-color-bg-container) !important;
+  border-right: var(--sto-border-width) solid var(--sto-color-border);
+  min-height: calc(100vh - var(--sto-shell-topbar) - var(--sto-shell-tabs));
+}
+
+.app-side-menu {
+  border-inline-end: none !important;
+  padding: var(--sto-space-3) var(--sto-space-2);
+}
+
+.app-side-menu .ant-menu-item {
+  height: 36px;
+  line-height: 36px;
+  margin-block: 0;
+  border-radius: 0;
+}
+
+.app-side-menu .ant-menu-item-selected {
+  color: var(--sto-color-brand);
+  background: #fff9f5;
+}
+
+.sto-opentabs {
+  display: flex;
+  align-items: flex-end;
+  height: var(--sto-shell-tabs);
+  background: var(--sto-color-bg-container);
+  border-bottom: var(--sto-border-width) solid #f2f3f5;
+}
+
+.sto-opentabs-list {
+  display: flex;
+  align-items: flex-end;
+  height: 24px;
+  margin-top: 4px;
+}
+
+.sto-opentab {
+  position: relative;
+  z-index: 0;
+  display: inline-flex;
+  align-items: center;
+  width: 125px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--sto-color-text-secondary);
+}
+
+.sto-opentab-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  color: #f5f6f7;
+}
+
+.sto-opentab-bg svg { display: block; width: 100%; height: 100%; }
+.sto-opentab.is-home { width: 52px; }
+.sto-opentab.is-active { z-index: 2; color: var(--sto-color-bg-container); }
+.sto-opentab.is-active .sto-opentab-bg { color: var(--sto-color-brand); }
+
+.sto-opentab-trigger {
+  width: 100%;
+  height: 100%;
+  padding: 0 28px 0 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sto-opentab.is-home .sto-opentab-trigger { padding-inline: 12px; text-align: center; }
+
+.sto-opentab-close {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sto-color-text-secondary);
+  cursor: pointer;
+}
+
+.sto-opentab.is-active .sto-opentab-close { color: var(--sto-color-bg-container); }
+.sto-opentab-close svg { display: block; width: 12px; height: 12px; }
+
+.app-content {
+  padding: var(--sto-space-4);
+  min-height: calc(100vh - var(--sto-shell-topbar) - var(--sto-shell-tabs));
+  overflow: auto;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sto-space-4);
+  margin-bottom: var(--sto-space-3);
+}
+
+.page-header-main { min-width: 0; }
+
+.page-header-title {
+  margin-block: var(--sto-space-2) var(--sto-space-1) !important;
+  color: var(--sto-color-text-heading) !important;
+}
+
+.page-header-description,
+.empty-state-description {
+  margin-bottom: 0 !important;
+  color: var(--sto-color-text-secondary) !important;
+}
+
+.page-header-extra {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sto-space-2);
+}
+
+.content-section {
+  padding: var(--sto-space-4);
+  background: var(--sto-color-bg-container);
+  border: var(--sto-border-width) solid var(--sto-color-border);
+  border-radius: var(--sto-radius-lg);
+}
+
+.content-section + .content-section {
+  margin-top: var(--sto-space-4);
+}
+
+.content-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sto-space-3);
+  margin-bottom: var(--sto-space-3);
+}
+
+.content-section-title {
+  margin: 0 !important;
+  color: var(--sto-color-text-heading) !important;
+}
+
+.content-section-title::before {
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  margin-right: var(--sto-space-2);
+  background: var(--sto-color-brand);
+  content: '';
+  vertical-align: -2px;
+}
+
+.empty-state {
+  display: flex;
+  min-height: 240px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.empty-state-title { margin: 0 0 var(--sto-space-1) !important; }
+.empty-state-action { margin-top: var(--sto-space-4); }
+
+@media (max-width: 900px) {
+  .app-brand-sub,
+  .app-user-meta {
+    display: none;
+  }
+
+  .app-header-brand {
+    min-width: auto;
+  }
+}

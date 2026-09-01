@@ -7,7 +7,9 @@ import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
+import { isAppDevSessionKey, resolveAppDevSourceRoot } from '../../shared/app-dev-session';
 import { captureClaudeTurnTokenUsage } from '../services/turn-token-capture';
+import { LIVE_CLAUDE_MESSAGE_CAP, capWindow, truncateToolPayload } from '../../shared/chat-tool-payload';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, patchEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -27,6 +29,8 @@ import {
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
 import { logUserSend } from '../../shared/user-send-log';
+import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
+import { sliceHistoryPage } from '../../shared/chat-history-page';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -93,6 +97,13 @@ const liveClaudeMessages = new Map<string, Array<{
   toolName?: string;
   receivedAt: number;
 }>>();
+
+type LiveClaudeMessage = NonNullable<ReturnType<typeof liveClaudeMessages.get>>[number];
+
+function setLiveClaudeMessages(sessionKey: string, entries: LiveClaudeMessage[]): void {
+  liveClaudeMessages.set(sessionKey, capWindow(entries, LIVE_CLAUDE_MESSAGE_CAP));
+}
+
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
 
 /**
@@ -173,6 +184,21 @@ function getAdditionalDirectories(cwd: string, media: Array<{ filePath: string }
     }
   }
   return [...directories];
+}
+
+function mergeAppDevAdditionalDirectories(
+  sessionKey: string,
+  cwd: string,
+  extra: string[] = [],
+): string[] | undefined {
+  const directories = new Set(extra.map((dir) => resolve(dir)));
+  if (isAppDevSessionKey(sessionKey)) {
+    const appRoot = resolveAppDevSourceRoot(cwd);
+    if (appRoot) directories.add(resolve(appRoot));
+  }
+  directories.delete(resolve(cwd));
+  const list = [...directories];
+  return list.length > 0 ? list : undefined;
 }
 
 function toClaudePromptStream(message: SDKUserMessage): AsyncIterable<SDKUserMessage> {
@@ -265,7 +291,7 @@ function formatClaudeError(error: unknown): string {
 
 function cacheClaudeErrorMessage(sessionKey: string, error: unknown): void {
   const current = liveClaudeMessages.get(sessionKey) ?? [];
-  liveClaudeMessages.set(sessionKey, [
+  setLiveClaudeMessages(sessionKey, [
     ...current,
     {
       id: randomUUID(),
@@ -669,6 +695,12 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     thinkingLevel: null,
     isRunning: activeClaudeQueries.has(sessionKey),
     runtimeResult: claudeRuntimeResults.get(sessionKey) ?? null,
+    fingerprint: buildChatHistoryFingerprint({
+      messages: mergedMessages,
+      persistedCount: persistedMessages.length,
+      liveCount: cachedMessages.length,
+      archivedIds,
+    }),
   };
 }
 
@@ -988,7 +1020,7 @@ export async function consumeClaudeQuery(
             const nextEntry = {
               id: typeof message.uuid === 'string' ? message.uuid : randomUUID(),
               role: 'toolresult' as const,
-              content: workflowToolResult.content,
+              content: truncateToolPayload(workflowToolResult.content),
               timestamp: toEpochMs(message.timestamp) ?? Date.now(),
               toolCallId: workflowToolResult.toolCallId,
               toolName: workflowToolResult.toolName,
@@ -998,9 +1030,9 @@ export async function consumeClaudeQuery(
             const existingIndex = current.findIndex((entry) => entry.id === nextEntry.id);
             if (existingIndex >= 0) {
               current[existingIndex] = nextEntry;
-              liveClaudeMessages.set(sessionKey, [...current]);
+              setLiveClaudeMessages(sessionKey, [...current]);
             } else {
-              liveClaudeMessages.set(sessionKey, [...current, nextEntry]);
+              setLiveClaudeMessages(sessionKey, [...current, nextEntry]);
             }
           }
           continue;
@@ -1013,7 +1045,7 @@ export async function consumeClaudeQuery(
         const nextEntry = {
           id: typeof liveMessage.uuid === 'string' ? liveMessage.uuid : randomUUID(),
           role: liveMessage.type,
-          content: toRawContentFromClaudeMessage(liveMessage.message),
+          content: truncateToolPayload(toRawContentFromClaudeMessage(liveMessage.message)),
           timestamp: toEpochMs(message.timestamp) ?? Date.now(),
           receivedAt: Date.now(),
         };
@@ -1021,9 +1053,9 @@ export async function consumeClaudeQuery(
         const existingIndex = current.findIndex((entry) => entry.id === nextEntry.id);
         if (existingIndex >= 0) {
           current[existingIndex] = nextEntry;
-          liveClaudeMessages.set(sessionKey, [...current]);
+          setLiveClaudeMessages(sessionKey, [...current]);
         } else {
-          liveClaudeMessages.set(sessionKey, [...current, nextEntry]);
+          setLiveClaudeMessages(sessionKey, [...current, nextEntry]);
         }
 
         // Emit a 'final' event for complete assistant messages so the renderer
@@ -1197,15 +1229,13 @@ async function startClaudeQuery(
     const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
-    logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
-    const userPromptPreview =
-      typeof prompt === 'string'
-        ? prompt
-        : '(stream/non-string prompt)';
+    logger.info('[claude-adapter][prompt] final systemPromptAppend', {
+      sessionKey,
+      systemPromptAppendChars: systemPromptAppend.length,
+    });
     logger.info('[claude-adapter][prompt] user message', {
       sessionKey,
       userPromptChars: typeof prompt === 'string' ? prompt.length : null,
-      userPrompt: userPromptPreview,
     });
     const userMessageForLog = typeof prompt === 'string'
       ? prompt
@@ -1239,7 +1269,11 @@ async function startClaudeQuery(
       // consumer loop can forward text deltas to the renderer in real time.
       includePartialMessages: true,
       settings: launchSelection.model ? { model: launchSelection.model } : undefined,
-      additionalDirectories: options?.additionalDirectories,
+      additionalDirectories: mergeAppDevAdditionalDirectories(
+        sessionKey,
+        cwd,
+        options?.additionalDirectories ?? [],
+      ),
       pathToClaudeCodeExecutable: sharedRuntime.pathToClaudeCodeExecutable,
       hooks: runtimeOptions.hooks,
       mcpServers: runtimeOptions.mcpServers,
@@ -1548,7 +1582,11 @@ export const claudeAdapter: EngineAdapter = {
       .filter(Boolean)
       .join('\n\n') || undefined;
     if (memorySystemPrompt) {
-      logger.info(`[agent-memory][claude] systemPromptAppend after memory injection:\n${systemPromptAppend}`);
+      logger.info('[agent-memory][claude] systemPromptAppend after memory injection', {
+        sessionKey: params.sessionKey,
+        memoryChars: memorySystemPrompt.length,
+        systemPromptAppendChars: systemPromptAppend?.length ?? 0,
+      });
     }
     return { ...params, systemPromptAppend };
   },
@@ -1588,7 +1626,28 @@ export const claudeAdapter: EngineAdapter = {
         entry.sessionId ?? '',
         entry.cwd,
       );
-      return { success: true, result };
+      const page = sliceHistoryPage(result.messages as Array<{ id?: string }>, {
+        limit: params.limit,
+        beforeId: params.beforeId,
+      });
+      logger.info('[claude-adapter][transcript-timing]', {
+        stage: 'history_page',
+        sessionKey: params.sessionKey,
+        totalCount: page.totalCount,
+        pageCount: page.messages.length,
+        hasMore: page.hasMore,
+        beforeId: params.beforeId ?? null,
+        limit: params.limit,
+      });
+      return {
+        success: true,
+        result: {
+          ...result,
+          messages: page.messages,
+          hasMore: page.hasMore,
+          totalCount: page.totalCount,
+        },
+      };
     } catch (error) {
       return { success: false, error: String(error) };
     }

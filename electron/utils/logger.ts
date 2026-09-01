@@ -148,23 +148,31 @@ function formatLocalTimestamp(date: Date = new Date()): string {
   return `${yyyy}-${MM}-${dd} ${HH}:${mm}:${ss}.${ms}${sign}${tzH}:${tzM}`;
 }
 
+function truncateLogText(value: string, limit = 2_048): string {
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit - 3)}...`;
+}
+
 function formatMessage(level: string, message: string, ...args: unknown[]): string {
   const timestamp = formatLocalTimestamp();
   const formattedArgs = args.length > 0 ? ' ' + args.map(arg => {
     if (arg instanceof Error) {
-      return `${arg.message}\n${arg.stack || ''}`;
+      return truncateLogText(`${arg.message}\n${arg.stack || ''}`);
     }
     if (typeof arg === 'object') {
       try {
-        return JSON.stringify(arg, null, 2);
+        return truncateLogText(JSON.stringify(arg, null, 2));
       } catch {
         return String(arg);
       }
     }
+    if (typeof arg === 'string') {
+      return truncateLogText(arg);
+    }
     return String(arg);
   }).join(' ') : '';
 
-  return `[${timestamp}] [${level.padEnd(5)}] ${message}${formattedArgs}`;
+  return `[${timestamp}] [${level.padEnd(5)}] ${truncateLogText(message)}${formattedArgs}`;
 }
 
 // ── Core write ───────────────────────────────────────────────────

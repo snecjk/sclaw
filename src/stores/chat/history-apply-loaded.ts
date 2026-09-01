@@ -23,6 +23,11 @@ import {
 import { restorePendingWorkflowDraftInBackground } from './history-workflow-effects';
 import { localizeAndHydrateWorkflowForms } from './history-form-effects';
 import { logChatFlow, logUserQuestion, logUserQuestionServerEcho } from './chat-flow-log';
+import {
+  markHistoryApplyPerf,
+  payloadSizeDetail,
+  startHistoryApplyPerf,
+} from './history-load-perf';
 import type { ChatGet, ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
 import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
@@ -219,13 +224,14 @@ export function applyLoadedHistorySnapshot(input: {
   } = deps;
 
   if (get().currentSessionKey !== targetSessionKey) return;
+  startHistoryApplyPerf(targetSessionKey);
   logChatFlow('history.apply.start', {
     sessionKey: targetSessionKey,
     rawCount: rawMessages.length,
-    thinkingLevel,
-    hasRuntimeState: Boolean(runtimeState),
+    ...payloadSizeDetail(rawMessages),
   });
 
+  const prepareStartedAt = performance.now();
   const canonicalBeforeLoad = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey];
   // 在 setTranscript 之前先捕获——id 匹配回显可能在 setTranscript 内清掉乐观消息。
   const optimisticBeforeLoad = canonicalBeforeLoad?.overlay.optimisticUserMessage ?? null;
@@ -236,6 +242,11 @@ export function applyLoadedHistorySnapshot(input: {
     rawMessages,
     previousTranscript,
     sessionKey: targetSessionKey,
+  });
+  markHistoryApplyPerf(targetSessionKey, 'apply.prepare.done', {
+    prepareMs: Math.round(performance.now() - prepareStartedAt),
+    rawCount: rawMessages.length,
+    enrichedCount: preparedHistory.enrichedMessages.length,
   });
   const preparedRawMessages = preparedHistory.rawMessages;
   // Canonical transcript keeps the engine payload untouched. Legacy display
@@ -271,6 +282,7 @@ export function applyLoadedHistorySnapshot(input: {
   reconcilePendingWorkflowForSession(enrichedMessages, preparedRawMessages, targetSessionKey, getMessageText);
 
   const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+  const mergeStartedAt = performance.now();
   finalMessages = mergeHistoryDisplayMessages({
     messages: finalMessages,
     currentMessages: getCurrentChatDisplayMessages(),
@@ -282,6 +294,10 @@ export function applyLoadedHistorySnapshot(input: {
     optimisticUser: cachedOptimistic,
     getMessageText,
     cachedOptimistic,
+  });
+  markHistoryApplyPerf(targetSessionKey, 'apply.merge.done', {
+    mergeMs: Math.round(performance.now() - mergeStartedAt),
+    messageCount: finalMessages.length,
   });
   finalMessages = restoreSkillMetaOnMessages(
     finalMessages,
@@ -312,12 +328,18 @@ export function applyLoadedHistorySnapshot(input: {
     userCountBefore: historyUserCountBefore,
     userCountAfter: finalMessages.filter((m) => m.role === 'user').length,
   });
+  const formRecoveryStartedAt = performance.now();
   const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
     sessionKey: targetSessionKey,
     get,
     set,
     getMessageText,
     thinkingLevel,
+  });
+  markHistoryApplyPerf(targetSessionKey, 'apply.recover.done', {
+    recoverMs: Math.round(performance.now() - formRecoveryStartedAt),
+    deferSet: formRecovery.deferSet,
+    messageCount: formRecovery.messages.length,
   });
   if (formRecovery.deferSet) {
     useChatRuntimeV2Store.getState().setDisplayProjection(targetSessionKey, formRecovery.messages);
@@ -340,10 +362,16 @@ export function applyLoadedHistorySnapshot(input: {
 
   useChatRuntimeV2Store.getState().setDisplayProjection(targetSessionKey, finalMessages);
   set({ thinkingLevel, loading: false });
+  const displayPayloadDetail = payloadSizeDetail(finalMessages, 'display');
   logChatFlow('history.apply.committed', {
     sessionKey: targetSessionKey,
     messageCount: finalMessages.length,
     thinkingLevel,
+    ...displayPayloadDetail,
+  });
+  markHistoryApplyPerf(targetSessionKey, 'apply.committed', {
+    messageCount: finalMessages.length,
+    ...displayPayloadDetail,
   });
 
   ensureWorkflowParameterFormInjected();

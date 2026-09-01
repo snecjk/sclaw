@@ -1,0 +1,232 @@
+pageType: content
+background:
+  type: solid
+  color: "$white"
+elements:
+  # ===== Title =====
+  - elementId: title
+    elementType: text
+    bounds: [40, 22, 880, 40]
+    content:
+      style: "$title"
+      align: [left, middle]
+      text: SClaw 应用广场内嵌互通架构
+
+  - elementId: subtitle
+    elementType: text
+    bounds: [40, 64, 880, 20]
+    content:
+      style: "$subtitle"
+      align: [left, middle]
+      text: 左页业务 H5 + 右栏 AI 面板 + 双桥协同，同一 Tab 内完成智能互通
+
+  # ===== Accent line under title =====
+  - elementId: title-line
+    elementType: shape
+    bounds: [40, 90, 60, 3]
+    shapeName: rect
+    fill: {type: solid, color: "$accent"}
+
+  # ===== Tab Container =====
+  - elementId: tab-frame
+    elementType: shape
+    bounds: [80, 108, 800, 205]
+    shapeName: rect
+    fill: {type: solid, color: "$white"}
+    border: {style: solid, width: 1.5, color: "$border"}
+
+  - elementId: tab-label
+    elementType: text
+    bounds: [80, 108, 800, 24]
+    content:
+      fontSize: 11
+      color: "$muted"
+      align: [center, middle]
+      text: 应用广场 Tab · 同一应用上下文
+
+  # ===== Left: H5 Page =====
+  - elementId: left-bg
+    elementType: shape
+    bounds: [100, 140, 310, 155]
+    shapeName: rect
+    fill: {type: solid, color: "$light"}
+    border: {style: solid, width: 1, color: "$border"}
+
+  - elementId: left-icon
+    elementType: icon
+    bounds: [120, 158, 20, 20]
+    iconName: "fas:globe"
+    fill: {type: solid, color: "$accent"}
+
+  - elementId: left-title
+    elementType: text
+    bounds: [148, 155, 240, 26]
+    content:
+      fontSize: 15
+      color: "$primary"
+      bold: true
+      align: [left, middle]
+      text: 业务 H5 页面
+
+  - elementId: left-desc
+    elementType: text
+    bounds: [120, 188, 270, 90]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.6
+      align: [left, top]
+      text: |
+        <p>*.sto.cn 域名</p>
+        <p>stoClaw SDK（window.stoClaw）</p>
+        <p>左页 Webview 内嵌</p>
+        <p>SSO 统一登录态</p>
+
+  # ===== Right: AI Panel =====
+  - elementId: right-bg
+    elementType: shape
+    bounds: [550, 140, 310, 155]
+    shapeName: rect
+    fill: {type: solid, color: "#FFF7ED"}
+    border: {style: solid, width: 1, color: "#FED7AA"}
+
+  - elementId: right-icon
+    elementType: icon
+    bounds: [570, 158, 20, 20]
+    iconName: "fas:robot"
+    fill: {type: solid, color: "$accent"}
+
+  - elementId: right-title
+    elementType: text
+    bounds: [598, 155, 240, 26]
+    content:
+      fontSize: 15
+      color: "$primary"
+      bold: true
+      align: [left, middle]
+      text: Embed AI 面板
+
+  - elementId: right-desc
+    elementType: text
+    bounds: [570, 188, 270, 90]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.6
+      align: [left, top]
+      text: |
+        <p>应用专属会话</p>
+        <p>bridge_* 工具集</p>
+        <p>自动注入页面上下文</p>
+        <p>Embed System Prompt</p>
+
+  # ===== Center connector =====
+  - elementId: center-line
+    elementType: line
+    bounds: [420, 200, 120, 30]
+    viewBox: [120, 30]
+    points: "10,15 110,15"
+    curve: sharp
+    arrow: [null, null]
+    border: {style: solid, width: 1.5, color: "$border"}
+
+  - elementId: center-label
+    elementType: text
+    bounds: [420, 175, 120, 20]
+    content:
+      fontSize: 11
+      color: "$muted"
+      align: [center, middle]
+      text: 同一 Tab
+
+  - elementId: center-label2
+    elementType: text
+    bounds: [420, 235, 120, 20]
+    content:
+      fontSize: 11
+      color: "$muted"
+      align: [center, middle]
+      text: 共享上下文
+
+  # ===== Bridge A: JSBridge =====
+  - elementId: bridge-a-line
+    elementType: line
+    bounds: [250, 315, 10, 38]
+    viewBox: [1, 38]
+    points: "0.5,0 0.5,38"
+    curve: sharp
+    arrow: [null, "arrow"]
+    border: {style: solid, width: 2, color: "$accent"}
+
+  - elementId: bridge-a-title
+    elementType: text
+    bounds: [140, 358, 240, 22]
+    content:
+      fontSize: 13
+      color: "$primary"
+      bold: true
+      align: [center, top]
+      text: 桥 A：JSBridge
+
+  - elementId: bridge-a-desc
+    elementType: text
+    bounds: [130, 382, 260, 55]
+    content:
+      fontSize: 11
+      color: "$text"
+      lineHeight: 1.5
+      align: [center, top]
+      text: |
+        <p>H5 → SClaw 宿主</p>
+        <p>用户信息 · 页面跳转 · 弹 UI · 消息联动</p>
+
+  # ===== Bridge B: Browser Bridge =====
+  - elementId: bridge-b-line
+    elementType: line
+    bounds: [700, 315, 10, 38]
+    viewBox: [1, 38]
+    points: "0.5,0 0.5,38"
+    curve: sharp
+    arrow: [null, "arrow"]
+    border: {style: solid, width: 2, color: "$accent"}
+
+  - elementId: bridge-b-title
+    elementType: text
+    bounds: [590, 358, 240, 22]
+    content:
+      fontSize: 13
+      color: "$primary"
+      bold: true
+      align: [center, top]
+      text: 桥 B：Browser Bridge
+
+  - elementId: bridge-b-desc
+    elementType: text
+    bounds: [580, 382, 260, 55]
+    content:
+      fontSize: 11
+      color: "$text"
+      lineHeight: 1.5
+      align: [center, top]
+      text: |
+        <p>Agent → 左页 DOM</p>
+        <p>点击 · 填表 · 截图 · 读页面 · 自动化</p>
+
+  # ===== Bottom quote =====
+  - elementId: quote-line
+    elementType: shape
+    bounds: [40, 452, 880, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$border"}
+
+  - elementId: quote
+    elementType: text
+    bounds: [40, 462, 880, 50]
+    content:
+      fontSize: 13
+      color: "$muted"
+      lineHeight: 1.5
+      align: [center, top]
+      text: |
+        <p>不是 iframe 里塞一个 ChatGPT，而是<strong> 页面 + AI + 自动化 </strong>三位一体</p>
+        <p>H5 通过 JSBridge 与 SClaw 对话，Agent 通过 Browser Bridge 与业务页面对话——两条桥合在一起，才是完整的应用内智能互通</p>

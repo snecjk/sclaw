@@ -1,0 +1,146 @@
+pageType: content
+background:
+  type: solid
+  color: $white
+elements:
+  - elementId: title
+    elementType: text
+    bounds: [40, 15, 880, 41]
+    content:
+      style: $title
+      align: [left, middle]
+      text: <p>业务页面长出 AI 能力</p>
+  - elementId: accent-line
+    elementType: shape
+    bounds: [40, 52, 50, 3]
+    shapeName: rect
+    fill: {type: solid, color: $accent}
+  - elementId: demo-label
+    elementType: text
+    bounds: [60, 310, 400, 20]
+    content:
+      fontSize: 10
+      color: $muted
+      align:
+        - center
+        - middle
+      text: 报价工作台 AI 报价助手 Demo
+  - elementId: mode-a-bg
+    elementType: shape
+    bounds: [490, 65, 430, 120]
+    shapeName: rect
+    fill:
+      type: solid
+      color: $light
+    border:
+      style: solid
+      width: 1
+      color: $border
+  - elementId: mode-a-label
+    elementType: text
+    bounds: [505, 72, 150, 20]
+    content:
+      fontSize: 11
+      color: $muted
+      align:
+        - left
+        - middle
+      text: 模式 A（常规）
+  - elementId: mode-a-title
+    elementType: text
+    bounds: [505, 94, 400, 24]
+    content:
+      fontSize: 15
+      color: $primary
+      bold: true
+      align: [left, middle]
+      text: AI → 页面
+  - elementId: mode-a-desc
+    elementType: text
+    bounds: [505, 122, 400, 58]
+    content:
+      fontSize: 11
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p>AI 结合 CLI、接口、Skills、工作流等后端能力</p>
+        <p>替代页面功能（创建报价、解析 Excel、批量调价）</p>
+        <p>处理完成后把结果展示给用户</p>
+  - elementId: mode-b-bg
+    elementType: shape
+    bounds: [490, 200, 430, 120]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#FFF7ED"
+    border:
+      style: solid
+      width: 1
+      color: "#FED7AA"
+  - elementId: mode-b-badge
+    elementType: text
+    bounds: [800, 205, 105, 20]
+    content:
+      fontSize: 10
+      color: $accent
+      bold: true
+      align:
+        - right
+        - middle
+      text: NEW
+  - elementId: mode-b-label
+    elementType: text
+    bounds: [505, 207, 150, 20]
+    content:
+      fontSize: 11
+      color: $muted
+      align: [left, middle]
+      text: 模式 B（本次）
+  - elementId: mode-b-title
+    elementType: text
+    bounds: [505, 229, 400, 24]
+    content:
+      fontSize: 15
+      color: $primary
+      bold: true
+      align: [left, middle]
+      text: 页面 → AI
+  - elementId: mode-b-desc
+    elementType: text
+    bounds: [505, 257, 400, 50]
+    content:
+      fontSize: 11
+      color: $text
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p>业务页面通过 JSBridge 主动调用 AI</p>
+        <p>chat.sendMessage · fillComposer · togglePanel</p>
+        <p>页面主动推，AI 被动响应</p>
+  - elementId: bottom-line
+    elementType: shape
+    bounds: [40, 345, 880, 1]
+    shapeName: rect
+    fill:
+      type: solid
+      color: $border
+  - elementId: bottom-note
+    elementType: text
+    bounds: [40, 358, 880, 50]
+    content:
+      fontSize: 13
+      color: $text
+      lineHeight: 1.5
+      align:
+        - center
+        - top
+      text: |
+        <p>两种模式<strong>互补</strong>：模式 A 用 AI 替代页面功能，模式 B 让页面主动调 AI</p>
+        <p>JSBridge 解决的是"业务方不想等用户开口，想主动推给 AI"的场景</p>
+  - elementId: KPsCij
+    elementType: image
+    bounds: [40, 85.1, 430, 209.9]
+    src: https://kimi-img.moonshot.cn/pub/slides/26-08-20-20:05:45-da3er6ed44j4g8326t8g.png
+    fit:
+      mode: fill
