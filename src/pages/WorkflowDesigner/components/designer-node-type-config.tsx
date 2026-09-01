@@ -83,6 +83,7 @@ export function DesignerNodeTypeConfig({ node, workflow, onChange }: DesignerNod
                 <label key={ext} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
+                    className="sto-native-checkbox"
                     checked={acceptedTypes.includes(ext)}
                     onChange={() => patch({ acceptedTypes: toggleValue(acceptedTypes, ext).join(',') })}
                   />
@@ -627,6 +628,7 @@ export function DesignerNodeTypeConfig({ node, workflow, onChange }: DesignerNod
                   <label key={option.value} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
+                      className="sto-native-checkbox"
                       checked={checked}
                       onChange={() => {
                         const next = checked
@@ -693,6 +695,7 @@ export function DesignerNodeTypeConfig({ node, workflow, onChange }: DesignerNod
                     <label key={option.value} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
+                        className="sto-native-checkbox"
                         checked={checked}
                         onChange={() => {
                           const next = checked

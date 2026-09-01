@@ -2315,19 +2315,15 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/file-preview/SaveArtifactDialog.tsx::pageDarkUtility::dark:border-::ion-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:bor::1",
+    "key": "src/components/file-preview/SaveArtifactDialog.tsx::pageDarkUtility::dark:border-::ion-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-checkbox-unchecked border-[#D7::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/file-preview/SaveArtifactDialog.tsx::pageDarkUtility::dark:bg-::checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:border-[var(--sto-b::1",
+    "key": "src/components/file-preview/SaveArtifactDialog.tsx::pageDarkUtility::dark:bg-::checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white d::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/components/file-preview/SaveArtifactDialog.tsx::pageDarkUtility::dark:border-:::border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)]', di::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/file-preview/SaveArtifactDialog.tsx::pageDarkUtility::dark:bg-::: 'border-[#D7DBE2] bg-white dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)]', disabled && 'cursor-not-allowed opacit::1",
+    "key": "src/components/file-preview/SaveArtifactDialog.tsx::pageDarkUtility::dark:bg-::-primary' : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white dark:bg-transparent', disabled && 'cursor-not-allowed opacity-45',::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -2587,15 +2583,15 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/file-preview/SaveArtifactDialog.tsx::rawColor::#1D2129::der text-white transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-::1",
+    "key": "src/components/file-preview/SaveArtifactDialog.tsx::rawColor::#1D2129::der text-white transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-che::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/file-preview/SaveArtifactDialog.tsx::rawColor::#1D2129::e transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-::1",
+    "key": "src/components/file-preview/SaveArtifactDialog.tsx::rawColor::#1D2129::e transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-checkbox-uncheck::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/file-preview/SaveArtifactDialog.tsx::rawColor::#D7DBE2::bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-co::1",
+    "key": "src/components/file-preview/SaveArtifactDialog.tsx::rawColor::#D7DBE2::er-primary dark:bg-primary' : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white dark:bg-transparent', disabled && 'cursor-not-allowed::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -2679,7 +2675,119 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#111827::return ( <strong key={index} className="font-semibold text-[#111827]"> {bold[1]} </strong> ); } return <spa::1",
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::n ( <strong key={index} className="font-semibold text-[#111827] dark:text-[var(--sto-text-primary)]"> {bold[1]} </strong>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:bg-::turn <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#D1D5DB] dark:bg-[var(--sto-text-tertiary)]" aria-hidden />; } /** * Design-like multi-::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::="mb-2.5 flex items-center gap-2 text-[13px] font-medium text-[#374151] dark:text-[var(--sto-text-primary)]"> {allDone ? ( outcome === '::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::', status === 'done' && 'font-medium text-[#111827] dark:text-[var(--sto-text-primary)]', status === 'error' && 'f::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::, status === 'error' && 'font-semibold text-red-600 dark:text-[var(--sto-toast-error-icon)]', status === 'pending'::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::status === 'pending' && 'font-medium text-[#9CA3AF] dark:text-[var(--sto-text-tertiary)]', )} >::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::'pending' ? 'text-[#D1D5DB]' : 'text-[#9CA3AF]', 'dark:text-[var(--sto-text-tertiary)]', status === 'active' &::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::rounded-xl border px-3.5 py-3 text-[13px] leading-[1.55] text-[#374151] dark:text-[var(--sto-text-primary)]', card.phase === 'errors' ?::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:border-::card.phase === 'errors' ? 'border-red-200 bg-red-50/50 dark:border-[var(--sto-toast-error-border)] dark:bg-destructive/5' : card.::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:bg-::border-red-200 bg-red-50/50 dark:border-[var(--sto-toast-error-border)] dark:bg-destructive/5' : card.phase === 'submitted' ? 'bor::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:border-::: card.phase === 'submitted' ? 'border-border bg-muted/20 dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)]'::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:bg-::? 'border-border bg-muted/20 dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)]' : 'border-[#EEF0F3] bg-[#F8FAF::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:border-::r(--sto-surface-primary)]' : 'border-[#EEF0F3] bg-[#F8FAFC] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]',::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:bg-::'border-[#EEF0F3] bg-[#F8FAFC] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]', )} data-flow-card-id={card.::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]"> {renderInlineEmphasis(card.t::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]"> {renderInlineEmphasis(card.b::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::<p className="m-0 text-[12px] leading-[1.45] text-[#9CA3AF] dark:text-[var(--sto-text-tertiary)]"> {renderInlineEmphasis(card.::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::<p className="mt-2 mb-0 text-[12px] font-medium text-red-600 dark:text-[var(--sto-toast-error-icon)]"> {errorCount}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:border-::ting' ? ( <div className="mt-3 border-t border-[#EEF0F3] pt-2.5 dark:border-[var(--sto-border-default)]"> {card.body ? ( <p cl::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]"> {renderInlineEmphasis(card.bod::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::? ( <p className="m-0 text-[12px] font-medium text-red-600 dark:text-[var(--sto-toast-error-icon)]"> {errorCount}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:border-::E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[v::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:bg-::er-[#D1D5DB] hover:bg-[#F9FAFB] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:b::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:border-[var(--sto-border-heavy)] da::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:border-::] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418] dark:border-[var(--sto-dialog-action-background)] dark:bg-[var(--sto-dialog-action-b::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:bg-::)] hover:bg-[#E57418] dark:border-[var(--sto-dialog-action-background)] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:text-::ialog-action-background)] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:shadow-none dark:hover:bg-[va::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::pageDarkUtility::dark:shadow-::log-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:shadow-none dark:hover:bg-[var(--sto-dialog-action-hover-background)]',::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#111827::return ( <strong key={index} className="font-semibold text-[#111827] dark:text-[var(--sto-text-primary)]"> {bold[1]} </st::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -2691,11 +2799,11 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#D1D5DB::} return <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#D1D5DB]" aria-hidden />; } /** * Design-like multi-step progress. * Hold on::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#D1D5DB::} return <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#D1D5DB] dark:bg-[var(--sto-text-tertiary)]" aria-hidden />; } /** * Design-l::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::className="mb-2.5 flex items-center gap-2 text-[13px] font-medium text-[#374151]"> {allDone ? ( outcome === 'fail' ? ( <A::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::className="mb-2.5 flex items-center gap-2 text-[13px] font-medium text-[#374151] dark:text-[var(--sto-text-primary)]"> {allDone ? ( o::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -2719,87 +2827,87 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#111827::[#F58220]', status === 'done' && 'font-medium text-[#111827]', status === 'error' && 'font-semibold text-red-60::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#111827::[#F58220]', status === 'done' && 'font-medium text-[#111827] dark:text-[var(--sto-text-primary)]', status === '::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#9CA3AF::ed-600', status === 'pending' && 'font-medium text-[#9CA3AF]', )} > {step.title::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#9CA3AF::icon)]', status === 'pending' && 'font-medium text-[#9CA3AF] dark:text-[var(--sto-text-tertiary)]', )}::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#D1D5DB::px] leading-[1.4]', status === 'pending' ? 'text-[#D1D5DB]' : 'text-[#9CA3AF]', status === 'active' && 'tex::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#D1D5DB::px] leading-[1.4]', status === 'pending' ? 'text-[#D1D5DB]' : 'text-[#9CA3AF]', 'dark:text-[var(--sto-text-::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#9CA3AF::status === 'pending' ? 'text-[#D1D5DB]' : 'text-[#9CA3AF]', status === 'active' && 'text-[#F58220]/90]',::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#9CA3AF::status === 'pending' ? 'text-[#D1D5DB]' : 'text-[#9CA3AF]', 'dark:text-[var(--sto-text-tertiary)]',::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F58220::: 'text-[#9CA3AF]', status === 'active' && 'text-[#F58220]/90]', )} > {::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F58220::o-text-tertiary)]', status === 'active' && 'text-[#F58220]/90]', )} > {::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#EEF0F3::me={cn( 'w-full max-w-full box-border rounded-xl border border-[#EEF0F3] bg-[#F8FAFC] px-3.5 py-3 text-[13px] leading-[1.55] text-[#374151]',::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::x-border rounded-xl border px-3.5 py-3 text-[13px] leading-[1.55] text-[#374151] dark:text-[var(--sto-text-primary)]', card.phase === 'errors'::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F8FAFC::'w-full max-w-full box-border rounded-xl border border-[#EEF0F3] bg-[#F8FAFC] px-3.5 py-3 text-[13px] leading-[1.55] text-[#374151]', card.p::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#EEF0F3::-default)] dark:bg-[var(--sto-surface-primary)]' : 'border-[#EEF0F3] bg-[#F8FAFC] dark:border-[var(--sto-border-default)] dark:bg-[var(--st::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::der-[#EEF0F3] bg-[#F8FAFC] px-3.5 py-3 text-[13px] leading-[1.55] text-[#374151]', card.phase === 'errors' && 'border-red-200 bg-red-50/50',::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F8FAFC::rk:bg-[var(--sto-surface-primary)]' : 'border-[#EEF0F3] bg-[#F8FAFC] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-sec::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::( <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0"> {renderInlineEmphasis(card.title)}::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::( <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]"> {rende::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::( <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0"> {renderInlineEmphasis(card.body)}::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::( <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]"> {rende::2",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#9CA3AF::nt ? ( <p className="m-0 text-[12px] leading-[1.45] text-[#9CA3AF]"> {renderInlineEmphasis(card.hint)} </p>::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#9CA3AF::nt ? ( <p className="m-0 text-[12px] leading-[1.45] text-[#9CA3AF] dark:text-[var(--sto-text-tertiary)]"> {renderInlineEm::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#EEF0F3::hase !== 'validating' ? ( <div className="mt-3 border-t border-[#EEF0F3] pt-2.5"> {card.body ? ( <p className="m-0 mb-2 t::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#EEF0F3::hase !== 'validating' ? ( <div className="mt-3 border-t border-[#EEF0F3] pt-2.5 dark:border-[var(--sto-border-default)]"> {card.body::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::? ( <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0"> {renderInlineEmphasis(card.body)}::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::? ( <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]"> {renderI::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#E5E7EB::0', isSecondary ? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]'::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#E5E7EB::0', isSecondary ? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] dark::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::Secondary ? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]' : 'bord::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#374151::Secondary ? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] dark:border-[var(--sto-borde::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#D1D5DB::? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]' : 'border border-[#F58220] bg-::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#D1D5DB::? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] dark:border-[var(--sto-border-default)] dark:bg-[va::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F9FAFB::rder-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]' : 'border border-[#F58220] bg-[#F58220] text-whit::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F9FAFB::rder-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F58220::der-[#D1D5DB] hover:bg-[#F9FAFB]' : 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F58220::bg-[var(--sto-control-hover-bg)]' : 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F58220::hover:bg-[#F9FAFB]' : 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418]'::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#F58220::-control-hover-bg)]' : 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418]::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::rgba(245,130,32,0.2)::: 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418]', )} onClick={() =>::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::rgba(245,130,32,0.2)::: 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418] dark:border-[var(--sto-dialog-action-background)] d::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#E57418::-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418]', )} onClick={() => dispatchFlowCardAc::1",
+    "key": "src/components/flow-card/FlowCard.tsx::rawColor::#E57418::-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418] dark:border-[var(--sto-dialog-action-background)] dark:bg-[var(--sto-d::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -3860,10 +3968,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
   },
   {
     "key": "src/components/settings/ProvidersSettings.tsx::pageDarkUtility::dark:bg-::-black/10 dark:border-white/10 p-3 shadow-sm", isDefault ? "bg-white/60 dark:bg-white/15" : "bg-[hsl(var(--glass-bg)/0.5)]")}> {fa::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/settings/ProvidersSettings.tsx::pageDarkUtility::dark:border-::unt.id)} className="rounded border-black/20 dark:border-white/20 text-link focus:ring-ring/40" />::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -6851,19 +6955,15 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/DataCenter/components/modals.tsx::pageDarkUtility::dark:border-::ion-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:bor::1",
+    "key": "src/pages/DataCenter/components/modals.tsx::pageDarkUtility::dark:border-::ion-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-checkbox-unchecked border-[#D7::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/DataCenter/components/modals.tsx::pageDarkUtility::dark:bg-::checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:border-border dark:::1",
+    "key": "src/pages/DataCenter/components/modals.tsx::pageDarkUtility::dark:bg-::checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white d::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/DataCenter/components/modals.tsx::pageDarkUtility::dark:border-:::border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:border-border dark:bg-background', disabled && 'cursor-not-allowed opac::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/DataCenter/components/modals.tsx::pageDarkUtility::dark:bg-::k:bg-primary' : 'border-[#D7DBE2] bg-white dark:border-border dark:bg-background', disabled && 'cursor-not-allowed opacity-45',::1",
+    "key": "src/pages/DataCenter/components/modals.tsx::pageDarkUtility::dark:bg-::-primary' : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white dark:bg-transparent', disabled && 'cursor-not-allowed opacity-45',::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -7035,15 +7135,15 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/DataCenter/components/modals.tsx::rawColor::#1D2129::der text-white transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-::1",
+    "key": "src/pages/DataCenter/components/modals.tsx::rawColor::#1D2129::der text-white transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-che::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/DataCenter/components/modals.tsx::rawColor::#1D2129::e transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-::1",
+    "key": "src/pages/DataCenter/components/modals.tsx::rawColor::#1D2129::e transition-colors', checked ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary' : 'sto-checkbox-uncheck::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/DataCenter/components/modals.tsx::rawColor::#D7DBE2::bg-[#1D2129] dark:border-primary dark:bg-primary' : 'border-[#D7DBE2] bg-white dark:border-border dark:bg-background', disabled && '::1",
+    "key": "src/pages/DataCenter/components/modals.tsx::rawColor::#D7DBE2::er-primary dark:bg-primary' : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white dark:bg-transparent', disabled && 'cursor-not-allowed::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -8543,11 +8643,11 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/WorkflowBuilder/components/workflow-overlays.tsx::rawColor::#DDE0E5::(item) ? 'border-primary bg-primary text-primary-foreground' : 'border-[#DDE0E5]', )} >::1",
+    "key": "src/pages/WorkflowBuilder/components/workflow-overlays.tsx::rawColor::#DDE0E5::y bg-primary text-primary-foreground' : 'sto-checkbox-unchecked border-[#DDE0E5]', )} >::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/WorkflowBuilder/components/workflow-overlays.tsx::rawColor::#DDE0E5::skill) ? 'border-primary bg-primary text-primary-foreground' : 'border-[#DDE0E5]', )} > {selected.h::1",
+    "key": "src/pages/WorkflowBuilder/components/workflow-overlays.tsx::rawColor::#DDE0E5::y bg-primary text-primary-foreground' : 'sto-checkbox-unchecked border-[#DDE0E5]', )} > {selected.h::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

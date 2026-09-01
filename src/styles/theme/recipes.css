@@ -576,6 +576,47 @@
   .sto-dialog-close { background-color: transparent; border-color: transparent; color: var(--sto-icon-secondary); }
   .sto-dialog-close:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-hover-bg); color: var(--sto-icon-primary); }
 
+  /* Checkbox visuals: keep the frozen light assets/native controls and own dark contrast here. */
+  .sto-checkbox-dark-visual { display: none; }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-checkbox-light-visual { display: none; }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-checkbox-dark-visual {
+    display: flex;
+    border-color: var(--sto-icon-secondary);
+  }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-checkbox-unchecked {
+    background-color: transparent;
+    border-color: var(--sto-icon-secondary);
+  }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-checkbox-dark-visual[data-state='checked'] {
+    background-color: var(--sto-brand-primary);
+    border-color: var(--sto-brand-primary);
+  }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-native-checkbox {
+    appearance: none;
+    display: inline-grid;
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    place-content: center;
+    border: 1px solid var(--sto-icon-secondary);
+    border-radius: 4px;
+    background-color: transparent;
+    color: var(--sto-control-primary-foreground);
+  }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-native-checkbox:checked {
+    border-color: var(--sto-brand-primary);
+    background-color: var(--sto-brand-primary);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m3.5 8 3 3 6-6' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 13px 13px;
+  }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-native-checkbox:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: var(--sto-control-focus-shadow);
+  }
+
   /* Third-party canvas chrome cannot carry recipe classes; this bridge keeps state ownership here. */
   .workflow-designer-flow .react-flow__controls { background-color: var(--sto-control-toolbar-background); border-color: var(--sto-overlay-border); box-shadow: 0 1px 3px color-mix(in srgb, var(--sto-overlay-scrim) 20%, transparent); }
   .workflow-designer-flow .react-flow__controls-button { background-color: var(--sto-control-toolbar-background); border-color: var(--sto-control-toolbar-border); color: inherit; }

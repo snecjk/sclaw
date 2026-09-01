@@ -17,7 +17,7 @@ function renderInlineEmphasis(text: string) {
     const bold = part.match(/^\*\*([^*]+)\*\*$/);
     if (bold) {
       return (
-        <strong key={index} className="font-semibold text-[#111827]">
+        <strong key={index} className="font-semibold text-[#111827] dark:text-[var(--sto-text-primary)]">
           {bold[1]}
         </strong>
       );
@@ -81,7 +81,7 @@ function StepStatusIcon({ status }: { status: FlowCardProgressStepStatus }) {
       />
     );
   }
-  return <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#D1D5DB]" aria-hidden />;
+  return <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#D1D5DB] dark:bg-[var(--sto-text-tertiary)]" aria-hidden />;
 }
 
 /**
@@ -110,7 +110,7 @@ function FlowCardProgress({
 
   return (
     <div className="w-full">
-      <div className="mb-2.5 flex items-center gap-2 text-[13px] font-medium text-[#374151]">
+      <div className="mb-2.5 flex items-center gap-2 text-[13px] font-medium text-[#374151] dark:text-[var(--sto-text-primary)]">
         {allDone ? (
           outcome === 'fail' ? (
             <AlertCircle className="h-4 w-4 shrink-0 text-red-500" aria-hidden />
@@ -137,9 +137,9 @@ function FlowCardProgress({
                   className={cn(
                     'm-0 text-[13px] leading-[1.4]',
                     status === 'active' && 'font-semibold text-[#F58220]',
-                    status === 'done' && 'font-medium text-[#111827]',
-                    status === 'error' && 'font-semibold text-red-600',
-                    status === 'pending' && 'font-medium text-[#9CA3AF]',
+                    status === 'done' && 'font-medium text-[#111827] dark:text-[var(--sto-text-primary)]',
+                    status === 'error' && 'font-semibold text-red-600 dark:text-[var(--sto-toast-error-icon)]',
+                    status === 'pending' && 'font-medium text-[#9CA3AF] dark:text-[var(--sto-text-tertiary)]',
                   )}
                 >
                   {step.title}
@@ -149,6 +149,7 @@ function FlowCardProgress({
                     className={cn(
                       'm-0 mt-0.5 text-[12px] leading-[1.4]',
                       status === 'pending' ? 'text-[#D1D5DB]' : 'text-[#9CA3AF]',
+                      'dark:text-[var(--sto-text-tertiary)]',
                       status === 'active' && 'text-[#F58220]/90]',
                     )}
                   >
@@ -184,9 +185,12 @@ export function FlowCard({ card }: FlowCardProps) {
   return (
     <div
       className={cn(
-        'w-full max-w-full box-border rounded-xl border border-[#EEF0F3] bg-[#F8FAFC] px-3.5 py-3 text-[13px] leading-[1.55] text-[#374151]',
-        card.phase === 'errors' && 'border-red-200 bg-red-50/50',
-        card.phase === 'submitted' && 'border-border bg-muted/20',
+        'w-full max-w-full box-border rounded-xl border px-3.5 py-3 text-[13px] leading-[1.55] text-[#374151] dark:text-[var(--sto-text-primary)]',
+        card.phase === 'errors'
+          ? 'border-red-200 bg-red-50/50 dark:border-[var(--sto-toast-error-border)] dark:bg-destructive/5'
+          : card.phase === 'submitted'
+            ? 'border-border bg-muted/20 dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)]'
+            : 'border-[#EEF0F3] bg-[#F8FAFC] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]',
       )}
       data-flow-card-id={card.cardId}
       data-flow-card-phase={card.phase}
@@ -214,22 +218,22 @@ export function FlowCard({ card }: FlowCardProps) {
           ) : null}
           <div className="min-w-0 flex-1">
             {card.title ? (
-              <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0">
+              <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]">
                 {renderInlineEmphasis(card.title)}
               </p>
             ) : null}
             {card.body ? (
-              <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0">
+              <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]">
                 {renderInlineEmphasis(card.body)}
               </p>
             ) : null}
             {card.hint ? (
-              <p className="m-0 text-[12px] leading-[1.45] text-[#9CA3AF]">
+              <p className="m-0 text-[12px] leading-[1.45] text-[#9CA3AF] dark:text-[var(--sto-text-tertiary)]">
                 {renderInlineEmphasis(card.hint)}
               </p>
             ) : null}
             {errorCount !== null ? (
-              <p className="mt-2 mb-0 text-[12px] font-medium text-red-600">
+              <p className="mt-2 mb-0 text-[12px] font-medium text-red-600 dark:text-[var(--sto-toast-error-icon)]">
                 {errorCount}
                 {' '}
                 处待修正
@@ -240,14 +244,14 @@ export function FlowCard({ card }: FlowCardProps) {
       ) : null}
 
       {showProgress && progressSettled && (card.body || errorCount !== null) && card.phase !== 'validating' ? (
-        <div className="mt-3 border-t border-[#EEF0F3] pt-2.5">
+        <div className="mt-3 border-t border-[#EEF0F3] pt-2.5 dark:border-[var(--sto-border-default)]">
           {card.body ? (
-            <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0">
+            <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[#374151] last:mb-0 dark:text-[var(--sto-text-primary)]">
               {renderInlineEmphasis(card.body)}
             </p>
           ) : null}
           {errorCount !== null ? (
-            <p className="m-0 text-[12px] font-medium text-red-600">
+            <p className="m-0 text-[12px] font-medium text-red-600 dark:text-[var(--sto-toast-error-icon)]">
               {errorCount}
               {' '}
               处待修正
@@ -268,8 +272,8 @@ export function FlowCard({ card }: FlowCardProps) {
                 className={cn(
                   'inline-flex min-h-7 items-center justify-center rounded-md px-3 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   isSecondary
-                    ? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]'
-                    : 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418]',
+                    ? 'border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:hover:border-[var(--sto-border-heavy)] dark:hover:bg-[var(--sto-control-hover-bg)]'
+                    : 'border border-[#F58220] bg-[#F58220] text-white shadow-[0_2px_8px_rgba(245,130,32,0.2)] hover:bg-[#E57418] dark:border-[var(--sto-dialog-action-background)] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:shadow-none dark:hover:bg-[var(--sto-dialog-action-hover-background)]',
                 )}
                 onClick={() => dispatchFlowCardAction(action, card)}
               >

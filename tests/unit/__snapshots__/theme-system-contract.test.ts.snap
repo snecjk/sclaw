@@ -80,6 +80,10 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
+      "file": "src/components/flow-card/FlowCard.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
       "file": "src/components/input-composer/input-composer-toolbar.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },

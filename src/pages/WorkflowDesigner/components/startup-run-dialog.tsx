@@ -97,7 +97,7 @@ function FieldEditor({ field, value, onChange }: {
     return (
       <div className="space-y-1.5">
         <Label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-foreground">
-          <input type="checkbox" className="h-4 w-4 accent-primary" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} />
+          <input type="checkbox" className="sto-native-checkbox h-4 w-4 accent-primary" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} />
           <span>{field.label}{field.required ? <span className="text-destructive"> *</span> : null}</span>
         </Label>
         {description}
@@ -106,7 +106,7 @@ function FieldEditor({ field, value, onChange }: {
   }
   if (isMultiSelect(field.component)) {
     const selected = Array.isArray(value) ? value.map(String) : [];
-    return <div className="space-y-2"><Label className="text-sm font-semibold text-foreground">{field.label}{field.required ? <span className="text-destructive"> *</span> : null}</Label><div className="grid gap-2">{(field.options ?? []).map((option) => <Label key={option.value} className="flex cursor-pointer items-center gap-2 text-sm font-normal text-foreground"><input type="checkbox" className="h-4 w-4 accent-primary" checked={selected.includes(option.value)} onChange={() => onChange(selected.includes(option.value) ? selected.filter((item) => item !== option.value) : [...selected, option.value])} />{option.label}</Label>)}</div>{description}</div>;
+    return <div className="space-y-2"><Label className="text-sm font-semibold text-foreground">{field.label}{field.required ? <span className="text-destructive"> *</span> : null}</Label><div className="grid gap-2">{(field.options ?? []).map((option) => <Label key={option.value} className="flex cursor-pointer items-center gap-2 text-sm font-normal text-foreground"><input type="checkbox" className="sto-native-checkbox h-4 w-4 accent-primary" checked={selected.includes(option.value)} onChange={() => onChange(selected.includes(option.value) ? selected.filter((item) => item !== option.value) : [...selected, option.value])} />{option.label}</Label>)}</div>{description}</div>;
   }
   if (isEditableList(field.component)) {
     const items = Array.isArray(value) && value.length ? value.map((item) => String(item)) : [''];
