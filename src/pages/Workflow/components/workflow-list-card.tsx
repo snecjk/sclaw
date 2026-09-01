@@ -31,6 +31,7 @@ import {
 } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { WorkflowCardCover } from '@/pages/Workflow/components/workflow-card-cover';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import type {
   OfficialWorkflowCard,
   WorkflowCardItem,
@@ -39,6 +40,7 @@ import type {
 
 interface WorkflowCardShellProps {
   id: string;
+  label: string;
   coverKey: WorkflowCoverKey;
   dimmed?: boolean;
   highlighted?: boolean;
@@ -74,6 +76,7 @@ function WorkflowFlowRow({ flow }: { flow: string[] }) {
 /** 卡片通用外壳：头图 + body 区域，点击整体触发 onCardClick */
 function WorkflowCardShell({
   id,
+  label,
   coverKey,
   dimmed,
   highlighted,
@@ -89,12 +92,13 @@ function WorkflowCardShell({
         highlighted && 'border-primary/70 ring-2 ring-primary/25',
       )}
       tabIndex={highlighted ? -1 : undefined}
-      onClick={(e) => {
-        // if ((e.target as HTMLElement).closest('button, [role="switch"]')) return;
-        if ((e.target as HTMLElement).closest('button')) return;
-        onCardClick?.();
-      }}
     >
+      {onCardClick ? (
+        <CollectionCardAction
+          aria-label={`打开${label}`}
+          onClick={onCardClick}
+        />
+      ) : null}
       <div className={workflowListCardCoverWrapClass}>
         <WorkflowCardCover coverKey={coverKey} className={workflowListCardCoverClass} />
       </div>
@@ -138,6 +142,7 @@ export function WorkflowMineListCard({
   return (
     <WorkflowCardShell
       id={card.id}
+      label={card.name}
       coverKey={card.coverKey}
       dimmed={!card.enabled}
       highlighted={highlighted}
@@ -269,7 +274,12 @@ export function WorkflowOfficialListCard({
   const { t } = useTranslation('workflow');
 
   return (
-    <WorkflowCardShell id={card.id} coverKey={card.coverKey} onCardClick={onCardClick}>
+    <WorkflowCardShell
+      id={card.id}
+      label={card.name}
+      coverKey={card.coverKey}
+      onCardClick={onCardClick}
+    >
       <div className={workflowListCardMainClass}>
         <div className={workflowListCardHeadClass}>
           <div className={workflowListCardTitleRowClass}>

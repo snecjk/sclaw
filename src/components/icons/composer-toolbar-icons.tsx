@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-const composerIconClass = 'h-[22px] w-[22px] shrink-0 text-[#1D2129] dark:text-muted-foreground';
+const composerIconClass = 'h-[22px] w-[22px] shrink-0';
 
 /** 输入框工具栏：附件（回形针） */
 export function AttachFileIcon({ className }: { className?: string }) {

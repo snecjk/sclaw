@@ -13,11 +13,11 @@ import {
   Loader2,
   PanelsTopLeft,
   Plus,
-  Search,
   ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import qrCodeIcon from '@/assets/icons/qr-code-icon.svg';
+import qrCodeIcon from '@/assets/icons/qr-code-icon.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import vipH5ProdQrCode from '@/assets/vip-h5-prod-qr-code.png';
 import vipH5TestQrCode from '@/assets/vip-h5-test-qr-code.png';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
@@ -63,7 +63,17 @@ import type { LocalAuthorizeSelectionType } from '@/types/local-authorized-file'
 import { getAppEnv } from '../../../shared/env-config';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
 import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
-import { FolderBreadcrumbBar, IconToggle, TabButton } from './components/navigation';
+import {
+  DataCenterToolbarSearch,
+  FolderBreadcrumbBar,
+  IconToggle,
+  TabButton,
+} from './components/navigation';
+import {
+  dataCenterToolbarButtonClass,
+  dataCenterToolbarInteractiveSurfaceClass,
+  dataCenterToolbarSurfaceClass,
+} from './components/toolbar-styles';
 import { ROOT_ENTRY_ID } from './constants';
 import type { DataCenterUiEntry, DriveTab, UploadToSharedTarget } from './types';
 import {
@@ -622,15 +632,11 @@ export function DataCenter() {
                   <TabButton active={driveTab === 'upload'} onClick={() => setDriveTab('upload')}>{t('dataCenterPage.tabs.uploadFiles')}</TabButton>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" />
-                    <input
-                      value={currentKeyword}
-                      onChange={(event) => isLocalDriveTab ? localStore.setKeyword(event.target.value) : store.setKeyword(event.target.value)}
-                      placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
-                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
-                    />
-                  </div>
+                  <DataCenterToolbarSearch
+                    value={currentKeyword}
+                    onValueChange={(value) => isLocalDriveTab ? localStore.setKeyword(value) : store.setKeyword(value)}
+                    placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
+                  />
                 </div>
               </div>
 
@@ -663,7 +669,7 @@ export function DataCenter() {
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted">
+                  <div className={cn(dataCenterToolbarSurfaceClass, 'flex items-center p-1')}>
                     <IconToggle active={currentViewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => isLocalDriveTab ? localStore.setViewMode('grid') : store.setViewMode('grid')}>
                       <Grid2X2 className="h-4 w-4" />
                     </IconToggle>
@@ -673,13 +679,13 @@ export function DataCenter() {
                   </div>
                   {isUploadDriveTab ? (
                     <>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => setCreateFolderOpen(true)}>
+                      <Button type="button" variant="outline" className={dataCenterToolbarButtonClass} onClick={() => setCreateFolderOpen(true)}>
                         <FolderPlus className="mr-2 h-4 w-4" />
                         {t('dataCenterPage.toolbar.createFolder')}
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
+                          <Button type="button" variant="outline" className={dataCenterToolbarButtonClass} disabled={uploading}>
                             {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                             {t('dataCenterPage.toolbar.uploadFile')}
                             <ChevronDown className="ml-2 h-3.5 w-3.5" />
@@ -698,7 +704,7 @@ export function DataCenter() {
                   ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
+                        <Button type="button" variant="outline" className={dataCenterToolbarButtonClass} disabled={uploading}>
                           {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                           {t('dataCenterPage.toolbar.authorizeLocalFile')}
                           <ChevronDown className="ml-2 h-3.5 w-3.5" />
@@ -736,17 +742,13 @@ export function DataCenter() {
 
               {store.section !== 'data_source' ? (
                 <div className="flex min-w-0 items-center gap-2">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" />
-                    <input
-                      value={store.keyword}
-                      onChange={(event) => store.setKeyword(event.target.value)}
-                      placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
-                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
-                    />
-                  </div>
+                  <DataCenterToolbarSearch
+                    value={store.keyword}
+                    onValueChange={store.setKeyword}
+                    placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
+                  />
                   <AssociationFilterDropdown value={associationFilter} onChange={setAssociationFilter} />
-                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted">
+                  <div className={cn(dataCenterToolbarSurfaceClass, 'flex items-center p-1')}>
                     <IconToggle active={store.viewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => store.setViewMode('grid')}>
                       <Grid2X2 className="h-4 w-4" />
                     </IconToggle>
@@ -757,7 +759,7 @@ export function DataCenter() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground dark:hover:bg-muted/70"
+                    className={cn(dataCenterToolbarButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}
                     onClick={() => setCreateFolderOpen(true)}
                     disabled={!canCreateFolder}
                   >
@@ -785,7 +787,10 @@ export function DataCenter() {
                   className="shrink-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#6B8CFF] focus-visible:ring-offset-1"
                   onClick={() => setQrCodePinned((pinned) => !pinned)}
                 >
-                  <img src={qrCodeIcon} alt="" className="h-[21px] w-[21px] dark:invert" />
+                  <ThemedMonochromeIcon
+                    source={qrCodeIcon}
+                    className="sto-icon--neutral-strong h-[21px] w-[21px]"
+                  />
                 </button>
               </TooltipTrigger>
               <TooltipContent
@@ -1084,7 +1089,7 @@ function AssociationFilterDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none outline-none ring-0 transition-colors hover:bg-[#F7F8FA] focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted/50"
+          className={cn(dataCenterToolbarInteractiveSurfaceClass, 'inline-flex items-center justify-center px-3 text-[13px] font-medium outline-none')}
         >
           {t('dataCenterPage.toolbar.associationLabel', { value: label })}
           <ChevronDown className="ml-1 h-3.5 w-3.5" />

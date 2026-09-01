@@ -425,7 +425,6 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           src="about:blank"
           partition={SCLAW_EMBED_BROWSER_PARTITION}
           allowpopups={true}
-          // @ts-expect-error Electron <webview> attributes
           webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=no,enableRemoteModule=no"
           preload={guestPreloadUrl ?? undefined}
           className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
 import { cn } from '@/lib/utils';
 import {
+  sidebarBodyTextClass,
   sidebarListItemTextClass,
   sidebarRecentSessionActiveClass,
   sidebarSingleActionRowPaddingClass,
@@ -92,15 +93,17 @@ export function SidebarRecentSessionRow({
   return (
     <div className={cn('relative flex w-full min-w-0 items-center', className)}>
       <div
+        data-selected={isActive ? 'true' : undefined}
         className={cn(
           'group relative flex h-8 w-full items-center rounded-lg transition-colors',
           isActive
-            ? cn(sidebarRecentSessionActiveClass, 'hover:bg-[var(--sto-sidebar-row-hover-bg)]')
+            ? sidebarRecentSessionActiveClass
             : sidebarSubitemTextIdleClass,
         )}
       >
         <button
           type="button"
+          aria-current={isActive ? 'page' : undefined}
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
@@ -110,7 +113,12 @@ export function SidebarRecentSessionRow({
             channelSource && isPinned ? 'pr-[62px]' : 'pr-8',
           )}
         >
-          <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate',
+              isActive ? sidebarBodyTextClass : sidebarListItemTextClass,
+            )}
+          >
             {label}
           </span>
         </button>

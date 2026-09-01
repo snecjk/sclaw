@@ -8,6 +8,8 @@ import type { AppItem } from '@/types/more-apps';
 import { AppIcon } from './AppIcon';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { collectionCardShellClass } from '@/lib/surfaces';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import { formatExternalAppDomain } from './format-external-app-domain';
 
 interface AppCardProps {
@@ -45,15 +47,15 @@ function AppCardImpl({
       : t('moreApps.clickToInstall', { defaultValue: '点击安装后可用' });
 
   // Tags based on app properties
-  const tags: { label: string; className: string }[] = [];
+  const tags: { label: string; variant: 'official' | 'external' | 'hot' }[] = [];
   if (app.official) {
-    tags.push({ label: t('moreApps.tag.official', { defaultValue: '官方' }), className: 'more-apps-tag--official' });
+    tags.push({ label: t('moreApps.tag.official', { defaultValue: '官方' }), variant: 'official' });
   }
   if (isExternal) {
-    tags.push({ label: t('moreApps.tag.external', { defaultValue: '外部' }), className: 'more-apps-tag--external' });
+    tags.push({ label: t('moreApps.tag.external', { defaultValue: '外部' }), variant: 'external' });
   }
   if (app.badge) {
-    tags.push({ label: app.badge, className: 'more-apps-tag--hot' });
+    tags.push({ label: app.badge, variant: 'hot' });
   }
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
@@ -87,12 +89,19 @@ function AppCardImpl({
   return (
     <article
       className={cn(
+        collectionCardShellClass,
         'more-apps-card',
         isExternal && 'more-apps-card--custom',
         installed && 'more-apps-card--installed',
       )}
-      onClick={handleOpen}
     >
+      <CollectionCardAction
+        aria-label={t('moreApps.openApp', {
+          appName: app.name,
+          defaultValue: `打开${app.name}`,
+        })}
+        onClick={handleOpen}
+      />
       {/* Top row: icon + title + actions */}
       <div className="more-apps-card__top">
         <AppIcon
@@ -108,7 +117,8 @@ function AppCardImpl({
           {isMineTab && isExternal && (
             <div className="more-apps-card__actions">
               <button
-                className="more-apps-card__icon-btn"
+                type="button"
+                className="sto-control sto-control--icon-muted more-apps-card__icon-btn"
                 onClick={handleEdit}
                 aria-label={t('moreApps.action.edit', { defaultValue: '编辑' })}
                 title={t('moreApps.action.edit', { defaultValue: '编辑' })}
@@ -116,7 +126,8 @@ function AppCardImpl({
                 <Pencil className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
-                className="more-apps-card__icon-btn more-apps-card__icon-btn--danger"
+                type="button"
+                className="sto-control sto-control--icon-muted sto-control--icon-danger more-apps-card__icon-btn more-apps-card__icon-btn--danger"
                 onClick={handleDelete}
                 aria-label={t('moreApps.action.delete', { defaultValue: '删除' })}
                 title={t('moreApps.action.delete', { defaultValue: '删除' })}
@@ -141,7 +152,7 @@ function AppCardImpl({
       {tags.length > 0 && (
         <div className="more-apps-card__tags">
           {tags.map((tag, idx) => (
-            <span key={idx} className={cn('more-apps-tag', tag.className)}>
+            <span key={idx} className="sto-feedback sto-feedback--badge more-apps-tag" data-variant={tag.variant}>
               {tag.label}
             </span>
           ))}
@@ -156,21 +167,23 @@ function AppCardImpl({
         <div className="more-apps-card__foot-actions">
           {!isExternal && onToggleFavorite && (
             <button
-              className={cn('more-apps-card__favorite', favorite && 'more-apps-card__favorite--active')}
+              type="button"
+              className={cn('sto-control sto-control--favorite sto-control--favorite-subtle more-apps-card__favorite', favorite && 'more-apps-card__favorite--active')}
               onClick={handleToggleFavorite}
               aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
+              aria-pressed={favorite}
               title={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
             >
               <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
             </button>
           )}
           {installed ? (
-            <span className="more-apps-card__use" onClick={(e) => { e.stopPropagation(); onOpen(app); }}>
+            <span className="more-apps-card__use">
               {isExternal ? t('moreApps.action.openLink', { defaultValue: '打开链接' }) : t('moreApps.action.open', { defaultValue: '打开' })}
             </span>
           ) : (
             <button
-              className="more-apps-card__install"
+              className="sto-control sto-control--brand-solid more-apps-card__install"
               onClick={handleInstall}
             >
               {t('moreApps.action.install', { defaultValue: '打开' })}

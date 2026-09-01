@@ -14,6 +14,7 @@ import { useMoreAppsStore } from '@/stores/more-apps';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
+  collectionCardShellClass,
   stoMainInnerShell,
   stoPageTitleClass,
 } from '@/lib/surfaces';
@@ -21,6 +22,7 @@ import { AppCard } from './AppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import {
@@ -383,7 +385,11 @@ export function MoreAppsPage() {
             <span className="app-market__hero-error-text">
               {t('moreApps.bannerError', { defaultValue: '横幅加载失败' })}
             </span>
-            <button type="button" className="app-market__hero-retry" onClick={() => fetchBanners()}>
+            <button
+              type="button"
+              className="sto-control sto-control--showcase sto-control--showcase-retry app-market__hero-retry"
+              onClick={() => fetchBanners()}
+            >
               {t('moreApps.bannerRetry', { defaultValue: '重试' })}
             </button>
           </div>
@@ -406,7 +412,7 @@ export function MoreAppsPage() {
               banner.title || banner.subtitle || t('moreApps.banner', { defaultValue: '横幅' });
             const bannerClassName = cn(
               'app-market__hero-banner',
-              clickable && 'app-market__hero-banner--clickable',
+              clickable && 'sto-control sto-control--artwork-link app-market__hero-banner--clickable',
             );
             const content = imageFailed ? (
               <div className="app-market__hero-image-fallback" aria-hidden="true">
@@ -496,7 +502,7 @@ export function MoreAppsPage() {
           </span>
           <button
             type="button"
-            className="app-market__list-retry"
+            className="sto-control sto-control--brand-retry app-market__list-retry"
             onClick={() => fetchApps({ reset: true })}
           >
             {t('moreApps.retry', { defaultValue: '重试' })}
@@ -522,22 +528,20 @@ export function MoreAppsPage() {
             return (
               <article
                 key={app.id}
-                className={cn('app-market__row', installed && 'app-market__row--installed')}
+                className={cn(
+                  collectionCardShellClass,
+                  'app-market__row',
+                  installed && 'app-market__row--installed',
+                )}
                 data-app-id={app.id}
-                role="button"
-                tabIndex={0}
-                aria-label={t('moreApps.openApp', {
-                  appName: app.name,
-                  defaultValue: `打开${app.name}`,
-                })}
-                onClick={() => handleOpenApp(app)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    handleOpenApp(app);
-                  }
-                }}
               >
+                <CollectionCardAction
+                  aria-label={t('moreApps.openApp', {
+                    appName: app.name,
+                    defaultValue: `打开${app.name}`,
+                  })}
+                  onClick={() => handleOpenApp(app)}
+                />
                 <div className="app-market__row-main">
                   <AppIcon
                     iconKey={app.iconKey}
@@ -560,12 +564,13 @@ export function MoreAppsPage() {
                 {!app.external && (
                   <button
                     type="button"
-                    className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
+                    className={cn('sto-control sto-control--favorite app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
                     onClick={(event) => {
                       event.stopPropagation();
                       handleToggleFavorite(app.id);
                     }}
                     aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
+                    aria-pressed={favorite}
                   >
                     <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
                   </button>
@@ -578,7 +583,11 @@ export function MoreAppsPage() {
           <div className="app-market__load-more-wrap">
             <button
               type="button"
-              className={cn('app-market__load-more', loadingMore && 'app-market__load-more--loading')}
+              className={cn(
+                'sto-control sto-control--quiet app-market__load-more',
+                loadingMore && 'app-market__load-more--loading',
+              )}
+              data-sto-state={loadingMore ? 'loading' : undefined}
               onClick={() => loadMoreApps()}
               disabled={loadingMore}
             >
@@ -605,13 +614,13 @@ export function MoreAppsPage() {
             <button
               key={cat.id}
               type="button"
-              className={cn('app-market__cat', marketCategory === cat.id && 'app-market__cat--active')}
+              className={cn('sto-navigation-item sto-navigation-item--feature-filter app-market__cat', marketCategory === cat.id && 'app-market__cat--active')}
               data-market-cat={cat.id}
               aria-pressed={marketCategory === cat.id ? 'true' : 'false'}
               onClick={() => handleSelectCategory(cat.id)}
             >
               <span>{cat.label}</span>
-              <span className="app-market__cat-count" aria-hidden="true">
+              <span className="sto-navigation-item__count sto-navigation-item__count--metadata app-market__cat-count" aria-hidden="true">
                 {cat.count}
               </span>
             </button>
@@ -674,7 +683,7 @@ export function MoreAppsPage() {
 
         <button
           type="button"
-          className="more-apps-add-btn"
+          className="sto-control sto-control--fill-action more-apps-add-btn"
           id="more-apps-add-external-btn"
           onClick={openAddModal}
         >
@@ -690,7 +699,7 @@ export function MoreAppsPage() {
             <button
               key={tab}
               type="button"
-              className={cn('more-apps-tab', activeTab === tab && 'more-apps-tab--active')}
+              className={cn('sto-navigation-item sto-navigation-item--feature-tab more-apps-tab', activeTab === tab && 'more-apps-tab--active')}
               role="tab"
               data-tab={tab}
               onClick={() => setActiveTab(tab)}
@@ -705,12 +714,12 @@ export function MoreAppsPage() {
           ))}
         </div>
 
-        <label className="more-apps-search-wrap">
+        <label className="sto-control sto-control--search-shell more-apps-search-wrap">
           <span className="sr-only">{t('moreApps.search', { defaultValue: '搜索应用' })}</span>
           <Search className="more-apps-search__icon" aria-hidden="true" />
           <input
             type="search"
-            className="more-apps-search"
+            className="sto-control sto-control--search-input more-apps-search"
             placeholder={t('moreApps.searchPlaceholder', { defaultValue: '搜索应用名称或关键词' })}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

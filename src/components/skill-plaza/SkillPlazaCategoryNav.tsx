@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 import { computeMineCategoryCounts } from '@/lib/skill-plaza-category';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { StoOutlineButton } from '@/components/ui/sto-neutral-controls';
+import { stoSortTriggerClass } from '@/lib/surfaces';
 
 const ALL_CATEGORY_SLUG = '';
 
@@ -102,18 +104,19 @@ export function SkillPlazaCategoryNav() {
             key={cat.slug || 'all'}
             type="button"
             onClick={() => setActiveCategory(cat.slug)}
+            aria-current={activeCategory === cat.slug ? 'true' : undefined}
             className={cn(
-              "inline-flex items-center gap-0.5 rounded-[12px] border-none bg-transparent px-3 py-1.5 font-['PingFang_SC'] text-[13px] font-medium whitespace-nowrap cursor-pointer transition-colors",
-              activeCategory === cat.slug
-                ? 'bg-[#E5E6EB] text-[#1D2129] font-semibold'
-                : 'text-[#86909C] hover:text-[#1D2129]',
+              "sto-navigation-item sto-navigation-item--filter inline-flex items-center gap-0.5 rounded-[12px] border-none px-3 py-1.5 font-['PingFang_SC'] text-[13px] font-medium whitespace-nowrap cursor-pointer transition-colors",
+              activeCategory === cat.slug && 'font-semibold',
             )}
           >
             <span>{cat.label}</span>
             <span
               className={cn(
                 'text-[13px] font-medium tabular-nums',
-                activeCategory === cat.slug ? 'text-[#86909C]' : 'text-[#C9CDD4]',
+                activeCategory === cat.slug
+                  ? 'text-[#86909C] dark:text-[var(--sto-text-secondary)]'
+                  : 'text-[#C9CDD4] dark:text-[var(--sto-text-tertiary)]',
               )}
             >
               {cat.slug === ALL_CATEGORY_SLUG ? allCount : displayCounts[cat.slug] ?? 0}
@@ -124,39 +127,40 @@ export function SkillPlazaCategoryNav() {
 
       {isMine ? (
         <div className="inline-flex flex-shrink-0 items-center gap-1">
-          <button
-            type="button"
+          <StoOutlineButton
             onClick={() => setViewMode('grid')}
             className={cn(
-              'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[12px] border p-0 transition-colors hover:bg-[#F2F3F5]',
+              'h-8 w-8 cursor-pointer border-border p-0',
               viewMode === 'grid'
-                ? 'border-border bg-white text-[#ff6700] shadow-sm'
-                : 'border-border bg-white text-[#86909C] hover:text-[#1D2129]',
+                ? 'text-[#ff6700] shadow-sm dark:text-[#ff6700] dark:shadow-none'
+                : 'text-[#86909C] hover:text-[#1D2129] dark:text-[var(--sto-text-tertiary)] dark:hover:text-[var(--sto-text-primary)]',
             )}
             title={t('plaza.view.grid', { defaultValue: '宫格视图' })}
           >
             <LayoutGrid className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
+          </StoOutlineButton>
+          <StoOutlineButton
             onClick={() => setViewMode('list')}
             className={cn(
-              'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[12px] border p-0 transition-colors hover:bg-[#F2F3F5]',
+              'h-8 w-8 cursor-pointer border-border p-0',
               viewMode === 'list'
-                ? 'border-border bg-white text-[#ff6700] shadow-sm'
-                : 'border-border bg-white text-[#86909C] hover:text-[#1D2129]',
+                ? 'text-[#ff6700] shadow-sm dark:text-[#ff6700] dark:shadow-none'
+                : 'text-[#86909C] hover:text-[#1D2129] dark:text-[var(--sto-text-tertiary)] dark:hover:text-[var(--sto-text-primary)]',
             )}
             title={t('plaza.view.list', { defaultValue: '条目视图' })}
           >
             <List className="h-4 w-4" />
-          </button>
+          </StoOutlineButton>
         </div>
       ) : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="group flex h-8 flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-[12px] border border-border bg-white px-2.5 text-[13px] font-medium text-[#1D2129] transition-colors hover:bg-[#F2F3F5]"
+              className={cn(
+                stoSortTriggerClass,
+                'group h-8 flex-shrink-0 cursor-pointer gap-1.5 rounded-[12px] border-border px-2.5 text-[13px] font-medium hover:bg-[#F2F3F5] dark:hover:bg-[var(--sto-control-hover-bg)]',
+              )}
             >
               <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="whitespace-nowrap">

@@ -1,27 +1,51 @@
 /* Workflow designer canvas — aligned with memory-center-web reactflow nodes */
 
 .workflow-designer-flow {
+  /* Node type swatches are authored canvas art, not reusable UI surface roles. */
+  --sto-art-workflow-node-trigger: #ecfdf5;
+  --sto-art-workflow-node-data: #dcfce7;
+  --sto-art-workflow-node-transform: #eef2ff;
+  --sto-art-workflow-node-agent: #f1f5ff;
+  --sto-art-workflow-node-condition: #fff7ed;
+  --sto-art-workflow-node-approval: #fef2f2;
+  --sto-art-workflow-node-action: #ecfeff;
+  --sto-art-workflow-node-output: #f8fafc;
+  --sto-art-workflow-node-icon-foreground: #1f2937;
+  --sto-art-workflow-library-output: #eef6ff;
+  --sto-art-workflow-template-output: #4f46e5;
+  --sto-art-workflow-template-output-foreground: #ffffff;
+  --sto-art-workflow-branch-border: rgb(249 115 22 / 16%);
+  --sto-art-workflow-branch-foreground: #9a3412;
+  --sto-art-workflow-branch-background: rgb(255 247 237 / 96%);
+  --sto-art-workflow-branch-shadow: 0 6px 14px rgb(15 23 42 / 8%);
+  --sto-art-workflow-parallel-border: rgb(15 92 83 / 18%);
+  --sto-art-workflow-parallel-foreground: #355f58;
+  --sto-art-workflow-parallel-background: rgb(240 253 250 / 96%);
   width: 100%;
   height: 100%;
   font-size: 14px;
   background:
-    radial-gradient(circle at 1px 1px, #dfe6ee 1.2px, transparent 1.2px),
-    #f7fbff;
+    radial-gradient(circle at 1px 1px, var(--sto-workflow-canvas-grid) 1.2px, transparent 1.2px),
+    var(--sto-workflow-canvas-background);
   background-size: 28px 28px;
 }
 
 .workflow-designer-flow .react-flow__controls {
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
-  border: 1px solid hsl(var(--border));
+  border-style: solid;
+  border-width: 1px;
   border-radius: 8px;
   overflow: hidden;
 }
 
 .workflow-designer-flow .react-flow__minimap {
-  border: 1px solid hsl(var(--border));
+  border-style: solid;
+  border-width: 1px;
   border-radius: 22px;
   overflow: hidden;
-  box-shadow: 0 18px 42px rgb(15 23 42 / 10%);
+}
+
+.workflow-designer-flow .react-flow__controls-button {
+  fill: currentColor;
 }
 
 .wf-canvas-node {
@@ -31,15 +55,9 @@
   max-width: 300px;
   padding: 12px;
   overflow: visible;
-  border: 1px solid #eef2f7;
+  border-style: solid;
+  border-width: 1px;
   border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 12px 30px rgb(15 23 42 / 7%);
-}
-
-.wf-canvas-node.selected {
-  border-color: #dbe4f0;
-  box-shadow: 0 18px 40px rgb(15 23 42 / 12%);
 }
 
 .wf-canvas-node-header {
@@ -55,16 +73,10 @@
   height: 22px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #edf2f7;
+  border-style: solid;
+  border-width: 1px;
   border-radius: 999px;
-  color: #94a3b8;
-  background: #fff;
   cursor: pointer;
-}
-
-.wf-canvas-node-close:hover {
-  color: #475569;
-  background: #f8fafc;
 }
 
 .wf-canvas-node-head {
@@ -81,18 +93,18 @@
   height: 32px;
   border-radius: 10px;
   flex-shrink: 0;
-  color: #1f2937;
+  color: var(--sto-art-workflow-node-icon-foreground);
 }
 
-.wf-canvas-node-icon.accent-trigger { background: #ecfdf5; }
-.wf-canvas-node-icon.accent-data { background: #dcfce7; }
-.wf-canvas-node-icon.accent-transform { background: #eef2ff; }
-.wf-canvas-node-icon.accent-agent { background: #f1f5ff; }
-.wf-canvas-node-icon.accent-condition { background: #fff7ed; }
-.wf-canvas-node-icon.accent-approval { background: #fef2f2; }
-.wf-canvas-node-icon.accent-action { background: #ecfeff; }
-.wf-canvas-node-icon.accent-output { background: #f8fafc; }
-.wf-canvas-node-icon.accent-browser { background: #ecfdf5; }
+.wf-canvas-node-icon.accent-trigger { background: var(--sto-art-workflow-node-trigger); }
+.wf-canvas-node-icon.accent-data { background: var(--sto-art-workflow-node-data); }
+.wf-canvas-node-icon.accent-transform { background: var(--sto-art-workflow-node-transform); }
+.wf-canvas-node-icon.accent-agent { background: var(--sto-art-workflow-node-agent); }
+.wf-canvas-node-icon.accent-condition { background: var(--sto-art-workflow-node-condition); }
+.wf-canvas-node-icon.accent-approval { background: var(--sto-art-workflow-node-approval); }
+.wf-canvas-node-icon.accent-action { background: var(--sto-art-workflow-node-action); }
+.wf-canvas-node-icon.accent-output { background: var(--sto-art-workflow-node-output); }
+.wf-canvas-node-icon.accent-browser { background: var(--sto-art-workflow-node-trigger); }
 
 .wf-canvas-node-copy {
   min-width: 0;
@@ -106,7 +118,7 @@
 }
 
 .wf-canvas-node-title-edit {
-  color: #94a3b8;
+  color: var(--sto-feature-muted-foreground);
   flex-shrink: 0;
 }
 
@@ -115,14 +127,14 @@
   font-size: 14px;
   font-weight: 800;
   line-height: 1.3;
-  color: #0f172a;
+  color: var(--sto-feature-foreground-strong);
 }
 
 .wf-canvas-node-head small {
   display: block;
   margin-top: 6px;
   font-size: 12px;
-  color: #8a97aa;
+  color: var(--sto-feature-subtle-foreground);
 }
 
 .wf-canvas-node-status {
@@ -131,23 +143,25 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px;
-  color: #64748b;
-  background: #f1f5f9;
+  color: var(--sto-feature-secondary-foreground);
+  background: var(--sto-feature-muted-background);
 }
 
 .wf-flow-handle {
   width: 14px !important;
   height: 14px !important;
-  border: 2px solid #fff !important;
-  background: #ffffff !important;
-  box-shadow: 0 0 0 1px #e5edf5, 0 5px 12px rgb(15 23 42 / 10%);
+  border: 2px solid var(--sto-panel-bg) !important;
+  background: var(--sto-panel-bg) !important;
+  box-shadow:
+    0 0 0 1px var(--sto-border-handle),
+    0 5px 12px color-mix(in srgb, var(--sto-shadow-tone) 10%, transparent);
 }
 
 .wf-flow-handle::after {
   content: '+';
   position: absolute;
   inset: -1px;
-  color: #94a3b8;
+  color: var(--sto-feature-muted-foreground);
   font-size: 12px;
   line-height: 13px;
   text-align: center;
@@ -189,18 +203,13 @@
 .wf-canvas-node-prompt-button {
   width: fit-content;
   max-width: 100%;
-  border: 1px solid #edf2f7;
+  border-style: solid;
+  border-width: 1px;
   border-radius: 8px;
-  background: #fff;
   padding: 6px 10px;
-  color: #334155;
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
-}
-
-.wf-canvas-node-prompt-button:hover {
-  background: #f8fafc;
 }
 
 .wf-canvas-node-field {
@@ -209,7 +218,7 @@
 }
 
 .wf-canvas-node-field span {
-  color: #0f172a;
+  color: var(--sto-feature-foreground-strong);
   font-size: 12px;
   font-weight: 800;
 }
@@ -219,11 +228,10 @@
   width: 100%;
   min-height: 64px;
   resize: vertical;
-  border: 1px solid #edf2f7;
+  border-style: solid;
+  border-width: 1px;
   border-radius: 8px;
-  background: #fff;
   padding: 8px;
-  color: #172033;
   font-size: 12px;
   line-height: 1.45;
   outline: none;
@@ -231,12 +239,6 @@
 
 .wf-canvas-node-field input {
   min-height: 34px;
-}
-
-.wf-canvas-node-field textarea:focus,
-.wf-canvas-node-field input:focus {
-  border-color: #f97316;
-  box-shadow: 0 0 0 2px rgb(249 115 22 / 12%);
 }
 
 .workflow-node-library-list {
@@ -250,8 +252,6 @@
   align-items: center;
   gap: 14px;
   border: 0;
-  background: transparent;
-  color: #0f172a;
   text-align: left;
   cursor: pointer;
 }
@@ -264,28 +264,28 @@
   align-items: center;
   justify-content: center;
   border-radius: 13px;
-  color: #1f2937;
-  background: #f1f5ff;
+  color: var(--sto-art-workflow-node-icon-foreground);
+  background: var(--sto-art-workflow-node-agent);
 }
 
 .workflow-node-library-item.tile-agent:nth-child(1) .workflow-node-library-icon {
-  background: #dcfce7;
+  background: var(--sto-art-workflow-node-data);
 }
 
 .workflow-node-library-item.tile-agent:nth-child(2) .workflow-node-library-icon {
-  background: #eef2ff;
+  background: var(--sto-art-workflow-node-transform);
 }
 
 .workflow-node-library-item.tile-agent:nth-child(3) .workflow-node-library-icon {
-  background: #fff7ed;
+  background: var(--sto-art-workflow-node-condition);
 }
 
 .workflow-node-library-item.tile-output .workflow-node-library-icon {
-  background: #eef6ff;
+  background: var(--sto-art-workflow-library-output);
 }
 
 .workflow-node-library-item.tile-browser .workflow-node-library-icon {
-  background: #ecfdf5;
+  background: var(--sto-art-workflow-node-trigger);
 }
 
 .workflow-node-library-copy {
@@ -301,7 +301,7 @@
 }
 
 .workflow-node-library-summary {
-  color: #8a97aa;
+  color: var(--sto-feature-subtle-foreground);
   font-size: 13px;
   line-height: 1.3;
 }
@@ -318,30 +318,10 @@
   height: 24px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #dbe4e2;
+  border-style: solid;
+  border-width: 1px;
   border-radius: 999px;
-  color: #64748b;
-  background: #fff;
-  box-shadow: 0 8px 18px rgb(15 23 42 / 14%);
   cursor: pointer;
-}
-
-.edge-action-button:hover {
-  color: #10201d;
-  border-color: #b6c7c2;
-  background: #f8fafc;
-}
-
-.edge-action-button-primary {
-  color: #fff;
-  border-color: #f97316;
-  background: #f97316;
-}
-
-.edge-action-button-primary:hover {
-  color: #fff;
-  border-color: #ea580c;
-  background: #ea580c;
 }
 
 .edge-branch-hint {
@@ -349,11 +329,11 @@
   max-width: 180px;
   padding: 3px 8px;
   overflow: hidden;
-  border: 1px solid rgb(249 115 22 / 16%);
+  border: 1px solid var(--sto-art-workflow-branch-border);
   border-radius: 999px;
-  color: #9a3412;
-  background: rgb(255 247 237 / 96%);
-  box-shadow: 0 6px 14px rgb(15 23 42 / 8%);
+  color: var(--sto-art-workflow-branch-foreground);
+  background: var(--sto-art-workflow-branch-background);
+  box-shadow: var(--sto-art-workflow-branch-shadow);
   font-size: 11px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -361,9 +341,9 @@
 }
 
 .edge-branch-hint-parallel {
-  color: #355f58;
-  border-color: rgb(15 92 83 / 18%);
-  background: rgb(240 253 250 / 96%);
+  color: var(--sto-art-workflow-parallel-foreground);
+  border-color: var(--sto-art-workflow-parallel-border);
+  background: var(--sto-art-workflow-parallel-background);
 }
 
 .insert-node-popover {
@@ -373,10 +353,9 @@
   z-index: 20;
   width: 286px;
   transform: translateX(-50%);
-  border: 1px solid #dbe4e2;
+  border-style: solid;
+  border-width: 1px;
   border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 18px 48px rgb(15 23 42 / 18%);
   padding: 12px;
 }
 
@@ -389,7 +368,7 @@
 
 .insert-node-menu-title {
   margin: 0;
-  color: #10201d;
+  color: var(--sto-feature-foreground-deep);
   font-size: 13px;
   font-weight: 800;
 }
@@ -402,19 +381,12 @@
   justify-content: center;
   border: 0;
   border-radius: 8px;
-  color: #64748b;
-  background: transparent;
   cursor: pointer;
-}
-
-.insert-node-popover-close:hover {
-  background: #f1f5f9;
-  color: #10201d;
 }
 
 .insert-node-menu-hint {
   margin: 4px 0 10px;
-  color: #64748b;
+  color: var(--sto-feature-secondary-foreground);
   font-size: 12px;
 }
 
@@ -429,17 +401,11 @@
   gap: 10px;
   width: 100%;
   padding: 10px;
-  border: 1px solid #e2e8f0;
+  border-style: solid;
+  border-width: 1px;
   border-radius: 12px;
-  background: #fff;
-  color: #10201d;
   text-align: left;
   cursor: pointer;
-}
-
-.template-tile:hover {
-  border-color: #f97316;
-  background: #fff7ed;
 }
 
 .template-tile-icon {
@@ -450,12 +416,13 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  color: #fff;
-  background: #f97316;
+  color: var(--sto-control-primary-foreground);
+  background: var(--sto-feature-brand-accent);
 }
 
 .tile-output .template-tile-icon {
-  background: #4f46e5;
+  background: var(--sto-art-workflow-template-output);
+  color: var(--sto-art-workflow-template-output-foreground);
 }
 
 .template-tile-copy {
@@ -470,7 +437,7 @@
 }
 
 .template-tile-subtitle {
-  color: #64748b;
+  color: var(--sto-feature-secondary-foreground);
   font-size: 11px;
   line-height: 1.35;
 }

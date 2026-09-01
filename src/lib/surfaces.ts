@@ -1,11 +1,12 @@
 import { cn } from '@/lib/utils';
 
-/**
- * 列表/广场卡片 hover 描边 + 阴影：与首页推荐卡一致
- *（RecommendCard：hover:border-[#C9CDD4] + hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)]）
- */
-export const listCardHoverBorderShadowClass = cn(
-  'hover:border-[#C9CDD4] hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)] dark:hover:border-border',
+/** 列表/广场卡片沿用全局 Flat Card 交互色。 */
+export const listCardHoverBorderShadowClass = 'sto-card sto-card--flat sto-card--interactive';
+
+/** 应用、技能、连接器、工作流等集合卡片共用的外壳与交互状态。 */
+export const collectionCardShellClass = cn(
+  'sto-card sto-card--flat sto-card--interactive sto-collection-card',
+  'transition-[background-color,border-color,box-shadow] duration-150',
 );
 
 /** Page section surface (Models page, Settings proxy, etc.) — glass gradient + blur */
@@ -20,8 +21,7 @@ export const glassSectionSurface = cn(
 
 /** 设置页右侧内容区白卡片（MasterGo：8px 圆角、#E5E6EB 描边、白底） */
 export const stoSettingsSectionCardClass = cn(
-  'overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-6',
-  'dark:border-border dark:bg-card',
+  'overflow-hidden rounded-[8px] border border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] p-6',
 );
 
 /** 设置页右侧内容卡片外槽：顶/右/底 8px 留白（MasterGo top:8px） */
@@ -170,35 +170,53 @@ export const myTaskPageHeaderRowClass = 'flex min-w-0 items-start justify-betwee
 export const myTaskPageSubtitleClass =
   'm-0 mt-1.5 text-sm font-normal leading-5 text-muted-foreground';
 
-/** 我的任务 / 技能·连接器一级 Tab 轨道（图二：#EDEDED 胶囊轨） */
-export const myTaskSectionTabsTrackClass =
-  'inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-muted';
+export const stoSegmentTabsTrackClass =
+  'sto-segment-track sto-segment-track--plain inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] p-0.5';
 
-/** 我的任务 / 技能·连接器一级 Tab 按钮（图二：选中白底深字） */
-export function myTaskSectionTabClass(active: boolean): string {
+export function stoSegmentTabClass(active: boolean): string {
   return cn(
-    "inline-flex items-center gap-1.5 rounded-[10px] px-3.5 py-[7px] font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
-    active
-      ? 'bg-white text-[#1A1A1A] dark:bg-background dark:text-foreground'
-      : 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground',
+    "sto-segment-item sto-segment-item--plain inline-flex items-center gap-1.5 rounded-[10px] px-3.5 py-[7px] font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
+    active && 'sto-segment-item--selected',
   );
 }
 
-/**
- * 我的任务页「新建定时任务」：白底 + #E8EAEF 描边 + 12px 圆角。
- */
+export const myTaskSectionTabsTrackClass = stoSegmentTabsTrackClass;
+export function myTaskSectionTabClass(active: boolean): string {
+  return stoSegmentTabClass(active);
+}
+
+export const stoOutlineButtonBaseClass = cn(
+  "sto-control sto-control--outline sto-control--neutral-outline inline-flex items-center justify-center rounded-[12px] border font-['PingFang_SC'] text-[13px] font-medium leading-none",
+  'transition-colors duration-150',
+);
+
+export const stoSearchFieldShellClass = cn(
+  'sto-control sto-control--field sto-control--neutral-field flex items-center gap-2 rounded-[12px] border px-3',
+);
+
+export const stoSortTriggerClass = cn(
+  'sto-control sto-control--outline sto-control--neutral-outline-default flex items-center gap-[6px] rounded-[10px] border',
+);
+
+export const stoIconSurfaceClass = cn(
+  'sto-control sto-control--outline sto-control--neutral-outline-default flex shrink-0 items-center justify-center rounded-lg border',
+);
+
+export const stoNeutralCardClass = cn(
+  'sto-card sto-card--secondary border',
+);
+
 export const myTaskCreateButtonClass = cn(
-  'inline-flex shrink-0 items-center gap-1.5 h-[34px] px-3.5 text-sm font-medium',
-  'rounded-[12px] border border-[#E8EAEF] bg-white text-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.04] dark:border-border dark:bg-card dark:hover:bg-white/[0.06] active:scale-[0.98]',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  stoOutlineButtonBaseClass,
+  'h-[34px] shrink-0 gap-1.5 px-3.5 text-sm',
+  'active:scale-[0.98]',
 );
 
 /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
-  'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] border-[#E5E6EB] bg-white p-4 dark:border-border dark:bg-secondary',
+  'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] p-4',
   'transition-[border-color,box-shadow] duration-base',
-  listCardHoverBorderShadowClass,
+  collectionCardShellClass,
 );
 
 /** 我的任务运行保障控件：标题行右侧紧凑排布（文案 + 问号 + 开关） */
@@ -268,42 +286,38 @@ export function myTaskCardMenuItemClass(isDestructive = false): string {
 /** 表单字段 focus（input / select / textarea） */
 export const formFieldFocusClass = cn(
   'focus:outline-none focus:ring-0',
-  'focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:focus:border-primary/50 dark:focus:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'focus:border-[var(--sto-form-interactive-border)] focus:shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 表单字段 focus-within（焦点在内部编辑器时画在外壳上） */
 export const formFieldFocusWithinClass = cn(
   'focus-within:outline-none focus-within:ring-0',
-  'focus-within:border-[#c5cad3] focus-within:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:focus-within:border-primary/50 dark:focus-within:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'focus-within:border-[var(--sto-form-interactive-border)] focus-within:shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 表单触发器 focus-visible（button 类下拉） */
 export const formFieldFocusVisibleClass = cn(
   'focus-visible:outline-none focus-visible:ring-0',
-  'focus-visible:border-[#c5cad3] focus-visible:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:focus-visible:border-primary/50 dark:focus-visible:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'focus-visible:border-[var(--sto-form-interactive-border)] focus-visible:shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 表单触发器 hover 描边 */
-export const formFieldHoverBorderClass = 'hover:border-[#c5cad3] dark:hover:border-primary/40';
+export const formFieldHoverBorderClass = 'hover:border-[var(--sto-form-interactive-border)]';
 
 /** 表单触发器展开态 */
 export const formFieldOpenClass = cn(
-  'border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
-  'dark:border-primary/50 dark:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+  'border-[var(--sto-form-interactive-border)] shadow-[var(--sto-form-interactive-shadow)]',
 );
 
 /** 定时任务弹窗：表单 label */
 export const taskCreateFormLabelClass = cn(
-  'block text-[12px] font-medium leading-[18px] tracking-normal text-[#1D2129]',
+  'block text-[12px] font-medium leading-[18px] tracking-normal text-[#1D2129] dark:text-[var(--sto-text-primary)]',
 );
 
 /** 定时任务弹窗：单行输入框 / 选择框 */
 export const taskCreateFormControlClass = cn(
-  'box-border flex h-[42px] w-full items-center',
-  'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] px-3 py-2',
+  'sto-control sto-control--dialog-field box-border flex h-[42px] w-full items-center',
+  'rounded-[8px] border px-3 py-2',
   'text-[12px] text-foreground',
 );
 
@@ -321,8 +335,8 @@ export const modalPrimarySubmitButtonClass = cn(
 
 /** SchedulePicker 触发器（与 formField 系列一致） */
 export const schedulePickerTriggerClass = cn(
-  'box-border flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5',
-  'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] px-3 py-2',
+  'sto-control sto-control--dialog-field box-border flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5',
+  'rounded-[8px] border px-3 py-2',
   'text-[12px] font-medium text-foreground',
   'outline-none transition-colors',
   formFieldHoverBorderClass,
@@ -362,7 +376,7 @@ export const scheduleToggleThumbClass = cn(
   'transition-transform duration-fast',
 );
 
-/** 我的任务卡片：关联工作流 badge（浅/暗色均用 #F0F4FF 底 + #6171DB 字） */
+/** 我的任务卡片：关联工作流 badge（Info soft + Info primary） */
 export const myTaskWorkflowBadgeClass = cn(
   'inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-[6px]',
   'bg-[#F0F4FF] px-1.5 py-[3px] text-xs font-medium leading-none text-[#6171DB]',
@@ -407,8 +421,8 @@ export const myTaskEmptyTemplateAddButtonClass = cn(
 
 /** 我的任务排序触发器 */
 export const myTaskSortTriggerClass = cn(
-  'flex h-[34px] items-center gap-[6px] rounded-[10px] border border-border bg-card',
-  'px-[10px] text-[13px] font-medium text-foreground transition-[border-color,box-shadow]',
+  stoSortTriggerClass,
+  'h-[34px] px-[10px] text-[13px] font-medium',
   formFieldHoverBorderClass,
   formFieldFocusVisibleClass,
 );
@@ -623,22 +637,21 @@ export function stoParameterFormDockLayout(variant: StoChatColumnVariant): 'home
 
 /** ParameterForm chat-dock 顶部条（浅灰底；暗色 secondary，避免白条） */
 export const parameterFormDockHeaderClass =
-  'shrink-0 rounded-t-[18px] bg-[#FAFBFC] px-3.5 pb-2 pt-3 dark:border-b dark:border-border dark:bg-secondary';
+  'shrink-0 rounded-t-[18px] border-b border-[var(--sto-form-dock-header-border)] bg-[var(--sto-form-panel-background)] px-3.5 pb-2 pt-3';
 
 /** ParameterForm chat-dock 继续 / 确认主按钮（暗色用品牌主色，避免整颗白钮） */
 export const parameterFormDockPrimaryButtonClass = cn(
   'inline-flex h-6 items-center gap-1 rounded-[7px] px-3 text-xs font-medium transition-colors disabled:opacity-50',
-  'bg-foreground text-primary-foreground hover:bg-foreground/90',
-  'dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90',
+  'bg-[var(--sto-form-dock-primary-background)] text-[var(--sto-form-dock-primary-foreground)] hover:bg-[var(--sto-form-dock-primary-hover-background)]',
 );
 
 /** ParameterForm chat-dock 可选项 hover（暗色不用 #FAFAFA 白底） */
 export const parameterFormDockOptionHoverClass =
-  'bg-transparent hover:bg-muted/40 dark:hover:bg-muted/60';
+  'bg-transparent hover:bg-[var(--sto-form-dock-option-hover-background)]';
 
 /** ParameterForm chat-dock 可选项选中底 */
 export const parameterFormDockOptionSelectedClass =
-  'bg-muted/30 dark:bg-muted/50';
+  'bg-[var(--sto-form-dock-option-selected-background)]';
 
 /** ParameterForm chat-dock 规则行 / 数字字段卡片外框 */
 export const parameterFormDockFieldRowClass =
@@ -961,7 +974,7 @@ export const contentHeaderSessionChipCloseClass = cn(
 /** 标题栏右侧 icon 按钮（16×16 icon，Grey-9 默认） */
 export const contentHeaderActionBtnClass = cn(
   'no-drag flex h-[var(--sto-content-header-control-h,28px)] w-[var(--sto-content-header-control-h,28px)] shrink-0 items-center justify-center rounded-md',
-  'text-[#4E5969] transition-colors duration-fast',
+  'sto-icon--neutral transition-colors duration-fast',
   'hover:bg-black/[0.04] hover:text-foreground',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
@@ -1135,9 +1148,8 @@ export const workflowListCardGridClass =
 
 /** 工作流列表卡片外框 */
 export const workflowListCardShellClass = cn(
-  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#E9EAEB] bg-card dark:border-border dark:bg-secondary',
-  'transition-[border-color,box-shadow] duration-base',
-  listCardHoverBorderShadowClass,
+  collectionCardShellClass,
+  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#E9EAEB] dark:border-[var(--sto-border-default)]',
 );
 
 /** 工作流卡片头图：距卡片边框上/左/右 4px（设计稿） */
@@ -1230,13 +1242,12 @@ export const workflowListCardMenuItemClass =
 
 /** 工作流详情 / 新建弹窗遮罩（暗色需更高不透明度，否则与页面底融在一起） */
 export const workflowDetailModalOverlayClass = cn(
-  'bg-black/20 backdrop-blur-[1px]',
-  'dark:bg-black/60 dark:backdrop-blur-sm',
+  'sto-overlay-scrim sto-overlay-scrim--dialog',
 );
 
 /** 工作流详情弹窗内容壳（540px / 圆角 24 / MasterGo 阴影） */
 export const workflowDetailModalContentClass = cn(
-  'flex w-full max-w-[540px] flex-col overflow-hidden rounded-[24px] bg-card',
+  'sto-overlay sto-overlay--dialog flex w-full max-w-[540px] flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border',
   'max-h-[min(960px,calc(100vh-40px))]',
   'shadow-[var(--sto-wf-detail-modal-shadow)]',
 );
@@ -1317,8 +1328,8 @@ export const skillMessageTagClass = skillComposerTagClass;
 
 /** Composer 技能 Picker 浮层容器 */
 export const skillPickerShellClass = cn(
-  'absolute left-0 bottom-full z-[100001] mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2',
-  'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
+  'sto-overlay absolute left-0 bottom-full z-[100001] mb-2 flex h-[390px] w-[280px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-lg border p-2',
+  'shadow-[var(--sto-shadow-control-popover)]',
 );
 
 /** 技能 Picker 列表区 */
@@ -1326,8 +1337,7 @@ export const skillPickerListClass = 'h-full min-h-0 overflow-y-auto';
 
 /** 技能 Picker 列表行 */
 export const skillPickerRowClass = cn(
-  'flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors',
-  'hover:bg-[#F0F2F5] dark:hover:bg-white/[0.06]',
+  'sto-navigation-item sto-navigation-item--picker flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors',
 );
 
 /** 技能 Picker 搜索命中高亮（Brand-6） */
@@ -1367,8 +1377,7 @@ export const createWorkflowModalOverlayClass = workflowDetailModalOverlayClass;
 
 /** 新建工作流弹窗内容壳（MasterGo 8:79172 组 7109 — 460×392 / 圆角 18） */
 export const createWorkflowModalContentClass = cn(
-  'flex w-full max-w-[460px] flex-col overflow-hidden rounded-[18px] bg-card shadow-modal',
-  'dark:border dark:border-border',
+  'sto-overlay sto-overlay--dialog flex w-full max-w-[460px] flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border',
 );
 
 /** 新建工作流弹窗标题区 */
@@ -1388,8 +1397,8 @@ export const createWorkflowModalSubtitleClass =
 
 /** 新建工作流弹窗关闭钮（标题行内 18×18） */
 export const createWorkflowModalCloseClass = cn(
-  'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm',
-  'text-foreground transition-colors duration-fast hover:bg-black/[0.04]',
+  'sto-control sto-dialog-close flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm',
+  'transition-colors duration-fast',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
@@ -1424,7 +1433,7 @@ export const createWorkflowModalCategorySelectClass =
 
 /** 新建工作流弹窗底栏 */
 export const createWorkflowModalFooterClass =
-  'flex shrink-0 items-center justify-end px-4 py-4';
+  'sto-dialog-footer shrink-0 items-center px-4 py-4';
 
 /** 新建工作流确认钮（#1D2129 底 / 34px / 圆角 12px） */
 export const createWorkflowModalConfirmButtonClass = cn(
@@ -1466,7 +1475,7 @@ export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
 /** 工具调用标题行（13px #86909C，图标 16px，标题行 gap 4px） */
 export const chatToolCallHeaderBtnClass = cn(
   'flex w-full items-center gap-1 text-left',
-  'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground',
+  'text-[13px] leading-5 font-normal text-[var(--sto-content-heading-secondary)] transition-colors duration-150 hover:text-[var(--sto-text-primary)]',
 );
 
 /** 工具/思考内容区：16px icon 列 + 竖线固定在 icon 中线 */
@@ -1488,14 +1497,14 @@ export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
 /** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
   'sto-chat-content-scrollbar m-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
-  'text-[13px] leading-5 font-normal text-[#86909C]',
+  'text-[13px] leading-5 font-normal text-[var(--sto-text-tertiary)]',
 );
 
 /** 思考/工具汇总条标题（MasterGo 4:2177：13/20 #86909C，chevron gap 4px） */
 export const chatThinkingSummaryHeaderClass = cn(
   'flex w-full items-center gap-1 py-1 text-left',
-  'text-[13px] leading-5 font-normal text-[#86909C]',
-  'transition-colors duration-150 hover:text-foreground',
+  'text-[13px] leading-5 font-normal text-[var(--sto-content-heading-secondary)]',
+  'transition-colors duration-150 hover:text-[var(--sto-text-primary)]',
 );
 
 /** 分段思考栈内一级摘要：与 phase-text 间距由外层 gap-3（12px）控制，去掉 py-1 避免视觉超出 12px */
@@ -1506,10 +1515,11 @@ export const chatThinkingSegmentSummaryHeaderClass = cn(
 
 /** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
 export const chatProcessSecondaryTextClass =
-  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[#86909C]';
+  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[var(--sto-text-tertiary)]';
 
 /** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
-export const chatProcessLoadingTextClass = 'text-[13px] leading-[18px] font-normal text-[#6B737D]';
+export const chatProcessLoadingTextClass =
+  'text-[13px] leading-[18px] font-normal text-[var(--sto-content-loading-foreground)]';
 
 /** 过程块标题行（MasterGo 4:2177：icon 16px + 文案，gap 4px） */
 export const chatProcessTitleRowClass = cn(
@@ -1545,7 +1555,7 @@ export const sidebarBodyTextClass = 'text-[13px] font-normal leading-5';
 /** 侧栏正文 13/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
 export const sidebarBodyTextMediumClass = 'text-[13px] font-medium leading-5';
 
-/** 侧栏一级正文色：浅色 #393E47；暗色由 --sto-sidebar-text-default 切换为 #E5E6EB */
+/** 侧栏一级正文色：浅色 #393E47；暗色默认项切换为 70% 白 */
 export const sidebarTextDefaultClass = 'text-[var(--sto-sidebar-text-default)]';
 
 /** 行内图标色 Grey-9 #4E5969 — MCP paint_4:0490「文字/文本-浅色-二级信息」 */
@@ -1554,6 +1564,16 @@ export const sidebarTextIconClass =
 
 /** 三级文字 Grey-8 #86909C — MCP paint_4:0520「文字/文本-更浅-三级信息」 */
 export const sidebarTextSectionClass = 'text-[var(--sto-sidebar-text-section)]';
+
+/** 侧栏窄态提示：浅色沿用设计深底，深色使用中性 Elevated Surface。 */
+export const sidebarTooltipContentClass = cn(
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+  'dark:bg-[var(--sto-surface-elevated)] dark:text-[var(--sto-text-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+);
+
+export const sidebarTooltipArrowClass =
+  'fill-[#1D2129] dark:fill-[var(--sto-surface-elevated)]';
 
 /** 品牌头版本号 — Grey-8，MCP font_8:49208（SF Pro 11px）；相对 logo 基线下移 6px */
 export const sidebarBrandVersionClass = cn(
@@ -1618,22 +1638,17 @@ export const sidebarScrollContainerClass = cn(
 /** 侧栏中部 Overlay 定位壳（不滚动）；复用共享 host 契约 */
 export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 
-/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 32px（h-8） */
+/** 展开侧栏主导航 idle — 浅色正文 Grey-10 + 图标 Grey-9；暗色统一为次级层；行高 32px（h-8） */
 export const sidebarNavExpandedIdleClass = cn(
-  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
-  sidebarTextDefaultClass,
+  'sto-navigation-item h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   // stroke：Lucide；text：内联填充图标（如 timer）的 currentColor，避免吃到正文色
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
-  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致）；行高 32px（h-8） */
+/** 展开侧栏主导航 active — 底色 + 主文字/主图标，字重与 idle 一致；行高 32px（h-8） */
 export const sidebarNavExpandedActiveClass = cn(
-  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
-  'bg-[var(--sto-sidebar-nav-active-bg)]',
-  sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
-  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+  'sto-navigation-item h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
+  '[&_svg]:stroke-[var(--sto-sidebar-icon-active)] [&_svg]:text-[var(--sto-sidebar-icon-active)]',
 );
 
 /** 任务组名 / 最近会话 / 三级子项 — Grey-10 Regular */
@@ -1642,14 +1657,13 @@ export const sidebarListItemTextClass = cn(sidebarBodyTextClass, sidebarTextDefa
 /** 三级子项 idle — Grey-10 Regular */
 export const sidebarSubitemTextIdleClass = cn(
   sidebarListItemTextClass,
-  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+  'sto-navigation-item',
 );
 
 /** 三级子项路由选中 — Grey-10 Regular + Grey-4 底（MCP 子项无加粗） */
 export const sidebarSubitemTextActiveClass = cn(
   sidebarBodyTextClass,
-  sidebarTextDefaultClass,
-  'bg-[var(--sto-sidebar-subitem-active-bg)]',
+  'sto-navigation-item',
 );
 
 /** 「展开全部 / 显示更多」等辅助链 — 12px Regular Grey-8 → hover Grey-10 */
@@ -1691,7 +1705,7 @@ export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinn
 export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';
 
 /** 最近分组内会话选中底 — light #DCDCDC；dark 走 --sto-sidebar-subitem-active-bg */
-export const sidebarRecentSessionActiveClass = 'bg-[var(--sto-sidebar-subitem-active-bg)]';
+export const sidebarRecentSessionActiveClass = 'sto-navigation-item sto-navigation-item--session';
 
 /**
  * 侧栏单操作行尾槽：标题预留与 28px 点击热区等宽，槽位贴行右缘。

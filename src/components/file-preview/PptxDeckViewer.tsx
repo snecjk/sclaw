@@ -136,7 +136,7 @@ export function PptxDeckViewer({ buffer, fileName, className }: PptxDeckViewerPr
   }
 
   return (
-    <div className={cn('flex h-full min-h-0 flex-col bg-muted/30 dark:bg-[#0d1117]', className)}>
+    <div className={cn('flex h-full min-h-0 flex-col bg-muted/30 dark:bg-[var(--sto-surface-under)]', className)}>
       {/* 放映区 */}
       <div ref={outerRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
         {!loaded ? (

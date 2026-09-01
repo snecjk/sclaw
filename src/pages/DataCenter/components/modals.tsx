@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown, ChevronRight, CircleAlert, Loader2, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import directoryIcon from '@/assets/icons/directory.svg';
-import downloadIcon from '@/assets/icons/download-icon.svg';
-import shareIcon from '@/assets/icons/share-icon.svg';
-import uploadIcon from '@/assets/icons/upload-icon.svg';
+import downloadIcon from '@/assets/icons/download-icon.svg?raw';
+import shareIcon from '@/assets/icons/share-icon.svg?raw';
+import uploadIcon from '@/assets/icons/upload-icon.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,9 +35,9 @@ export function DataCenterModal({
 }) {
   const { t } = useTranslation('common');
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+    <div className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className={cn(
-        'flex max-h-[86vh] w-full flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl',
+        'sto-overlay sto-overlay--dialog flex max-h-[86vh] w-full flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border',
         wide ? 'max-w-5xl' : 'max-w-md',
       )}>
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
@@ -44,14 +45,14 @@ export function DataCenterModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="sto-control sto-dialog-close rounded-md p-1"
             aria-label={t('actions.close')}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-5 py-4">{children}</div>
-        {footer ? <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">{footer}</div> : null}
+        {footer ? <div className="sto-dialog-footer shrink-0 border-t border-border px-5 py-4">{footer}</div> : null}
       </div>
     </div>
   );
@@ -60,8 +61,8 @@ export function DataCenterModal({
 export function TraceChatMissingDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation('common');
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-      <div className="w-full max-w-[337px] overflow-hidden rounded-[4px] border-t-[3px] border-[#F59A23] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.18)] dark:border-x dark:border-b dark:border-border dark:bg-background">
+    <div className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="sto-overlay sto-overlay--dialog w-full max-w-[337px] overflow-hidden rounded-[var(--sto-dialog-radius)] border">
         <div className="flex items-start gap-3 px-4 pb-4 pt-[17px]">
           <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 fill-[#FFB21A] text-white" />
           <div className="min-w-0 flex-1">
@@ -85,7 +86,7 @@ export function TraceChatMissingDialog({ onClose }: { onClose: () => void }) {
           <Button
             type="button"
             onClick={onClose}
-            className="h-8 rounded-[10px] bg-[#1D2129] px-4 text-[13px] font-medium text-white shadow-none hover:bg-[#343A45] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+            className="h-8 rounded-[10px] bg-[#1D2129] px-4 text-[13px] font-medium text-white shadow-none hover:bg-[#343A45] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
           >
             {t('actions.gotIt')}
           </Button>
@@ -132,8 +133,8 @@ export function TextPromptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-      <div className="w-full max-w-[454px] overflow-hidden rounded-[6px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-border dark:bg-background">
+    <div className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="sto-overlay sto-overlay--dialog w-full max-w-[454px] overflow-hidden rounded-[var(--sto-dialog-radius)] border">
         <div className="flex h-[50px] items-center justify-between border-b border-[#E5E6EB] px-[18px] dark:border-border">
           <h2 className="text-[18px] font-semibold leading-[24px] text-[#1D2129] dark:text-foreground">{title}</h2>
           <button
@@ -159,11 +160,11 @@ export function TextPromptModal({
           </div>
         </div>
 
-        <div className="flex h-[64px] items-center justify-end gap-2 border-t border-[#E5E6EB] px-[18px] dark:border-border">
+        <div className="sto-dialog-footer h-[64px] items-center border-t border-[#E5E6EB] px-[18px] dark:border-border">
           <Button type="button" variant="outline" className="h-9 rounded-[14px] px-5 text-[14px] font-normal" onClick={onCancel}>
             {t('actions.cancel')}
           </Button>
-          <Button type="button" className="h-9 rounded-[14px] bg-[#1D2129] px-5 text-[14px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={submit} disabled={saving}>
+          <Button type="button" className="h-9 rounded-[14px] bg-[#1D2129] px-5 text-[14px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]" onClick={submit} disabled={saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {effectiveConfirmText}
           </Button>
@@ -208,7 +209,7 @@ export function PreviewModal({
   };
 
   return (
-    <div className="no-drag fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-black/45 px-6 py-[30px]">
+    <div className="sto-overlay-scrim sto-overlay-scrim--dialog no-drag fixed inset-0 z-50 flex items-center justify-center overflow-auto px-6 py-[30px]">
       <div className="no-drag flex h-[calc(100vh-60px)] max-h-[calc(100vh-60px)] w-[80vw] min-w-[500px] max-w-[min(1000px,calc(100vw-48px))] flex-col overflow-hidden rounded-[6px] border border-[#D7DBE2] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.24)] dark:border-foreground/15 dark:bg-background dark:shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_24px_72px_rgba(0,0,0,0.62)]">
         <div className="no-drag relative z-10 flex h-[46px] shrink-0 items-center border-b border-[#E5E6EB] bg-white px-3 dark:border-border dark:bg-background">
           <div className="min-w-0 flex-1">
@@ -222,17 +223,17 @@ export function PreviewModal({
             </PreviewHeaderActionButton>
             {canDownload ? (
               <PreviewHeaderActionButton onClick={onDownload} ariaLabel={t('dataCenterPage.menu.download')}>
-                <img src={downloadIcon} alt="" aria-hidden="true" className="h-3.5 w-3.5 dark:invert" />
+                <ThemedMonochromeIcon source={downloadIcon} className="h-3.5 w-3.5" />
               </PreviewHeaderActionButton>
             ) : null}
             {onShare ? (
               <PreviewHeaderActionButton onClick={onShare} ariaLabel={t('dataCenterPage.menu.share')}>
-                <img src={shareIcon} alt="" aria-hidden="true" className="h-3.5 w-3.5 dark:invert" />
+                <ThemedMonochromeIcon source={shareIcon} className="h-3.5 w-3.5" />
               </PreviewHeaderActionButton>
             ) : null}
             {canUploadToShared && onUploadToShared ? (
               <PreviewHeaderActionButton onClick={onUploadToShared} ariaLabel={t('dataCenterPage.menu.uploadToShared')}>
-                <img src={uploadIcon} alt="" aria-hidden="true" className="h-3.5 w-3.5 dark:invert" />
+                <ThemedMonochromeIcon source={uploadIcon} className="h-3.5 w-3.5" />
               </PreviewHeaderActionButton>
             ) : null}
             <button
@@ -470,8 +471,8 @@ function FolderPickerDialog({
   const rootLoading = Boolean(loadingMap[ROOT_ENTRY_ID]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
-      <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-border dark:bg-background">
+    <div className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="sto-overlay sto-overlay--dialog w-full max-w-[414px] overflow-hidden rounded-[var(--sto-dialog-radius)] border">
         <div className="flex h-11 items-center justify-between px-4">
           <h2 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{title}</h2>
           <button
@@ -508,9 +509,9 @@ function FolderPickerDialog({
           </div>
         </div>
 
-        <div className="flex h-[48px] justify-end gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
+        <div className="sto-dialog-footer h-[48px] border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
           <Button type="button" variant="outline" className="h-8 rounded-[8px] px-4 text-[12px] font-normal" onClick={onClose}>{t('actions.cancel')}</Button>
-          <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={submit} disabled={saving}>
+          <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]" onClick={submit} disabled={saving}>
             {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
             {t('actions.confirm')}
           </Button>

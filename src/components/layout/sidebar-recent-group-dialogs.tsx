@@ -31,23 +31,18 @@ export interface SidebarRecentGroupDialogsProps {
   onDissolveConfirm: (groupId: string) => void | Promise<void>;
 }
 
-export function SidebarRecentGroupDialogs({
+function SidebarRecentGroupDialogsContent({
   dialog,
   onClose,
   onCreateConfirm,
   onDissolveConfirm,
 }: SidebarRecentGroupDialogsProps) {
   const { t } = useTranslation('common');
-  const [nameDraft, setNameDraft] = useState('');
+  const [nameDraft, setNameDraft] = useState(
+    () => dialog.defaultName ?? t('sidebar.defaultGroupName'),
+  );
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (dialog.mode === 'create') {
-      setNameDraft(dialog.defaultName ?? t('sidebar.defaultGroupName'));
-      setSubmitting(false);
-    }
-  }, [dialog.mode, dialog.defaultName, t]);
 
   useEffect(() => {
     if (dialog.mode === 'create' && inputRef.current) {
@@ -106,7 +101,7 @@ export function SidebarRecentGroupDialogs({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
+      className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="sidebar-group-input-title"
@@ -114,7 +109,7 @@ export function SidebarRecentGroupDialogs({
       onKeyDown={handleKeyDown}
     >
       <div
-        className="flex w-full max-w-[min(480px,100%)] flex-col rounded-[22px] border border-border bg-background shadow-2xl"
+        className="sto-overlay sto-overlay--dialog flex w-full max-w-[min(480px,100%)] flex-col rounded-[var(--sto-dialog-radius)] border"
         onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
       >
@@ -161,7 +156,7 @@ export function SidebarRecentGroupDialogs({
           />
         </div>
 
-        <div className="flex flex-shrink-0 justify-end gap-3 rounded-b-[22px] px-[18px] pb-[18px] pt-2">
+        <div className="sto-dialog-footer flex-shrink-0 rounded-b-[22px] px-[18px] pb-[18px] pt-2">
           <Button
             type="button"
             variant="outline"
@@ -191,4 +186,13 @@ export function SidebarRecentGroupDialogs({
     </div>,
     document.body,
   );
+}
+
+export function SidebarRecentGroupDialogs(props: SidebarRecentGroupDialogsProps) {
+  const { dialog } = props;
+  if (!dialog.mode) return null;
+  const resetKey = dialog.mode === 'create'
+    ? `create:${dialog.sessionKey ?? ''}:${dialog.defaultName ?? ''}`
+    : `dissolve:${dialog.groupId ?? ''}`;
+  return <SidebarRecentGroupDialogsContent key={resetKey} {...props} />;
 }

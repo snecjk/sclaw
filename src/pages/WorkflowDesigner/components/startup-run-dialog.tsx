@@ -225,8 +225,8 @@ export function StartupRunDialog({
 
   const stepCount = groups.length + (runtimeUploadNodes.length ? 1 : 0);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/30 p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isStarting) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="startup-run-title" className="grid max-h-[calc(100dvh-48px)] w-full max-w-[820px] grid-rows-[auto_minmax(0,1fr)_auto] gap-[18px] overflow-hidden rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(252,249,244,0.96))] p-6 shadow-[0_20px_48px_rgb(15_23_42_/_12%)]">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-[var(--sto-overlay-warm-scrim)] p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isStarting) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="startup-run-title" className="sto-overlay sto-overlay--warm-dialog grid max-h-[calc(100dvh-48px)] w-full max-w-[820px] grid-rows-[auto_minmax(0,1fr)_auto] gap-[18px] overflow-hidden rounded-[20px] border p-6">
         <header className="shrink-0">
           <h2 id="startup-run-title" className="text-xl font-semibold text-foreground">启动配置确认</h2>
           <label className="mt-4 flex items-center gap-2 text-sm font-medium">运行引擎
@@ -255,7 +255,7 @@ export function StartupRunDialog({
                   {runtimeUploadNodes.map((node) => {
                     const files = runtimeFiles[node.nodeId] ?? [];
                     const maxFiles = node.maxFiles ?? 20;
-                    return <div key={node.nodeId} className="rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-[0_10px_22px_rgb(15_23_42_/_4%)]">
+                    return <div key={node.nodeId} className="sto-card sto-card--workflow-upload rounded-2xl border p-4">
                       <Label className="text-sm font-semibold text-foreground">{node.name}，运行时上传文件<span className="text-destructive"> *</span></Label>
                       <p className="mt-1 text-xs text-muted-foreground">可选择多个文件，最多 {maxFiles} 个。文件只会复制到本次试运行工作区。</p>
                       <Button type="button" variant="outline" className="mt-3 h-9 bg-background text-sm" onClick={async () => {

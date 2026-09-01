@@ -71,6 +71,7 @@ docs/pr-session-notes-
 nul
 .claude/
 .kilo/
+.worktrees/
 /.codegraph/
 outputs/
 .tmp/

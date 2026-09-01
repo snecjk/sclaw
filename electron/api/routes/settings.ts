@@ -3,6 +3,12 @@ import { applyProxySettings } from '../../main/proxy';
 import { syncLaunchAtStartupSettingFromStore } from '../../main/launch-at-startup';
 import { syncApplicationMenuFromStore } from '../../main/menu';
 import { syncPreventSystemSleepSettingFromStore } from '../../main/prevent-sleep';
+import {
+  applyNativeAppearancePreference,
+  isThemePreference,
+  normalizeThemePreference,
+  syncNativeAppearanceFromStore,
+} from '../../main/appearance';
 import { syncProxyConfigToOpenClaw } from '../../utils/openclaw-proxy';
 import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../../utils/store';
 import { appUpdater } from '../../main/updater';
@@ -48,7 +54,8 @@ export async function handleSettingsRoutes(
   ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/settings' && req.method === 'GET') {
-    sendJson(res, 200, await getAllSettings());
+    const settings = await getAllSettings();
+    sendJson(res, 200, { ...settings, theme: normalizeThemePreference(settings.theme) });
     return true;
   }
 
@@ -60,6 +67,10 @@ export async function handleSettingsRoutes(
         patch.channelSessionIdleHours = Number.isFinite(raw)
           ? Math.min(168, Math.max(1, Math.floor(raw)))
           : 24;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'theme') && !isThemePreference(patch.theme)) {
+        sendJson(res, 400, { success: false, error: 'Invalid theme preference' });
+        return true;
       }
       const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
       for (const [key, value] of entries) {
@@ -76,6 +87,9 @@ export async function handleSettingsRoutes(
       }
       if (patchTouchesLanguage(patch)) {
         await syncApplicationMenuFromStore();
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'theme')) {
+        applyNativeAppearancePreference(patch.theme as AppSettings['theme']);
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
         await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
@@ -100,8 +114,12 @@ export async function handleSettingsRoutes(
   if (url.pathname.startsWith('/api/settings/') && req.method === 'PUT') {
     const key = url.pathname.slice('/api/settings/'.length) as keyof AppSettings;
     try {
-      const body = await parseJsonBody<{ value: AppSettings[keyof AppSettings] }>(req);
-      await setSetting(key, body.value);
+      const body = await parseJsonBody<{ value: unknown }>(req);
+      if (key === 'theme' && !isThemePreference(body.value)) {
+        sendJson(res, 400, { success: false, error: 'Invalid theme preference' });
+        return true;
+      }
+      await setSetting(key, body.value as AppSettings[keyof AppSettings]);
       if (
         key === 'proxyEnabled' ||
         key === 'proxyServer' ||
@@ -121,6 +139,9 @@ export async function handleSettingsRoutes(
       if (key === 'language') {
         await syncApplicationMenuFromStore();
       }
+      if (key === 'theme') {
+        applyNativeAppearancePreference(body.value as AppSettings['theme']);
+      }
       if (key === 'autoCheckUpdate') {
         await appUpdater.syncPeriodicCheckFromSettings(body.value === true);
       }
@@ -138,6 +159,7 @@ export async function handleSettingsRoutes(
       await syncLaunchAtStartupSettingFromStore();
       await syncPreventSystemSleepSettingFromStore();
       await syncApplicationMenuFromStore();
+      await syncNativeAppearanceFromStore();
       const settings = await getAllSettings();
       await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
       sendJson(res, 200, { success: true, settings });

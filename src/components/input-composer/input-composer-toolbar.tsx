@@ -23,6 +23,7 @@ import {
 } from '@/components/icons/composer-toolbar-icons';
 import { InputComposerToolbarIconTooltip } from './input-composer-toolbar-icon-tooltip';
 import type { InputComposerShellLayout } from './input-composer-shell';
+import { inputComposerHomeToolbarIconBtn as homeIconBtn } from './input-composer-toolbar-styles';
 
 /** 工具栏按钮组 props；`labels` 为 i18n 文案，`extra` 可插 Agent picker 等 */
 export interface InputComposerToolbarProps {
@@ -83,15 +84,10 @@ export interface InputComposerToolbarProps {
   dropdownToolsAnchorRef?: RefObject<HTMLElement | null>;
 }
 
-const homeIconBtn = cn(
-  'inline-flex h-[30px] w-[30px] flex-col items-center justify-center rounded-lg px-[1.62px] py-[2.08px]',
-  'text-[#000] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted',
-);
-
 const homeIconActive = 'bg-[#F0F2F5] hover:bg-[#F0F2F5] dark:bg-muted dark:hover:bg-muted';
 
 const defaultIconBtn =
-  'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]';
+  'h-8 w-8 rounded-full p-0 text-[var(--sto-icon-primary)] hover:bg-black/5 hover:text-foreground dark:text-[var(--sto-icon-secondary)] dark:hover:bg-white/[0.06]';
 
 const defaultIconActive =
   'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]';
@@ -359,5 +355,3 @@ export function InputComposerToolbar({
     </>
   );
 }
-
-export { homeIconBtn as inputComposerHomeToolbarIconBtn };

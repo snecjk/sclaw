@@ -79,7 +79,7 @@ const thinkingPanelBodyGridClass = (expanded: boolean, animate: boolean) =>
 /** §5.6 / §6.2：箭头 200ms ease；收起向下，展开向上（rotate-180） */
 const thinkingPanelChevronClass = (expanded: boolean, animate: boolean) =>
   cn(
-    'h-3.5 w-3.5 shrink-0 opacity-70 transition-transform',
+    'h-3.5 w-3.5 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)] transition-transform',
     animate ? 'duration-200 ease-[ease]' : 'transition-none',
     expanded && 'rotate-180',
   );

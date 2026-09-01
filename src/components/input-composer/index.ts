@@ -58,8 +58,9 @@ export type {
   InputComposerShellProps,
 } from './input-composer-shell';
 
-export { InputComposerToolbar, inputComposerHomeToolbarIconBtn } from './input-composer-toolbar';
+export { InputComposerToolbar } from './input-composer-toolbar';
 export type { InputComposerToolbarProps } from './input-composer-toolbar';
+export { inputComposerHomeToolbarIconBtn } from './input-composer-toolbar-styles';
 
 export { InputComposerToolbarIconTooltip } from './input-composer-toolbar-icon-tooltip';
 

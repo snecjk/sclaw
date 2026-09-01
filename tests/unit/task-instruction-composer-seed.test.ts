@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyBeautifiedTextToSegments,
   mergeInstructionTextIntoSegments,
-} from '../../src/pages/MyTask/components/TaskInstructionComposer';
+} from '../../src/pages/MyTask/components/task-instruction-composer-segments';
 import {
   persistedSegmentsToComposer,
   sanitizeEditPlainText,

@@ -270,6 +270,7 @@ const electronAPI = {
         'startup-progress',
         'auth:token-expired',
         'sto:models-synced',
+        'sto:appearance-state',
         'turn-token:updated',
         'workflow:status-update',
         'workflow:completion-open',

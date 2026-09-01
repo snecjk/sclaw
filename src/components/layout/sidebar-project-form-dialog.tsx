@@ -76,11 +76,11 @@ export function ProjectFormDialog({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-[22px] bg-background p-6 shadow-xl">
+    <div className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[200] flex items-center justify-center p-4">
+      <div className="sto-overlay sto-overlay--dialog w-full max-w-md rounded-[var(--sto-dialog-radius)] border p-6">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{t('sidebar.newProject')}</h2>
-          <button type="button" onClick={onClose} aria-label={t('actions.cancel')}>
+          <button type="button" onClick={onClose} className="sto-control sto-dialog-close rounded-lg p-1" aria-label={t('actions.cancel')}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -132,7 +132,7 @@ export function ProjectFormDialog({
           {t('sidebar.projectArtifactHint')}
         </p>
 
-        <div className="flex justify-end gap-2">
+        <div className="sto-dialog-footer">
           <Button type="button" variant="ghost" onClick={onClose}>
             {t('actions.cancel')}
           </Button>

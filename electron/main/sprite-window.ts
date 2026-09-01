@@ -5,6 +5,7 @@
 import { BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { isQuitting } from './app-state';
+import { attachAppearanceReplay } from './appearance-replay';
 
 let spriteWindow: BrowserWindow | null = null;
 
@@ -104,6 +105,7 @@ export function createSpriteWindow(): BrowserWindow {
       sandbox: false,
     },
   });
+  attachAppearanceReplay(win);
 
   // Set floating level for less aggressive always-on-top
   win.setAlwaysOnTop(true, 'floating');
