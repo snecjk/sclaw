@@ -55,7 +55,7 @@ export interface ChatStaticItemsListProps {
       attachments?: AttachedFileMeta[];
     },
   ) => void;
-  onOpenWorkflow?: () => void;
+  onOpenWorkflow?: (workflowId: string) => void;
 }
 
 function collectSearchKeysForDisplayItem(item: ChatDisplayItem): string[] {
