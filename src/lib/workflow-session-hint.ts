@@ -259,6 +259,14 @@ export function truncateSessionLabel(label: string, maxLength = 50): string {
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
 }
 
+/** True when `label` is a sidebar title produced by `truncateSessionLabel`, not the full user prompt. */
+export function isTruncatedDerivedSessionLabel(label: string, maxLength = 50): boolean {
+  const trimmed = label.trim();
+  if (!trimmed) return false;
+  if (trimmed.endsWith('…') && trimmed.length === maxLength + '…'.length) return true;
+  return trimmed.endsWith('...') && trimmed.length >= maxLength;
+}
+
 /** Drop injected/system titles before persisting to sessionLabels. */
 export function normalizeDerivedSessionLabel(label: string | undefined): string | undefined {
   const trimmed = label?.trim();

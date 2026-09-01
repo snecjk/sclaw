@@ -26,6 +26,14 @@ export function shouldArmOlderHistoryLoader(metrics: ChatScrollMetrics): boolean
   return metrics.overflow && metrics.atBottom;
 }
 
+/** Last-N pages often collapse into a few bubbles; keep fetching older until the list can scroll. */
+export function shouldFillViewportWithOlderHistory(
+  metrics: ChatScrollMetrics,
+  hasOlderHistory: boolean,
+): boolean {
+  return hasOlderHistory && !metrics.overflow;
+}
+
 /**
  * Load older pages only when the user has scrolled to the top of a list that
  * is already following the bottom. Initial layout at index 0 is not enough —
@@ -80,4 +88,23 @@ export function restoreScrollAfterPrepend(
   const delta = el.scrollHeight - previousScrollHeight;
   if (delta > 0) el.scrollTop += delta;
   return el.scrollHeight;
+}
+
+export function pinScrollToLatest(
+  el: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'>,
+): void {
+  el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+}
+
+/** Pull-to-load keeps the viewport; viewport-fill prepends must stay on the newest messages. */
+export function applyScrollAfterHistoryPrepend(
+  el: Pick<HTMLElement, 'scrollTop' | 'scrollHeight' | 'clientHeight'>,
+  previous: { scrollHeight: number; clientHeight: number },
+): void {
+  const previousOverflow = previous.scrollHeight > previous.clientHeight + 8;
+  if (previousOverflow) {
+    restoreScrollAfterPrepend(el, previous.scrollHeight);
+    return;
+  }
+  pinScrollToLatest(el);
 }

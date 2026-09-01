@@ -140,6 +140,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
                 showThinking={showThinking}
                 scrollRef={scrollRef}
                 variant="home"
+                sessionKey={sessionKey}
                 onReachStart={() => {
                   void useChatStore.getState().loadOlderHistory(sessionKey);
                 }}

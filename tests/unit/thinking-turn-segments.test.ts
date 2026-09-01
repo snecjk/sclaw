@@ -413,6 +413,38 @@ describe('parseThinkingTurnLayout', () => {
     ).toBe(true);
   });
 
+  it('keeps mid-turn deliverable report in the bubble when more tools and a short note follow', () => {
+    const report = [
+      '## 三大仓库 8 月主要改动',
+      '',
+      '| 仓库 | 模块 |',
+      '| --- | --- |',
+      '| sto-claw | 工作流内容、语音识别、钉钉 |',
+    ].join('\n');
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '扫仓库' },
+          { type: 'tool_use', id: 't1', name: 'exec', input: {} },
+          { type: 'text', text: report },
+          { type: 'thinking', thinking: '对一下任务' },
+          { type: 'tool_use', id: 't2', name: 'exec', input: {} },
+          { type: 'text', text: '已修正。' },
+        ],
+      },
+    ];
+
+    const done = parseThinkingTurnLayout(messages, { isLiveStream: false });
+    expect(done.finalReplyText).toContain('三大仓库 8 月主要改动');
+    expect(done.finalReplyText).toContain('已修正。');
+    expect(
+      done.segments.some(
+        (segment) => segment.kind === 'phase-text' && segment.text.includes('| 仓库 |'),
+      ),
+    ).toBe(false);
+  });
+
   it('interleaves OpenClaw live narration between tool groups, not at tail', () => {
     const messages = [
       {

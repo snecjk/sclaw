@@ -686,6 +686,7 @@ export function Chat() {
                 showThinking={showThinking}
                 scrollRef={scrollRef}
                 variant="page"
+                sessionKey={currentSessionKey}
                 forceFullRender={isSearchOpen}
                 matchedMessageKeys={matchedMessageKeys}
                 activeSearchMessageKey={activeSearchMatch?.key ?? null}

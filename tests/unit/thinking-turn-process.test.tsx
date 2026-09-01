@@ -148,3 +148,27 @@ describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thi
     expect(container.textContent).toContain('a'.repeat(100));
   });
 });
+
+describe('ThinkingTurnProcess 展开后展示全部工具', () => {
+  it('does not keep only the last 10 tool cards after expanding the summary', () => {
+    const timeline = Array.from({ length: 12 }, (_, index) => ({
+      type: 'tool' as const,
+      index,
+      id: `tool-${index}`,
+      name: `tool_${index}`,
+      input: {},
+    }));
+    const segments: ThinkingTurnSegment[] = [{
+      kind: 'tool-group',
+      key: 'group-tools-1',
+      timeline,
+      state: 'completed',
+    }];
+
+    render(<ThinkingTurnProcess segments={segments} />);
+    fireEvent.click(screen.getByRole('button', { name: /使用 12 个工具/ }));
+
+    expect(screen.getByText('调用工具-tool_0')).toBeInTheDocument();
+    expect(screen.getByText('调用工具-tool_11')).toBeInTheDocument();
+  });
+});

@@ -12,6 +12,7 @@ import { isWorkflowSessionTitle } from '@/lib/workflow-session';
 import {
   isCorruptedSessionLabel,
   isPlaceholderSessionLabel,
+  isTruncatedDerivedSessionLabel,
   truncateSessionLabel,
 } from '@/lib/workflow-session-hint';
 import {
@@ -736,6 +737,8 @@ export interface OpeningUserRecoveryOptions {
   sending?: boolean;
   /** Local overlay already shows the opening user turn; do not synthesize it from the session title. */
   optimisticUser?: RawMessage | null;
+  /** Older history pages still exist; wait for pagination instead of filling from the session title. */
+  historyHasMore?: boolean;
 }
 
 /** Reconstruct the opening user turn from a stored session title when history omits it. */
@@ -752,8 +755,11 @@ export function recoverInitialUserFromSessionLabel(
     return enrichedMessages;
   }
   if (historyHasSkillUserTurn(enrichedMessages)) return enrichedMessages;
+  if (options?.historyHasMore) return enrichedMessages;
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
-  if (!label || historyHasOpeningUserTurn(enrichedMessages, label)) return enrichedMessages;
+  if (!label || isTruncatedDerivedSessionLabel(label) || historyHasOpeningUserTurn(enrichedMessages, label)) {
+    return enrichedMessages;
+  }
   return insertOptimisticUserMessage(enrichedMessages, {
     role: 'user',
     content: label,
@@ -777,7 +783,12 @@ export function ensureOpeningUserMessageFirst(
   }
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   let working = messages;
-  if (label && !historyHasOpeningUserTurn(working, label)) {
+  if (
+    label
+    && !options?.historyHasMore
+    && !isTruncatedDerivedSessionLabel(label)
+    && !historyHasOpeningUserTurn(working, label)
+  ) {
     working = recoverInitialUserFromSessionLabel(working, sessionKey, sessionLabels, gatewayLabel, options);
   }
 
@@ -787,7 +798,7 @@ export function ensureOpeningUserMessageFirst(
   let openingUser = visibleUsers.reduce((earliest, message) => (
     toMs(message.timestamp) < toMs(earliest.timestamp) ? message : earliest
   ));
-  if (label) {
+  if (label && !isTruncatedDerivedSessionLabel(label)) {
     const labeled = visibleUsers.find(
       (message) => normalizeUserMessageForDisplay(getMessageText(message.content)) === label,
     );
