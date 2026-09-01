@@ -1,11 +1,10 @@
 /**
- * IconCheckbox — 用设计稿 SVG 切换勾选态
- * - checbox_1：未选
- * - checbox_2：已选
+ * IconCheckbox — 浅色沿用设计稿 SVG，暗色使用共享 checkbox recipe
  *
  * 传入 `onCheckedChange` 时为可点击按钮；仅传 `checked` 时为展示态。
  */
-import { useCallback, type ButtonHTMLAttributes, type MouseEvent } from 'react';
+import { type ButtonHTMLAttributes, type MouseEvent } from 'react';
+import { Check } from 'lucide-react';
 import uncheckedIcon from '@/assets/icons/checbox_1.svg';
 import checkedIcon from '@/assets/icons/checbox_2.svg';
 import { cn } from '@/lib/utils';
@@ -28,16 +27,27 @@ export function IconCheckbox({
   ...props
 }: IconCheckboxProps) {
   const icon = (
-    <img
-      src={checked ? checkedIcon : uncheckedIcon}
-      alt=""
-      width={size}
-      height={size}
-      className="pointer-events-none select-none object-contain"
-      style={{ width: size, height: size }}
-      draggable={false}
-      aria-hidden
-    />
+    <>
+      <img
+        src={checked ? checkedIcon : uncheckedIcon}
+        alt=""
+        width={size}
+        height={size}
+        className="sto-checkbox-light-visual pointer-events-none select-none object-contain"
+        style={{ width: size, height: size }}
+        draggable={false}
+        aria-hidden
+      />
+      <span
+        className="sto-checkbox-dark-visual pointer-events-none shrink-0 items-center justify-center rounded-[4px] border bg-transparent text-primary-foreground"
+        style={{ width: size, height: size }}
+        data-state={checked ? 'checked' : 'unchecked'}
+        data-sto-checkbox-theme="dark"
+        aria-hidden
+      >
+        {checked ? <Check style={{ width: size * 0.75, height: size * 0.75 }} strokeWidth={3} /> : null}
+      </span>
+    </>
   );
 
   const sharedClassName = cn(
@@ -45,18 +55,15 @@ export function IconCheckbox({
     className,
   );
 
-  const handleClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      onClick?.(event);
-      if (event.defaultPrevented || disabled) return;
-      onCheckedChange?.(!checked);
-    },
-    [checked, disabled, onCheckedChange, onClick],
-  );
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    onClick?.(event);
+    if (event.defaultPrevented || disabled) return;
+    onCheckedChange?.(!checked);
+  };
 
   if (!onCheckedChange) {
     return (
-      <span className={sharedClassName} aria-hidden>
+      <span className={sharedClassName} data-state={checked ? 'checked' : 'unchecked'} aria-hidden>
         {icon}
       </span>
     );
@@ -67,6 +74,7 @@ export function IconCheckbox({
       type="button"
       role="checkbox"
       aria-checked={checked}
+      data-state={checked ? 'checked' : 'unchecked'}
       disabled={disabled}
       className={cn(
         sharedClassName,

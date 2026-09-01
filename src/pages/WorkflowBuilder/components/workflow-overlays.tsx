@@ -127,7 +127,7 @@ export function DataTreeModal({
                       <span
                         className={cn(
                           'flex h-[17px] w-[17px] items-center justify-center rounded-sm border text-[11px]',
-                          selected.has(item) ? 'border-primary bg-primary text-primary-foreground' : 'border-[#DDE0E5]',
+                          selected.has(item) ? 'border-primary bg-primary text-primary-foreground' : 'sto-checkbox-unchecked border-[#DDE0E5]',
                         )}
                       >
                         {selected.has(item) ? '✓' : ''}
@@ -209,7 +209,7 @@ export function SkillPickerPopover({
                 <span
                   className={cn(
                     'flex h-[17px] w-[17px] items-center justify-center rounded-sm border text-[11px]',
-                    selected.has(skill) ? 'border-primary bg-primary text-primary-foreground' : 'border-[#DDE0E5]',
+                    selected.has(skill) ? 'border-primary bg-primary text-primary-foreground' : 'sto-checkbox-unchecked border-[#DDE0E5]',
                   )}
                 >
                   {selected.has(skill) ? '✓' : ''}

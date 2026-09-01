@@ -853,7 +853,7 @@ function TreeCheckbox({ checked, disabled = false, onClick }: { checked?: boolea
         'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-white transition-colors',
         checked
           ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary'
-          : 'border-[#D7DBE2] bg-white dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)]',
+          : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white dark:bg-transparent',
         disabled && 'cursor-not-allowed opacity-45',
       )}
       aria-pressed={Boolean(checked)}

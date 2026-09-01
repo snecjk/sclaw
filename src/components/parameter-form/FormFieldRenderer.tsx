@@ -403,7 +403,7 @@ function renderCheckboxField(
             checked={Boolean(value)}
             onChange={(e) => onChange(e.target.checked)}
             disabled={field.disabled}
-            className="h-4 w-4 text-primary focus:ring-primary rounded"
+            className="sto-native-checkbox h-4 w-4 rounded text-primary focus:ring-primary"
           />
           <span className="text-[13.5px] font-medium text-foreground">{field.label}</span>
         </label>

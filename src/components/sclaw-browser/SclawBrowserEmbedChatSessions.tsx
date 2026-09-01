@@ -117,7 +117,8 @@ export function SclawBrowserEmbedChatSessions(props: SclawBrowserEmbedChatSessio
               return (
                 <DropdownMenuItem
                   key={item.key}
-                  className={cn('group flex items-start gap-2 pr-1', active && 'bg-accent')}
+                  aria-selected={active}
+                  className="group flex items-start gap-2 pr-1"
                   onSelect={(event) => {
                     event.preventDefault();
                     if (keepOpenOnDeleteRef.current) return;
