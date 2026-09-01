@@ -24,9 +24,8 @@ import { restorePendingWorkflowDraftInBackground } from './history-workflow-effe
 import { localizeAndHydrateWorkflowForms } from './history-form-effects';
 import { logChatFlow, logUserQuestion, logUserQuestionServerEcho } from './chat-flow-log';
 import {
-  estimateJsonBytes,
-  formatPayloadSize,
   markHistoryApplyPerf,
+  payloadSizeDetail,
   startHistoryApplyPerf,
 } from './history-load-perf';
 import type { ChatGet, ChatSet } from './store-api';
@@ -226,12 +225,10 @@ export function applyLoadedHistorySnapshot(input: {
 
   if (get().currentSessionKey !== targetSessionKey) return;
   startHistoryApplyPerf(targetSessionKey);
-  const applyPayloadBytes = estimateJsonBytes(rawMessages);
   logChatFlow('history.apply.start', {
     sessionKey: targetSessionKey,
     rawCount: rawMessages.length,
-    payloadBytes: applyPayloadBytes,
-    payloadSize: formatPayloadSize(applyPayloadBytes),
+    ...payloadSizeDetail(rawMessages),
   });
 
   const prepareStartedAt = performance.now();
@@ -365,18 +362,16 @@ export function applyLoadedHistorySnapshot(input: {
 
   useChatRuntimeV2Store.getState().setDisplayProjection(targetSessionKey, finalMessages);
   set({ thinkingLevel, loading: false });
-  const displayPayloadBytes = estimateJsonBytes(finalMessages);
+  const displayPayloadDetail = payloadSizeDetail(finalMessages, 'display');
   logChatFlow('history.apply.committed', {
     sessionKey: targetSessionKey,
     messageCount: finalMessages.length,
     thinkingLevel,
-    displayPayloadBytes,
-    displayPayloadSize: formatPayloadSize(displayPayloadBytes),
+    ...displayPayloadDetail,
   });
   markHistoryApplyPerf(targetSessionKey, 'apply.committed', {
     messageCount: finalMessages.length,
-    displayPayloadBytes,
-    displayPayloadSize: formatPayloadSize(displayPayloadBytes),
+    ...displayPayloadDetail,
   });
 
   ensureWorkflowParameterFormInjected();

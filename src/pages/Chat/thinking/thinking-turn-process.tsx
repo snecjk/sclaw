@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
@@ -61,6 +61,7 @@ import {
   type ThinkingToolGroupSegment,
   type ThinkingTurnSegment,
 } from '@/pages/Chat/thinking-turn-segments';
+import { sliceStreamingThinkingTail } from '@/pages/Chat/thinking/streaming-tail-window';
 import { foldThinkingTimelineTools, resolveTurnToolCount } from '@/pages/Chat/thinking/fold-turn-tools';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
@@ -121,17 +122,24 @@ export function AwaitingReplyIndicator({ className }: { className?: string }) {
   );
 }
 
-function ThinkingBlockBody({
+const ThinkingBlockBody = memo(function ThinkingBlockBody({
   content,
+  omittedChars = 0,
   isTypewriterActive,
+  isStreamActive = false,
   resetKey,
   onRevealComplete,
 }: {
   content: string;
+  /** 父级已按流式尾部窗口截断后传入的省略字数（未截断为 0） */
+  omittedChars?: number;
   isTypewriterActive: boolean;
+  /** 流式当前块：整个流式期间保持纯文本（含顺序打字机已锁定的兜底路径），完成帧才转 ReactMarkdown */
+  isStreamActive?: boolean;
   resetKey: string;
   onRevealComplete?: () => void;
 }) {
+  const { t } = useTranslation('chat');
   const { text: displayed, isAnimating } = useTypewriterReveal(content, isTypewriterActive, {
     resetKey,
   });
@@ -142,13 +150,19 @@ function ThinkingBlockBody({
     onRevealComplete?.();
   }, [isTypewriterActive, isAnimating, displayed, content.length, onRevealComplete]);
 
-  if (isTypewriterActive || isAnimating) {
+  if (isTypewriterActive || isAnimating || isStreamActive) {
+    const source = isTypewriterActive || isAnimating ? displayed : content;
     return (
       <p
         className={cn(chatProcessBlockBodyClass, 'whitespace-pre-wrap')}
-        aria-busy={isTypewriterActive || isAnimating ? true : undefined}
+        aria-busy={isTypewriterActive || isAnimating || isStreamActive ? true : undefined}
       >
-        {displayed}
+        {omittedChars > 0 ? (
+          <span className="mb-1 block opacity-70">
+            {t('streaming.omittedEarlierThinkingChars', { count: omittedChars })}
+          </span>
+        ) : null}
+        {source}
         {isTypewriterActive ? <ChatProcessLoadingEllipsis /> : null}
       </p>
     );
@@ -164,7 +178,7 @@ function ThinkingBlockBody({
       <ReactMarkdown remarkPlugins={chatRemarkPlugins}>{content}</ReactMarkdown>
     </div>
   );
-}
+});
 
 function resolveSkillDisplayName(
   name: string,
@@ -183,7 +197,7 @@ function resolveSkillDisplayName(
   return resolveChatToolDisplayName(name);
 }
 
-function resolveSkillNamesInThinking(
+export function resolveSkillNamesInThinking(
   text: string,
   skills: { id: string; slug?: string; name: string; title?: string }[],
 ): string {
@@ -210,6 +224,41 @@ function resolveSkillNamesInThinking(
   return result;
 }
 
+type SkillNameResolveEntry = { id: string; slug?: string; name: string; title?: string };
+
+/** 单块内容缓存上限（LRU），防长会话无限增长；skills 数组按引用隔离，store 更新后旧缓存随 WeakMap 回收 */
+const SKILL_NAME_RESOLVE_CACHE_LIMIT = 200;
+const skillNameResolveCache = new WeakMap<SkillNameResolveEntry[], Map<string, string>>();
+
+/**
+ * resolveSkillNamesInThinking 的按块内容缓存版：冻结块重复渲染时零正则；
+ * 正在生长的流式块内容每帧变化，天然 miss，行为与全量解析一致。
+ */
+export function resolveSkillNamesInThinkingCached(
+  text: string,
+  skills: SkillNameResolveEntry[],
+): string {
+  if (!text || skills.length === 0) return text;
+  let byText = skillNameResolveCache.get(skills);
+  if (!byText) {
+    byText = new Map();
+    skillNameResolveCache.set(skills, byText);
+  }
+  const hit = byText.get(text);
+  if (hit !== undefined) {
+    byText.delete(text);
+    byText.set(text, hit);
+    return hit;
+  }
+  const resolved = resolveSkillNamesInThinking(text, skills);
+  byText.set(text, resolved);
+  if (byText.size > SKILL_NAME_RESOLVE_CACHE_LIMIT) {
+    const oldest = byText.keys().next().value;
+    if (oldest !== undefined) byText.delete(oldest);
+  }
+  return resolved;
+}
+
 function resolveTimelineBlockCollapseState(
   index: number,
   timelineLength: number,
@@ -233,6 +282,146 @@ function resolveTimelineBlockCollapseState(
     isActive: isInProgress,
   };
 }
+
+/** 流式 snapshot 每帧新建 input 对象；引用不等时按值比较，已完成工具卡片才不致每帧重渲染 */
+function toolInputEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (left == null || right == null) return false;
+  // 快速路径：长度/类型明显不同直接不等，避免大 input JSON.stringify
+  if (typeof left !== typeof right) return false;
+  if (typeof left === 'string' || typeof left === 'number' || typeof left === 'boolean') {
+    return left === right;
+  }
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
+interface TimelineThinkingRowProps {
+  content: string;
+  skills: { id: string; slug?: string; name: string; title?: string }[];
+  title: string;
+  icon: ReturnType<typeof resolveChatThinkingIcon>;
+  collapsible: boolean;
+  isComplete: boolean;
+  autoExpand: boolean;
+  isActive: boolean;
+  isTypewriterActive: boolean;
+  resetKey: string;
+  onRevealComplete: (resetKey: string) => void;
+}
+
+/** 单个深度思考块：props 全为基础类型/稳定引用，块内容未变时跳过整棵子树（含 ReactMarkdown） */
+const TimelineThinkingRow = memo(function TimelineThinkingRow({
+  content,
+  skills,
+  title,
+  icon,
+  collapsible,
+  isComplete,
+  autoExpand,
+  isActive,
+  isTypewriterActive,
+  resetKey,
+  onRevealComplete,
+}: TimelineThinkingRowProps) {
+  // 流式当前块先截尾再脱敏/替换技能名：截尾 O(1)（只取最后 3000 字），
+  // 避免 10 万字时每帧对全文跑正则。
+  const tailWindow = useMemo(
+    () => (isActive ? sliceStreamingThinkingTail(content) : { text: content, omittedChars: 0 }),
+    [content, isActive],
+  );
+  const thinkingContent = useMemo(
+    () => maskDwsSensitiveIdsForDisplay(
+      resolveSkillNamesInThinkingCached(tailWindow.text, skills),
+    ),
+    [tailWindow.text, skills],
+  );
+  return (
+    <ChatProcessBlock
+      title={title}
+      icon={icon}
+      collapsible={collapsible}
+      isComplete={isComplete}
+      autoExpand={autoExpand}
+      isActive={isActive}
+    >
+      <ThinkingBlockBody
+        content={thinkingContent}
+        omittedChars={tailWindow.omittedChars}
+        isTypewriterActive={isTypewriterActive}
+        isStreamActive={isActive}
+        resetKey={resetKey}
+        onRevealComplete={() => onRevealComplete(resetKey)}
+      />
+    </ChatProcessBlock>
+  );
+});
+
+interface TimelineToolRowProps {
+  name: string;
+  input: unknown;
+  skills: { id: string; slug?: string; name: string; title?: string }[];
+  status: StreamingTool['status'] | undefined;
+  collapsible: boolean;
+  isComplete: boolean;
+  autoExpand: boolean;
+  isActive: boolean;
+  isInputTypewriterActive: boolean;
+  isAwaitingToolInput: boolean;
+  resetKey: string;
+  onInputRevealComplete: (resetKey: string) => void;
+}
+
+/** 单个工具调用块：input 按值比较（流式 snapshot 对象每帧新建），其余 props 均为基础类型/稳定引用 */
+const TimelineToolRow = memo(function TimelineToolRow({
+  name,
+  input,
+  skills,
+  status,
+  collapsible,
+  isComplete,
+  autoExpand,
+  isActive,
+  isInputTypewriterActive,
+  isAwaitingToolInput,
+  resetKey,
+  onInputRevealComplete,
+}: TimelineToolRowProps) {
+  return (
+    <ChatToolCallCard
+      name={name}
+      displayName={resolveSkillDisplayName(name, skills)}
+      input={input}
+      status={status}
+      variant="readonly"
+      presentation="thinkingProcess"
+      thinkingProcessCollapsible={collapsible}
+      isComplete={isComplete}
+      autoExpand={autoExpand}
+      isActive={isActive}
+      isInputTypewriterActive={isInputTypewriterActive}
+      typewriterResetKey={resetKey}
+      onInputRevealComplete={() => onInputRevealComplete(resetKey)}
+      isAwaitingToolInput={isAwaitingToolInput}
+    />
+  );
+}, (prev, next) => (
+  prev.name === next.name
+  && prev.skills === next.skills
+  && prev.status === next.status
+  && prev.collapsible === next.collapsible
+  && prev.isComplete === next.isComplete
+  && prev.autoExpand === next.autoExpand
+  && prev.isActive === next.isActive
+  && prev.isInputTypewriterActive === next.isInputTypewriterActive
+  && prev.isAwaitingToolInput === next.isAwaitingToolInput
+  && prev.resetKey === next.resetKey
+  && prev.onInputRevealComplete === next.onInputRevealComplete
+  && toolInputEqual(prev.input, next.input)
+));
 
 interface TimelineBodyProps {
   timeline: ThinkingTimelineItem[];
@@ -300,42 +489,6 @@ function TimelineBody({
         const reveal = getBlockRevealState(i, blockResetKey);
         if (!reveal.isVisible) return null;
 
-        if (item.type === 'thinking') {
-          // 深度思考面板不走 extractThinking/cleanThinkingText，展示前需单独脱敏
-          const thinkingContent = maskDwsSensitiveIdsForDisplay(
-            resolveSkillNamesInThinking(item.content, skills),
-          );
-          const collapse = resolveTimelineBlockCollapseState(
-            i,
-            displayTimeline.length,
-            isLiveStream,
-            batchIsCompleted,
-            sequentialIndex,
-          );
-          return (
-            <ChatProcessBlock
-              key={blockResetKey}
-              title={t('streaming.deepThinkingLabel')}
-              icon={ThinkingIcon}
-              collapsible={level2Collapsible}
-              isComplete={collapse.isComplete}
-              autoExpand={collapse.autoExpand}
-              isActive={collapse.isActive}
-            >
-              <ThinkingBlockBody
-                content={thinkingContent}
-                isTypewriterActive={reveal.isTypewriterActive}
-                resetKey={blockResetKey}
-                onRevealComplete={() => markBlockRevealFinished(blockResetKey)}
-              />
-            </ChatProcessBlock>
-          );
-        }
-
-        if (item.type !== 'tool') return null;
-
-        const key = toolRowKey(item);
-        const toolStatus = streamingStatusByKey.get(key);
         const collapse = resolveTimelineBlockCollapseState(
           i,
           displayTimeline.length,
@@ -343,25 +496,47 @@ function TimelineBody({
           batchIsCompleted,
           sequentialIndex,
         );
+
+        if (item.type === 'thinking') {
+          return (
+            <TimelineThinkingRow
+              key={blockResetKey}
+              content={item.content}
+              skills={skills}
+              title={t('streaming.deepThinkingLabel')}
+              icon={ThinkingIcon}
+              collapsible={level2Collapsible}
+              isComplete={collapse.isComplete}
+              autoExpand={collapse.autoExpand}
+              isActive={collapse.isActive}
+              isTypewriterActive={reveal.isTypewriterActive}
+              resetKey={blockResetKey}
+              onRevealComplete={markBlockRevealFinished}
+            />
+          );
+        }
+
+        if (item.type !== 'tool') return null;
+
+        const key = toolRowKey(item);
+        const toolStatus = streamingStatusByKey.get(key);
         return (
-          <ChatToolCallCard
+          <TimelineToolRow
             key={key}
             name={item.name}
-            displayName={resolveSkillDisplayName(item.name, skills)}
             input={item.input}
+            skills={skills}
             status={toolStatus}
-            variant="readonly"
-            presentation="thinkingProcess"
-            thinkingProcessCollapsible={level2Collapsible}
+            collapsible={level2Collapsible}
             isComplete={collapse.isComplete}
             autoExpand={collapse.autoExpand}
             isActive={collapse.isActive}
             isInputTypewriterActive={reveal.isTypewriterActive && hasDisplayableToolInput(item.input)}
-            typewriterResetKey={blockResetKey}
-            onInputRevealComplete={() => markBlockRevealFinished(blockResetKey)}
             isAwaitingToolInput={
               reveal.isTypewriterActive && !hasDisplayableToolInput(item.input) && toolStatus === 'running'
             }
+            resetKey={blockResetKey}
+            onInputRevealComplete={markBlockRevealFinished}
           />
         );
       })}
@@ -547,11 +722,24 @@ function ThinkingToolGroupPanel({
   );
   const [expanded, setExpanded] = useState(false);
   const [collapseAnimationEnabled, setCollapseAnimationEnabled] = useState(false);
+  // 完成态卸载：收起时正文不挂载（不再靠 grid-rows-[0fr] 视觉隐藏全量 DOM）；
+  // 收起动画（300ms，§5.6）期间保留挂载，动画结束后卸载
+  const [bodyMounted, setBodyMounted] = useState(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setCollapseAnimationEnabled(true));
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    if (expanded) {
+      setBodyMounted(true);
+      return undefined;
+    }
+    if (!bodyMounted) return undefined;
+    const timer = setTimeout(() => setBodyMounted(false), 300);
+    return () => clearTimeout(timer);
+  }, [expanded, bodyMounted]);
 
   const handleSummaryToggle = () => {
     setExpanded((prev) => !prev);
@@ -595,23 +783,25 @@ function ThinkingToolGroupPanel({
           aria-hidden
         />
       </button>
-      <div className={thinkingPanelBodyGridClass(expanded, collapseAnimationEnabled)}>
-        <div className="min-h-0 overflow-hidden">
-          <TimelineBody
-            timeline={stableTimeline}
-            isLiveStream={false}
-            hasFinalReply={false}
-            batchIsCompleted
-            streamingTools={streamingTools}
-            enableProcessTypewriter={false}
-            isConnecting={false}
-            isProcessing={false}
-            isStillExecuting={false}
-            connectingLabelKey={connectingLabelKey}
-            readonlyExpanded
-          />
+      {bodyMounted ? (
+        <div className={thinkingPanelBodyGridClass(expanded, collapseAnimationEnabled)}>
+          <div className="min-h-0 overflow-hidden">
+            <TimelineBody
+              timeline={stableTimeline}
+              isLiveStream={false}
+              hasFinalReply={false}
+              batchIsCompleted
+              streamingTools={streamingTools}
+              enableProcessTypewriter={false}
+              isConnecting={false}
+              isProcessing={false}
+              isStillExecuting={false}
+              connectingLabelKey={connectingLabelKey}
+              readonlyExpanded
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -635,7 +825,7 @@ export interface ThinkingTurnProcessProps {
 }
 
 /** 分段思考过程：phase text 与 tool-group 交替。使用位置：AssistantTurnMessage。 */
-export function ThinkingTurnProcess({
+export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
   turnStableKey,
   segments,
   isStreaming = false,
@@ -772,4 +962,4 @@ export function ThinkingTurnProcess({
       ) : null}
     </div>
   );
-}
+});

@@ -14,12 +14,43 @@ interface HistoryLoadPerfContext {
 
 const contexts = new Map<string, HistoryLoadPerfContext>();
 
+// 全量 stringify 估算字节数是 O(payload) 的主线程操作，大包下可达几十 ms，
+// 默认关闭；需要验收/排障时在 DevTools 执行
+// localStorage.setItem('sclaw:chat-history-perf:debug', '1') 后刷新开启。
+let payloadDebugCache: boolean | null = null;
+
+export function isPayloadSizeDebugEnabled(): boolean {
+  if (payloadDebugCache !== null) return payloadDebugCache;
+  try {
+    payloadDebugCache =
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('sclaw:chat-history-perf:debug') === '1';
+  } catch {
+    payloadDebugCache = false;
+  }
+  return payloadDebugCache;
+}
+
 export function estimateJsonBytes(value: unknown): number {
   try {
     return new TextEncoder().encode(JSON.stringify(value)).byteLength;
   } catch {
     return 0;
   }
+}
+
+/** debug 开关开启时返回 { payloadBytes, payloadSize }（或带 prefix 的 displayPayloadBytes/displayPayloadSize），否则返回空对象（零序列化成本）。 */
+export function payloadSizeDetail(
+  value: unknown,
+  fieldPrefix = '',
+): Record<string, unknown> {
+  if (!isPayloadSizeDebugEnabled()) return {};
+  const bytes = estimateJsonBytes(value);
+  const prefix = fieldPrefix ? `${fieldPrefix}P` : '';
+  return {
+    [`${prefix}payloadBytes`]: bytes,
+    [`${prefix}payloadSize`]: formatPayloadSize(bytes),
+  };
 }
 
 export function formatPayloadSize(bytes: number): string {

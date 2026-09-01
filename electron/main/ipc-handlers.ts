@@ -1040,11 +1040,15 @@ function registerGatewayHandlers(
         const sanitizeMs = Date.now() - sanitizeStart;
         const messages = (payload as { messages?: unknown[] } | null)?.messages;
         const messageCount = Array.isArray(messages) ? messages.length : 0;
-        let payloadBytes = 0;
-        try {
-          payloadBytes = JSON.stringify(payload).length;
-        } catch {
-          payloadBytes = 0;
+        // 全量 stringify 估算字节数是 O(payload) 的主进程主线程操作，
+        // 仅在显式开启 debug（SCLAW_CHAT_HISTORY_PERF_DEBUG=1）时计算。
+        let payloadBytes: number | null = null;
+        if (process.env.SCLAW_CHAT_HISTORY_PERF_DEBUG === '1') {
+          try {
+            payloadBytes = JSON.stringify(payload).length;
+          } catch {
+            payloadBytes = null;
+          }
         }
         logger.info('[chat-history-perf]', {
           stage: 'ipc.rpc.done',

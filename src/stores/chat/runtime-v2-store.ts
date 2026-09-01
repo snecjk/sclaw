@@ -85,6 +85,141 @@ export function subscribeCanonicalChatRuntimeProjection(
   return () => projectionListeners.delete(listener);
 }
 
+interface SessionEventApplyResult {
+  next: ClientSessionState;
+  accepted: boolean;
+  needsHydration: boolean;
+}
+
+/** applyEvent 的单会话归约（不提交 store）；合帧 flush 与单事件路径共用，保证语义一致 */
+function reduceEventIntoSession(
+  current: ClientSessionState,
+  event: CanonicalChatEvent,
+): SessionEventApplyResult {
+  if (current.sync.status === 'gapped' || current.sync.status === 'hydrating') {
+    const allPendingEvents = [...current.sync.pendingEvents, event];
+    const bufferOverflowed = current.sync.bufferOverflowed || allPendingEvents.length > MAX_PENDING_EVENTS;
+    const pendingEvents = allPendingEvents.slice(-MAX_PENDING_EVENTS);
+    return {
+      next: { ...current, sync: { ...current.sync, pendingEvents, bufferOverflowed } },
+      accepted: false,
+      needsHydration: false,
+    };
+  }
+  const reduction = reduceSessionEvent(current, event);
+  if (reduction.needsHydration) {
+    return {
+      next: {
+        ...current,
+        sync: {
+          ...current.sync,
+          status: 'gapped',
+          pendingEvents: [event],
+          retryAt: null,
+        },
+      },
+      accepted: false,
+      needsHydration: true,
+    };
+  }
+  if (!reduction.accepted) return { next: current, accepted: false, needsHydration: false };
+  return {
+    next: {
+      ...reduction.state,
+      sync: { ...reduction.state.sync, status: 'ready' },
+    },
+    accepted: true,
+    needsHydration: false,
+  };
+}
+
+/**
+ * 同步应用单个事件（不经过 delta 合帧队列）。
+ * 用于 hydrate/bootstrap 回放等不能延迟、也不能丢失 projection 通知的场景。
+ */
+function applyEventToStoreImmediately(event: CanonicalChatEvent): void {
+  const current = useChatRuntimeV2Store.getState().sessionsByKey[event.sessionKey]
+    ?? createClientSessionState();
+  const result = reduceEventIntoSession(current, event);
+  if (result.next !== current) {
+    useChatRuntimeV2Store.setState((state) => ({
+      sessionsByKey: { ...state.sessionsByKey, [event.sessionKey]: result.next },
+    }));
+  }
+  if (result.accepted) notifyProjection(event);
+  if (result.needsHydration) void useChatRuntimeV2Store.getState().hydrate(event.sessionKey);
+}
+
+/**
+ * message.delta 合帧（chat-thinking-perf 3.1）：delta 先入队，每帧（rAF；无 rAF 环境
+ * 退化为 40ms 时间片）最多一次 store 提交。任何非 delta 事件 / transcript 写入到来前
+ * 先同步 flush，保证事件不丢、与同会话后续事件顺序不乱。
+ */
+const pendingDeltaEvents: CanonicalChatEvent[] = [];
+let deltaFlushScheduled = false;
+
+function scheduleChatDeltaFlush(): void {
+  if (deltaFlushScheduled) return;
+  deltaFlushScheduled = true;
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => flushPendingChatRuntimeDeltas());
+    return;
+  }
+  setTimeout(() => flushPendingChatRuntimeDeltas(), 40);
+}
+
+function enqueueChatDeltaEvent(event: CanonicalChatEvent): void {
+  pendingDeltaEvents.push(event);
+  scheduleChatDeltaFlush();
+}
+
+/** 把已排队的 delta 按序归约并一次性提交；导出供测试与非 delta 路径强制对齐 */
+export function flushPendingChatRuntimeDeltas(): void {
+  deltaFlushScheduled = false;
+  if (pendingDeltaEvents.length === 0) return;
+  const events = pendingDeltaEvents.splice(0, pendingDeltaEvents.length);
+  const baseState = useChatRuntimeV2Store.getState();
+  const nextByKey = new Map<string, ClientSessionState>();
+  const acceptedEvents: CanonicalChatEvent[] = [];
+  const hydrateKeys: string[] = [];
+
+  for (const event of events) {
+    const current =
+      nextByKey.get(event.sessionKey)
+      ?? baseState.sessionsByKey[event.sessionKey]
+      ?? createClientSessionState();
+    const result = reduceEventIntoSession(current, event);
+    if (result.next !== current) nextByKey.set(event.sessionKey, result.next);
+    if (result.accepted) acceptedEvents.push(event);
+    if (result.needsHydration) hydrateKeys.push(event.sessionKey);
+  }
+
+  if (nextByKey.size > 0) {
+    useChatRuntimeV2Store.setState((state) => {
+      const sessionsByKey = { ...state.sessionsByKey };
+      for (const [sessionKey, next] of nextByKey) {
+        sessionsByKey[sessionKey] = next;
+      }
+      return { sessionsByKey };
+    });
+  }
+  for (const event of acceptedEvents) notifyProjection(event);
+  for (const sessionKey of hydrateKeys) {
+    void useChatRuntimeV2Store.getState().hydrate(sessionKey);
+  }
+
+  // flush 期间（projection 监听器等同步路径）新到的 delta 排下一帧
+  if (pendingDeltaEvents.length > 0) scheduleChatDeltaFlush();
+}
+
+function dropPendingChatRuntimeDeltas(sessionKey: string): void {
+  for (let index = pendingDeltaEvents.length - 1; index >= 0; index -= 1) {
+    if (pendingDeltaEvents[index]?.sessionKey === sessionKey) {
+      pendingDeltaEvents.splice(index, 1);
+    }
+  }
+}
+
 function messageTimestampMs(message: RawMessage): number {
   const value = message.timestamp;
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -162,7 +297,10 @@ function transcriptContainsCompletedTurn(
 export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
   sessionsByKey: {},
   initialized: false,
-  setTranscript: (sessionKey, transcript) => set((state) => {
+  setTranscript: (sessionKey, transcript) => {
+    // 先对齐已排队 delta，避免用未含 delta 的 overlay 计算 transcriptSettled
+    flushPendingChatRuntimeDeltas();
+    set((state) => {
     const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
     const optimistic = current.overlay.optimisticUserMessage;
     const echoedId = optimistic?.id;
@@ -213,7 +351,8 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
         },
       },
     };
-  }),
+    });
+  },
   setHistoryFingerprint: (sessionKey, fingerprint) => set((state) => {
     const current = state.sessionsByKey[sessionKey];
     if (!current || current.historyFingerprint === fingerprint) return state;
@@ -278,7 +417,10 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
       },
     };
   }),
-  setOptimisticUserMessage: (sessionKey, message) => set((state) => {
+  setOptimisticUserMessage: (sessionKey, message) => {
+    // 与 setTranscript 同理：先对齐已排队 delta，再基于最新 overlay 判断物化
+    flushPendingChatRuntimeDeltas();
+    set((state) => {
     const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
     if (current.overlay.optimisticUserMessage === message) return state;
     const shouldMaterializeCompletedOverlay = Boolean(
@@ -328,7 +470,8 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
         },
       },
     };
-  }),
+    });
+  },
   clearError: (sessionKey) => set((state) => {
     const current = state.sessionsByKey[sessionKey];
     if (!current?.error) return state;
@@ -350,6 +493,8 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
     };
   }),
   clearOverlay: (sessionKey) => set((state) => {
+    // 清 overlay 同时丢弃本会话未提交的排队 delta，否则 rAF flush 可能把流式又写回来
+    dropPendingChatRuntimeDeltas(sessionKey);
     const current = state.sessionsByKey[sessionKey];
     if (!current) return state;
     return {
@@ -363,14 +508,18 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
       },
     };
   }),
-  clearSession: (sessionKey) => set((state) => {
+  clearSession: (sessionKey) => {
+    // 会话销毁时丢弃其未提交的 delta，避免重建出僵尸会话状态
+    dropPendingChatRuntimeDeltas(sessionKey);
+    set((state) => {
     if (!state.sessionsByKey[sessionKey]) return state;
     const sessionsByKey = { ...state.sessionsByKey };
     delete sessionsByKey[sessionKey];
     hydratePromises.delete(sessionKey);
     clearHydrateRetry(sessionKey);
     return { sessionsByKey };
-  }),
+    });
+  },
   hydrate: async (sessionKey) => {
     const existing = hydratePromises.get(sessionKey);
     if (existing) return existing;
@@ -413,8 +562,9 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
         clearHydrateRetry(sessionKey);
         set((state) => ({ sessionsByKey: { ...state.sessionsByKey, [sessionKey]: hydrated } }));
         for (const event of pending) {
-          const accepted = get().applyEvent(event);
-          if (accepted) notifyProjection(event);
+          // hydrate 回放不能进 delta 合帧队列，否则 delta  return false 会导致
+          // 回放期间 UI 缺一段流式，projection 通知也要等到 rAF flush 才发出。
+          applyEventToStoreImmediately(event);
         }
         if (bufferOverflowed) {
           void import('./store').then(({ useChatStore }) => (
@@ -454,52 +604,29 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
     return operation;
   },
   applyEvent: (event) => {
+    // delta 走合帧队列：本帧统一提交，projection 通知也在 flush 时按序发出。
+    // 因此 applyEvent(delta) 返回 false，调用方不要把它理解成「事件被拒绝」；
+    // 同步回放路径（hydrate/bootstrap）应使用 applyEventToStoreImmediately。
+    if (event.type === 'message.delta') {
+      enqueueChatDeltaEvent(event);
+      return false;
+    }
+    // 非 delta 事件（final / run 终态等）必须先 flush 已排队 delta，再按原语义处理
+    flushPendingChatRuntimeDeltas();
     const current = get().sessionsByKey[event.sessionKey] ?? createClientSessionState();
-    if (current.sync.status === 'gapped' || current.sync.status === 'hydrating') {
-      const allPendingEvents = [...current.sync.pendingEvents, event];
-      const bufferOverflowed = current.sync.bufferOverflowed || allPendingEvents.length > MAX_PENDING_EVENTS;
-      const pendingEvents = allPendingEvents.slice(-MAX_PENDING_EVENTS);
+    const result = reduceEventIntoSession(current, event);
+    if (result.next !== current) {
       set((state) => ({
         sessionsByKey: {
           ...state.sessionsByKey,
-          [event.sessionKey]: {
-            ...current,
-            sync: { ...current.sync, pendingEvents, bufferOverflowed },
-          },
+          [event.sessionKey]: result.next,
         },
       }));
-      return false;
     }
-    const reduction = reduceSessionEvent(current, event);
-    if (reduction.needsHydration) {
-      set((state) => ({
-        sessionsByKey: {
-          ...state.sessionsByKey,
-          [event.sessionKey]: {
-            ...current,
-            sync: {
-              ...current.sync,
-              status: 'gapped',
-              pendingEvents: [event],
-              retryAt: null,
-            },
-          },
-        },
-      }));
+    if (result.needsHydration) {
       void get().hydrate(event.sessionKey);
-      return false;
     }
-    if (!reduction.accepted) return false;
-    set((state) => ({
-      sessionsByKey: {
-        ...state.sessionsByKey,
-        [event.sessionKey]: {
-          ...reduction.state,
-          sync: { ...reduction.state.sync, status: 'ready' },
-        },
-      },
-    }));
-    return true;
+    return result.accepted;
   },
 }));
 
@@ -535,8 +662,8 @@ export async function initializeChatRuntimeV2(): Promise<void> {
     const buffered = bootstrapEvents;
     bootstrapEvents = [];
     for (const event of buffered) {
-      const accepted = useChatRuntimeV2Store.getState().applyEvent(event);
-      if (accepted) notifyProjection(event);
+      // 初始化缓存事件同样同步回放，避免 delta 被合帧队列吞掉 projection 通知
+      applyEventToStoreImmediately(event);
     }
     useChatRuntimeV2Store.setState({ initialized: true });
   })().finally(() => {
@@ -545,8 +672,8 @@ export async function initializeChatRuntimeV2(): Promise<void> {
       const buffered = bootstrapEvents;
       bootstrapEvents = [];
       for (const event of buffered) {
-        const accepted = useChatRuntimeV2Store.getState().applyEvent(event);
-        if (accepted) notifyProjection(event);
+        // 兜底路径与主初始化路径一致：同步回放，避免 delta 被合帧队列吞掉通知
+        applyEventToStoreImmediately(event);
       }
     }
     initializePromise = null;

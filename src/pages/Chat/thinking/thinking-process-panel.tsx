@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { RawMessage } from '@/stores/chat';
-import { parseThinkingTurnLayout } from '@/pages/Chat/thinking-turn-segments';
+import { parseThinkingTurnLayoutCached } from '@/pages/Chat/thinking-turn-segments';
 import {
   ThinkingTurnProcess,
   type ThinkingTurnProcessProps,
@@ -54,17 +54,30 @@ export function ThinkingProcessPanel({
   const isLiveStream =
     isStreaming || isConnecting || isProcessing || isStillExecuting;
 
+  /**
+   * 用 parseThinkingTurnLayoutCached 缓存解析结果，避免 activeStream 包装对象
+   * 每渲染新建导致的 useMemo 失效；cacheKey 缺省时直出。
+   */
+  const layoutCacheKey =
+    sources.length > 0
+      ? sources.map((message, index) => message.id ?? `idx:${index}`).join('|')
+      : undefined;
   const layout = useMemo(
     () =>
       sources.length > 0
-        ? parseThinkingTurnLayout(sources, {
+        ? parseThinkingTurnLayoutCached(layoutCacheKey, sources, {
             isLiveStream,
             streamingTools:
               isLiveStream && streamingTools.length > 0 ? streamingTools : undefined,
             engineProfile,
           })
         : { segments: [], finalReplyText: null },
-    [sources, isLiveStream, streamingTools, engineProfile],
+    [sources, isLiveStream, streamingTools, engineProfile, layoutCacheKey],
+  );
+
+  const turnStreamingTools = useMemo(
+    () => streamingTools.map((tool) => ({ ...tool, updatedAt: 0 })),
+    [streamingTools],
   );
 
   const turnProps: ThinkingTurnProcessProps = {
@@ -73,7 +86,7 @@ export function ThinkingProcessPanel({
     isConnecting,
     isProcessing,
     isStillExecuting,
-    streamingTools: streamingTools.map((tool) => ({ ...tool, updatedAt: 0 })),
+    streamingTools: turnStreamingTools,
     hasFinalReply: hasReplyBody || layout.finalReplyText !== null,
     connectingLabelKey,
     className,

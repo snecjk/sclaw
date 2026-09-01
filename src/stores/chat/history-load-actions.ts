@@ -7,10 +7,9 @@ import {
 import { logChatFlow } from './chat-flow-log';
 import {
   cancelHistoryLoadPerf,
-  estimateJsonBytes,
   finishHistoryLoadPerf,
-  formatPayloadSize,
   markHistoryLoadPerf,
+  payloadSizeDetail,
   startHistoryLoadPerf,
 } from './history-load-perf';
 import type { ChatGet, ChatSet, HistoryActions } from './store-api';
@@ -228,12 +227,11 @@ export function createHistoryLoadActions(
             ? mergeHistoryTail(existingTranscript, pageMessages)
             : pageMessages;
           const totalCount = readHistoryTotalCount(data.totalCount, allMessages.length);
-          const payloadBytes = estimateJsonBytes(pageMessages);
+          const payloadDetail = payloadSizeDetail(pageMessages);
           markHistoryLoadPerf(targetSessionKey, 'load.rpc.done', {
             rpcMs,
             messageCount: allMessages.length,
-            payloadBytes,
-            payloadSize: formatPayloadSize(payloadBytes),
+            ...payloadDetail,
             engineType,
           });
           if (_historyGenerationBySession.get(targetSessionKey) !== generation) {
@@ -257,8 +255,7 @@ export function createHistoryLoadActions(
             thinkingLevel,
             isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : null,
             rpcMs,
-            payloadBytes,
-            payloadSize: formatPayloadSize(payloadBytes),
+            ...payloadDetail,
             engineType,
           });
 
@@ -291,8 +288,7 @@ export function createHistoryLoadActions(
             messageCount: allMessages.length,
             pageCount: pageMessages.length,
             totalCount,
-            payloadBytes,
-            payloadSize: formatPayloadSize(payloadBytes),
+            ...payloadDetail,
           });
         } catch (err) {
           console.warn('Failed to load chat history:', err);

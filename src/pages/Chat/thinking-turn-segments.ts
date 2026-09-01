@@ -849,6 +849,46 @@ function extractOrderedEventsFromMessage(message: RawMessage): RawTurnEvent[] {
 }
 
 /**
+ * 事件提取按消息引用缓存：历史消息与已提交 snapshot 在流式期间引用稳定，
+ * 每帧只重新提取正在生长的 streaming snapshot，冻结消息零成本。
+ *
+ * 指纹含 block 个数 + thinking/text 字符长度。原地加长同一块的 thinking
+ * 字符串时 array.length 不变，必须把正文长度算进去，否则会打出旧事件。
+ */
+const orderedEventsByMessage = new WeakMap<
+  RawMessage,
+  { events: RawTurnEvent[]; fingerprint: string }
+>();
+
+/** 导出供缓存失效测试；禁止当作展示/协议字段。 */
+export function messageContentCacheFingerprint(message: RawMessage): string {
+  const content = message.content;
+  if (typeof content === 'string') return `s:${content.length}`;
+  if (!Array.isArray(content)) return 'empty';
+  let fingerprint = `n:${content.length}`;
+  for (const block of content) {
+    if (!block || typeof block !== 'object') {
+      fingerprint += '|x';
+      continue;
+    }
+    const record = block as Record<string, unknown>;
+    const thinking = typeof record.thinking === 'string' ? record.thinking.length : 0;
+    const text = typeof record.text === 'string' ? record.text.length : 0;
+    fingerprint += `|${String(record.type ?? '')}:${thinking}:${text}`;
+  }
+  return fingerprint;
+}
+
+function extractOrderedEventsFromMessageCached(message: RawMessage): RawTurnEvent[] {
+  const fingerprint = messageContentCacheFingerprint(message);
+  const cached = orderedEventsByMessage.get(message);
+  if (cached && cached.fingerprint === fingerprint) return cached.events;
+  const events = rebalanceBundledThinkingTools(extractOrderedEventsFromMessage(message));
+  orderedEventsByMessage.set(message, { events, fingerprint });
+  return events;
+}
+
+/**
  * Claude 图二：仅把 opening 旁白挪到首个一级摘要之下（不移动批次间旁白）。
  */
 function moveOpeningPhaseTextBelowFirstGroup(segments: ThinkingTurnSegment[]): void {
@@ -1253,9 +1293,7 @@ function mergeEventsFromChronologicalTurn(
       if (typeof entry.message.id === 'string' && entry.message.id.length > 0) {
         mergedAssistantIds.add(entry.message.id);
       }
-      const events = rebalanceBundledThinkingTools(
-        extractOrderedEventsFromMessage(entry.message),
-      );
+      const events = extractOrderedEventsFromMessageCached(entry.message);
       mergeRawTurnEvents(merged, events, seenToolKeys, seenStableIds);
       continue;
     }
@@ -1273,7 +1311,7 @@ function mergeEventsFromChronologicalTurn(
     const alreadyMerged = mergedAssistantRefs.has(message)
       || (typeof message.id === 'string' && message.id.length > 0 && mergedAssistantIds.has(message.id));
     if (alreadyMerged) continue;
-    const events = rebalanceBundledThinkingTools(extractOrderedEventsFromMessage(message));
+    const events = extractOrderedEventsFromMessageCached(message);
     mergeRawTurnEvents(merged, events, seenToolKeys, seenStableIds);
   }
 
@@ -1286,7 +1324,7 @@ function mergeEventsFromPickedMessages(picked: RawMessage[]): RawTurnEvent[] {
   const seenStableIds = new Set<string>();
 
   for (const message of picked) {
-    const events = rebalanceBundledThinkingTools(extractOrderedEventsFromMessage(message));
+    const events = extractOrderedEventsFromMessageCached(message);
     mergeRawTurnEvents(merged, events, seenToolKeys, seenStableIds);
   }
 
@@ -1762,6 +1800,77 @@ export function parseThinkingTurnLayout(
     }),
     { isLiveStream: options.isLiveStream },
   );
+}
+
+interface ParseThinkingTurnLayoutCacheEntry {
+  messages: RawMessage[];
+  fingerprints: string[];
+  options: ParseThinkingTurnLayoutOptions;
+  result: ParsedThinkingTurn;
+}
+
+/** 每 turn 一条最近结果；活跃流式 turn 之外基本不增长，小上限防泄漏 */
+const PARSE_LAYOUT_CACHE_LIMIT = 8;
+const parseLayoutCache = new Map<string, ParseThinkingTurnLayoutCacheEntry>();
+
+function parseLayoutInputsEqual(
+  entry: ParseThinkingTurnLayoutCacheEntry,
+  messages: RawMessage[],
+  options: ParseThinkingTurnLayoutOptions,
+): boolean {
+  const cachedOptions = entry.options;
+  if (
+    cachedOptions.isLiveStream !== options.isLiveStream
+    || cachedOptions.streamingTools !== options.streamingTools
+    || cachedOptions.chronologicalEntries !== options.chronologicalEntries
+    || cachedOptions.precedingUserText !== options.precedingUserText
+    || cachedOptions.engineProfile !== options.engineProfile
+    || cachedOptions.wasInterrupted !== options.wasInterrupted
+  ) {
+    return false;
+  }
+  if (entry.messages.length !== messages.length) return false;
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (!message || entry.messages[index] !== message) return false;
+    if (entry.fingerprints[index] !== messageContentCacheFingerprint(message)) return false;
+  }
+  return true;
+}
+
+/**
+ * parseThinkingTurnLayout 的结果复用缓存（保守版增量：只做「输入完全未变 → 复用」，
+ * 不做有正确性风险的尾部增量解析；parser 是纯函数，引用相等即输出相等）。
+ *
+ * 覆盖场景：activeStream 包装对象每渲染新建导致的 useMemo 失效重渲染
+ * （staleTick、无关 store 更新等），命中时返回同一 result 引用，
+ * 下游 useMemo / memo 链全部保持。cacheKey 缺省时直出不缓存。
+ */
+export function parseThinkingTurnLayoutCached(
+  cacheKey: string | undefined,
+  messages: RawMessage[],
+  options: ParseThinkingTurnLayoutOptions,
+): ParsedThinkingTurn {
+  if (!cacheKey) return parseThinkingTurnLayout(messages, options);
+
+  const cached = parseLayoutCache.get(cacheKey);
+  if (cached && parseLayoutInputsEqual(cached, messages, options)) {
+    return cached.result;
+  }
+
+  const result = parseThinkingTurnLayout(messages, options);
+  parseLayoutCache.delete(cacheKey);
+  parseLayoutCache.set(cacheKey, {
+    messages,
+    fingerprints: messages.map(messageContentCacheFingerprint),
+    options,
+    result,
+  });
+  if (parseLayoutCache.size > PARSE_LAYOUT_CACHE_LIMIT) {
+    const oldest = parseLayoutCache.keys().next().value;
+    if (oldest !== undefined) parseLayoutCache.delete(oldest);
+  }
+  return result;
 }
 
 function countToolsInSegments(segments: ThinkingTurnSegment[]): number {

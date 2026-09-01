@@ -174,6 +174,7 @@
     "collapsedSummary": "{{thoughtCount}} 回思考、{{toolCount}} 個のツールを使用",
     "collapsedSummaryThoughtsOnly": "{{thoughtCount}} 回思考",
     "collapsedSummaryToolsOnly": "{{toolCount}} 個のツールを使用",
+    "omittedEarlierThinkingChars": "先頭の {{count}} 文字を省略しました",
     "invokeToolLabel": "ツール呼び出し – {{toolName}}",
     "toolNoParams": "パラメータなし",
     "paramsConfirmedLabel": "パラメータを確認しました",

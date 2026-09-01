@@ -5,6 +5,7 @@
  * 思考面板内 `collapsible` 仅流式中启用；结束后平铺展开、无 chevron。
  */
 import type { LucideIcon } from 'lucide-react';
+import { memo } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProcessBlockCollapse } from '@/hooks/use-process-block-collapse';
@@ -67,7 +68,7 @@ export interface ChatProcessBlockProps {
   className?: string;
 }
 
-export function ChatProcessBlock({
+export const ChatProcessBlock = memo(function ChatProcessBlock({
   title,
   icon: Icon,
   isRunning = false,
@@ -164,7 +165,7 @@ export function ChatProcessBlock({
       ) : body}
     </div>
   );
-}
+});
 
 /** 过程块内容区默认正文样式（13px 灰色） */
 export const chatProcessBlockBodyClass = chatProcessSecondaryTextClass;
