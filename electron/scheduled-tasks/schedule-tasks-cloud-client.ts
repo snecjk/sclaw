@@ -47,7 +47,7 @@ function parseCloudListPayload(payload: unknown): CloudScheduleTaskRow[] {
 }
 
 /**
- * 拉取当前用户的云端任务镜像（push / sync-status / pull 都走这条）。
+ * 拉取当前用户的云端任务镜像（有 pending 时的出队 / sync-status / pull 走这条）。
  * @param includeDeleted 是否含墓碑；true 时带 `includeDeleted=1`
  * @returns 云端行列表；信封无法解析为列表时抛错（push tick catch 跳过，不 bootstrap）
  */
