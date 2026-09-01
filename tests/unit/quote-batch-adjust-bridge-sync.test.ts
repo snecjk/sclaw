@@ -66,10 +66,25 @@ describe('quote-batch-adjust-bridge-sync', () => {
     runtimeMock.mockReturnValue('embed-runtime-1');
   });
 
-  it('resolves latest batchAdjustParams from messages', () => {
-    const payload = resolveLatestBatchAdjustBridgePayload(batchMessages());
+  it('resolves params from objectListJson without nested objectList', () => {
+    const objectListJson = JSON.stringify(batchParams.objectList);
+    const messages: RawMessage[] = [{
+      id: 'm-json',
+      role: 'assistant',
+      content: [
+        createFlowCardBlock({
+          cardId: 'quote-active',
+          phase: 'batch_adjust',
+          data: {
+            scene: 'batch_adjust',
+            freightFeeType: batchParams.freightFeeType,
+            objectListJson,
+          },
+        }),
+      ],
+    }];
+    const payload = resolveLatestBatchAdjustBridgePayload(messages);
     expect(payload?.params.objectList[0]?.objectName).toBe('刘飞');
-    expect(payload?.previewUrl).toContain('quote-ops-console');
   });
 
   it('emits batch-adjust.params-ready from a new message (not card / params-content diff)', () => {

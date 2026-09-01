@@ -92,6 +92,19 @@ function parseAdjustItem(raw: unknown): BatchAdjustItem | null {
   };
 }
 
+/** CLI JSON flags (`objectListJson` / `quotationListJson`) — array, string, or one extra string wrap. */
+export function parseCliJsonArray(value: unknown): unknown[] | null {
+  if (Array.isArray(value) && value.length > 0) return value;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    let parsed: unknown = JSON.parse(value);
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseAdjustObject(raw: unknown): BatchAdjustObject | null {
   if (!isRecord(raw)) return null;
   const objectName = readString(raw.objectName);
@@ -99,20 +112,27 @@ function parseAdjustObject(raw: unknown): BatchAdjustObject | null {
   const startDate = readString(raw.startDate);
   const endDate = readString(raw.endDate);
   if (!objectName || !sceneType || !startDate || !endDate) return null;
-  if (!Array.isArray(raw.items) || raw.items.length === 0) return null;
-  const items = raw.items.map(parseAdjustItem).filter((item): item is BatchAdjustItem => item != null);
+  const itemRows = parseCliJsonArray(raw.items);
+  if (!itemRows) return null;
+  const items = itemRows.map(parseAdjustItem).filter((item): item is BatchAdjustItem => item != null);
   if (items.length === 0) return null;
   return { objectName, sceneType, startDate, endDate, items };
 }
 
-/** Parse `flow_card.data.batchAdjustParams` or raw object. */
+function readObjectList(source: Record<string, unknown>): BatchAdjustObject[] | null {
+  const rows = parseCliJsonArray(source.objectList) ?? parseCliJsonArray(source.objectListJson);
+  if (!rows) return null;
+  const objectList = rows.map(parseAdjustObject).filter((obj): obj is BatchAdjustObject => obj != null);
+  return objectList.length > 0 ? objectList : null;
+}
+
+/** Parse `flow_card.data.batchAdjustParams` or raw object (`objectList` or CLI `objectListJson`). */
 export function parseBatchAdjustParams(raw: unknown): BatchAdjustParams | null {
   if (!isRecord(raw)) return null;
   const source = isRecord(raw.batchAdjustParams) ? raw.batchAdjustParams : raw;
   if (!isRecord(source)) return null;
-  if (!Array.isArray(source.objectList) || source.objectList.length === 0) return null;
-  const objectList = source.objectList.map(parseAdjustObject).filter((obj): obj is BatchAdjustObject => obj != null);
-  if (objectList.length === 0) return null;
+  const objectList = readObjectList(source);
+  if (!objectList) return null;
   const freightFeeType = readString(source.freightFeeType) ?? DEFAULT_FREIGHT_FEE_TYPE;
   const summary = readString(source.summary) ?? undefined;
   return { freightFeeType, objectList, summary };
@@ -139,20 +159,27 @@ export function parseBatchAdjustDraft(raw: unknown): BatchAdjustDraftResult | nu
   if (!isRecord(raw)) return null;
   const source = isRecord(raw.batchAdjustDraft) ? raw.batchAdjustDraft : raw;
   if (!isRecord(source)) return null;
-  const hasList = Array.isArray(source.quotationList) && source.quotationList.length > 0;
+  const quotationList = parseCliJsonArray(source.quotationList)
+    ?? parseCliJsonArray(source.quotationListJson)
+    ?? undefined;
   const quoteId = readString(source.quoteId);
-  if (!hasList && !quoteId) return null;
+  if (!quotationList && !quoteId) return null;
   return {
-    quotationList: Array.isArray(source.quotationList) ? source.quotationList : undefined,
+    quotationList,
     quoteId: quoteId ?? undefined,
-    freightQuotationList: Array.isArray(source.freightQuotationList) ? source.freightQuotationList : undefined,
-    surchargeQuotationList: Array.isArray(source.surchargeQuotationList) ? source.surchargeQuotationList : undefined,
+    freightQuotationList: parseCliJsonArray(source.freightQuotationList) ?? undefined,
+    surchargeQuotationList: parseCliJsonArray(source.surchargeQuotationList) ?? undefined,
   };
 }
 
 /** CLI `--objectListJson` 字符串（紧凑 JSON）。 */
 export function serializeBatchAdjustObjectListJson(objectList: BatchAdjustObject[]): string {
   return JSON.stringify(objectList);
+}
+
+/** CLI `--quotationListJson` 字符串（草案 quotationList 原样 stringify）。 */
+export function serializeQuotationListJson(quotationList: unknown[]): string {
+  return JSON.stringify(quotationList);
 }
 
 /** 列出缺参项，供 Skill 文本追问。 */
