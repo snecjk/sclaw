@@ -1,4 +1,4 @@
-export type SessionSkillLeaseState = 'pinned' | 'used' | 'selected';
+export type SessionSkillLeaseState = 'pinned' | 'used' | 'loaded' | 'selected';
 export type PendingSkillTurnStatus = 'routing' | 'running' | 'completed' | 'failed';
 
 export interface SessionSkillLease {
@@ -17,6 +17,7 @@ export interface PendingSkillTurn {
   turnNo: number;
   taskFingerprint?: string;
   selectedSlugs: string[];
+  loadedSlugs: string[];
   usedSlugs: string[];
   status: PendingSkillTurnStatus;
 }
@@ -139,8 +140,52 @@ export function beginSessionSkillTurn(
         turnNo,
         taskFingerprint: input.taskFingerprint,
         selectedSlugs,
+        loadedSlugs: [],
         usedSlugs: [],
         status: 'running',
+      },
+    },
+  };
+}
+
+export function attachSessionSkillToTurn(
+  state: SessionSkillState,
+  rawRunId: string | undefined,
+  item: SelectedSkillInput,
+): SessionSkillState {
+  const slug = normalizeSlug(item.slug);
+  const runId = rawRunId && state.pendingTurns[rawRunId]
+    ? rawRunId
+    : Object.values(state.pendingTurns)
+      .filter((turn) => turn.status === 'running')
+      .sort((left, right) => right.turnNo - left.turnNo)[0]?.runId;
+  if (!slug || !runId) return state;
+  const pending = state.pendingTurns[runId];
+  const loadedSlugs = pending.loadedSlugs ?? [];
+  const selectedSlugs = pending.selectedSlugs.includes(slug)
+    ? pending.selectedSlugs
+    : [...pending.selectedSlugs, slug];
+  const existing = state.skills.find((lease) => lease.slug === slug);
+  const nextState: SessionSkillLeaseState = existing?.state === 'pinned' ? 'pinned' : 'loaded';
+  const nextLease: SessionSkillLease = {
+    slug,
+    sourceHash: item.sourceHash,
+    state: nextState,
+    score: item.score ?? existing?.score ?? 0,
+    reasons: [...new Set([...(existing?.reasons ?? []), ...(item.reasons ?? []), 'runtime-loaded'])],
+    selectedAtTurn: pending.turnNo,
+    lastUsedTurn: existing?.lastUsedTurn,
+    expiresAfterTurn: nextState === 'pinned' ? undefined : pending.turnNo + 3,
+  };
+  return {
+    ...state,
+    skills: [...state.skills.filter((lease) => lease.slug !== slug), nextLease],
+    pendingTurns: {
+      ...state.pendingTurns,
+      [runId]: {
+        ...pending,
+        selectedSlugs,
+        loadedSlugs: loadedSlugs.includes(slug) ? loadedSlugs : [...loadedSlugs, slug],
       },
     },
   };
@@ -182,7 +227,7 @@ export function finishSessionSkillTurn(
   if (!pending) return state;
   const pendingTurns = { ...state.pendingTurns };
   delete pendingTurns[runId];
-  const used = new Set(success ? pending.usedSlugs : []);
+  const used = new Set(success ? [...pending.usedSlugs, ...(pending.loadedSlugs ?? [])] : []);
   const skills = state.skills.map((lease) => {
     if (!pending.selectedSlugs.includes(lease.slug) || lease.state === 'pinned') return lease;
     if (used.has(lease.slug)) {
@@ -202,7 +247,7 @@ export function finishSessionSkillTurn(
 }
 
 export function orderSessionSkillLeases(skills: SessionSkillLease[]): SessionSkillLease[] {
-  const priority: Record<SessionSkillLeaseState, number> = { pinned: 3, used: 2, selected: 1 };
+  const priority: Record<SessionSkillLeaseState, number> = { pinned: 4, used: 3, loaded: 2, selected: 1 };
   return [...skills].sort((left, right) => (
     priority[right.state] - priority[left.state]
     || (right.lastUsedTurn ?? -1) - (left.lastUsedTurn ?? -1)

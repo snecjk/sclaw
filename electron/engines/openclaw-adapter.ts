@@ -193,7 +193,6 @@ export const openClawAdapter: EngineAdapter = {
   scheduledTaskCapabilities: {
     requiresWorkspacePath: false,
     supportsWorkflow: true,
-    restrictToAllowedRoots: false,
   },
   chatCapabilities: {
     hasReliableRuntimeStatus: false,

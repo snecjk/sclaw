@@ -13,6 +13,10 @@ import {
 import { logger } from '../utils/logger';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { sclawAgentExtensionState } from '../agent-extensions/runtime';
+import {
+  beginRuntimeSkillAccessTurn,
+  clearRuntimeSkillAccess,
+} from '../agent-extensions/extensions/sto-skill-runtime/access';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
@@ -1125,6 +1129,7 @@ export async function consumeClaudeQuery(
     }
     throw error;
   } finally {
+    clearRuntimeSkillAccess(sessionKey);
     flushPendingToolInputDelta();
     clearPendingToolInputDelta();
     activeClaudeQueries.delete(sessionKey);
@@ -1221,6 +1226,7 @@ async function startClaudeQuery(
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
     trackingRunId = runId;
+    beginRuntimeSkillAccessTurn(sessionKey, runId);
     const queryMode = existing?.sessionId ? 'resume' as const : 'new' as const;
     logClaudeQueryTiming('launch_prepared', {
       sessionKey,
@@ -1229,7 +1235,11 @@ async function startClaudeQuery(
       mode: queryMode,
       details: { hasExistingSession: Boolean(existing?.sessionId) },
     });
-    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
+    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt, {
+      runId,
+      agentId,
+      cwd,
+    });
     const skillRoute = await routeSessionSkills({
       sessionKey,
       runId,
@@ -1519,6 +1529,7 @@ function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
 }
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
+  clearRuntimeSkillAccess(sessionKey);
   sclawAgentExtensionState.clearSession(sessionKey);
   await ensureClaudeRuntimeReady();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
@@ -1550,7 +1561,6 @@ export const claudeAdapter: EngineAdapter = {
     defaultPermissionProfile: 'dangerous-bypass',
     requiresWorkspacePath: false,
     supportsWorkflow: true,
-    restrictToAllowedRoots: false,
   },
   chatCapabilities: {
     hasReliableRuntimeStatus: true,

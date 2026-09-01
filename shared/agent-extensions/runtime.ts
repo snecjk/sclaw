@@ -53,11 +53,16 @@ export async function runSclawBeforeToolPolicies(
   context: SclawExtensionBuildContext,
 ): Promise<SclawBeforeToolDecision> {
   let input = event.input;
+  let permissionDecision: 'allow' | undefined;
   for (const policy of policies) {
     if (!policy.beforeTool) continue;
     try {
       const decision = await policy.beforeTool({ ...event, input }, context);
-      if (!decision || decision.action === 'allow') continue;
+      if (!decision) continue;
+      if (decision.action === 'allow') {
+        permissionDecision ??= decision.permissionDecision;
+        continue;
+      }
       if (decision.action === 'deny') {
         context.logger.warn('[agent-extension] policy.before.denied', {
           engine: context.engine,
@@ -89,7 +94,9 @@ export async function runSclawBeforeToolPolicies(
       };
     }
   }
-  return input === event.input ? { action: 'allow' } : { action: 'patch', input };
+  return input === event.input
+    ? { action: 'allow', permissionDecision }
+    : { action: 'patch', input };
 }
 
 export async function runSclawAfterToolPolicies(

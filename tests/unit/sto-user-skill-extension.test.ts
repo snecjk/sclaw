@@ -9,21 +9,25 @@ import { buildClaudeAgentExtensions } from '../../electron/agent-extensions/adap
 import { buildPiAgentExtensions } from '../../electron/agent-extensions/adapters/pi';
 import { typeBoxObjectToZodRawShape } from '../../electron/agent-extensions/schema/typebox-to-zod';
 import {
-  STO_USER_SKILL_CAPABILITY,
-  StoUserSkillPortError,
-  type StoUserSkillPort,
-} from '../../electron/agent-extensions/extensions/sto-user-skill-tool/capability';
+  STO_SKILL_RUNTIME_CAPABILITY,
+  StoSkillRuntimePortError,
+  type StoSkillRuntimePort,
+} from '../../electron/agent-extensions/extensions/sto-skill-runtime/capability';
 import {
   USER_SKILL_SYSTEM_PROMPT,
-  stoUserSkillToolDefinition,
-} from '../../electron/agent-extensions/extensions/sto-user-skill-tool/definition';
+  stoSkillRuntimeDefinition,
+} from '../../electron/agent-extensions/extensions/sto-skill-runtime/definition';
 
 const logger: SclawExtensionLogger = {
   debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(),
 };
 
 function dependencies() {
-  const port: StoUserSkillPort = {
+  const port: StoSkillRuntimePort = {
+    search: vi.fn(async () => ({
+      query: 'demo', items: [], totalEnabled: 0, degraded: false,
+    })),
+    recordRead: vi.fn(async () => ({ slug: 'demo-skill', recorded: true as const })),
     save: vi.fn(async () => ({
       ok: true,
       slug: 'demo-skill',
@@ -36,7 +40,7 @@ function dependencies() {
   };
   return {
     port,
-    capabilities: new SclawCapabilityRegistry().provide(STO_USER_SKILL_CAPABILITY, port),
+    capabilities: new SclawCapabilityRegistry().provide(STO_SKILL_RUNTIME_CAPABILITY, port),
     stateManager: new SclawExtensionStateManager(),
     logger,
   };
@@ -54,13 +58,14 @@ function preToolInput(toolCallId: string, toolName: string, toolInput: Record<st
   };
 }
 
-describe('sto-user-skill-tool common extension', () => {
+describe('sto-skill-runtime user-skill contributions', () => {
   it('activates the Claude tool and prompt only for user-skill intent', async () => {
     const deps = dependencies();
-    const entries = [{ common: stoUserSkillToolDefinition }];
-    expect(stoUserSkillToolDefinition.tools).toHaveLength(1);
-    expect(stoUserSkillToolDefinition.tools?.[0]?.parameters).toBeDefined();
-    typeBoxObjectToZodRawShape(stoUserSkillToolDefinition.tools![0].parameters);
+    const entries = [{ common: stoSkillRuntimeDefinition }];
+    expect(stoSkillRuntimeDefinition.tools).toHaveLength(2);
+    const saveTool = stoSkillRuntimeDefinition.tools?.find((tool) => tool.name === 'save_user_skill');
+    expect(saveTool?.parameters).toBeDefined();
+    typeBoxObjectToZodRawShape(saveTool!.parameters);
     const unrelated = await buildClaudeAgentExtensions({
       sessionKey: 'user-skill-lazy',
       mode: 'interactive',
@@ -68,8 +73,8 @@ describe('sto-user-skill-tool common extension', () => {
       entries,
       ...deps,
     });
-    expect(unrelated.options.mcpServers).toBeUndefined();
-    expect(unrelated.options.systemPromptAppend).toBeUndefined();
+    expect(unrelated.options.mcpServers?.['sto-skill-runtime']).toBeDefined();
+    expect(unrelated.options.systemPromptAppend).not.toContain(USER_SKILL_SYSTEM_PROMPT);
     expect(unrelated.options.hooks?.PreToolUse).toBeDefined();
 
     const matched = await buildClaudeAgentExtensions({
@@ -80,7 +85,7 @@ describe('sto-user-skill-tool common extension', () => {
       ...deps,
     });
     expect(matched.diagnostics).toEqual([]);
-    expect(matched.options.mcpServers?.['sto-user-skill-tool']).toBeDefined();
+    expect(matched.options.mcpServers?.['sto-skill-runtime']).toBeDefined();
     expect(matched.options.systemPromptAppend).toContain(USER_SKILL_SYSTEM_PROMPT);
 
     const followUp = await buildClaudeAgentExtensions({
@@ -90,7 +95,7 @@ describe('sto-user-skill-tool common extension', () => {
       entries,
       ...deps,
     });
-    expect(followUp.options.mcpServers?.['sto-user-skill-tool']).toBeDefined();
+    expect(followUp.options.mcpServers?.['sto-skill-runtime']).toBeDefined();
   });
 
   it('registers a lazy PI tool and activates it from before_agent_start', async () => {
@@ -98,7 +103,7 @@ describe('sto-user-skill-tool common extension', () => {
     const result = await buildPiAgentExtensions({
       sessionKey: 'pi-user-skill',
       mode: 'interactive',
-      entries: [{ common: stoUserSkillToolDefinition }],
+      entries: [{ common: stoSkillRuntimeDefinition }],
       ...deps,
     });
     expect(result.initiallyActiveToolNames).not.toContain('save_user_skill');
@@ -106,7 +111,7 @@ describe('sto-user-skill-tool common extension', () => {
     const handlers = new Map<string, (event: Record<string, unknown>) => unknown>();
     const activeTools: string[] = [];
     const extension = result.extensions.find(
-      (item) => typeof item !== 'function' && item.name === 'sto-user-skill-tool',
+      (item) => typeof item !== 'function' && item.name === 'sto-skill-runtime',
     );
     if (!extension || typeof extension === 'function') throw new Error('missing extension');
     await extension.factory({
@@ -127,7 +132,7 @@ describe('sto-user-skill-tool common extension', () => {
 
   it('returns the common success envelope and preserves Host API error codes', async () => {
     const deps = dependencies();
-    const tool = stoUserSkillToolDefinition.tools?.[0];
+    const tool = stoSkillRuntimeDefinition.tools?.find((item) => item.name === 'save_user_skill');
     if (!tool) throw new Error('missing save_user_skill');
     const context = {
       engine: 'claude' as const,
@@ -150,7 +155,7 @@ describe('sto-user-skill-tool common extension', () => {
     });
 
     vi.mocked(deps.port.save).mockRejectedValueOnce(
-      new StoUserSkillPortError('PREINSTALL_PROTECTED', '不能覆盖预装技能'),
+      new StoSkillRuntimePortError('PREINSTALL_PROTECTED', '不能覆盖预装技能'),
     );
     const failed = await tool.execute({
       skillMd: '---\nname: demo\ndescription: demo\n---\n',
@@ -167,7 +172,7 @@ describe('sto-user-skill-tool common extension', () => {
       sessionKey: 'guard',
       mode: 'interactive',
       userPrompt: '普通问题',
-      entries: [{ common: stoUserSkillToolDefinition }],
+      entries: [{ common: stoSkillRuntimeDefinition }],
       ...deps,
     });
     const preTool = result.options.hooks?.PreToolUse?.[0]?.hooks[0] as HookCallback;

@@ -21,6 +21,9 @@ export interface ClaudeRuntimeOptions {
 
 interface ClaudeRuntimeExtensionContext {
   sessionKey: string;
+  runId?: string;
+  agentId?: string;
+  cwd?: string;
   /** 本轮用户原文；用于口头「发给某人」等按需注入启发式。 */
   userPrompt?: string;
 }
@@ -141,11 +144,12 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
 export async function buildClaudeRuntimeOptions(
   sessionKey: string,
   userPrompt?: string,
+  turn?: { runId?: string; agentId?: string; cwd?: string },
 ): Promise<ClaudeRuntimeOptions> {
   logger.info(`[claude-runtime] building runtime options, sessionKey=${sessionKey}, extensions=${claudeRuntimeExtensions.length} [${claudeRuntimeExtensions.map(e => e.id).join(', ')}]`);
 
   const options: ClaudeRuntimeOptions = {};
-  const context: ClaudeRuntimeExtensionContext = { sessionKey, userPrompt };
+  const context: ClaudeRuntimeExtensionContext = { sessionKey, userPrompt, ...turn };
 
   for (const extension of claudeRuntimeExtensions) {
     const start = Date.now();
@@ -162,6 +166,9 @@ export async function buildClaudeRuntimeOptions(
   const unified = await buildClaudeAgentExtensions({
     sessionKey,
     userPrompt,
+    runId: turn?.runId,
+    agentId: turn?.agentId,
+    cwd: turn?.cwd,
     mode: isScheduledTaskExecutionSessionKey(sessionKey) ? 'scheduled' : 'interactive',
   });
   mergeRuntimeOptions(options, unified.options);

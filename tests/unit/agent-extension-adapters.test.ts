@@ -44,6 +44,7 @@ function definition(): SclawAgentExtensionDefinition {
     policies: [{
       id: 'patch-bash',
       beforeTool(event) {
+        if (event.toolName === 'read') return { action: 'allow', permissionDecision: 'allow' };
         if (event.toolName !== 'bash') return { action: 'allow' };
         return { action: 'patch', input: { ...event.input, patched: true } };
       },
@@ -104,6 +105,19 @@ describe('Claude agent extension adapter', () => {
     expect(hookResult?.hookSpecificOutput).toMatchObject({
       hookEventName: 'PreToolUse',
       updatedInput: { command: 'echo ok', patched: true },
+    });
+    const readHookResult = await callback({
+      hook_event_name: 'PreToolUse',
+      session_id: 'sdk-session',
+      transcript_path: 'transcript.jsonl',
+      cwd: 'D:/workspace',
+      tool_name: 'Read',
+      tool_input: { file_path: 'D:/skills/runtime/SKILL.md' },
+      tool_use_id: 'tool-read',
+    }, 'tool-read', { signal: new AbortController().signal });
+    expect(readHookResult?.hookSpecificOutput).toMatchObject({
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
     });
 
     const server = result.options.mcpServers?.['synthetic-extension'] as unknown as {
@@ -307,6 +321,8 @@ describe('Pi agent extension adapter', () => {
       type: 'before_agent_start', prompt: 'hello', systemPrompt: 'base', systemPromptOptions: {},
     });
     expect(promptResult).toEqual({ systemPrompt: 'base\n\nshared prompt' });
+
+    result.setTurnContext({ runId: 'run-1' });
   });
 
   it('uses only the native PI contribution in replace mode', async () => {

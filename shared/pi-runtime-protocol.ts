@@ -31,11 +31,13 @@ export interface PiSessionConfig {
   systemPrompt?: string;
   model: PiModelConfig;
   media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
-  scheduledAllowedRoots?: string[];
-  /** SClaw-managed skill roots exposed to Pi. Project `.pi` resources stay disabled. */
+  /** Keeps scheduled-only extension semantics without changing filesystem access. */
+  sessionMode?: 'interactive' | 'scheduled';
+  /** SClaw-managed Skill roots selected for Pi's native Skill loader. */
   skillRoots?: string[];
-  /** Exact per-turn Skill selection; used for stable loader reuse and usage attribution. */
+  /** Exact per-turn selection used for diagnostics and usage attribution. */
   selectedSkills?: Array<{ slug: string; path: string; sourceHash: string }>;
+  /** Stable hash of the native Skill selection. */
   skillSetHash?: string;
 }
 

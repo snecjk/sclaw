@@ -25,11 +25,23 @@ describe('PI prompt logging extension', () => {
     });
 
     expect(log).toHaveBeenCalledOnce();
-    expect(log).toHaveBeenCalledWith('turn.prompt.final', {
-      sessionKey: 'pi:main:test',
-      runId: 'run-1',
-      userPrompt: '查看当前页面',
-      systemPrompt: 'base\n\nbrowser guidance',
-    });
+    expect(log).toHaveBeenCalledWith(
+      'turn.prompt.final',
+      {
+        sessionKey: 'pi:main:test',
+        runId: 'run-1',
+        systemPromptChars: 22,
+        userPromptChars: 6,
+      },
+      [
+        '===== SYSTEM PROMPT =====',
+        'base',
+        '',
+        'browser guidance',
+        '===== USER PROMPT =====',
+        '查看当前页面',
+        '===== END PROMPT =====',
+      ].join('\n'),
+    );
   });
 });

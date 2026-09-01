@@ -136,7 +136,7 @@ Notes:
 
 StoClaw employs a **dual-process architecture** with a unified host API layer. The renderer talks to a single client abstraction, while Electron Main owns protocol selection and process lifecycle:
 
-Internal business tools shared by Claude Agent and Pi Agent use the static, common-first [Agent Extension Architecture](docs/agent-extension-architecture.md). Common tools and prompts can opt into engine-neutral turn/session activation so inactive tool schemas stay out of ordinary requests while safety policies remain active. Adapters provide mandatory shell/tool-kind runtime semantics and scheduled-task capabilities, keeping engine branches out of common business code. The migrated STO workflow tools use the same common contracts and typed Host API capability, but stay Claude-enabled until PI workflow execution is supported. The DingTalk send guard is now a shared Claude/PI extension: its prompt activates on DingTalk/send intent or pending mention context and stays active for session follow-ups, while its safety policy is always installed; one-shot mention context and rate-limit/dedup state remain owned by Main. User skill creation is also shared: `save_user_skill` and its guidance activate on skill authoring intent, while direct skill-directory write protection remains always active. Browser Bridge remains Claude-only: six `bridge_*` tools operate the existing Main-owned embed/Chrome bridge through a typed Host API capability, with automatic embed activation and strict embed session targeting. Interactive Pi sessions instead load the reviewed `@amaster.ai/pi-browser-use` extension and let Pi activate every tool the extension registers at runtime. Scheduled Pi sessions do not load browser automation. Engine-native contributions remain available as an explicit escape hatch; arbitrary project extensions are not auto-loaded.
+Internal business tools shared by Claude Agent and Pi Agent use the static, common-first [Agent Extension Architecture](docs/agent-extension-architecture.md). Common tools and prompts can opt into engine-neutral turn/session activation so inactive tool schemas stay out of ordinary requests while safety policies remain active. Adapters provide mandatory shell/tool-kind runtime semantics and scheduled-task capabilities, keeping engine branches out of common business code. The migrated STO workflow tools use the same common contracts and typed Host API capability, but stay Claude-enabled until PI workflow execution is supported. The DingTalk send guard is now a shared Claude/PI extension: its prompt activates on DingTalk/send intent or pending mention context and stays active for session follow-ups, while its safety policy is always installed; one-shot mention context and rate-limit/dedup state remain owned by Main. Skill runtime and user-skill creation are consolidated in the shared `sto-skill-runtime` extension: `search_skills` remains always available, while `save_user_skill` and its guidance activate on skill authoring intent and direct skill-directory write protection remains always active. Browser Bridge remains Claude-only: six `bridge_*` tools operate the existing Main-owned embed/Chrome bridge through a typed Host API capability, with automatic embed activation and strict embed session targeting. Interactive Pi sessions instead load the reviewed `@amaster.ai/pi-browser-use` extension and let Pi activate every tool the extension registers at runtime. Scheduled Pi sessions do not load browser automation. Engine-native contributions remain available as an explicit escape hatch; arbitrary project extensions are not auto-loaded.
 
 ```┌─────────────────────────────────────────────────────────────────┐
 │                        StoClaw Desktop App                         │
@@ -337,22 +337,30 @@ output on the MCP stdio channel. Its profile and configuration resolve under the
 SClaw-managed `~/.stoclaw/pi` directory through `PI_AGENT_HOME` and
 `PI_CODING_AGENT_DIR`. Project-local Pi settings remain untrusted and are ignored.
 
-Pi scheduled tasks reuse the canonical scheduler and chat runtime, but restrict
-file tools to the task workspace and configured personal/shared artifact folders.
-The shell-command restriction is an application policy, not an operating-system sandbox.
+Pi scheduled tasks reuse the canonical scheduler and chat runtime. Their file and
+shell tools follow the same path-access behavior as ordinary Pi conversations: the
+workspace is the default working directory, not an application-level allowlist.
 Pi does not support workflows in phase 1. It loads only SClaw-managed enabled
 global and agent-scoped skills projected from the engine-neutral skills store into
 Pi-owned `~/.stoclaw/pi/skills` and `~/.stoclaw/pi/agents/{agentId}/skills`
 directories. Each conversation keeps a bounded, persistent local Skill lease set
-(8 for interactive sessions, 4 for scheduled runs); Pi receives only those exact
-paths and reuses its loader while the Skill-set hash is unchanged. Used Skills are
-retained for three following turns, unused selections for one, and agent-scoped
-Skills remain pinned. Claude sessions use the same router and pass the bounded slug
-set to the SDK instead of exposing every installed Skill. Hybrid remote routing uses
+(6 for interactive sessions, 4 for scheduled runs). The shared, always-active
+`search_skills` lets Claude and Pi search the complete enabled catalog and returns
+locally validated `skillMdPath` values. The engines use their native `Read/read`
+tools to load the selected `SKILL.md` and referenced files inside the current loop.
+Runtime reads are recorded in the same lease state.
+The pre-turn set still follows each engine's native behavior: Claude receives the
+bounded slug set through the SDK and Pi receives the exact selected paths through
+its native resource loader. `search_skills` plus native file reading is only the
+runtime fallback for a miss.
+Reviewed foundational Skills can be declared in the shared default-engine list and
+are pinned into both engines' normal start-of-turn set. Used or runtime-loaded Skills are retained for three following
+turns, unused selections for one, and agent-scoped Skills remain pinned. Hybrid remote routing uses
 dedicated memory-center Skill routing collection/index with keyword and embedding
 recall plus reciprocal-rank fusion, and degrades to local metadata matching.
-Users can disable Skill discovery from the chat Skill picker; Claude and Pi then
-load every enabled installed Skill and skip remote routing until it is enabled again.
+Users can disable pre-turn Skill discovery from the chat Skill picker; both engines
+then use every enabled Skill through their native mechanism, while runtime catalog
+tools remain available and automatic remote routing stays disabled.
 See [Session Skill routing](docs/session-skill-routing.md).
 
 Pi does not read OpenClaw or Claude skill directories. Project `.pi`

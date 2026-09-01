@@ -132,7 +132,7 @@ async function buildPiSessionConfig(
 ): Promise<{ config: PiSessionConfig; entry: EngineSessionRegistryEntry }> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
   const agentId = existing?.agentId || await resolveAgentIdForSessionKey(sessionKey);
-  const cwd = params?.cwdOverride?.trim() || existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId);
+  const cwd = existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId);
   if (!cwd) throw new Error(`PI_WORKSPACE_UNAVAILABLE: session ${sessionKey} has no cwd`);
   await getSkillManager().reconcile(
     { agentId },
@@ -140,17 +140,18 @@ async function buildPiSessionConfig(
     { notifyAfterBatch: false },
   );
   const selection = await resolvePiModel(agentId, existing);
+  const sessionMode = params?.runtimePolicy?.origin === 'scheduled_task' ? 'scheduled' : 'interactive';
   const selectedSkills = runId && params
     ? (await routeSessionSkills({
         sessionKey,
         runId,
         agentId,
         engine: 'pi',
-        mode: params.allowedRoots?.length ? 'scheduled' : 'interactive',
+        mode: sessionMode,
         query: params.message,
         rawMessage: params.message,
         attachmentNames: params.media?.map((item) => item.fileName),
-        onProgress: params.allowedRoots?.length
+        onProgress: sessionMode === 'scheduled'
           ? undefined
           : (message) => emitSkillRoutingProgress(progressSink, sessionKey, runId, message),
       })).selected
@@ -184,7 +185,7 @@ async function buildPiSessionConfig(
     systemPrompt: workspaceNote,
     model: selection.model,
     media: params?.media,
-    scheduledAllowedRoots: params?.allowedRoots,
+    sessionMode,
     skillRoots: selectedSkills.map((skill) => skill.sourceDir),
     selectedSkills: selectedSkills.map((skill) => ({
       slug: skill.slug,
@@ -261,7 +262,6 @@ export const piAdapter: EngineAdapter = {
     enforcedPermissionProfile: 'workspace-write',
     requiresWorkspacePath: true,
     supportsWorkflow: false,
-    restrictToAllowedRoots: true,
   },
   chatCapabilities: {
     hasReliableRuntimeStatus: true,

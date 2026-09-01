@@ -53,10 +53,6 @@ export interface EngineSendParams {
   runtimePolicy?: ChatRuntimePolicy;
   /** 定时任务执行时由 executor 透传；交互式 chat 不设（undefined）以保留引擎默认。 */
   permissionProfile?: EnginePermissionProfile;
-  /** 定时任务允许访问的根目录；仅受限运行时使用，交互式会话不设置。 */
-  allowedRoots?: string[];
-  /** 受限任务的固定 cwd；普通对话不设置。 */
-  cwdOverride?: string;
 }
 
 export interface EngineSendWithMediaParams extends EngineSendParams {
@@ -100,7 +96,6 @@ export interface EngineScheduledTaskCapabilities {
   enforcedPermissionProfile?: EnginePermissionProfile;
   requiresWorkspacePath: boolean;
   supportsWorkflow: boolean;
-  restrictToAllowedRoots: boolean;
 }
 
 export interface EngineAdapter {

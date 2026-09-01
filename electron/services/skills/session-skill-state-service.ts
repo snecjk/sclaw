@@ -1,6 +1,7 @@
 import { getSessionSkillStateRepository } from '../../db/repositories/session-skill-state-repository';
 import {
   beginSessionSkillTurn,
+  attachSessionSkillToTurn,
   emptySessionSkillState,
   finishSessionSkillTurn,
   markSessionSkillUsed,
@@ -58,6 +59,14 @@ export async function beginSkillTurn(input: {
 
 export async function markSkillUsed(sessionKey: string, runId: string, slug: string): Promise<void> {
   await mutate(sessionKey, (state) => markSessionSkillUsed(state, runId, slug));
+}
+
+export async function markSkillLoaded(
+  sessionKey: string,
+  runId: string | undefined,
+  skill: SelectedSkillInput,
+): Promise<void> {
+  await mutate(sessionKey, (state) => attachSessionSkillToTurn(state, runId, skill));
 }
 
 export async function completeSkillTurn(

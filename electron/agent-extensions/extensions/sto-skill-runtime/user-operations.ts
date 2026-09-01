@@ -6,8 +6,8 @@ import {
 } from '../../../../shared/agent-extensions';
 import { STO_USER_SKILL_ACTIVATION } from './activation';
 import {
-  STO_USER_SKILL_CAPABILITY,
-  StoUserSkillPortError,
+  STO_SKILL_RUNTIME_CAPABILITY,
+  StoSkillRuntimePortError,
   type SaveUserSkillResponse,
 } from './capability';
 
@@ -55,7 +55,7 @@ export const saveUserSkillTool: SclawToolDefinition<
     context,
   ): Promise<SclawToolOutcome<SaveUserSkillResponse>> {
     try {
-      const data = await context.capabilities.require(STO_USER_SKILL_CAPABILITY).save(input);
+      const data = await context.capabilities.require(STO_SKILL_RUNTIME_CAPABILITY).save(input);
       return {
         success: true,
         type: 'user_skill_saved',
@@ -64,7 +64,7 @@ export const saveUserSkillTool: SclawToolDefinition<
         data,
       };
     } catch (error) {
-      const code = error instanceof StoUserSkillPortError
+      const code = error instanceof StoSkillRuntimePortError
         ? error.code
         : 'SAVE_USER_SKILL_ERROR';
       return sclawToolFailure(

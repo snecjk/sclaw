@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -7,11 +7,6 @@ import {
   parseAgentEngineType,
 } from '../../shared/agent-engine';
 import { inferSessionCatalogMeta } from '../../shared/session-type';
-import {
-  extractScheduledCommandAbsolutePaths,
-  isPiToolPathAllowed,
-  piShellCommandViolatesScheduledPolicy,
-} from '../../electron/pi-runtime/path-policy';
 import {
   getPiAssistantDisplaySnapshot,
   getPiAssistantError,
@@ -337,71 +332,6 @@ describe('Pi worker session command queue', () => {
     expect(started).toEqual(['one', 'two']);
     release();
     await first;
-  });
-});
-
-describe('Pi scheduled-task path policy', () => {
-  it('allows configured roots and rejects external and parent paths', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'stoclaw-pi-policy-'));
-    const workspace = join(base, 'workspace');
-    const outside = join(base, 'outside');
-    await Promise.all([mkdir(workspace), mkdir(outside)]);
-    try {
-      expect(await isPiToolPathAllowed(join(workspace, 'new.txt'), [workspace])).toBe(true);
-      expect(await isPiToolPathAllowed(join(outside, 'secret.txt'), [workspace])).toBe(false);
-      expect(await piShellCommandViolatesScheduledPolicy('cat ../outside/secret.txt', [workspace])).toBe(true);
-      expect(await piShellCommandViolatesScheduledPolicy(`echo ok > "${join(workspace, 'out.txt')}"`, [workspace])).toBe(false);
-    } finally {
-      await rm(base, { recursive: true, force: true });
-    }
-  });
-
-  it('extracts Windows and macOS absolute paths without directory allowlists', () => {
-    expect(extractScheduledCommandAbsolutePaths(
-      'type C:/Users/admin/secret.txt && type "D:\\Data Files\\report.txt" --output="E:/Output Dir/result.txt"',
-      'win32',
-    )).toEqual([
-      'C:/Users/admin/secret.txt',
-      'D:\\Data Files\\report.txt',
-      'E:/Output Dir/result.txt',
-    ]);
-    expect(extractScheduledCommandAbsolutePaths(
-      'cat /Volumes/Data/secret.txt /private/etc/hosts /tmp/report.txt',
-      'darwin',
-    )).toEqual(['/Volumes/Data/secret.txt', '/private/etc/hosts', '/tmp/report.txt']);
-  });
-
-  it('fails closed for shell-expanded paths', async () => {
-    await expect(piShellCommandViolatesScheduledPolicy('cat $HOME/secret.txt', ['/workspace']))
-      .resolves.toBe(true);
-    await expect(piShellCommandViolatesScheduledPolicy('cat "$(pwd)/secret.txt"', ['/workspace']))
-      .resolves.toBe(true);
-    await expect(piShellCommandViolatesScheduledPolicy(
-      'Get-Content "$env:USERPROFILE\\secret.txt"',
-      ['C:\\workspace'],
-    )).resolves.toBe(true);
-  });
-
-  it('rejects destructive PowerShell host commands', async () => {
-    await expect(piShellCommandViolatesScheduledPolicy('Stop-Computer -Force', ['C:\\workspace']))
-      .resolves.toBe(true);
-    await expect(piShellCommandViolatesScheduledPolicy('Format-Volume -DriveLetter D', ['C:\\workspace']))
-      .resolves.toBe(true);
-  });
-
-  it('rejects an existing symlink that escapes an allowed root', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'stoclaw-pi-symlink-'));
-    const workspace = join(base, 'workspace');
-    const outside = join(base, 'outside');
-    await Promise.all([mkdir(workspace), mkdir(outside)]);
-    await writeFile(join(outside, 'secret.txt'), 'secret');
-    const link = join(workspace, 'outside-link');
-    try {
-      await symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
-      expect(await isPiToolPathAllowed(join(link, 'secret.txt'), [workspace])).toBe(false);
-    } finally {
-      await rm(base, { recursive: true, force: true });
-    }
   });
 });
 

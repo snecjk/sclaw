@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  STO_USER_SKILL_CAPABILITY,
-  StoUserSkillPortError,
-} from '../../electron/agent-extensions/extensions/sto-user-skill-tool/capability';
-import { createHostApiUserSkillPort } from '../../electron/agent-extensions/extensions/sto-user-skill-tool/host-api-capability';
+  STO_SKILL_RUNTIME_CAPABILITY,
+  StoSkillRuntimePortError,
+} from '../../electron/agent-extensions/extensions/sto-skill-runtime/capability';
+import { createHostApiSkillRuntimePort } from '../../electron/agent-extensions/extensions/sto-skill-runtime/host-api-capability';
 
-describe('sto-user-skill Host API capability', () => {
+describe('sto-skill-runtime user-skill Host API capability', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('unwraps saved skill data and accepts the schedule acknowledgement', async () => {
@@ -34,7 +34,7 @@ describe('sto-user-skill Host API capability', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const port = createHostApiUserSkillPort();
+    const port = createHostApiSkillRuntimePort();
     await expect(port.save({ skillMd: 'demo' })).resolves.toMatchObject({ slug: 'demo' });
     await expect(port.scheduleOrphanImport('test')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -52,10 +52,10 @@ describe('sto-user-skill Host API capability', () => {
       }),
     })));
 
-    const port = createHostApiUserSkillPort();
+    const port = createHostApiSkillRuntimePort();
     const error = await port.save({ skillMd: 'demo' }).catch((caught) => caught);
-    expect(error).toBeInstanceOf(StoUserSkillPortError);
+    expect(error).toBeInstanceOf(StoSkillRuntimePortError);
     expect(error).toMatchObject({ code: 'PREINSTALL_PROTECTED', message: '不能覆盖预装技能' });
-    expect(STO_USER_SKILL_CAPABILITY.id).toBe('sto.user-skill');
+    expect(STO_SKILL_RUNTIME_CAPABILITY.id).toBe('sto.skill-runtime');
   });
 });

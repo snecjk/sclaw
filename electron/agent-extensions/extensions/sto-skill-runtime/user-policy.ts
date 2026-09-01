@@ -3,7 +3,7 @@ import {
   evaluateUserSkillWriteGuard,
   shouldScheduleOrphanImportAfterTool,
 } from '../../../../shared/user-skill-write-guard';
-import { STO_USER_SKILL_CAPABILITY } from './capability';
+import { STO_SKILL_RUNTIME_CAPABILITY } from './capability';
 
 export const userSkillWritePolicy: SclawToolPolicy = {
   id: 'user-skill-write-guard',
@@ -15,7 +15,7 @@ export const userSkillWritePolicy: SclawToolPolicy = {
     if (!decision.blocked) return { action: 'allow' };
     context.logger.warn('[agent-extension] user-skill.write.denied', {
       engine: context.engine,
-      extensionId: 'sto-user-skill-tool',
+      extensionId: 'sto-skill-runtime',
       toolCallId: event.toolCallId,
       toolName: event.toolName,
       matchedPath: decision.matchedPath,
@@ -29,11 +29,11 @@ export const userSkillWritePolicy: SclawToolPolicy = {
     })) return;
 
     await context.capabilities
-      .require(STO_USER_SKILL_CAPABILITY)
+      .require(STO_SKILL_RUNTIME_CAPABILITY)
       .scheduleOrphanImport('agent-extension-after-skill-path-tool');
     context.logger.info('[agent-extension] user-skill.orphan-import.scheduled', {
       engine: context.engine,
-      extensionId: 'sto-user-skill-tool',
+      extensionId: 'sto-skill-runtime',
       toolCallId: event.toolCallId,
       toolName: event.toolName,
     });

@@ -151,6 +151,15 @@ function policyHooks(
           },
         };
       }
+      if (decision.permissionDecision === 'allow') {
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'allow',
+            permissionDecisionReason: 'Read access to a locally validated runtime Skill candidate',
+          },
+        };
+      }
       return {};
     };
     hooks.PreToolUse = [{ hooks: [callback] }];

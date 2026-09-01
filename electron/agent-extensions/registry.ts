@@ -6,13 +6,12 @@ import {
 } from '../../shared/agent-extensions';
 import type { ClaudeNativeContribution } from './adapters/claude/types';
 import type { PiNativeContribution } from './adapters/pi/types';
-import { clawScheduledPathGuardDefinition } from './extensions/claw-scheduled-path-guard/definition';
 import { stoScheduledTaskToolDefinition } from './extensions/sto-scheduled-task-tool/definition';
 import { stoWorkflowToolDefinition } from './extensions/sto-workflow-tool/definition';
 import { stoDingTalkSendGuardDefinition } from './extensions/sto-dingtalk-send-guard/definition';
-import { stoUserSkillToolDefinition } from './extensions/sto-user-skill-tool/definition';
 import { stoBrowserToolDefinition } from './extensions/sto-browser-tool/definition';
 import { piBrowserUseDefinition } from './extensions/pi-browser-use/definition';
+import { stoSkillRuntimeDefinition } from './extensions/sto-skill-runtime/definition';
 
 export interface RegisteredAgentExtension {
   common: SclawAgentExtensionDefinition;
@@ -24,8 +23,6 @@ export interface RegisteredAgentExtension {
 
 /** Internal, compile-time allowlist. Entries are reviewed and bundled with SClaw. */
 export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
-  common: clawScheduledPathGuardDefinition,
-}, {
   common: stoBrowserToolDefinition,
 }, {
   common: piBrowserUseDefinition,
@@ -36,7 +33,7 @@ export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
 }, {
   common: stoDingTalkSendGuardDefinition,
 }, {
-  common: stoUserSkillToolDefinition,
+  common: stoSkillRuntimeDefinition,
 }];
 
 const EXTENSION_ID_PATTERN = /^[a-z][a-z0-9-]{0,127}$/;

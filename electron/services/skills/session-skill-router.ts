@@ -1,6 +1,4 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
 import { parseSkillTranscriptMarkers } from '../../../shared/skill-transcript-marker';
 import type { SclawAgentEngine, SclawAgentSessionMode } from '../../../shared/agent-extensions/types';
 import { getCurrentActiveUserCode } from '../user-skill-workspace';
@@ -14,16 +12,16 @@ import {
 } from './session-skill-state-service';
 import { orderSessionSkillLeases, type SelectedSkillInput } from './session-skill-state';
 import { skillRoutingRemoteService } from './skill-routing-remote-service';
+import { computeSkillPackageHash } from './skill-package-hash';
+import { getDefaultEngineSkillSlugs } from './default-engine-skills';
 
 const INTERACTIVE_LIMIT = 6;
 const SCHEDULED_LIMIT = 4;
 const PINNED_LIMIT = 4;
 const ROUTE_REFRESH_TURNS = 5;
 const ROUTING_CARD_SYNC_BATCH_SIZE = 10;
-const BUILTIN_PINNED_SKILL_SLUGS = ['sai-cli'] as const;
 const TOPIC_CHANGE_RE = /(?:换个问题|另一个问题|另外(?:一件事|一个)|现在(?:帮我|处理|检查)|unrelated|new topic)/i;
 const FOLLOW_UP_RE = /(?:继续|再加|再改|按刚才|这个也|然后|颜色换|同样|基于上面|接着|also|continue|same way|then)/i;
-const packageHashCache = new Map<string, { signature: string; hash: string }>();
 const syncedCatalogRevisions = new Map<string, string>();
 
 export interface RoutedSessionSkill {
@@ -60,29 +58,6 @@ function fileExtensions(names: string[]): string[] {
     const match = name.toLowerCase().match(/\.[a-z0-9]{1,10}$/);
     return match?.[0];
   }).filter((value): value is string => Boolean(value)))];
-}
-
-async function packageHash(pkg: DesiredSkillPackage): Promise<string> {
-  const skillPath = join(pkg.sourceDir, 'SKILL.md');
-  let skillMd = '';
-  let fileSignature = 'missing';
-  try {
-    const info = await stat(skillPath);
-    fileSignature = `${info.size}:${info.mtimeMs}`;
-  } catch {
-    // A missing package is filtered by the engine adapter later.
-  }
-  const signature = `${pkg.slug}\n${pkg.version}\n${pkg.scope}\n${pkg.enabled}\n${fileSignature}`;
-  const cached = packageHashCache.get(skillPath);
-  if (cached?.signature === signature) return cached.hash;
-  if (fileSignature !== 'missing') {
-    skillMd = await readFile(skillPath, 'utf-8').catch(() => '');
-  }
-  const hash = createHash('sha256')
-    .update(`${signature}\n${skillMd}`)
-    .digest('hex');
-  packageHashCache.set(skillPath, { signature, hash });
-  return hash;
 }
 
 function localScore(query: string, pkg: DesiredSkillPackage, extensions: string[]): number {
@@ -122,7 +97,7 @@ export async function routeSessionSkills(input: {
   const userCode = await getCurrentActiveUserCode();
   const desired = (await listDesiredPackages({ userCode, agentId: input.agentId })).filter((pkg) => pkg.enabled);
   const packageHashes = new Map<string, string>();
-  await Promise.all(desired.map(async (pkg) => packageHashes.set(pkg.slug, await packageHash(pkg))));
+  await Promise.all(desired.map(async (pkg) => packageHashes.set(pkg.slug, await computeSkillPackageHash(pkg))));
   const packageBySlug = new Map(desired.map((pkg) => [normalize(pkg.slug), pkg]));
   const manifestRevision = createHash('sha256')
     .update([...packageHashes]
@@ -149,6 +124,16 @@ export async function routeSessionSkills(input: {
       engine: input.engine,
       skillCount: selected.length,
     });
+    // Keep a lightweight pending turn so an on-demand load can attach and be
+    // promoted even when automatic pre-turn discovery is disabled.
+    await beginSkillTurn({
+      sessionKey: input.sessionKey,
+      runId: input.runId,
+      manifestRevision,
+      query: input.query,
+      selected: [],
+      remoteSearched: false,
+    });
     return {
       selected,
       skillSetHash,
@@ -165,7 +150,7 @@ export async function routeSessionSkills(input: {
   const markerSlugs = parseSkillTranscriptMarkers(input.rawMessage ?? '').map((item) => item.slug);
   const commandSlugs = [...(input.rawMessage ?? '').matchAll(/(?:^|\s)\/skill:([a-z0-9._-]+)/gi)].map((match) => match[1]);
   const explicitSlugs = [...new Set([...(input.explicitSlugs ?? []), ...markerSlugs, ...commandSlugs].map(normalize).filter(Boolean))];
-  const builtinPinnedSlugs = BUILTIN_PINNED_SKILL_SLUGS
+  const builtinPinnedSlugs = getDefaultEngineSkillSlugs({ engine: input.engine, mode: input.mode })
     .map(normalize)
     .filter((slug) => validSkills.has(slug));
   const configuredPinned = desired.filter((pkg) => pkg.scope === 'agent');

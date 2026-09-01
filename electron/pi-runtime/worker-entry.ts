@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { access, mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -35,6 +35,7 @@ import { createPiPromptLoggingExtension } from './prompt-logging-extension';
 import { buildPiSystemPromptOverride } from './system-prompt-policy';
 import { importNativeEsm } from './native-esm-import';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
+import { piSessionConfigurationKey } from './session-config-policy';
 
 type PiSession = {
   session: AgentSession;
@@ -48,6 +49,7 @@ type PiSession = {
   lastRunError?: string;
   streamingAssistant?: Record<string, unknown> & { role: 'assistant'; content: Array<Record<string, unknown>> };
   clearExtensionSessionState: () => void;
+  setExtensionTurnContext: (context: { runId?: string }) => void;
   unsubscribe: () => void;
 };
 
@@ -62,8 +64,13 @@ const parentPort = (process as NodeJS.Process & {
   parentPort?: { on(event: 'message', listener: (event: { data: unknown }) => void): void; postMessage(value: unknown): void };
 }).parentPort;
 
-function logPiCore(stage: string, details: Record<string, unknown> = {}): void {
-  console.info(`[pi-core] ${stage} ${JSON.stringify(details)}`);
+function logPiCore(
+  stage: string,
+  details: Record<string, unknown> = {},
+  multilineBody?: string,
+): void {
+  const header = `[pi-core] ${stage} ${JSON.stringify(details)}`;
+  console.info(multilineBody ? `${header}\n${multilineBody}` : header);
 }
 
 function summarizeSessionConfig(config: PiSessionConfig): Record<string, unknown> {
@@ -87,7 +94,7 @@ function summarizeSessionConfig(config: PiSessionConfig): Record<string, unknown
       mimeType: item.mimeType,
       filePath: item.filePath,
     })),
-    scheduledAllowedRoots: config.scheduledAllowedRoots ?? [],
+    sessionMode: config.sessionMode ?? 'interactive',
     skillRoots: config.skillRoots ?? [],
     selectedSkills: config.selectedSkills?.map((item) => item.slug) ?? [],
     skillSetHash: config.skillSetHash ?? '',
@@ -135,27 +142,6 @@ function emit(sessionKey: string, event: NormalizedEngineEvent): void {
   post({ type: 'engine.event', sessionKey, event });
 }
 
-function configKey(config: PiSessionConfig): string {
-  return JSON.stringify({
-    cwd: config.cwd,
-    agentDir: config.agentDir,
-    projectTrusted: config.projectTrusted === true,
-    sessionFile: config.sessionFile,
-    provider: config.model.provider,
-    model: config.model.model,
-    baseUrl: config.model.baseUrl ?? '',
-    apiProtocol: config.model.apiProtocol ?? '',
-    headers: config.model.headers ?? {},
-    credentialRevision: config.model.apiKey
-      ? createHash('sha256').update(config.model.apiKey).digest('hex')
-      : '',
-    roots: config.scheduledAllowedRoots ?? [],
-    skillRoots: config.skillRoots ?? [],
-    skillSetHash: config.skillSetHash ?? '',
-    systemPrompt: config.systemPrompt ?? '',
-  });
-}
-
 async function createSession(config: PiSessionConfig): Promise<PiSession> {
   const startedAt = Date.now();
   logPiCore('session.create.start', summarizeSessionConfig(config));
@@ -178,8 +164,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     agentId: config.sessionKey.startsWith('agent:') ? config.sessionKey.split(':')[1] : 'main',
     model: config.model.model,
     accountId: config.model.accountId,
-    mode: config.scheduledAllowedRoots?.length ? 'scheduled' : 'interactive',
-    allowedRoots: config.scheduledAllowedRoots,
+    mode: config.sessionMode ?? 'interactive',
   });
   for (const diagnostic of unifiedExtensions.diagnostics) {
     logPiCore('extension.diagnostic', diagnostic as unknown as Record<string, unknown>);
@@ -190,7 +175,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   );
   logPiCore('extension.tools-enabled', {
     sessionKey: config.sessionKey,
-    mode: config.scheduledAllowedRoots?.length ? 'scheduled' : 'interactive',
+    mode: config.sessionMode ?? 'interactive',
     excludedTools: excludedToolNames,
     initiallyActiveToolCount: initiallyActiveToolNames.length,
     initiallyActiveTools: initiallyActiveToolNames,
@@ -202,8 +187,8 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     agentDir: config.agentDir,
     settingsManager,
     noExtensions: true,
-    // Only explicit per-turn paths are loaded. Avoid scanning the full global
-    // and agent Skill roots before filtering them down.
+    // Use Pi's native Skill loader for the bounded start-of-turn selection.
+    // search_skills plus Pi's native read tool handles runtime misses.
     noSkills: true,
     additionalSkillPaths: config.skillRoots ?? [],
     skillsOverride: (current) => ({
@@ -323,8 +308,9 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     session,
     sessionId: session.sessionId,
     sessionFile: session.sessionFile,
-    configKey: configKey(config),
+    configKey: piSessionConfigurationKey(config),
     clearExtensionSessionState: unifiedExtensions.clearSessionState,
+    setExtensionTurnContext: unifiedExtensions.setTurnContext,
     unsubscribe: () => {},
   };
   entry.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
@@ -411,7 +397,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
 
 async function ensureSession(config: PiSessionConfig): Promise<PiSession> {
   const existing = sessions.get(config.sessionKey);
-  const nextKey = configKey(config);
+  const nextKey = piSessionConfigurationKey(config);
   if (existing?.configKey === nextKey) {
     logPiCore('session.ensure.reuse', { sessionKey: config.sessionKey, sessionId: existing.sessionId });
     return existing;
@@ -465,6 +451,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       entry.lastRunStatus = undefined;
       entry.lastRunError = undefined;
       entry.streamingAssistant = undefined;
+      entry.setExtensionTurnContext({ runId });
       const result: PiPromptResult = { runId, sessionId: entry.sessionId, sessionFile: entry.sessionFile };
       respond(request.requestId, true, result);
       logPiCore('session.prompt.accepted', {

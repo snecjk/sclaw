@@ -4,7 +4,7 @@ import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { SCHEDULED_TASK_CORE_PROMPT } from '../../shared/scheduled-task-instruction';
 import { STO_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-scheduled-task-tool/definition';
 import { STO_WORKFLOW_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-workflow-tool/definition';
-import { USER_SKILL_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-user-skill-tool/definition';
+import { USER_SKILL_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-skill-runtime/definition';
 import { BRIDGE_SYSTEM_PROMPT } from '../../electron/agent-extensions/extensions/sto-browser-tool/prompts';
 import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 
@@ -91,9 +91,9 @@ describe('buildClaudeRuntimeOptions', () => {
       '把这个方法保存成用户技能',
     );
 
-    expect(unrelated.mcpServers?.['sto-user-skill-tool']).toBeUndefined();
+    expect(unrelated.mcpServers?.['sto-skill-runtime']).toBeDefined();
     expect(unrelated.systemPromptAppend).not.toContain(USER_SKILL_SYSTEM_PROMPT);
-    expect(matched.mcpServers?.['sto-user-skill-tool']).toBeDefined();
+    expect(matched.mcpServers?.['sto-skill-runtime']).toBeDefined();
     expect(matched.systemPromptAppend).toContain(USER_SKILL_SYSTEM_PROMPT);
   });
 

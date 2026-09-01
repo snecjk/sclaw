@@ -32,13 +32,17 @@ import { STO_SCHEDULED_TASK_CAPABILITY } from '../../extensions/sto-scheduled-ta
 import { createHostApiScheduledTaskPort } from '../../extensions/sto-scheduled-task-tool/host-api-capability';
 import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtalk-send-guard/capability';
 import { createHostApiDingTalkSendGuardPort } from '../../extensions/sto-dingtalk-send-guard/host-api-capability';
-import { STO_USER_SKILL_CAPABILITY } from '../../extensions/sto-user-skill-tool/capability';
-import { createHostApiUserSkillPort } from '../../extensions/sto-user-skill-tool/host-api-capability';
+import { STO_SKILL_RUNTIME_CAPABILITY } from '../../extensions/sto-skill-runtime/capability';
+import { createHostApiSkillRuntimePort } from '../../extensions/sto-skill-runtime/host-api-capability';
+import {
+  beginRuntimeSkillAccessTurn,
+  clearRuntimeSkillAccess,
+} from '../../extensions/sto-skill-runtime/access';
 
 const defaultCapabilities = new SclawCapabilityRegistry()
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
   .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())
-  .provide(STO_USER_SKILL_CAPABILITY, createHostApiUserSkillPort());
+  .provide(STO_SKILL_RUNTIME_CAPABILITY, createHostApiSkillRuntimePort());
 const defaultStateManager = new SclawExtensionStateManager();
 const defaultLogger: SclawExtensionLogger = {
   debug: (message, details) => console.debug(message, details ?? ''),
@@ -52,7 +56,6 @@ export interface BuildPiAgentExtensionsInput {
   mode: SclawAgentSessionMode;
   commandShell?: SclawCommandShell;
   cwd?: string;
-  allowedRoots?: readonly string[];
   agentId?: string;
   model?: string;
   accountId?: string;
@@ -68,6 +71,7 @@ export interface BuildPiAgentExtensionsResult {
   /** Exact extension tool names that are active before lazy activation. */
   initiallyActiveToolNames: string[];
   diagnostics: SclawExtensionDiagnostic[];
+  setTurnContext(context: { runId?: string }): void;
   /** Clears framework-owned session/turn/tool-call state on worker disposal. */
   clearSessionState(): void;
 }
@@ -105,6 +109,7 @@ export async function buildPiAgentExtensions(
   const usedToolNames = new Set<string>();
   const initiallyActiveToolNames: string[] = [];
   const buildStartedAt = Date.now();
+  let turnContext: { runId?: string } = {};
 
   extensionLogger.info('[agent-extension] build.start', {
     engine: 'pi',
@@ -157,11 +162,10 @@ export async function buildPiAgentExtensions(
       commandShell: input.commandShell ?? (process.platform === 'win32' ? 'powershell' : 'bash'),
       userPrompt,
       cwd: input.cwd,
-      allowedRoots: input.allowedRoots,
       agentId: input.agentId,
       model: input.model,
       accountId: input.accountId,
-      runId: input.runId,
+      runId: turnContext.runId ?? input.runId,
       capabilities,
       state: stateManager.forExtension(input.sessionKey, definition.id),
       logger: extensionLogger,
@@ -404,7 +408,11 @@ export async function buildPiAgentExtensions(
       hidden: true,
       factory(pi) {
         pi.on('turn_start', () => stateManager.beginTurn(input.sessionKey));
-        pi.on('turn_end', () => stateManager.endTurn(input.sessionKey));
+        pi.on('turn_end', () => {
+          stateManager.endTurn(input.sessionKey);
+          turnContext = {};
+          clearRuntimeSkillAccess(input.sessionKey);
+        });
         pi.on('session_shutdown', (event) => {
           // Pi tears down and recreates its extension runtime on every resource
           // reload. That is not the end of the SClaw conversation, so keep
@@ -430,6 +438,13 @@ export async function buildPiAgentExtensions(
     extensions,
     initiallyActiveToolNames,
     diagnostics,
-    clearSessionState: () => stateManager.clearSession(input.sessionKey),
+    setTurnContext: (context) => {
+      turnContext = { ...context };
+      beginRuntimeSkillAccessTurn(input.sessionKey, context.runId);
+    },
+    clearSessionState: () => {
+      clearRuntimeSkillAccess(input.sessionKey);
+      stateManager.clearSession(input.sessionKey);
+    },
   };
 }

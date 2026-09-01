@@ -74,7 +74,7 @@ describe('session Skill router discovery setting', () => {
     ]);
   });
 
-  it('loads every enabled installed Skill without remote routing or lease updates when disabled', async () => {
+  it('loads every enabled installed Skill without remote routing and opens a lightweight runtime turn when disabled', async () => {
     const onProgress = vi.fn();
     const result = await routeSessionSkills({
       sessionKey: 'pi:main:session-1',
@@ -93,7 +93,11 @@ describe('session Skill router discovery setting', () => {
     expect(mocks.search).not.toHaveBeenCalled();
     expect(mocks.reconcileSessionSkillState).not.toHaveBeenCalled();
     expect(mocks.getSessionSkillState).not.toHaveBeenCalled();
-    expect(mocks.beginSkillTurn).not.toHaveBeenCalled();
+    expect(mocks.beginSkillTurn).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-1',
+      selected: [],
+      remoteSearched: false,
+    }));
     expect(onProgress).not.toHaveBeenCalled();
   });
 

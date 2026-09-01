@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   beginSessionSkillTurn,
+  attachSessionSkillToTurn,
   emptySessionSkillState,
   finishSessionSkillTurn,
   markSessionSkillUsed,
@@ -100,13 +101,35 @@ describe('session skill lease state', () => {
     expect(recovered.skills[0].state).toBe('selected');
   });
 
-  it('orders pinned, used, and selected leases deterministically', () => {
+  it('attaches a runtime-loaded skill to the active turn and promotes it on success', () => {
+    let state = begin(emptySessionSkillState('session-1'), 'run-1', []);
+    state = attachSessionSkillToTurn(state, undefined, {
+      slug: 'documents',
+      sourceHash: 'documents-hash',
+      state: 'loaded',
+    });
+    expect(state.pendingTurns['run-1']).toMatchObject({
+      selectedSlugs: ['documents'],
+      loadedSlugs: ['documents'],
+    });
+    expect(state.skills[0]).toMatchObject({ slug: 'documents', state: 'loaded' });
+    state = finishSessionSkillTurn(state, 'run-1', true);
+    expect(state.skills[0]).toMatchObject({
+      slug: 'documents',
+      state: 'used',
+      lastUsedTurn: 1,
+      expiresAfterTurn: 4,
+    });
+  });
+
+  it('orders pinned, used, loaded, and selected leases deterministically', () => {
     let state = begin(emptySessionSkillState('session-1'), 'run-1', [
       { ...selected('pinned'), state: 'pinned' as const, score: 1 },
       { ...selected('selected'), score: 999 },
       { ...selected('used'), state: 'used' as const, score: 2 },
+      { ...selected('loaded'), state: 'loaded' as const, score: 500 },
     ]);
     state = markSessionSkillUsed(state, 'run-1', 'used');
-    expect(orderSessionSkillLeases(state.skills).map((skill) => skill.slug)).toEqual(['pinned', 'used', 'selected']);
+    expect(orderSessionSkillLeases(state.skills).map((skill) => skill.slug)).toEqual(['pinned', 'used', 'loaded', 'selected']);
   });
 });

@@ -46,7 +46,6 @@ export interface SclawExtensionContext {
   /** Shell dialect used by shell tools in this runtime. */
   commandShell: SclawCommandShell;
   cwd?: string;
-  allowedRoots?: readonly string[];
   agentId?: string;
   model?: string;
   accountId?: string;
@@ -145,7 +144,7 @@ export interface SclawAfterToolEvent extends SclawBeforeToolEvent {
 }
 
 export type SclawBeforeToolDecision =
-  | { action: 'allow' }
+  | { action: 'allow'; permissionDecision?: 'allow' }
   | { action: 'deny'; reason: string; terminate?: boolean }
   | { action: 'patch'; input: Record<string, unknown> };
 

@@ -178,13 +178,6 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       permissionProfile: scheduledCapabilities.enforcedPermissionProfile
         ?? task.permissionProfile
         ?? scheduledCapabilities.defaultPermissionProfile,
-      allowedRoots: scheduledCapabilities.restrictToAllowedRoots
-        ? [task.workspacePath, task.myArtifactFolderPath, task.sharedArtifactFolderPath]
-            .filter((value): value is string => Boolean(value?.trim()))
-        : undefined,
-      cwdOverride: scheduledCapabilities.restrictToAllowedRoots
-        ? task.workspacePath ?? undefined
-        : undefined,
       engineType: adapter.type,
       media: media.length ? media : undefined,
       runtimePolicy: {
