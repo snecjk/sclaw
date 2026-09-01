@@ -65,8 +65,8 @@ export function parseSiteappSavedFiles(data: unknown): SiteappSavedFile[] {
   const root = asRecord(data);
   if (!root) return [];
   const cliData = asRecord(root.data);
-  const result = asRecord(cliData?.result);
-  const saved = result?.savedFiles ?? root.savedFiles;
+  const result = asRecord(cliData?.result) ?? asRecord(root.result);
+  const saved = result?.savedFiles ?? cliData?.savedFiles ?? root.savedFiles;
   if (!Array.isArray(saved)) return [];
   const files: SiteappSavedFile[] = [];
   for (const item of saved) {

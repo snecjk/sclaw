@@ -16,7 +16,8 @@ export function isSameAppDevStatus(
     && left.phase === right.phase
     && left.progress === right.progress
     && left.previewUrl === right.previewUrl
-    && left.error === right.error;
+    && left.error === right.error
+    && left.detail === right.detail;
 }
 
 export function appDevStatusPollIntervalMs(phase: AppDevPhase | undefined): number {

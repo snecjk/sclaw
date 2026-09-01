@@ -22,7 +22,7 @@ import {
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
+import { ChatEngineModelCascade } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
@@ -128,10 +128,7 @@ export function HomeComposer({
   );
 
   const inlineToolbarSelectors = toolbarSelectors ?? (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
-      <ChatModelSelector variant="inline" className="min-w-max shrink-0" />
-    </div>
+    <ChatEngineModelCascade className="min-w-0 max-w-full" />
   );
 
   const sendMessage = onSend ?? handleHubSend;

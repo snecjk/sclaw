@@ -33,7 +33,7 @@ import {
   type SclawBrowserFrameHandle,
 } from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { AppDevSetupProgress } from '@/components/app-dev/AppDevSetupProgress';
 import { buildAppDevFileTree } from '@/lib/app-dev-file-tree';
 import {
   listAppSourceFiles,
@@ -60,16 +60,6 @@ export type AppDevStageMode = 'preview' | 'code' | 'git' | 'external-services' |
 type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
-
-const PHASE_LABELS: Record<string, string> = {
-  created: '正在准备运行环境…',
-  'preparing-env': '正在准备运行环境…',
-  installing: '正在安装应用组件…',
-  starting: '正在启动应用…',
-  ready: '运行中',
-  stopped: '已停止',
-  error: '出了点问题',
-};
 
 interface OpenTab {
   path: string;
@@ -593,9 +583,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center p-8">
-            <div className="w-full max-w-sm text-center">
-              {phase === 'error' ? (
-                <>
+            {phase === 'error' ? (
+              <div className="w-full max-w-sm text-center">
                   <AlertCircle className="mx-auto mb-4 h-10 w-10 text-[var(--sto-functional-error)]" aria-hidden />
                   <p className="mb-2 text-sm font-medium text-foreground">应用启动遇到了问题</p>
                   <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
@@ -605,9 +594,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     <RotateCw className="h-3.5 w-3.5" aria-hidden />
                     重试
                   </Button>
-                </>
-              ) : phase === 'stopped' ? (
-                <>
+              </div>
+            ) : phase === 'stopped' ? (
+              <div className="w-full max-w-sm text-center">
                   <Square className="mx-auto mb-4 h-9 w-9 text-muted-foreground" aria-hidden />
                   <p className="mb-2 text-sm font-medium text-foreground">预览已停止</p>
                   <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
@@ -617,18 +606,14 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     <RotateCw className="h-3.5 w-3.5" aria-hidden />
                     启动预览
                   </Button>
-                </>
-              ) : (
-                <>
-                  <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-                  <p className="mb-4 text-sm font-medium text-foreground">{PHASE_LABELS[phase]}</p>
-                  <Progress value={status?.progress ?? 0} className="mb-3" />
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    首次创建需要准备运行环境，通常在一两分钟内完成。你可以先在左侧描述想做的功能。
-                  </p>
-                </>
-              )}
-            </div>
+              </div>
+            ) : (
+              <AppDevSetupProgress
+                phase={phase || 'created'}
+                progress={status?.progress ?? 0}
+                detail={status?.detail}
+              />
+            )}
           </div>
         )
       ) : null}

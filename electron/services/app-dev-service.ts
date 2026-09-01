@@ -7,17 +7,22 @@
 
 import { app } from 'electron';
 import { spawn } from 'child_process';
-import { existsSync, statSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { homedir } from 'os';
 import { extname, dirname, join, relative, resolve, sep } from 'path';
 import {
+  buildSnpmInstallArgs,
   creepRatio,
+  isTransientNpmInstallFailure,
+  needsAppNpmInstall,
+  parseNpmrcRegistry,
   pipelineProgress,
   sanitizePackageName,
   type AppDevPhase,
 } from '../utils/app-dev-info';
-import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManagedNode, getManagedNodePaths } from '../utils/node-runtime';
+import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManagedNode } from '../utils/node-runtime';
+import { ensureSnpmBin, resolveSnpmBin } from '../utils/snpm-cli';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
 import { needsWinShell, quoteForCmd } from '../utils/paths';
@@ -74,6 +79,8 @@ export interface AppDevStatus {
   previewUrl?: string;
   /** Non-technical error hint; raw logs stay available for agent diagnosis. */
   error?: string;
+  /** Extra line for the active setup step (e.g. snpm found vs installing). */
+  detail?: string;
 }
 
 const statuses = new Map<string, AppDevStatus>();
@@ -1534,41 +1541,79 @@ export async function deleteDevApp(
   return { offline, ...removed };
 }
 
-async function runNpmInstall(
-  workspaceId: string,
-  appPath: string,
-  shouldReportProgress: () => boolean,
-): Promise<void> {
-  const { npmBin } = getManagedNodePaths();
-  const npmCwd = resolveAppNpmCwd(appPath);
-  let ratio = 0;
+function resolveAppNpmRegistry(npmCwd: string): string | undefined {
+  const npmrcPath = join(npmCwd, '.npmrc');
+  if (!existsSync(npmrcPath)) return undefined;
+  try {
+    return parseNpmrcRegistry(readFileSync(npmrcPath, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(npmBin, ['install', '--no-audit', '--no-fund'], {
+function spawnSnpmInstallOnce(
+  snpmBin: string,
+  npmCwd: string,
+  args: string[],
+  onActivity: (chunk: string) => void,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(snpmBin, args, {
       cwd: npmCwd,
       env: getNodeSpawnEnv() as NodeJS.ProcessEnv,
       windowsHide: true,
     });
     const tail: string[] = [];
-    const onActivity = (chunk: unknown) => {
-      tail.push(String(chunk));
+    const handleChunk = (chunk: unknown) => {
+      const text = String(chunk);
+      tail.push(text);
       if (tail.length > 40) tail.shift();
-      ratio = creepRatio(ratio);
-      if (shouldReportProgress()) {
-        setStatus(workspaceId, {
-          phase: 'installing',
-          progress: pipelineProgress('installing', ratio),
-        });
-      }
+      onActivity(text);
     };
-    child.stdout?.on('data', onActivity);
-    child.stderr?.on('data', onActivity);
+    child.stdout?.on('data', handleChunk);
+    child.stderr?.on('data', handleChunk);
     child.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`npm install failed (code ${code})\n${tail.join('').trim()}`));
+      else reject(new Error(`snpm install failed (code ${code})\n${tail.join('').trim()}`));
     });
     child.on('error', reject);
   });
+}
+
+async function runNpmInstall(
+  workspaceId: string,
+  appPath: string,
+  shouldReportProgress: () => boolean,
+): Promise<void> {
+  const npmCwd = resolveAppNpmCwd(appPath);
+  const registry = resolveAppNpmRegistry(npmCwd);
+  const snpmBin = await ensureSnpmBin();
+  const args = buildSnpmInstallArgs(registry);
+  logger.info(
+    `[app-dev] snpm install start bin=${snpmBin} cwd=${npmCwd}${registry ? ` registry=${registry}` : ''}`,
+  );
+  let ratio = 0;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await spawnSnpmInstallOnce(snpmBin, npmCwd, args, () => {
+        ratio = creepRatio(ratio);
+        if (shouldReportProgress()) {
+          setStatus(workspaceId, {
+            phase: 'installing',
+            progress: pipelineProgress('installing', ratio),
+          });
+        }
+      });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const retry = attempt < maxAttempts && isTransientNpmInstallFailure(message);
+      if (!retry) throw error;
+      logger.warn(`[app-dev] snpm install retry ${attempt}/${maxAttempts - 1}: ${message.split('\n')[0]}`);
+      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
 }
 
 /**
@@ -1600,17 +1645,48 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
       pipeline.throwIfCanceled();
     }
 
-    const nodeModules = join(resolveAppNpmCwd(appPath), 'node_modules');
-    if (!existsSync(nodeModules)) {
-      setStatus(workspaceId, { phase: 'installing', progress: pipelineProgress('installing', 0) });
+    const needsDeps = needsAppNpmInstall(resolveAppNpmCwd(appPath));
+    const foundSnpm = resolveSnpmBin();
+    setStatus(workspaceId, {
+      phase: 'checking-snpm',
+      progress: pipelineProgress('checking-snpm', foundSnpm ? 0.85 : 0.2),
+      detail: foundSnpm
+        ? '本机已安装 snpm'
+        : needsDeps
+          ? '未检测到 snpm，正在安装…'
+          : '未检测到 snpm（当前依赖已就绪，跳过安装）',
+    });
+    if (needsDeps) {
+      await ensureSnpmBin();
+      pipeline.throwIfCanceled();
+      setStatus(workspaceId, {
+        phase: 'checking-snpm',
+        progress: pipelineProgress('checking-snpm', 1),
+        detail: 'snpm 已就绪',
+      });
+      setStatus(workspaceId, {
+        phase: 'installing',
+        progress: pipelineProgress('installing', 0),
+        detail: '正在执行 snpm install',
+      });
       await runNpmInstall(workspaceId, appPath, isCurrent);
       pipeline.throwIfCanceled();
     }
 
-    setStatus(workspaceId, { phase: 'starting', progress: pipelineProgress('starting', 0.3) });
+    setStatus(workspaceId, {
+      phase: 'starting',
+      progress: pipelineProgress('starting', 0.3),
+      detail: '正在启动预览服务',
+    });
     const entry = await startDevServer(workspaceId, appPath);
     pipeline.throwIfCanceled();
-    setStatus(workspaceId, { phase: 'ready', progress: 100, previewUrl: entry.previewUrl, error: undefined });
+    setStatus(workspaceId, {
+      phase: 'ready',
+      progress: 100,
+      previewUrl: entry.previewUrl,
+      error: undefined,
+      detail: undefined,
+    });
   } catch (err) {
     if (err instanceof OperationCanceledError || !isCurrent()) return;
     const message = err instanceof Error ? err.message : String(err);
@@ -1977,17 +2053,18 @@ export async function installNpmPackage(
     await setupManagedNode();
   }
 
-  const { npmBin } = getManagedNodePaths();
+  const snpmBin = await ensureSnpmBin();
+  const registry = resolveAppNpmRegistry(npmCwd);
   const outputs: string[] = [];
   for (const name of packageNames) {
     const packageName = assertNpmPackageName(name);
     const result = await collectSpawnOutput(
-      npmBin,
-      ['install', packageName, '--save', '--no-audit', '--no-fund'],
+      snpmBin,
+      buildSnpmInstallArgs(registry, [packageName]),
       { cwd: npmCwd, env: getNodeSpawnEnv() as NodeJS.ProcessEnv },
     );
     if (!result.ok) {
-      throw new Error(`npm install ${packageName} 失败\n${result.output}`);
+      throw new Error(`snpm install ${packageName} 失败\n${result.output}`);
     }
     outputs.push(result.output);
   }

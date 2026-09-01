@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSiteappApplicationCreate } from '../../shared/siteapp-cli-payload';
+import { parseSiteappApplicationCreate, parseSiteappSavedFiles } from '../../shared/siteapp-cli-payload';
 import { buildSiteAppCreateParams } from '../../electron/utils/siteapp-cli';
 
 describe('siteapp application create params', () => {
@@ -65,5 +65,43 @@ describe('parseSiteappApplicationCreate', () => {
       name: undefined,
       status: undefined,
     });
+  });
+});
+
+describe('parseSiteappSavedFiles', () => {
+  it('reads savedFiles from sai-cli source download payload (result.savedFiles)', () => {
+    expect(parseSiteappSavedFiles({
+      input: { app_code: 'app_cb1bddf371e19a70' },
+      path: 'siteapp.source.download',
+      result: {
+        savedFiles: [{
+          contentType: 'application/gzip',
+          fileName: 'app_cb1bddf371e19a70-dev.tar.gz',
+          localPath: 'file:///Users/sto/.sai/out/siteapp/source/download/app_cb1bddf371e19a70-dev.tar.gz',
+          size: 254,
+        }],
+        statusCode: 200,
+      },
+    })).toEqual([{
+      localPath: 'file:///Users/sto/.sai/out/siteapp/source/download/app_cb1bddf371e19a70-dev.tar.gz',
+      fileName: 'app_cb1bddf371e19a70-dev.tar.gz',
+      size: 254,
+      contentType: 'application/gzip',
+    }]);
+  });
+
+  it('still reads nested data.result.savedFiles', () => {
+    expect(parseSiteappSavedFiles({
+      data: {
+        result: {
+          savedFiles: [{ localPath: '/tmp/source.tar.gz', fileName: 'source.tar.gz' }],
+        },
+      },
+    })).toEqual([{
+      localPath: '/tmp/source.tar.gz',
+      fileName: 'source.tar.gz',
+      size: undefined,
+      contentType: undefined,
+    }]);
   });
 });
