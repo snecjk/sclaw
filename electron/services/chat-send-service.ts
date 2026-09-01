@@ -5,6 +5,7 @@ import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt'
 import { agentMemoryContextService } from './agent-memory-context-service';
 import { getMemoryTurnCoordinator } from './memory-turn-coordinator';
 import { getChatRuntimeSupervisor } from './chat-runtime-supervisor';
+import { emitAgentPreparationProgress } from './agent-preparation-progress';
 
 type ChatSendResult = { success: boolean; result?: { runId?: string }; error?: string };
 
@@ -54,9 +55,35 @@ export function runMainChatSend(
     }
     const skipRead = input.memoryPolicy?.skipRead === true;
     const skipWrite = input.memoryPolicy?.skipWrite === true;
+    const showPreparationProgress = runtime.runtimePolicy.origin === 'interactive';
+    if (showPreparationProgress && !skipRead) {
+      emitAgentPreparationProgress(
+        gatewayManager,
+        input.sessionKey,
+        input.idempotencyKey,
+        'memory',
+        'running',
+        '正在检索相关记忆…',
+      );
+    }
     const memory = skipRead
       ? { injectedExecutionMemories: [] }
       : await agentMemoryContextService.prepare(input.sourceText?.trim() || input.message);
+    if (showPreparationProgress && !skipRead) {
+      const hasMemory = Boolean(memory.preference || memory.execution);
+      emitAgentPreparationProgress(
+        gatewayManager,
+        input.sessionKey,
+        input.idempotencyKey,
+        'memory',
+        'completed',
+        hasMemory ? '已检索到相关记忆' : '未检索到相关记忆',
+        undefined,
+        memory.displayMemories?.length
+          ? { memories: memory.displayMemories }
+          : undefined,
+      );
+    }
     const coordinator = getMemoryTurnCoordinator(gatewayManager);
     if (!skipWrite) {
       coordinator.begin({

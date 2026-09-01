@@ -1,4 +1,4 @@
-import { toLegacyChatMessagePayload } from '../../gateway/normalized-engine-event';
+import { emitAgentPreparationProgress } from '../agent-preparation-progress';
 
 export type SkillRoutingProgressSink = {
   emit(event: string, payload: unknown): unknown;
@@ -10,16 +10,14 @@ export function emitSkillRoutingProgress(
   runId: string,
   text: string,
 ): void {
-  if (!sink) return;
-  sink.emit('chat:message', toLegacyChatMessagePayload({
-    type: 'message.delta',
+  const completed = /^(?:已匹配技能|未匹配到相关技能|未找到匹配技能)/.test(text);
+  emitAgentPreparationProgress(
+    sink,
     sessionKey,
     runId,
-    message: {
-      id: `skill-routing-${runId}`,
-      role: 'assistant',
-      content: [{ type: 'text', text }],
-      metadata: { kind: 'skill-routing-progress' },
-    },
-  }));
+    'skill',
+    completed ? 'completed' : 'running',
+    text,
+    runId,
+  );
 }

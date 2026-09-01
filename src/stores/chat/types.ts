@@ -70,6 +70,8 @@ export interface AttachedFileMeta {
 export interface RawMessage {
   role: 'user' | 'assistant' | 'system' | 'toolresult';
   content: unknown; // string | ContentBlock[]
+  /** Structured runtime metadata attached to transient engine messages. */
+  metadata?: Record<string, unknown>;
   timestamp?: number;
   id?: string;
   toolCallId?: string;

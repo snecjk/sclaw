@@ -91,6 +91,45 @@ describe('canonical chat client session reducer', () => {
     expect(secondDelta.overlay.streamingMessage).toMatchObject({ content: 'second partial' });
   });
 
+  it('retains and updates preparation stages while normal deltas keep streaming', () => {
+    const started = reduceSessionEvent(createClientSessionState(), event()).state;
+    const memoryRunning = reduceSessionEvent(started, event({
+      eventId: 'event-2',
+      sequence: 2,
+      type: 'message.delta',
+      payload: {
+        id: 'agent-preparation-memory-message-1',
+        role: 'assistant',
+        content: '正在检索相关记忆…',
+        metadata: { kind: 'agent-preparation-progress', stage: 'memory', status: 'running' },
+      },
+    })).state;
+    const memoryCompleted = reduceSessionEvent(memoryRunning, event({
+      eventId: 'event-3',
+      sequence: 3,
+      type: 'message.delta',
+      payload: {
+        id: 'agent-preparation-memory-message-1',
+        role: 'assistant',
+        content: '已检索到相关记忆',
+        metadata: { kind: 'agent-preparation-progress', stage: 'memory', status: 'completed' },
+      },
+    })).state;
+    const replyDelta = reduceSessionEvent(memoryCompleted, event({
+      eventId: 'event-4',
+      sequence: 4,
+      type: 'message.delta',
+      payload: { id: 'assistant-1', role: 'assistant', content: 'reply' },
+    })).state;
+
+    expect(replyDelta.overlay.streamingMessages).toHaveLength(1);
+    expect(replyDelta.overlay.streamingMessages[0]).toMatchObject({
+      id: 'agent-preparation-memory-message-1',
+      content: '已检索到相关记忆',
+    });
+    expect(replyDelta.overlay.streamingMessage).toMatchObject({ content: 'reply' });
+  });
+
   it('rejects duplicates and requests hydration for sequence gaps', () => {
     const started = reduceSessionEvent(createClientSessionState(), event()).state;
     expect(reduceSessionEvent(started, event()).accepted).toBe(false);

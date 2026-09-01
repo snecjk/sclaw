@@ -13,6 +13,7 @@ import type { ChatHistoryFingerprint } from '../../../shared/chat-history-finger
 import type { AttachedFileMeta, RawMessage, ToolStatus } from './types';
 import { collectToolUpdates, isToolResultRole, upsertToolStatuses } from './helpers';
 import { appendStreamingAssistantSnapshot } from './streaming-state';
+import { isAgentPreparationProgressMessage } from '@/lib/agent-preparation-progress';
 
 interface ChatDispatchPayload {
   idempotencyKey: string;
@@ -70,6 +71,17 @@ export interface SessionEventReduction {
   state: ClientSessionState;
   needsHydration: boolean;
   accepted: boolean;
+}
+
+function upsertPreparationProgressMessage(
+  messages: RawMessage[],
+  message: RawMessage,
+): RawMessage[] {
+  const index = messages.findIndex((item) => item.id === message.id);
+  if (index < 0) return [...messages, message];
+  const next = [...messages];
+  next[index] = message;
+  return next;
 }
 
 export function createClientSessionState(): ClientSessionState {
@@ -227,6 +239,7 @@ export function reduceSessionEvent(
   const preserveExistingOptimistic = currentOptimisticBelongsToRun
     || Boolean(state.overlay.optimisticUserMessage);
   const isToolResult = Boolean(message && isToolResultRole(message.role));
+  const isPreparationProgress = isAgentPreparationProgressMessage(message);
   const toolUpdates = message
     ? collectToolUpdates(message, event.type === 'message.delta' ? 'delta' : 'final')
     : [];
@@ -268,6 +281,8 @@ export function reduceSessionEvent(
             : message ?? state.overlay.streamingMessage,
         streamingMessages: startsNewRun || clearOverlay
           ? []
+          : isPreparationProgress && message
+            ? upsertPreparationProgressMessage(state.overlay.streamingMessages, message)
           // Keep only committed assistant messages in the chronological buffer.
           // The current growing delta already lives in streamingMessage. Mixing
           // it into this array makes a reused run id jump back to its first

@@ -45,6 +45,10 @@ describe('runMainChatSend memory boundary', () => {
       preference: '<!-- StoClaw-Agent-Memory -->\n偏好\n<!-- StoClaw-Agent-Memory -->',
       execution: '<!-- StoClaw-Agent-Execution-Memory -->\n经验\n<!-- StoClaw-Agent-Execution-Memory -->',
       injectedExecutionMemories: [{ memoryId: 'e1', memory: '经验' }],
+      displayMemories: [
+        { kind: 'preference', memory: '偏好简洁输出' },
+        { kind: 'execution', memory: '使用 sai-cli 查询' },
+      ],
     });
     bindMock.mockResolvedValue(undefined);
     runtimeBeginMock.mockImplementation(async (
@@ -92,6 +96,26 @@ describe('runMainChatSend memory boundary', () => {
       message: expect.stringContaining('StoClaw-Agent-Execution-Memory'),
     }));
     expect(bindMock).toHaveBeenCalledWith({ sessionKey: 'agent:main:main', idempotencyKey: 'id-1', runId: 'run-1' });
+  });
+
+  it('emits live memory preparation progress with renderer-safe memory content', async () => {
+    const emit = vi.fn();
+    const dispatch = vi.fn().mockResolvedValue({ success: true, result: { runId: 'run-progress' } });
+
+    await runMainChatSend({ emit } as never, {
+      sessionKey: 'agent:main:progress',
+      message: '查询数据',
+      sourceText: '查询数据',
+      idempotencyKey: 'progress-id',
+      engineType: 'openclaw',
+    }, (params) => params, dispatch);
+
+    const emittedText = emit.mock.calls.map(([, payload]) => JSON.stringify(payload)).join('\n');
+    expect(emittedText).toContain('正在检索相关记忆…');
+    expect(emittedText).toContain('已检索到相关记忆');
+    expect(emittedText).toContain('偏好简洁输出');
+    expect(emittedText).toContain('使用 sai-cli 查询');
+    expect(emittedText).not.toContain('StoClaw-Agent-Memory');
   });
 
   it('merges Claude memory into the existing system prompt without changing the message', async () => {
