@@ -717,8 +717,8 @@ export interface SiteappMenuPreviewItem {
 export interface SiteappMenuPreview {
   appCode?: string;
   menus: SiteappMenuPreviewItem[];
-  skipped: Array<{ label: string; reason: string }>;
-  source: 'top-nav' | 'side-nav' | 'empty';
+  skipped: Array<{ label: string; reason: string; path?: string }>;
+  source: 'top-nav' | 'side-nav' | 'routes' | 'mixed' | 'empty';
 }
 
 export async function previewStoAppMenus(input: {

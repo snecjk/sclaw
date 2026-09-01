@@ -71,7 +71,7 @@ export function buildPostPublishMenuSyncPrompt(input: {
     structureRule,
     appCodeLine,
     '',
-    '扫描顺序：`src/layouts/nav-config.ts`、`src/App.tsx` 的 Route、`src/runtime/page-registry.ts` / `page-loader.ts`、`src/pages/`。忽略 404、index 重定向、以及 `developerOnly` 的开发页。',
+    '扫描项目源码中的导航、Route，以及带 permission/auth 的路由表。运行时按权限隐藏的页面也要列入，避免尚未授权时漏同步。忽略 404、index 重定向、以及 `developerOnly` 的开发页。',
     '',
     '先用中文列出将要同步的菜单树（编码、名称、父子关系），然后明确问我：「是否把以上菜单同步到云端？」',
     '我同意之前，不要执行 apply。',

@@ -59,6 +59,7 @@ describe('siteapp menu sync', () => {
     expect(prompt).toContain('sai-cli siteapp menu sync');
     expect(prompt).toContain('sai-cli siteapp menu list');
     expect(prompt).toContain('我同意之前，不要执行 apply');
+    expect(prompt).toContain('运行时按权限隐藏的页面也要列入');
   });
 
   it('uses a manual opener when triggered from the publish-menu action', () => {
