@@ -27,6 +27,7 @@ import { Sprite } from './pages/Sprite';
 import { FloatIcon } from './pages/FloatIcon';
 import { WorkflowTestPage } from './pages/Workflow';
 import { DataCenter } from './pages/DataCenter';
+import { ReportHistoryPage } from './pages/DataCenter/reports/ReportHistoryPage';
 import { TutorialDetailPage } from './pages/LearningCenter/TutorialDetailPage';
 import { LearningCenterPage } from './pages/LearningCenter/LearningCenterPage';
 import { useSettingsStore } from './stores/settings';
@@ -325,6 +326,7 @@ function App() {
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/my-tasks" element={<MyTask />} />
               <Route path="/data-center" element={<DataCenter />} />
+              <Route path="/data-center/reports/history" element={<ReportHistoryPage />} />
               <Route path="/learning-center" element={<LearningCenterPage />} />
               <Route path="/learning-center/tutorial/:tutorialId" element={<TutorialDetailPage />} />
               <Route path="/workflow/*" element={<WorkflowTestPage />} />

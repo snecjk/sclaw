@@ -140,7 +140,7 @@
             "qaArtifact": "Manage files saved from conversation and workflow artifact previews for tracing, downloads, and later analysis.",
             "drive": "Manage authorized local files and online data assets for AI and workflow references.",
             "dataSource": "Data source management will be connected after the backend API is available.",
-            "financeReport": "View your reports with SSO skip-login."
+            "financeReport": "Browse and search published data models."
         },
         "tabs": {
             "myArtifacts": "My artifacts",
@@ -179,7 +179,16 @@
         "financeReport": {
             "loading": "Loading my reports…",
             "loadFailedTitle": "Failed to load my reports",
-            "loadFailedDescription": "Could not obtain skip-login URL. Sign in to StoClaw and try again."
+            "loadFailedDescription": "Could not load the report list. Sign in and try again.",
+            "totalCount": "{{count}} reports",
+            "listHint": "Search by model name, category, or description",
+            "searchPlaceholder": "Search model name, category, description",
+            "emptyDescription": "No published data models yet",
+            "allReports": "All reports",
+            "historyTitle": "Report data",
+            "historyDescription": "Select a template and run conditions to preview product data.",
+            "historyEmptyTitle": "Query to preview",
+            "historyEmptyDescription": "Choose a template and run record, then click Query to preview product data."
         },
         "feedback": {
             "loadFailed": "Failed to load",

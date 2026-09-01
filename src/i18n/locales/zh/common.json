@@ -180,7 +180,16 @@
         "financeReport": {
             "loading": "正在加载我的报表…",
             "loadFailedTitle": "我的报表加载失败",
-            "loadFailedDescription": "免登链接获取失败，请确认已登录 StoClaw 后重试。"
+            "loadFailedDescription": "报表列表获取失败，请确认已登录后重试。",
+            "totalCount": "共 {{count}} 条报表",
+            "listHint": "搜索模型名称、分类或描述",
+            "searchPlaceholder": "搜索模型名称、分类、描述",
+            "emptyDescription": "暂无已发布的数据模型",
+            "allReports": "全部报表",
+            "historyTitle": "报表数据",
+            "historyDescription": "选择模板与运行条件后查询，查看产物数据预览。",
+            "historyEmptyTitle": "请先查询产物",
+            "historyEmptyDescription": "选择模板与运行记录后点击「查询」，即可预览产物数据。"
         },
         "feedback": {
             "loadFailed": "加载失败",

@@ -36,6 +36,7 @@ import { handleUsageRoutes } from './routes/usage';
 import { handleSkillRoutes } from './routes/skills';
 import { handleSkillPlazaRoutes } from './routes/skill-plaza';
 import { handleAppPlazaRoutes } from './routes/app-plaza';
+import { handleFinanceBiRoutes } from './routes/finance-bi';
 import { handleConnectorRoutes } from './routes/connectors';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
@@ -88,6 +89,7 @@ const routeHandlers: RouteHandler[] = [
   handleSkillRoutes,
   handleSkillPlazaRoutes,
   handleAppPlazaRoutes,
+  handleFinanceBiRoutes,
   handleLearningCenterRoutes,
   handleConnectorRoutes,
   handleFileRoutes,

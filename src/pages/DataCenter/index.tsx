@@ -62,7 +62,7 @@ import type { DataCenterTempUrl } from '@/types/data-center';
 import type { LocalAuthorizeSelectionType } from '@/types/local-authorized-file';
 import { getAppEnv } from '../../../shared/env-config';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
-import { DataCenterFinanceEmbedPane } from './components/DataCenterFinanceEmbedPane';
+import { ReportListPage } from './reports/ReportListPage';
 import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import {
   DataCenterToolbarSearch,
@@ -642,7 +642,7 @@ export function DataCenter() {
 
           {isFinanceReportSection ? (
             <section className="flex min-h-0 flex-1 flex-col">
-              <DataCenterFinanceEmbedPane className="flex min-h-0 flex-1 flex-col" />
+              <ReportListPage />
             </section>
           ) : store.section === 'drive' ? (
             <div className="mb-[18px] shrink-0">
@@ -760,7 +760,7 @@ export function DataCenter() {
                 )}
               </div>
 
-              {store.section !== 'data_source' ? (
+              {!isFinanceReportSection ? (
                 <div className="flex min-w-0 items-center gap-2">
                   <DataCenterToolbarSearch
                     value={store.keyword}
@@ -838,7 +838,7 @@ export function DataCenter() {
           </div>
         ) : null}
 
-        {store.section !== 'data_source' ? (
+        {!isFinanceReportSection ? (
           <>
             {currentParentEntryId !== ROOT_ENTRY_ID ? (
               <FolderBreadcrumbBar
