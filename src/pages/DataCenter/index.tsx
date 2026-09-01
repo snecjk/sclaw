@@ -91,6 +91,7 @@ import {
 type AssociationFilter = 'all' | 'task';
 
 const appEnv = getAppEnv();
+const SHOW_FINANCE_REPORT_TAB = false;
 const vipH5QrCode = appEnv === 'development' || appEnv === 'test'
   ? vipH5TestQrCode
   : vipH5ProdQrCode;
@@ -600,16 +601,18 @@ export function DataCenter() {
                 <PanelsTopLeft className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
                 {t('dataCenterPage.sections.qaArtifact')}
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isFinanceReportSection}
-                onClick={() => handleSectionChange('data_source')}
-                className={myTaskSectionTabClass(isFinanceReportSection)}
-              >
-                <BarChart3 className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
-                {t('dataCenterPage.sections.financeReport')}
-              </button>
+              {SHOW_FINANCE_REPORT_TAB ? (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isFinanceReportSection}
+                  onClick={() => handleSectionChange('data_source')}
+                  className={myTaskSectionTabClass(isFinanceReportSection)}
+                >
+                  <BarChart3 className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                  {t('dataCenterPage.sections.financeReport')}
+                </button>
+              ) : null}
               <button
                 type="button"
                 role="tab"

@@ -18,6 +18,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
         'dataCenterPage.toolbar.gridView': '网格视图',
         'dataCenterPage.toolbar.listView': '列表视图',
         'dataCenterPage.toolbar.createFolder': '新建文件夹',
+        'dataCenterPage.sections.financeReport': '我的报表',
       };
       if (key === 'dataCenterPage.toolbar.associationLabel') return `关联：${options?.value ?? ''}`;
       return labels[key] ?? key;
@@ -115,6 +116,12 @@ afterEach(() => {
 });
 
 describe('data center toolbar theme', () => {
+  it('temporarily hides the finance report tab', () => {
+    renderToolbar();
+
+    expect(screen.queryByRole('tab', { name: '我的报表' })).toBeNull();
+  });
+
   it('uses one dark resting surface for search, filter, view switch, and create action', () => {
     const dispose = installControlRecipes('dark');
     renderToolbar();
