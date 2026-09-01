@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isSclawEmbedDeferredWindowOpenUrl,
   isSclawEmbedHttpUrl,
   isSclawEmbedLikelyDownloadUrl,
   isSclawEmbedSameFrameWindowOpen,
@@ -52,5 +53,14 @@ describe('sclaw-embed-browser-window-open', () => {
     expect(isSclawEmbedSameFrameWindowOpen('_blank')).toBe(false);
     expect(isSclawEmbedSameFrameWindowOpen('')).toBe(false);
     expect(isSclawEmbedSameFrameWindowOpen(undefined)).toBe(false);
+  });
+
+  it('detects deferred empty / about:blank window.open targets', () => {
+    expect(isSclawEmbedDeferredWindowOpenUrl('')).toBe(true);
+    expect(isSclawEmbedDeferredWindowOpenUrl('   ')).toBe(true);
+    expect(isSclawEmbedDeferredWindowOpenUrl('about:blank')).toBe(true);
+    expect(isSclawEmbedDeferredWindowOpenUrl('ABOUT:BLANK')).toBe(true);
+    expect(isSclawEmbedDeferredWindowOpenUrl(undefined)).toBe(true);
+    expect(isSclawEmbedDeferredWindowOpenUrl('https://example.sto.cn/a')).toBe(false);
   });
 });

@@ -1,11 +1,10 @@
 /**
- * Right-stage for app-dev workbench: 预览 / 代码 / Git / 云服务 / 社区.
+ * Right-stage for app-dev workbench: 预览 / 代码 / Git / 外部服务 / 社区.
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
-  Cloud,
   ExternalLink,
   Eye,
   FileCode2,
@@ -22,7 +21,6 @@ import {
   Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { AppDevCloudPanel } from '@/components/app-dev/AppDevCloudPanel';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
@@ -57,7 +55,7 @@ import { cn } from '@/lib/utils';
 import '@/components/more-apps/app-plaza-shell.css';
 import '@/components/sclaw-browser/sclaw-browser-overlay.css';
 
-export type AppDevStageMode = 'preview' | 'code' | 'git' | 'external-services' | 'cloud' | 'community';
+export type AppDevStageMode = 'preview' | 'code' | 'git' | 'external-services' | 'community';
 type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
@@ -420,7 +418,6 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             { id: 'code', label: '代码', icon: FileCode2 },
             { id: 'git', label: 'Git 代码管理', icon: GitBranch },
             { id: 'external-services', label: '外部服务', icon: PlugZap },
-            { id: 'cloud', label: '云服务', icon: Cloud },
             { id: 'community', label: '社区', icon: Users },
           ] as const
         ).map((tab) => {
@@ -638,10 +635,6 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       ) : null}
 
       {mode === 'external-services' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
-
-      {mode === 'cloud' ? (
-        <AppDevCloudPanel workspaceId={workspaceId} appName={appName} />
-      ) : null}
 
       {mode === 'community' ? <AppDevCommunityPanel workspaceId={workspaceId} /> : null}
 

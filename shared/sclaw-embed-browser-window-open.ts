@@ -41,6 +41,17 @@ export function isSclawEmbedSameFrameWindowOpen(frameName: string | undefined): 
   return name === '_self' || name === '_top' || name === '_parent';
 }
 
+/**
+ * window.open() / window.open('', '_blank') / about:blank — Chromium creates
+ * an empty window first; the real URL is assigned afterwards. Denying this
+ * makes window.open return null and the follow-up navigation never happens.
+ */
+export function isSclawEmbedDeferredWindowOpenUrl(url: string | undefined): boolean {
+  const trimmed = typeof url === 'string' ? url.trim() : '';
+  if (!trimmed) return true;
+  return trimmed.toLowerCase() === 'about:blank';
+}
+
 /** Decide how an embed guest window.open URL should be handled. */
 export function resolveSclawEmbedWindowOpenAction(url: string): SclawEmbedWindowOpenAction {
   const trimmed = typeof url === 'string' ? url.trim() : '';
