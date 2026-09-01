@@ -7,6 +7,10 @@ const { fetchSkipLoginLinkMock, openExternalUrlMock, openInSclawBrowserMock } = 
   openInSclawBrowserMock: vi.fn(),
 }));
 
+vi.mock('@/lib/workflow-api', () => ({
+  getWorkflowStoToken: () => 'sto-local-token',
+}));
+
 vi.mock('@/stores/app-plaza-shell', () => ({
   useAppPlazaShellStore: (selector: (state: Record<string, unknown>) => unknown) => selector({
     openOrFocusDevAppTab: vi.fn(),
@@ -47,9 +51,13 @@ vi.mock('@/lib/app-plaza-api', () => ({
 
 import {
   DevAppCard,
-  buildAppPermissionsUrl,
   formatDevAppCardDesc,
 } from '../../src/components/more-apps/DevAppCard';
+import {
+  buildAppPermissionsCallbackUrl,
+  buildAppPermissionsUrl,
+  buildDirectAppPermissionsLoginUrl,
+} from '../../src/lib/app-permissions-url';
 import type { DevAppSummary } from '../../src/lib/app-dev-api';
 
 function app(pageType: 'site' | 'assets'): DevAppSummary {
@@ -102,9 +110,30 @@ describe('DevAppCard page type', () => {
     expect(buildAppPermissionsUrl('app_prod', 'production')).toBe(
       'https://sclaw.sto.cn/apps/app_prod/permissions',
     );
+    expect(buildAppPermissionsUrl(
+      'app_configured',
+      'test',
+      '/permissions?appId=app_configured&embed=1',
+    )).toBe('https://sclaw-test.sto.cn/permissions?appId=app_configured&embed=1');
+    expect(buildAppPermissionsUrl(
+      'app_configured',
+      'test',
+      'https://sclaw-test.sto.cn/permissions?appId=app_configured&embed=1#roles',
+    )).toBe('https://sclaw-test.sto.cn/permissions?appId=app_configured&embed=1#roles');
+    expect(buildAppPermissionsCallbackUrl(
+      'https://sclaw-test.sto.cn/permissions?appId=app_configured&embed=1',
+    )).toBe(
+      'https://sclaw-test.sto.cn/sso/callback?redirect=%2Fpermissions%3FappId%3Dapp_configured%26embed%3D1',
+    );
+    expect(buildDirectAppPermissionsLoginUrl(
+      'http://localhost:5174/sso/callback?redirect=%2Fpermissions%3FappId%3Dapp_configured',
+      'sto-local-token',
+    )).toBe(
+      'http://localhost:5174/sso/callback?redirect=%2Fpermissions%3FappId%3Dapp_configured&stoToken=sto-local-token',
+    );
   });
 
-  it('opens the current app permissions page in the embedded browser with SSO', async () => {
+  it('opens the local permissions page with the current StoToken without remote SSO', async () => {
     fetchSkipLoginLinkMock.mockResolvedValue(
       'https://page-test.sto.cn/sto-base-service/sto-sso-web/#/main?autoLogin=true&ticket=t-1',
     );
@@ -115,14 +144,14 @@ describe('DevAppCard page type', () => {
     });
     fireEvent.click(await screen.findByText('权限配置'));
     await waitFor(() => {
-      expect(fetchSkipLoginLinkMock).toHaveBeenCalledWith('SCLAW_PORTAL');
+      expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
       expect(openInSclawBrowserMock).toHaveBeenCalledWith({
-        url: 'https://page-test.sto.cn/sto-base-service/sto-sso-web/#/main?autoLogin=true&ticket=t-1&returnUrl=https%3A%2F%2Fsclaw-test.sto.cn%2Fapps%2Fapp_site%2Fpermissions',
+        url: 'https://sclaw-test.sto.cn/sso/callback?redirect=%2Fapps%2Fapp_site%2Fpermissions&stoToken=sto-local-token',
         title: 'site app · 权限配置',
         appId: 'dev-app-permissions:app_site',
-        sourceUrl: 'https://sclaw-test.sto.cn/apps/app_site/permissions',
+        sourceUrl: 'https://sclaw-test.sto.cn/sso/callback?redirect=%2Fapps%2Fapp_site%2Fpermissions',
         systemCode: 'SCLAW_PORTAL',
-        skipLoginEligible: true,
+        skipLoginEligible: false,
       });
     });
     expect(openExternalUrlMock).not.toHaveBeenCalled();

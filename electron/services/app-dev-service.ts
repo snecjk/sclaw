@@ -116,6 +116,8 @@ export interface DevAppSummary {
   availability: 'local' | 'remote-only' | 'path-missing';
   /** Cloud preview page URL from site-apps list. */
   previewUrl?: string;
+  /** Permission-management URL configured by memory-center. */
+  permissionsUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
   listError?: string;
@@ -1203,6 +1205,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         appCode: cloud.appCode,
         availability: 'local',
         previewUrl: cloud.previewUrl,
+        permissionsUrl: cloud.permissionsUrl,
         gitlabProjectId: cloud.gitlabProjectId,
         devopsApplicationId: cloud.devopsApplicationId,
         source: fields.source ?? 'created',
@@ -1222,6 +1225,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         appCode: cloud.appCode,
         availability: pathOk ? 'path-missing' : 'remote-only',
         previewUrl: cloud.previewUrl,
+        permissionsUrl: cloud.permissionsUrl,
         gitlabProjectId: cloud.gitlabProjectId,
         devopsApplicationId: cloud.devopsApplicationId,
         pageType: cloud.pageType,

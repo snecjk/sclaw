@@ -33,15 +33,15 @@ import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import { appendSkipLoginReturnUrl, fetchAppPlazaSkipLoginLink } from '@/lib/app-plaza-api';
-import { getAppEnv, type AppEnvironment } from '../../../shared/env-config';
+import {
+  buildAppPermissionsCallbackUrl,
+  buildDirectAppPermissionsLoginUrl,
+  buildAppPermissionsUrl,
+  usesDirectPortalAuth,
+} from '@/lib/app-permissions-url';
+import { getWorkflowStoToken } from '@/lib/workflow-api';
+import { getAppEnv } from '../../../shared/env-config';
 import { getAppNameInitial } from './AppIcon';
-
-export function buildAppPermissionsUrl(appCode: string, env: AppEnvironment = getAppEnv()): string {
-  const origin = env === 'development' || env === 'test'
-    ? 'https://sclaw-test.sto.cn'
-    : 'https://sclaw.sto.cn';
-  return `${origin}/apps/${encodeURIComponent(appCode)}/permissions`;
-}
 
 export function formatDevAppCardDesc(app: Pick<DevAppSummary, 'pageType' | 'availability' | 'localReady' | 'source'>): string {
   const kind = app.pageType === 'assets' ? '托管应用' : '独立站点';
@@ -132,16 +132,32 @@ export function DevAppCard({ app }: DevAppCardProps) {
       toast.message('缺少 appCode，无法打开权限配置');
       return;
     }
-    const permissionsUrl = buildAppPermissionsUrl(app.appCode);
-    try {
-      const skipLoginUrl = await fetchAppPlazaSkipLoginLink('SCLAW_PORTAL');
-      console.log('skipLoginUrl', skipLoginUrl);
-      console.log('permissionsUrl', permissionsUrl);
+    const env = getAppEnv();
+    const permissionsUrl = buildAppPermissionsUrl(app.appCode, env, app.permissionsUrl);
+    const callbackUrl = buildAppPermissionsCallbackUrl(permissionsUrl);
+    if (usesDirectPortalAuth(env)) {
+      const stoToken = getWorkflowStoToken();
+      if (!stoToken) {
+        toast.error('当前登录缺少 StoToken，请重新登录后再试');
+        return;
+      }
       openInSclawBrowser({
-        url: appendSkipLoginReturnUrl(skipLoginUrl, permissionsUrl),
+        url: buildDirectAppPermissionsLoginUrl(callbackUrl, stoToken),
         title: `${app.name} · 权限配置`,
         appId: `dev-app-permissions:${app.appCode}`,
-        sourceUrl: permissionsUrl,
+        sourceUrl: callbackUrl,
+        systemCode: 'SCLAW_PORTAL',
+        skipLoginEligible: false,
+      });
+      return;
+    }
+    try {
+      const skipLoginUrl = await fetchAppPlazaSkipLoginLink('SCLAW_PORTAL');
+      openInSclawBrowser({
+        url: appendSkipLoginReturnUrl(skipLoginUrl, callbackUrl),
+        title: `${app.name} · 权限配置`,
+        appId: `dev-app-permissions:${app.appCode}`,
+        sourceUrl: callbackUrl,
         systemCode: 'SCLAW_PORTAL',
         skipLoginEligible: true,
       });

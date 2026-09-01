@@ -98,6 +98,15 @@ export function appendSkipLoginReturnUrl(skipLoginUrl: string, returnUrl: string
   if (!ticket || !target) return ticket;
   try {
     const parsed = new URL(ticket);
+    if (parsed.hash) {
+      const fragment = parsed.hash.slice(1);
+      const queryIndex = fragment.indexOf('?');
+      const hashPath = queryIndex >= 0 ? fragment.slice(0, queryIndex) : fragment;
+      const hashParams = new URLSearchParams(queryIndex >= 0 ? fragment.slice(queryIndex + 1) : '');
+      hashParams.set('returnUrl', target);
+      parsed.hash = `${hashPath}?${hashParams.toString()}`;
+      return parsed.toString();
+    }
     parsed.searchParams.set('returnUrl', target);
     return parsed.toString();
   } catch {
