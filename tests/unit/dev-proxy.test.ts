@@ -6,7 +6,7 @@ import {
   buildViteProxyFromFile,
   ensureDevProxyForAbsoluteUrl,
   proxyKeyFromHostname,
-} from '../../resources/app-templates/react-a2ui-template/scripts/dev-proxy.mjs';
+} from '../../resources/app-templates/site-minimal/scripts/dev-proxy.mjs';
 
 describe('dev-proxy helpers', () => {
   const tempDirs: string[] = [];
