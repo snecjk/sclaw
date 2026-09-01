@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { bootstrapSsoAuth } from '@sto/sclaw-plugin-sso-auth';
 import App from './App';
+import './theme/theme.css';
 import './index.css';
 
 const container = document.getElementById('root');

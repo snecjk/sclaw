@@ -1,12 +1,13 @@
 # PC 企业应用模板
 
-本模板 = **公司发布平台 Vite 工程底座** + **antd PC 三栏工作台** + **请求封装**。
+本模板 = **公司发布平台 Vite 工程底座** + **STO PC 应用壳层** + **请求封装**。
 
 ## 默认布局
 
-1. **顶部一级导航**：Logo、应用名、横向菜单、用户信息
-2. **左侧二级导航**：随顶部菜单切换
-3. **正文区域**：业务页面容器
+1. **应用顶栏**：STO Logo、应用名和当前用户
+2. **打开页签**：固定首页，其他页面支持打开和关闭
+3. **静态侧栏**：由 `src/layouts/nav-config.ts` 声明 Assets 页面
+4. **正文区域**：统一的页面标题、内容卡片和空状态组件
 
 ## 请求封装
 
@@ -39,7 +40,9 @@ node scripts/ensure-dev-proxy.mjs "https://baseinfo-chatbotapi-test.sto.cn/api/r
 
 | 路径 | 说明 |
 |---|---|
-| `src/layouts/` | 顶部 / 侧栏布局与导航配置 |
+| `src/theme/` | STO 主题 Token、antd 主题与 CSS 变量 |
+| `src/layouts/` | 顶栏、页签、静态侧栏与页面容器 |
+| `src/components/` | 页面标题、内容卡片和空状态等页面原语 |
 | `src/pages/` | 首页、组件示例、占位业务页 |
 | `src/lib/request.ts` | fetch 封装（cookie + stoToken + 生产 proxy 还原） |
 | `src/lib/resolve-api-url.ts` | `/proxy/<key>` ↔ 真实域名 |

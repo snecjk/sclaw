@@ -11,6 +11,10 @@ const assetsCss = readFileSync(
   join(process.cwd(), 'resources/app-templates/assets-minimal/src/index.css'),
   'utf8',
 );
+const assetsThemeCss = readFileSync(
+  join(process.cwd(), 'resources/app-templates/assets-minimal/src/theme/theme.css'),
+  'utf8',
+);
 
 describe('minimal app templates STO PC visual contract', () => {
   it('uses the soft border token for shell separators and content cards', () => {
@@ -24,10 +28,10 @@ describe('minimal app templates STO PC visual contract', () => {
     expect(css).toMatch(/\.sto-opentab\.is-active \.sto-opentab-close\s*\{[^}]*color:\s*var\(--sto-color-bg-container\)/s);
   });
 
-  it('uses the soft border token for assets shell separators and content surface', () => {
-    expect(assetsCss).toMatch(/--sto-color-border-secondary:\s*#e5e6eb/i);
-    expect(assetsCss).toMatch(/\.app-header\s*\{[^}]*border-bottom:\s*1px solid var\(--sto-color-border-secondary\)/s);
-    expect(assetsCss).toMatch(/\.app-sider\s*\{[^}]*border-right:\s*1px solid var\(--sto-color-border-secondary\)/s);
-    expect(assetsCss).toMatch(/\.app-content\s*\{[^}]*border:\s*1px solid var\(--sto-color-border-secondary\)/s);
+  it('uses the shared soft border token for assets shell separators and content cards', () => {
+    expect(assetsThemeCss).toMatch(/--sto-color-border-secondary:\s*#e5e6eb/i);
+    expect(assetsCss).toMatch(/\.app-header\s*\{[^}]*border-bottom:\s*var\(--sto-border-width\) solid var\(--sto-color-border-secondary\)/s);
+    expect(assetsCss).toMatch(/\.app-sider\s*\{[^}]*border-right:\s*var\(--sto-border-width\) solid var\(--sto-color-border-secondary\)/s);
+    expect(assetsCss).toMatch(/\.content-section\s*\{[^}]*border:\s*var\(--sto-border-width\) solid var\(--sto-color-border-secondary\)/s);
   });
 });
