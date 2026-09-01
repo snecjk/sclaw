@@ -61,7 +61,9 @@ describe('ExternalServiceManagerDialog', () => {
     render(<ExternalServiceManagerDialog open onClose={vi.fn()} />);
     expect(await screen.findByText('策略本体服务')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
-    expect(await screen.findByLabelText('Daily 地址')).toHaveValue(draft.environments.daily);
+    expect(await screen.findByLabelText('测试环境地址')).toHaveValue(draft.environments.daily);
+    expect(screen.getByLabelText('预发环境地址')).toHaveValue(draft.environments.stage);
+    expect(screen.getByLabelText('生产环境地址')).toHaveValue(draft.environments.online);
   });
 
   it('发布前必须二次确认', async () => {
@@ -72,5 +74,48 @@ describe('ExternalServiceManagerDialog', () => {
     expect(publishMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '确认发布' }));
     await waitFor(() => expect(publishMock).toHaveBeenCalledWith(draft.serviceId));
+  });
+
+  it('支持按名称或外部服务编码筛选服务', async () => {
+    pageMock.mockResolvedValueOnce({
+      items: [
+        {
+          serviceId: draft.serviceId,
+          name: draft.name,
+          description: draft.description,
+          owner: draft.owner,
+          status: 'ACTIVE',
+          latestVersion: '1.0.0',
+          authType: 'stoToken',
+          hasSdk: false,
+          hasUsageGuide: false,
+          updatedAt: '2026-08-27T00:00:00Z',
+        },
+        {
+          serviceId: 'public-status',
+          name: '公共状态服务',
+          description: '状态查询',
+          owner: 'platform',
+          status: 'ACTIVE',
+          latestVersion: '2.0.0',
+          authType: 'none',
+          hasSdk: false,
+          hasUsageGuide: false,
+          updatedAt: '2026-08-27T00:00:00Z',
+        },
+      ],
+      total: 2,
+      pageNum: 1,
+      pageSize: 20,
+    });
+    render(<ExternalServiceManagerDialog open onClose={vi.fn()} />);
+    expect(await screen.findByText('公共状态服务')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('搜索服务名称或外部服务编码'), {
+      target: { value: 'ontology' },
+    });
+
+    expect(screen.getByText('策略本体服务')).toBeInTheDocument();
+    expect(screen.queryByText('公共状态服务')).not.toBeInTheDocument();
   });
 });

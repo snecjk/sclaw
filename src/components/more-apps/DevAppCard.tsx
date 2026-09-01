@@ -44,7 +44,7 @@ import { getAppEnv } from '../../../shared/env-config';
 import { getAppNameInitial } from './AppIcon';
 
 export function formatDevAppCardDesc(app: Pick<DevAppSummary, 'pageType' | 'availability' | 'localReady' | 'source'>): string {
-  const kind = app.pageType === 'assets' ? '托管应用' : '独立站点';
+  const kind = app.pageType === 'assets' ? 'Assets' : 'Site';
   const availability = app.availability ?? (app.localReady ? 'local' : 'remote-only');
   const state =
     availability === 'local'
@@ -60,7 +60,7 @@ interface DevAppCardProps {
 }
 
 export function DevAppCard({ app }: DevAppCardProps) {
-  const pageTypeLabel = app.pageType === 'assets' ? '托管应用' : '独立站点';
+  const pageTypeLabel = app.pageType === 'assets' ? 'Assets' : 'Site';
   const openOrFocusDevAppTab = useAppPlazaShellStore((s) => s.openOrFocusDevAppTab);
   const closeDevAppTabsByWorkspaceId = useAppPlazaShellStore((s) => s.closeDevAppTabsByWorkspaceId);
   const unregisterWorkspaceId = useAppDevCatalogStore((s) => s.unregisterWorkspaceId);

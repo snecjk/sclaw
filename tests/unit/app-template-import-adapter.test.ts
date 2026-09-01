@@ -13,7 +13,6 @@ describe('app template import adapter', () => {
         scripts: {
           dev: 'vite',
           build: 'vite build',
-          'sclaw:services': 'node scripts/external-services.mjs',
         },
         dependencies: {
           '@sto/sclaw-plugin-sso-auth': '0.1.0',
@@ -41,7 +40,6 @@ describe('app template import adapter', () => {
         dev: 'vite',
         build: 'vite build',
         lint: 'eslint .',
-        'sclaw:services': 'node scripts/external-services.mjs',
       },
       dependencies: {
         '@sto/sclaw-plugin-sso-auth': '0.1.0',

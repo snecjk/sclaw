@@ -81,18 +81,18 @@ describe('formatDevAppCardDesc', () => {
       pageType: 'site',
       localReady: true,
       availability: 'local',
-    })).toBe('独立站点 · 本机可编辑');
+    })).toBe('Site · 本机可编辑');
     expect(formatDevAppCardDesc({
       pageType: 'assets',
       localReady: true,
       availability: 'local',
       source: 'imported',
-    })).toBe('托管应用 · 本地导入');
+    })).toBe('Assets · 本地导入');
     expect(formatDevAppCardDesc({
       pageType: 'site',
       localReady: false,
       availability: 'remote-only',
-    })).toBe('独立站点 · 仅云端，需拉取到本地');
+    })).toBe('Site · 仅云端，需拉取到本地');
   });
 });
 
@@ -159,9 +159,9 @@ describe('DevAppCard page type', () => {
 
   it('marks a Site app and keeps its browser entry', async () => {
     render(<DevAppCard app={app('site')} />);
-    expect(screen.getByLabelText('应用类型：独立站点')).toHaveClass('more-apps-card__icon--dev');
-    expect(screen.getByLabelText('应用类型：独立站点')).toHaveTextContent('s');
-    expect(screen.getByText('独立站点 · 本机可编辑')).toBeInTheDocument();
+    expect(screen.getByLabelText('应用类型：Site')).toHaveClass('more-apps-card__icon--dev');
+    expect(screen.getByLabelText('应用类型：Site')).toHaveTextContent('s');
+    expect(screen.getByText('Site · 本机可编辑')).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: '更多操作' }), {
       button: 0,
       ctrlKey: false,
@@ -171,9 +171,9 @@ describe('DevAppCard page type', () => {
 
   it('marks an Assets app and omits the browser entry', () => {
     render(<DevAppCard app={app('assets')} />);
-    expect(screen.getByLabelText('应用类型：托管应用')).toHaveClass('more-apps-card__icon--dev');
-    expect(screen.getByLabelText('应用类型：托管应用')).toHaveTextContent('a');
-    expect(screen.getByText('托管应用 · 本机可编辑')).toBeInTheDocument();
+    expect(screen.getByLabelText('应用类型：Assets')).toHaveClass('more-apps-card__icon--dev');
+    expect(screen.getByLabelText('应用类型：Assets')).toHaveTextContent('a');
+    expect(screen.getByText('Assets · 本机可编辑')).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: '更多操作' }), {
       button: 0,
       ctrlKey: false,
@@ -198,6 +198,6 @@ describe('DevAppCard page type', () => {
       ctrlKey: false,
     });
     expect(await screen.findByText('删除应用')).toBeInTheDocument();
-    expect(screen.getByText('独立站点 · 仅云端，需拉取到本地')).toBeInTheDocument();
+    expect(screen.getByText('Site · 仅云端，需拉取到本地')).toBeInTheDocument();
   });
 });

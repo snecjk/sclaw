@@ -68,3 +68,23 @@ npm run typecheck    # 可选：tsc -b
 ## 身份认证
 
 Site 默认安装 `@sto/sclaw-plugin-sso-auth`。本地预览通过 Vite 同源端点复用当前登录 SClaw 的用户身份；发布后由部署平台注入 `window.__STO_SSO_AUTH_CONFIG__`，插件负责单点登录、Code 换票和会话管理。业务页面不得自行读取 Cookie、拼接 SSO URL 或调用换票接口。
+
+## 当前用户菜单
+
+SSO 初始化完成后，模板会调用：
+
+```text
+GET /api/v1/site-apps/{applicationId}/auth/menu
+```
+
+发布后，`applicationId` 从 `/ai-apps[-环境]/{applicationId}/...` 地址路径解析；本地开发时从 Vite 注入的 `window.__STO_SSO_AUTH_CONFIG__.applicationId` 读取。请求复用 `src/lib/request.ts` 自动携带当前用户的 `stoToken`。运行时仅展示接口返回的 `active + visible` 菜单，并按 `sort_order` 排序；接口失败或返回空菜单时不回退本地静态菜单。
+
+菜单服务根据当前页面域名选择：
+
+| 页面环境 | 菜单服务 |
+|---|---|
+| 本地、测试或 daily | `https://baseinfo-aimemory-test.sto.cn` |
+| 预发（域名包含 `pre`） | `https://pre-baseinfo-aimemory.sto.cn` |
+| 其他发布域名 | `https://baseinfo-aimemory.sto.cn` |
+
+本地请求使用 `/proxy/siteapp-menu/...`，由 Vite 代理到测试服务。`src/layouts/nav-config.ts` 中的 `SIDE_NAV` 仍用于开发期菜单声明和发布同步，但不再作为运行时授权回退。新增页面时，需要同时注册 `App.tsx` 的 React 路由并发布对应菜单。

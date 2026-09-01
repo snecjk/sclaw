@@ -166,6 +166,16 @@ function renderFiles(manifest: ExternalServicesManifest, proxy: DevProxyManifest
   };
 }
 
+function proxiesEqualIgnoringOrder(actual: DevProxyManifest, expected: DevProxyManifest): boolean {
+  if (actual.version !== expected.version || actual.proxies.length !== expected.proxies.length) return false;
+  const normalize = (entries: ProxyEntry[]) => entries
+    .map((entry) => JSON.stringify(Object.fromEntries(
+      Object.entries(entry).sort(([left], [right]) => left.localeCompare(right)),
+    )))
+    .sort();
+  return JSON.stringify(normalize(actual.proxies)) === JSON.stringify(normalize(expected.proxies));
+}
+
 async function writeFiles(appPath: string, files: ReturnType<typeof renderFiles>): Promise<void> {
   const entries = [
     [MANIFEST_PATH, files.manifest],
@@ -276,8 +286,13 @@ export function createBindingService(deps: BindingDependencies = {}) {
       const expected = renderFiles(manifest, proxy);
       const actual = await Promise.all(CHANGED_FILES.map((path) => readOptional(join(appPath, path))));
       const expectedValues = [expected.manifest, expected.proxy, expected.generated];
-      const errors = CHANGED_FILES.flatMap((path, index) =>
-        actual[index] === expectedValues[index] ? [] : [`${path} 与绑定配置不一致`]);
+      const expectedProxy = JSON.parse(expected.proxy) as DevProxyManifest;
+      const errors = CHANGED_FILES.flatMap((path, index) => {
+        const matches = path === PROXY_PATH
+          ? proxiesEqualIgnoringOrder(proxy, expectedProxy)
+          : actual[index] === expectedValues[index];
+        return matches ? [] : [`${path} 与绑定配置不一致`];
+      });
       return { valid: errors.length === 0, errors, serviceCount: manifest.services.length };
     } catch (error) {
       return {

@@ -149,7 +149,7 @@ apply 写入前会逐段检查目标父目录，拒绝模板工作区内已有�
 ## 5. package.json 与规模限制
 
 - 来源业务依赖默认生效；SClaw 管理的认证插件和已绑定外部服务 SDK 始终使用平台版本。
-- `dev`、`build`、`preview`、`sclaw:services` 等平台脚本保留。
+- `dev`、`build`、`preview` 等平台脚本保留。
 - Rollup 的平台 `resolutions/overrides` 保留。
 - 最大 5,000 个导入文件、单文件 5 MiB、来源快照总计 200 MiB。
 

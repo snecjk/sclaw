@@ -138,4 +138,46 @@ describe('app external service binding', () => {
     expect(proxy.proxies).toEqual([{ key: 'manual', target: 'https://manual.sto.cn' }]);
     expect((await service.validate(appPath)).valid).toBe(true);
   });
+
+  it('允许在已托管代理后追加人工代理', async () => {
+    const appPath = await createTempApp();
+    const service = createBindingService({
+      getVersion: vi.fn().mockResolvedValue(POLICY_VERSION),
+      installNpmPackage: vi.fn().mockResolvedValue({ packageName: 'sdk', output: '' }),
+    });
+    await service.bind({ appPath, serviceId: POLICY_VERSION.serviceId, version: '1.0.0', alias: 'policy' });
+
+    const proxyPath = join(appPath, 'contracts/dev-proxy.v1.json');
+    const proxy = JSON.parse(await readFile(proxyPath, 'utf8'));
+    proxy.proxies.push({
+      key: 'siteapp-menu',
+      target: 'https://baseinfo-aimemory-test.sto.cn',
+      changeOrigin: true,
+    });
+    await writeFile(proxyPath, `${JSON.stringify(proxy, null, 2)}\n`);
+
+    await expect(service.validate(appPath)).resolves.toEqual({
+      valid: true,
+      errors: [],
+      serviceCount: 1,
+    });
+  });
+
+  it('仍然拒绝被篡改的托管代理', async () => {
+    const appPath = await createTempApp();
+    const service = createBindingService({
+      getVersion: vi.fn().mockResolvedValue(POLICY_VERSION),
+      installNpmPackage: vi.fn().mockResolvedValue({ packageName: 'sdk', output: '' }),
+    });
+    await service.bind({ appPath, serviceId: POLICY_VERSION.serviceId, version: '1.0.0', alias: 'policy' });
+
+    const proxyPath = join(appPath, 'contracts/dev-proxy.v1.json');
+    const proxy = JSON.parse(await readFile(proxyPath, 'utf8'));
+    proxy.proxies.find((entry: { key: string }) => entry.key === 'policy').target = 'https://wrong.sto.cn';
+    await writeFile(proxyPath, `${JSON.stringify(proxy, null, 2)}\n`);
+
+    const result = await service.validate(appPath);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('contracts/dev-proxy.v1.json 与绑定配置不一致');
+  });
 });

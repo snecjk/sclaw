@@ -3,6 +3,7 @@ import { StoSsoAuthError } from './errors';
 import {
   clearStoredSession,
   CALLBACK_CODE_CLAIM_KEY,
+  isTokenExpired,
   persistSession,
   readStoredUser,
   readTokenCookie,
@@ -189,7 +190,7 @@ export function createPublishedSiteSsoAuth(
       const callbackCodeDigest = await digestCallbackCode(callbackCode);
       if (readSessionValue(CALLBACK_CODE_CLAIM_KEY) === callbackCodeDigest) {
         const existingToken = readTokenCookie(platform.cookie);
-        if (existingToken) {
+        if (existingToken && !isTokenExpired(existingToken)) {
           token = existingToken;
           user = readStoredUser(platform);
           cleanCallbackUrl(stripAuthParamsFromUrl(platform.href));
@@ -221,11 +222,13 @@ export function createPublishedSiteSsoAuth(
     }
 
     const existingToken = readTokenCookie(platform.cookie);
-    if (existingToken) {
+    if (existingToken && !isTokenExpired(existingToken)) {
       token = existingToken;
       user = readStoredUser(platform);
       return;
     }
+
+    if (existingToken) clearStoredSession(platform);
 
     redirectOnce(REDIRECT_GUARD_KEY);
   }
@@ -241,6 +244,11 @@ export function createPublishedSiteSsoAuth(
       return bootstrapPromise;
     },
     getToken() {
+      if (token && isTokenExpired(token)) {
+        clearStoredSession(platform);
+        token = null;
+        user = null;
+      }
       return token;
     },
     getUser() {
