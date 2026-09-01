@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 
-import { writeAppDevWorkspaceId } from '../../electron/services/app-dev-marker';
+import { writeAppDevAppCode, writeAppDevWorkspaceId } from '../../electron/services/app-dev-marker';
 
 let root = '';
 afterEach(async () => {
@@ -28,5 +28,26 @@ it('把 workspaceId 写入 marker 且保留已有字段', async () => {
     name: 'Demo',
     createdAt: '2026-08-27T00:00:00.000Z',
     pageType: 'site',
+  });
+});
+
+it('把 appCode 写入 marker 且保留 workspaceId', async () => {
+  root = await mkdtemp(join(tmpdir(), 'sclaw-marker-appcode-'));
+  await mkdir(join(root, '.sclaw'));
+  await writeFile(join(root, '.sclaw/app-dev.json'), JSON.stringify({
+    kind: 'app-dev',
+    name: 'Demo',
+    projectType: 'frontend',
+    createdAt: '2026-08-27T00:00:00.000Z',
+    workspaceId: 'ws-1',
+    pageType: 'site',
+  }));
+
+  await writeAppDevAppCode(root, 'app_created');
+
+  expect(JSON.parse(await readFile(join(root, '.sclaw/app-dev.json'), 'utf8'))).toMatchObject({
+    workspaceId: 'ws-1',
+    appCode: 'app_created',
+    name: 'Demo',
   });
 });

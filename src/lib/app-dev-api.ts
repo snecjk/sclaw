@@ -592,6 +592,21 @@ export async function getStoAppStatus(workspaceId: string): Promise<StoAppStatus
   return res.status;
 }
 
+export interface StoAppPushHistoryItem {
+  revisionId: string;
+  appCode: string;
+  message: string;
+  commitSha?: string;
+  createdAt: number;
+}
+
+export async function listStoAppPushes(workspaceId: string): Promise<StoAppPushHistoryItem[]> {
+  const res = await hostApiFetch<{ items: StoAppPushHistoryItem[] }>(
+    `/api/app-dev/sto-app/pushes?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.items ?? [];
+}
+
 export async function pushStoApp(
   workspaceId: string,
   message: string,
@@ -702,8 +717,8 @@ export interface SiteappMenuPreviewItem {
 export interface SiteappMenuPreview {
   appCode?: string;
   menus: SiteappMenuPreviewItem[];
-  skipped: Array<{ label: string; reason: string }>;
-  source: 'top-nav' | 'side-nav' | 'empty';
+  skipped: Array<{ label: string; reason: string; path?: string }>;
+  source: 'top-nav' | 'side-nav' | 'routes' | 'mixed' | 'empty';
 }
 
 export async function previewStoAppMenus(input: {

@@ -356,6 +356,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
       toast.success('已提交到 STO 应用');
       setCommitOpen(false);
+      setSourceRevision((n) => n + 1);
     } catch (error) {
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
       if (nextStatus) setStoStatus(nextStatus);
@@ -672,8 +673,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
           canDeploy={canDeploy}
+          cloudPush={showCloudActions && !isTemplateWorkspace}
+          recordsRevision={sourceRevision + (deploy.history?.[0]?.updatedAt ?? 0)}
           deployRunning={deploy.running}
-          deployHistory={deploy.history}
+          deployHistory={deploy.history ?? []}
           onOpenDeploy={() => setDeployOpen(true)}
         />
       </AppDevSplitBody>

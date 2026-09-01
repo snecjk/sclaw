@@ -301,6 +301,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
       await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
       toast.success('已提交到 STO 应用');
       setCommitOpen(false);
+      setSourceRevision((n) => n + 1);
     } catch (error) {
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
       if (nextStatus) setStoStatus(nextStatus);
@@ -534,8 +535,10 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
           previewRevision={previewRevision}
           initialMode={layout === 'ide' ? 'code' : 'preview'}
           canDeploy={canDeploy}
+          cloudPush={showCloudActions}
+          recordsRevision={sourceRevision + (deploy.history?.[0]?.updatedAt ?? 0)}
           deployRunning={deploy.running}
-          deployHistory={deploy.history}
+          deployHistory={deploy.history ?? []}
           onOpenDeploy={() => setDeployOpen(true)}
         />
       </AppDevSplitBody>

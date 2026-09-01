@@ -43,11 +43,13 @@ import {
   getStoAppBindingByWorkspaceId,
   upsertStoAppBinding,
 } from './sto-app-binding-store';
+import { writeAppDevAppCode } from './app-dev-marker';
 import { listUserWorkspaces } from './session-catalog-service';
 import {
   readStoWorkspaceFile,
   writeStoWorkspaceBinding,
 } from './sto-workspace-store';
+import { upsertStoAppPushHistory } from './sto-app-push-history-store';
 
 export interface CodeCollabCommandResult {
   ok: boolean;
@@ -92,7 +94,8 @@ function serializeForCodeCollabLog(value: unknown): string {
 }
 
 function isRepositoryReady(status?: string, headCommitSha?: string | null): boolean {
-  return status?.trim().toLowerCase() === 'ready' && Boolean(headCommitSha?.trim());
+  const normalized = status?.trim().toLowerCase() ?? '';
+  return (normalized === 'ready' || normalized === 'active') && Boolean(headCommitSha?.trim());
 }
 
 async function provisionRepository(appCode: string): Promise<SiteappRepositoryProvision> {
@@ -161,6 +164,9 @@ export async function ensureStoWorkspaceBinding(
     appCode = (await getStoAppBindingByLocalPath(cwd))?.appCode;
   }
   if (!appCode) {
+    appCode = (await readMarkerForFirstPush(cwd)).appCode;
+  }
+  if (!appCode) {
     logger.warn(`[code-collab] ensure workspace skip: no appCode appPath=${cwd}`);
     return null;
   }
@@ -174,9 +180,9 @@ export async function ensureStoWorkspaceBinding(
     remote = listed.find((item) => item.appCode === appCode);
     if (remote) remote = await enrichSiteAppRecord(remote);
   }
-  if (!remote || remote.status?.trim().toLowerCase() === 'archived') {
+  if (remote?.status?.trim().toLowerCase() === 'archived') {
     logger.warn(
-      `[code-collab] ensure workspace skip: status not writable appPath=${cwd} status=${remote?.status ?? '-'}`,
+      `[code-collab] ensure workspace skip: status not writable appPath=${cwd} status=${remote.status}`,
     );
     return null;
   }
@@ -184,7 +190,7 @@ export async function ensureStoWorkspaceBinding(
   const written = await writeStoWorkspaceBinding({
     appPath: cwd,
     cloud: siteAppToWorkspaceFields(remote),
-    fallback: { appCode, status: remote.status ?? 'ready' },
+    fallback: { appCode, status: remote?.status ?? 'ready' },
   });
   if (written) {
     logger.info(`[code-collab] ensured .sto/workspace.json appPath=${cwd} appCode=${appCode}`);
@@ -214,6 +220,7 @@ async function readMarkerForFirstPush(appPath: string): Promise<{
   applicationName: string;
   pageType: SiteAppPageType;
   source?: 'created' | 'imported';
+  appCode?: string;
 }> {
   const fallbackName = basename(appPath);
   try {
@@ -226,10 +233,14 @@ async function readMarkerForFirstPush(appPath: string): Promise<{
     const source = raw.source === 'created' || raw.source === 'imported'
       ? raw.source
       : undefined;
+    const appCode = typeof raw.appCode === 'string' && raw.appCode.trim()
+      ? raw.appCode.trim()
+      : undefined;
     return {
       applicationName,
       pageType: normalizeSiteAppPageType(raw.pageType),
       source,
+      appCode,
     };
   } catch {
     return { applicationName: fallbackName, pageType: 'site' };
@@ -252,13 +263,56 @@ async function summarizePendingRegistrationStatus(cwd: string): Promise<CodeColl
     bound: false,
     syncState,
     syncLabel: '待首次提交',
+    appCode: marker.appCode,
     applicationName: marker.applicationName,
     raw: { pendingRegistration: true, source: marker.source ?? 'created' },
   };
 }
 
+async function persistFirstPushAppCode(input: {
+  appPath: string;
+  appCode: string;
+  applicationName: string;
+  status?: string;
+  cloud?: SiteAppRecord;
+  workspaceId?: string;
+}): Promise<StoWorkspaceFile | null> {
+  const appCode = input.appCode.trim();
+  if (!appCode) throw new Error('缺少 appCode');
+  await writeAppDevAppCode(input.appPath, appCode).catch((err) => {
+    logger.warn(`[code-collab] marker appCode write failed appPath=${input.appPath}:`, err);
+  });
+
+  const state = await writeStoWorkspaceBinding({
+    appPath: input.appPath,
+    cloud: siteAppToWorkspaceFields(input.cloud),
+    fallback: { appCode, status: input.status || input.cloud?.status || 'ready' },
+  });
+
+  let workspaceId = input.workspaceId?.trim();
+  if (!workspaceId) {
+    const workspaces = await listUserWorkspaces();
+    workspaceId = workspaces.find((item) => resolve(item.rootPath) === resolve(input.appPath))?.id;
+  }
+  if (workspaceId) {
+    await upsertStoAppBinding({
+      appCode,
+      applicationName: input.applicationName.trim() || appCode,
+      localPath: resolve(input.appPath),
+      workspaceId,
+    }).catch((err) => logger.warn('[code-collab] binding upsert after first-push create failed:', err));
+  }
+  return state;
+}
+
+function isFirstPushBaselineReady(state: StoWorkspaceFile | null): boolean {
+  return Boolean(state?.appCode && (state.baseRevisionId || state.baseCommitSha));
+}
+
 /**
  * Bind workspace for push. Creates the cloud Site App on first commit only.
+ * appCode is persisted immediately after cloud create so a later git/provision
+ * failure will reuse the same application instead of creating another one.
  */
 async function ensureWorkspaceForPush(
   appPath: string,
@@ -266,49 +320,54 @@ async function ensureWorkspaceForPush(
 ): Promise<{ cwd: string; state: StoWorkspaceFile }> {
   const cwd = await realpath(resolve(appPath));
   const existing = await readStoWorkspaceFile(cwd);
-  if (existing) {
-    if (existing.workspacePath !== cwd) {
-      throw new Error('workspacePath 与当前目录不一致，请检查 .sto/workspace.json');
-    }
-    return { cwd, state: existing };
+  if (existing && existing.workspacePath !== cwd) {
+    throw new Error('workspacePath 与当前目录不一致，请检查 .sto/workspace.json');
+  }
+  if (isFirstPushBaselineReady(existing)) {
+    return { cwd, state: existing! };
   }
 
-  const fromBinding = await ensureStoWorkspaceBinding(cwd, hints);
-  if (fromBinding) return { cwd, state: fromBinding };
+  const fromBinding = existing ?? await ensureStoWorkspaceBinding(cwd, hints);
+  const marker = await readMarkerForFirstPush(cwd);
+  const { applicationName, pageType } = marker;
+  let appCode = fromBinding?.appCode || marker.appCode || hints?.appCode?.trim();
 
-  const { applicationName, pageType } = await readMarkerForFirstPush(cwd);
-  logger.info(
-    `[code-collab] first-push create cloud app name=${applicationName} pageType=${pageType} appPath=${cwd}`,
-  );
-  const created = await createSiteApplication({
-    applicationName,
-    description: `${applicationName} 应用`,
-    pageType,
-  });
+  if (!appCode) {
+    logger.info(
+      `[code-collab] first-push create cloud app name=${applicationName} pageType=${pageType} appPath=${cwd}`,
+    );
+    const created = await siteappApplicationCreate({
+      name: applicationName,
+      description: `${applicationName} 应用`,
+      pageType,
+    });
+    appCode = created.appCode;
+    await persistFirstPushAppCode({
+      appPath: cwd,
+      appCode,
+      applicationName: created.name || applicationName,
+      status: created.status || 'ready',
+      workspaceId: hints?.workspaceId,
+    });
+  } else if (!fromBinding?.baseRevisionId && !fromBinding?.baseCommitSha) {
+    logger.info(
+      `[code-collab] first-push reuse cloud app appCode=${appCode} name=${applicationName} appPath=${cwd}`,
+    );
+  }
 
-  const state = await writeStoWorkspaceBinding({
+  const provisioned = await provisionRepository(appCode);
+  const remote = siteAppFromProvision(appCode, provisioned, applicationName, pageType);
+  const state = await persistFirstPushAppCode({
     appPath: cwd,
-    cloud: siteAppToWorkspaceFields(created),
-    fallback: { appCode: created.appCode, status: created.status ?? 'ready' },
+    appCode,
+    applicationName: remote.applicationName || applicationName,
+    status: remote.status || 'ready',
+    cloud: remote,
+    workspaceId: hints?.workspaceId,
   });
   if (!state) {
     throw new Error('首次提交：云端应用已创建，但未能写入 .sto/workspace.json');
   }
-
-  let workspaceId = hints?.workspaceId?.trim();
-  if (!workspaceId) {
-    const workspaces = await listUserWorkspaces();
-    workspaceId = workspaces.find((item) => resolve(item.rootPath) === cwd)?.id;
-  }
-  if (workspaceId) {
-    await upsertStoAppBinding({
-      appCode: created.appCode,
-      applicationName: created.applicationName || applicationName,
-      localPath: cwd,
-      workspaceId,
-    }).catch((err) => logger.warn('[code-collab] binding upsert after first-push create failed:', err));
-  }
-
   return { cwd, state };
 }
 
@@ -511,6 +570,13 @@ export async function pushCodeApplication(
       commitSha: revision.commitSha,
       sourceSha256: snapshot.sourceSha256,
     });
+    await upsertStoAppPushHistory(cwd, {
+      revisionId,
+      appCode: state.appCode,
+      message: trimmed,
+      commitSha: revision.commitSha,
+      createdAt: Date.now(),
+    }).catch((err) => logger.warn('[code-collab] push history write failed:', err));
     logger.info(`[code-collab] action=push success revisionId=${revisionId}`);
     return { ok: true, output: '提交成功', json: revision };
   } finally {

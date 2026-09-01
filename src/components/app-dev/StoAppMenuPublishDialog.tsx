@@ -241,7 +241,7 @@ export function StoAppMenuPublishDialog({
         </div>
 
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          根据「{appName}」当前导航配置整理云端菜单。可改名称；拖拽只调整同一父级下的顺序（根级之间，或某个一级目录内的页面），不能跨级或改父子关系。
+          根据「{appName}」源码里的导航、路由和权限配置整理云端菜单（含当前账号看不到的页面，便于配置权限）。可改名称；拖拽只调整同一父级下的顺序（根级之间，或某个一级目录内的页面），不能跨级或改父子关系。
           {pageType === 'assets' ? '托管应用只同步一个一级菜单。' : '首页重定向不会生成「根目录」。'}
         </p>
 
@@ -256,13 +256,13 @@ export function StoAppMenuPublishDialog({
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-6 text-[13px] text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              正在扫描导航配置…
+              正在扫描项目源码中的导航与路由…
             </div>
           ) : error && !preview ? (
             <p className="px-3 py-4 text-[13px] text-destructive">{error}</p>
           ) : rows.length === 0 ? (
             <p className="px-3 py-4 text-[13px] text-muted-foreground">
-              没有可同步的菜单。请检查 `src/layouts/nav-config.ts`，并排除 developerOnly / 404 / 默认重定向。
+              没有可同步的菜单。已排除 developerOnly、404 和默认重定向。请确认页面已写入导航或 Route。
             </p>
           ) : (
             <DndContext
