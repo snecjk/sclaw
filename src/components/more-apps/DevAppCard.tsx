@@ -5,8 +5,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Globe2,
-  Package,
   FolderOpen,
   MoreHorizontal,
   Pencil,
@@ -14,6 +12,7 @@ import {
   Trash2,
   Loader2,
   ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -32,6 +31,29 @@ import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
+import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
+import { appendSkipLoginReturnUrl, fetchAppPlazaSkipLoginLink } from '@/lib/app-plaza-api';
+import {
+  buildAppPermissionsCallbackUrl,
+  buildDirectAppPermissionsLoginUrl,
+  buildAppPermissionsUrl,
+  usesDirectPortalAuth,
+} from '@/lib/app-permissions-url';
+import { getWorkflowStoToken } from '@/lib/workflow-api';
+import { getAppEnv } from '../../../shared/env-config';
+import { getAppNameInitial } from './AppIcon';
+
+export function formatDevAppCardDesc(app: Pick<DevAppSummary, 'pageType' | 'availability' | 'localReady' | 'source'>): string {
+  const kind = app.pageType === 'assets' ? '托管应用' : '独立站点';
+  const availability = app.availability ?? (app.localReady ? 'local' : 'remote-only');
+  const state =
+    availability === 'local'
+      ? (app.source === 'imported' ? '本地导入' : '本机可编辑')
+      : availability === 'path-missing'
+        ? '目录失效，需重新拉取'
+        : '仅云端，需拉取到本地';
+  return `${kind} · ${state}`;
+}
 
 interface DevAppCardProps {
   app: DevAppSummary;
@@ -39,7 +61,6 @@ interface DevAppCardProps {
 
 export function DevAppCard({ app }: DevAppCardProps) {
   const pageTypeLabel = app.pageType === 'assets' ? '托管应用' : '独立站点';
-  const PageTypeIcon = app.pageType === 'assets' ? Package : Globe2;
   const openOrFocusDevAppTab = useAppPlazaShellStore((s) => s.openOrFocusDevAppTab);
   const closeDevAppTabsByWorkspaceId = useAppPlazaShellStore((s) => s.closeDevAppTabsByWorkspaceId);
   const unregisterWorkspaceId = useAppDevCatalogStore((s) => s.unregisterWorkspaceId);
@@ -104,6 +125,45 @@ export function DevAppCard({ app }: DevAppCardProps) {
       return;
     }
     openExternalUrl(previewUrl);
+  };
+
+  const handleOpenPermissions = async () => {
+    if (!app.appCode) {
+      toast.message('缺少 appCode，无法打开权限配置');
+      return;
+    }
+    const env = getAppEnv();
+    const permissionsUrl = buildAppPermissionsUrl(app.appCode, env, app.permissionsUrl);
+    const callbackUrl = buildAppPermissionsCallbackUrl(permissionsUrl);
+    if (usesDirectPortalAuth(env)) {
+      const stoToken = getWorkflowStoToken();
+      if (!stoToken) {
+        toast.error('当前登录缺少 StoToken，请重新登录后再试');
+        return;
+      }
+      openInSclawBrowser({
+        url: buildDirectAppPermissionsLoginUrl(callbackUrl, stoToken),
+        title: `${app.name} · 权限配置`,
+        appId: `dev-app-permissions:${app.appCode}`,
+        sourceUrl: callbackUrl,
+        systemCode: 'SCLAW_PORTAL',
+        skipLoginEligible: false,
+      });
+      return;
+    }
+    try {
+      const skipLoginUrl = await fetchAppPlazaSkipLoginLink('SCLAW_PORTAL');
+      openInSclawBrowser({
+        url: appendSkipLoginReturnUrl(skipLoginUrl, callbackUrl),
+        title: `${app.name} · 权限配置`,
+        appId: `dev-app-permissions:${app.appCode}`,
+        sourceUrl: callbackUrl,
+        systemCode: 'SCLAW_PORTAL',
+        skipLoginEligible: true,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '权限配置免登链接获取失败');
+    }
   };
 
   const handleReveal = async () => {
@@ -179,51 +239,21 @@ export function DevAppCard({ app }: DevAppCardProps) {
         <div
           className="more-apps-card__icon--dev"
           aria-label={`应用类型：${pageTypeLabel}`}
-          title={`应用类型：${pageTypeLabel}`}
+          title={`${pageTypeLabel} · ${statusLabel}`}
         >
-          <PageTypeIcon className="h-6 w-6" aria-hidden />
+          <span className="more-apps-card__icon-letter" aria-hidden>
+            {getAppNameInitial(app.name)}
+          </span>
         </div>
-        <div className="more-apps-card__head">
+        <div className="more-apps-card__head more-apps-card__head--dev">
           <h3 className="more-apps-card__title">{app.name}</h3>
-          <p
-            className={cn(
-              'mt-1 text-[11px]',
-              localReady
-                ? 'text-[var(--sto-functional-success)] dark:text-emerald-300'
-                : 'text-[var(--sto-functional-warning)] dark:text-amber-300',
-            )}
-          >
-            {statusLabel}
+          <p className="more-apps-card__desc more-apps-card__desc--dev">
+            {formatDevAppCardDesc(app)}
           </p>
         </div>
       </div>
 
-      <p className="more-apps-card__desc">
-        {localReady
-          ? (app.projectType === 'fullstack' ? '前端 + 后端应用' : '前端应用') + '，通过对话持续完善'
-          : '换设备或本地目录已删除时，选择父目录拉取后即可继续编辑'}
-      </p>
-
       <div className="more-apps-card__foot more-apps-card__foot--dev">
-        <button
-          type="button"
-          className="more-apps-card__primary-action"
-          disabled={cloning}
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleEdit();
-          }}
-        >
-          {cloning ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-          ) : localReady ? (
-            <Pencil className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <Download className="h-3.5 w-3.5" aria-hidden />
-          )}
-          {cloning ? '拉取中…' : localReady ? '继续编辑' : '拉取到本地'}
-        </button>
-
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
@@ -235,7 +265,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
               <MoreHorizontal className="h-4 w-4" aria-hidden />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[160px]" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuContent align="start" className="min-w-[160px]" onClick={(e) => e.stopPropagation()}>
             {localReady ? (
               <DropdownMenuItem onClick={() => void handleEdit()}>
                 <Pencil className="mr-2 h-3.5 w-3.5" aria-hidden />
@@ -257,6 +287,10 @@ export function DevAppCard({ app }: DevAppCardProps) {
                 系统浏览器打开
               </DropdownMenuItem>
             ) : null}
+            <DropdownMenuItem disabled={!app.appCode} onClick={() => void handleOpenPermissions()}>
+              <ShieldCheck className="mr-2 h-3.5 w-3.5" aria-hidden />
+              权限配置
+            </DropdownMenuItem>
             {canDelete ? (
               <>
                 <DropdownMenuSeparator />
@@ -274,6 +308,18 @@ export function DevAppCard({ app }: DevAppCardProps) {
             ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
+        <button
+          type="button"
+          className="more-apps-card__primary-action"
+          disabled={cloning}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleEdit();
+          }}
+        >
+          {cloning ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+          {cloning ? '拉取中…' : localReady ? '继续编辑' : '拉取到本地'}
+        </button>
       </div>
 
       {deleteOpen

@@ -1,4 +1,5 @@
 import {
+  codeDeployProgressLabel,
   codeDeployStatusLabel,
   formatCodeDeployFailurePrompt,
   isCodeDeploySettled,
@@ -39,7 +40,7 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-async function pollDeployUntilTerminal(
+export async function pollDeployUntilTerminal(
   deploymentId: string,
   options?: {
     intervalMs?: number;
@@ -153,7 +154,7 @@ export async function runStoAppDeployFlow(input: {
   };
   input.onProgress?.({
     phase: 'polling',
-    label: `发布进行中：${codeDeployStatusLabel(initialFields.status || 'CREATED')}`,
+    label: `发布进行中：${codeDeployProgressLabel(initialFields)}`,
     fields: initialFields,
   });
 
@@ -164,7 +165,7 @@ export async function runStoAppDeployFlow(input: {
     onProgress: (fields) => {
       input.onProgress?.({
         phase: 'polling',
-        label: `发布进行中：${codeDeployStatusLabel(fields.status)}`,
+        label: `发布进行中：${codeDeployProgressLabel(fields)}`,
         fields,
       });
     },

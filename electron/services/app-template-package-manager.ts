@@ -29,7 +29,7 @@ interface CachedTemplateMeta {
   fetchedAt: string;
 }
 
-const TEMPLATE_ID_PATTERN = /^(?:site-minimal|assets-minimal|[0-9A-HJKMNP-TV-Z]{26})$/;
+const TEMPLATE_ID_PATTERN = /^(?:site-minimal|assets-minimal|react-a2ui-template|[0-9A-HJKMNP-TV-Z]{26})$/;
 const VERSION_PATTERN = /^1\.0\.\d+$/;
 
 function validTemplateRoot(dir: string): boolean {
@@ -46,51 +46,90 @@ function builtinTemplateResourcesRoot(): string {
     join(process.resourcesPath, 'app-templates'),
   ];
   const resolved = candidates.find((candidate) =>
-    existsSync(join(candidate, 'site-minimal')) || existsSync(join(candidate, 'assets-minimal')),
+    existsSync(join(candidate, 'site-minimal'))
+    || existsSync(join(candidate, 'assets-minimal'))
+    || existsSync(join(candidate, 'react-a2ui-template')),
   );
   if (!resolved) throw new Error('内置应用模板资源缺失');
   return resolved;
 }
 
 export function resolveLocalBuiltinTemplateDir(
-  templateId: 'site-minimal' | 'assets-minimal',
+  templateId: string,
   resourcesRoot = builtinTemplateResourcesRoot(),
 ): string {
-  const resolved = join(resourcesRoot, templateId);
-  if (!validTemplateRoot(resolved)) throw new Error(`内置模板资源缺失: ${templateId}`);
+  const id = templateId.trim();
+  if (!id || id.includes('/') || id.includes('\\') || id === '..') {
+    throw new Error(`内置模板 ID 不合法: ${templateId}`);
+  }
+  const resolved = join(resourcesRoot, id);
+  if (!validTemplateRoot(resolved)) throw new Error(`内置模板资源缺失: ${id}`);
   return resolved;
 }
 
-export async function listLocalBuiltinAppTemplates(
-  resourcesRoot: string | undefined,
-  pageType?: AppTemplatePageType,
-): Promise<AppTemplateSummary[]> {
-  const pageTypes: AppTemplatePageType[] = pageType ? [pageType] : ['site', 'assets'];
-  return Promise.all(pageTypes.map(async (currentPageType) => {
-    const templateId = `${currentPageType}-minimal` as const;
-    const root = resolveLocalBuiltinTemplateDir(templateId, resourcesRoot ?? builtinTemplateResourcesRoot());
+async function readLocalTemplateManifest(root: string): Promise<{
+  templateId: string;
+  pageType: AppTemplatePageType;
+  name: string;
+  description: string;
+} | null> {
+  try {
     const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as {
       templateId?: string;
       pageType?: string;
       name?: string;
       description?: string;
     };
-    if (manifest.templateId !== templateId || manifest.pageType !== currentPageType) {
-      throw new Error(`内置模板 manifest.json 与资源目录不一致: ${templateId}`);
-    }
+    if (manifest.pageType !== 'site' && manifest.pageType !== 'assets') return null;
+    const templateId = manifest.templateId?.trim();
+    if (!templateId) return null;
     return {
       templateId,
-      pageType: currentPageType,
+      pageType: manifest.pageType,
       name: manifest.name?.trim() || templateId,
       description: manifest.description?.trim() || '',
-      status: 'ACTIVE' as const,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function listLocalBuiltinAppTemplates(
+  resourcesRoot: string | undefined,
+  pageType?: AppTemplatePageType,
+): Promise<AppTemplateSummary[]> {
+  const root = resourcesRoot ?? builtinTemplateResourcesRoot();
+  const entries = await readdir(root, { withFileTypes: true });
+  const items: AppTemplateSummary[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(root, entry.name);
+    if (!validTemplateRoot(dir)) continue;
+    const manifest = await readLocalTemplateManifest(dir);
+    if (!manifest) continue;
+    if (manifest.templateId !== entry.name) {
+      throw new Error(`内置模板 manifest.json 与资源目录不一致: ${entry.name}`);
+    }
+    if (pageType && manifest.pageType !== pageType) continue;
+    items.push({
+      templateId: manifest.templateId,
+      pageType: manifest.pageType,
+      name: manifest.name,
+      description: manifest.description,
+      status: 'ACTIVE',
       isBuiltin: true,
       latestVersion: 'local',
       createdAt: '',
       updatedAt: '',
-      source: 'local-resource' as const,
-    };
-  }));
+      source: 'local-resource',
+    });
+  }
+  return items.sort((left, right) => {
+    const leftMinimal = left.templateId.endsWith('-minimal') ? 0 : 1;
+    const rightMinimal = right.templateId.endsWith('-minimal') ? 0 : 1;
+    if (leftMinimal !== rightMinimal) return leftMinimal - rightMinimal;
+    return left.templateId.localeCompare(right.templateId);
+  });
 }
 
 function normalizedEtag(value: string | null): string | null {

@@ -95,6 +95,25 @@ export function isCodeDeploySettled(
   return isCodeDeployTerminal(fields.status);
 }
 
+/** UI/progress view: pending pipeline labels are still running, not a failure. */
+export function presentCodeDeployFields(fields: CodeDeployRecordFields): CodeDeployRecordFields {
+  if (!isSpuriousPendingDeployFailure(fields)) return fields;
+  const pipelineLabel = fields.failureMessage?.trim() || '待执行';
+  return {
+    ...fields,
+    status: pipelineLabel,
+    failureStage: undefined,
+    failureMessage: undefined,
+  };
+}
+
+export function codeDeployProgressLabel(fields: CodeDeployRecordFields): string {
+  if (isSpuriousPendingDeployFailure(fields)) {
+    return fields.failureMessage?.trim() || '待执行';
+  }
+  return codeDeployStatusLabel(fields.status);
+}
+
 export interface CodeDeployRecordFields {
   deploymentId?: string;
   applicationId?: string;

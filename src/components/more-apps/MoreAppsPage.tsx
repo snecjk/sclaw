@@ -7,7 +7,7 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Heart, FolderInput, ChevronDown, FileCode2, PlugZap } from 'lucide-react';
+import { Search, Plus, Heart, FolderInput, FileCode2, PlugZap, Download, MoreHorizontal } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -24,7 +24,7 @@ import {
   stoPageTitleClass,
 } from '@/lib/surfaces';
 import { AppCard } from './AppCard';
-import { DevAppCard } from './DevAppCard';
+import { DevAppCard, formatDevAppCardDesc } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { CreateAppDialog } from './CreateAppDialog';
 import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
@@ -53,7 +53,6 @@ import { useAppDevPermission } from '@/hooks/use-app-dev-permission';
 const HERO_CAROUSEL_INTERVAL = 5000;
 /** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
 const STO_POLICY_SYSTEM_CODE = 'sto-policy';
-type DevAppTypeFilter = 'all' | 'site' | 'assets';
 
 export function MoreAppsPage() {
   const { t } = useTranslation('common');
@@ -103,7 +102,6 @@ export function MoreAppsPage() {
   const [importingApp, setImportingApp] = useState(false);
   const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
-  const [devAppTypeFilter, setDevAppTypeFilter] = useState<DevAppTypeFilter>('all');
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
   // already fetches the first APP page, so we don't double-fire on initial render.
@@ -134,17 +132,15 @@ export function MoreAppsPage() {
   const filteredDevApps = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return devApps;
-    return devApps.filter(
-      (app) =>
-        app.name.toLowerCase().includes(q)
-        || app.projectType.toLowerCase().includes(q),
-    );
+    return devApps.filter((app) => {
+      const haystack = [
+        app.name,
+        app.projectType,
+        formatDevAppCardDesc(app),
+      ].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
   }, [devApps, searchQuery]);
-
-  const visibleDevApps = useMemo(() => {
-    if (devAppTypeFilter === 'all') return filteredDevApps;
-    return filteredDevApps.filter((app) => (app.pageType ?? 'site') === devAppTypeFilter);
-  }, [devAppTypeFilter, filteredDevApps]);
 
   const handleImportApp = useCallback(async () => {
     if (!canUseAppDev || importingApp) return;
@@ -745,37 +741,15 @@ export function MoreAppsPage() {
   const renderDevAppsView = () => {
     const emptyMessage = searchQuery
       ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
-      : devAppTypeFilter === 'site'
-        ? '暂无独立站点'
-        : devAppTypeFilter === 'assets'
-          ? '暂无托管应用'
-          : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' });
+      : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' });
 
     return (
       <div className="more-apps-main">
-        <div className="mb-4 flex items-center gap-1" aria-label="开发应用类型筛选">
-          {([['all', '全部'], ['site', '独立站点'], ['assets', '托管应用']] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={devAppTypeFilter === value}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-xs transition-colors',
-                devAppTypeFilter === value
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-              onClick={() => setDevAppTypeFilter(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {visibleDevApps.length === 0 ? (
+        {filteredDevApps.length === 0 ? (
           <div className="more-apps-empty">{emptyMessage}</div>
         ) : (
           <div className="more-apps-grid">
-            {visibleDevApps.map((app) => (
+            {filteredDevApps.map((app) => (
               <DevAppCard
                 key={app.appCode || app.workspaceId || `${app.name}:${app.appPath}`}
                 app={app}
@@ -803,35 +777,42 @@ export function MoreAppsPage() {
 
         <div className="app-plaza-heading-actions">
           {canUseAppDev ? (
+            <button
+              type="button"
+              className="more-apps-add-btn"
+              id="more-apps-create-app-btn"
+              onClick={() => setCreateAppOpen(true)}
+            >
+              <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+              {t('moreApps.createApp', { defaultValue: '创建应用' })}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="more-apps-add-btn"
+            id="more-apps-add-external-btn"
+            onClick={openAddModal}
+          >
+            <Download className="more-apps-add-btn__icon" aria-hidden="true" />
+            {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
+          </button>
+          {canUseAppDev ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="more-apps-add-btn more-apps-add-btn--ghost"
-                  id="more-apps-create-app-btn"
+                  className="more-apps-add-btn more-apps-add-btn--icon"
+                  aria-label="更多开发操作"
                   aria-haspopup="menu"
                 >
-                  <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
-                  {importingApp
-                    ? t('moreApps.importingApp', { defaultValue: '导入中…' })
-                    : t('moreApps.createApp', { defaultValue: '创建应用' })}
-                  <ChevronDown className="more-apps-add-btn__chevron" aria-hidden="true" />
+                  <MoreHorizontal className="more-apps-add-btn__icon" aria-hidden="true" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[10rem]">
-                <DropdownMenuItem
-                  id="more-apps-create-app-item"
-                  onSelect={() => setCreateAppOpen(true)}
-                >
-                  <Plus className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                  {t('moreApps.createApp', { defaultValue: '创建应用' })}
+                <DropdownMenuItem onSelect={() => setTemplateManagerOpen(true)}>
+                  <FileCode2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  管理应用模板
                 </DropdownMenuItem>
-                {canUseAppDev ? (
-                  <DropdownMenuItem onSelect={() => setTemplateManagerOpen(true)}>
-                    <FileCode2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                    管理应用模板
-                  </DropdownMenuItem>
-                ) : null}
                 <DropdownMenuItem onSelect={() => setExternalServiceManagerOpen(true)}>
                   <PlugZap className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
                   管理外部服务
@@ -849,15 +830,6 @@ export function MoreAppsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          <button
-            type="button"
-            className="more-apps-add-btn more-apps-add-btn--ghost"
-            id="more-apps-add-external-btn"
-            onClick={openAddModal}
-          >
-            <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
-            {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
-          </button>
         </div>
       </div>
 
@@ -891,7 +863,7 @@ export function MoreAppsPage() {
           <input
             type="search"
             className="more-apps-search"
-            placeholder={t('moreApps.searchPlaceholder', { defaultValue: '搜索应用名称或关键词' })}
+            placeholder={t('moreApps.searchPlaceholder', { defaultValue: '搜索应用名称或描述' })}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             autoComplete="off"

@@ -13,7 +13,9 @@ import type {
   TemplateImportPreview,
   TemplateImportStatus,
 } from '../../shared/app-template-source-import';
+import type { StoAppDeployHistoryRecord } from '../../shared/sto-app-deploy-history';
 export type { CodeApplicationPageType } from '../../shared/code-application-catalog';
+export type { StoAppDeployHistoryRecord } from '../../shared/sto-app-deploy-history';
 
 /** sai-cli / 建站长耗时接口：不走 Host API 默认 15s 超时 */
 const APP_DEV_LONG_RUNNING: Pick<HostApiFetchInit, 'disableTimeout'> = {
@@ -31,7 +33,7 @@ export interface NodeRuntimeStatus {
 }
 
 export type AppDevPhase =
-  | 'created' | 'preparing-env' | 'installing' | 'starting' | 'ready' | 'stopped' | 'error';
+  | 'created' | 'preparing-env' | 'checking-snpm' | 'installing' | 'starting' | 'ready' | 'stopped' | 'error';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -40,6 +42,8 @@ export interface AppDevStatus {
   progress: number;
   previewUrl?: string;
   error?: string;
+  /** Extra line for the active setup step (e.g. snpm found vs installing). */
+  detail?: string;
 }
 
 export interface AppDevEnvironment {
@@ -154,6 +158,7 @@ export interface DevAppSummary {
   appCode?: string;
   availability?: 'local' | 'remote-only' | 'path-missing';
   previewUrl?: string;
+  permissionsUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
   /** `imported` = 本地导入；`created` = 新建站 / 云端拉取 */
@@ -657,6 +662,68 @@ export async function refreshStoAppDeploy(input: {
   data: unknown;
 }> {
   return hostApiFetch('/api/app-dev/sto-app/deploy/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function listStoAppDeployHistory(workspaceId: string): Promise<StoAppDeployHistoryRecord[]> {
+  const res = await hostApiFetch<{ items?: StoAppDeployHistoryRecord[] }>(
+    `/api/app-dev/sto-app/deploy/history?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return Array.isArray(res.items) ? res.items : [];
+}
+
+export async function upsertStoAppDeployHistory(
+  workspaceId: string,
+  record: StoAppDeployHistoryRecord,
+): Promise<StoAppDeployHistoryRecord[]> {
+  const res = await hostApiFetch<{ items?: StoAppDeployHistoryRecord[] }>(
+    '/api/app-dev/sto-app/deploy/history',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId, record }),
+    },
+  );
+  return Array.isArray(res.items) ? res.items : [];
+}
+
+export interface SiteappMenuPreviewItem {
+  menu_code: string;
+  parent_code: string | null;
+  menu_name: string;
+  menu_type: string;
+  resource_path?: string | null;
+}
+
+export interface SiteappMenuPreview {
+  appCode?: string;
+  menus: SiteappMenuPreviewItem[];
+  skipped: Array<{ label: string; reason: string }>;
+  source: 'top-nav' | 'side-nav' | 'empty';
+}
+
+export async function previewStoAppMenus(input: {
+  workspaceId: string;
+  pageType?: string;
+  appName?: string;
+}): Promise<SiteappMenuPreview> {
+  return hostApiFetch('/api/app-dev/sto-app/menu/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function syncStoAppMenus(input: {
+  workspaceId: string;
+  appCode?: string;
+  menus: SiteappMenuPreviewItem[];
+}): Promise<{ success: boolean; appCode: string; data: unknown }> {
+  return hostApiFetch('/api/app-dev/sto-app/menu/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),

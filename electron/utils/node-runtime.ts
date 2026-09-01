@@ -27,6 +27,7 @@ import {
   type NodePlatform,
 } from './node-runtime-info';
 import { logger } from './logger';
+import { stripInheritedNpmRegistryEnv } from './app-dev-info';
 
 /**
  * Company-internal mirror root hosting the nodejs.org/dist layout
@@ -104,11 +105,12 @@ export function getNodeSpawnEnv(
   const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
   const existing = baseEnv[pathKey] ?? baseEnv.PATH ?? '';
   const sep = process.platform === 'win32' ? ';' : ':';
-  return {
+  const env = stripInheritedNpmRegistryEnv({
     ...baseEnv,
     [pathKey]: existing ? `${binDir}${sep}${existing}` : binDir,
     npm_config_cache: join(homedir(), '.stoclaw', 'npm-cache'),
-  };
+  });
+  return env;
 }
 
 /** Download `url` and return the body as a string (for small files like SHASUMS256.txt). */

@@ -14,6 +14,8 @@ export interface SiteAppRecord {
   headCommitSha?: string;
   description?: string;
   previewUrl?: string;
+  /** Permission-management URL configured by memory-center. */
+  permissionsUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
   pageType: SiteAppPageType;
@@ -68,6 +70,7 @@ export function normalizeSiteApp(item: unknown): SiteAppRecord | null {
       row.portalUrl,
       row.portal_url,
     ),
+    permissionsUrl: pickString(row.permissionsUrl, row.permissions_url),
     gitlabProjectId: pickId(row.gitlabProjectId, row.gitlab_project_id),
     devopsApplicationId: pickId(row.devopsApplicationId, row.devops_application_id),
     pageType: normalizeSiteAppPageType(row.pageType ?? row.page_type),
@@ -143,6 +146,7 @@ export function mergeSiteAppRecords(
     headCommitSha: overlay.headCommitSha ?? base.headCommitSha,
     description: overlay.description ?? base.description,
     previewUrl: overlay.previewUrl ?? base.previewUrl,
+    permissionsUrl: overlay.permissionsUrl ?? base.permissionsUrl,
     gitlabProjectId: overlay.gitlabProjectId ?? base.gitlabProjectId,
     devopsApplicationId: overlay.devopsApplicationId ?? base.devopsApplicationId,
     pageType: overlay.pageType ?? base.pageType,

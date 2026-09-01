@@ -32,6 +32,9 @@ function attachWillAttachWebviewHandler(webContents: WebContents): void {
   webContents.on('will-attach-webview', (_event, webPreferences, params) => {
     if (!isEmbedPartition(params.partition)) return;
     applyEmbedGuestPreferences(webPreferences);
+    // Chromium blocks guest window.open unless this attribute is present.
+    // React boolean props on <webview> can omit it; force it at attach time.
+    params.allowpopups = 'true';
   });
 }
 

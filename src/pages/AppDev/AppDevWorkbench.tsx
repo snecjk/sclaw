@@ -28,6 +28,7 @@ import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
 import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
 import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
+import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -183,6 +184,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
+  const [menuPublishOpen, setMenuPublishOpen] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
@@ -216,12 +218,14 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
     workspaceId,
     appCode: stoStatus?.appCode,
     appName,
+    pageType,
     onFailedPrompt: (prompt) => {
       setComposerSeed((prev) => ({
         text: prompt,
         version: (prev?.version ?? 0) + 1,
       }));
     },
+    onSuccess: () => setMenuPublishOpen(true),
     onStatusRefresh: async () => {
       const next = await getStoAppStatus(workspaceId).catch(() => null);
       if (next) setStoStatus(next);
@@ -483,6 +487,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
             onOpenDialog={() => setDeployOpen(true)}
             onClearTerminalJob={deploy.clear}
             onFillComposer={handleFillComposerFromDiagnostics}
+            onPublishMenu={() => setMenuPublishOpen(true)}
           />
         ) : null}
 
@@ -528,6 +533,10 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
           initialMode={layout === 'ide' ? 'code' : 'preview'}
+          canDeploy={canDeploy}
+          deployRunning={deploy.running}
+          deployHistory={deploy.history}
+          onOpenDeploy={() => setDeployOpen(true)}
         />
       </AppDevSplitBody>
 
@@ -560,6 +569,14 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
         appCode={stoStatus?.appCode}
         onCancel={() => setDeployOpen(false)}
         onConfirm={handleDeploy}
+      />
+      <StoAppMenuPublishDialog
+        open={menuPublishOpen}
+        workspaceId={workspaceId}
+        appName={appName}
+        appCode={stoStatus?.appCode}
+        pageType={pageType ?? 'site'}
+        onClose={() => setMenuPublishOpen(false)}
       />
     </div>
   );

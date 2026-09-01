@@ -1,11 +1,10 @@
 /**
- * Right-stage for app-dev workbench: 预览 / 代码 / Git / 云服务 / 社区.
+ * Right-stage for app-dev workbench: 预览 / 代码 / Git / 外部服务 / 社区.
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
-  Cloud,
   ExternalLink,
   Eye,
   FileCode2,
@@ -22,7 +21,6 @@ import {
   Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { AppDevCloudPanel } from '@/components/app-dev/AppDevCloudPanel';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
@@ -33,7 +31,7 @@ import {
   type SclawBrowserFrameHandle,
 } from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { AppDevSetupProgress } from '@/components/app-dev/AppDevSetupProgress';
 import { buildAppDevFileTree } from '@/lib/app-dev-file-tree';
 import {
   listAppSourceFiles,
@@ -43,6 +41,7 @@ import {
   type AppDevStatus,
   type AppSourceFileEntry,
   type AppSourceSearchHit,
+  type StoAppDeployHistoryRecord,
 } from '@/lib/app-dev-api';
 import {
   stripLegacyAppDevPreviewAuth,
@@ -56,20 +55,10 @@ import { cn } from '@/lib/utils';
 import '@/components/more-apps/app-plaza-shell.css';
 import '@/components/sclaw-browser/sclaw-browser-overlay.css';
 
-export type AppDevStageMode = 'preview' | 'code' | 'git' | 'external-services' | 'cloud' | 'community';
+export type AppDevStageMode = 'preview' | 'code' | 'git' | 'external-services' | 'community';
 type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
-
-const PHASE_LABELS: Record<string, string> = {
-  created: '正在准备运行环境…',
-  'preparing-env': '正在准备运行环境…',
-  installing: '正在安装应用组件…',
-  starting: '正在启动应用…',
-  ready: '运行中',
-  stopped: '已停止',
-  error: '出了点问题',
-};
 
 interface OpenTab {
   path: string;
@@ -96,6 +85,10 @@ interface AppDevWorkbenchStageProps {
   sourceRevision?: number;
   /** Bumped for a process restart, including when the new server reuses a URL. */
   previewRevision?: number;
+  canDeploy?: boolean;
+  deployRunning?: boolean;
+  deployHistory?: StoAppDeployHistoryRecord[];
+  onOpenDeploy?: () => void;
 }
 
 function fileName(path: string): string {
@@ -114,6 +107,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onFillComposerFromDiagnostics,
   sourceRevision = 0,
   previewRevision = 0,
+  canDeploy = false,
+  deployRunning = false,
+  deployHistory = [],
+  onOpenDeploy,
 }: AppDevWorkbenchStageProps) {
   const [mode, setMode] = useState<AppDevStageMode>('preview');
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
@@ -413,7 +410,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   };
 
   return (
-    <section className="relative flex min-w-0 flex-1 flex-col bg-muted/30">
+    <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5">
         {(
           [
@@ -421,7 +418,6 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             { id: 'code', label: '代码', icon: FileCode2 },
             { id: 'git', label: 'Git 代码管理', icon: GitBranch },
             { id: 'external-services', label: '外部服务', icon: PlugZap },
-            { id: 'cloud', label: '云服务', icon: Cloud },
             { id: 'community', label: '社区', icon: Users },
           ] as const
         ).map((tab) => {
@@ -593,9 +589,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center p-8">
-            <div className="w-full max-w-sm text-center">
-              {phase === 'error' ? (
-                <>
+            {phase === 'error' ? (
+              <div className="w-full max-w-sm text-center">
                   <AlertCircle className="mx-auto mb-4 h-10 w-10 text-[var(--sto-functional-error)]" aria-hidden />
                   <p className="mb-2 text-sm font-medium text-foreground">应用启动遇到了问题</p>
                   <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
@@ -605,9 +600,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     <RotateCw className="h-3.5 w-3.5" aria-hidden />
                     重试
                   </Button>
-                </>
-              ) : phase === 'stopped' ? (
-                <>
+              </div>
+            ) : phase === 'stopped' ? (
+              <div className="w-full max-w-sm text-center">
                   <Square className="mx-auto mb-4 h-9 w-9 text-muted-foreground" aria-hidden />
                   <p className="mb-2 text-sm font-medium text-foreground">预览已停止</p>
                   <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
@@ -617,34 +612,34 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     <RotateCw className="h-3.5 w-3.5" aria-hidden />
                     启动预览
                   </Button>
-                </>
-              ) : (
-                <>
-                  <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-                  <p className="mb-4 text-sm font-medium text-foreground">{PHASE_LABELS[phase]}</p>
-                  <Progress value={status?.progress ?? 0} className="mb-3" />
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    首次创建需要准备运行环境，通常在一两分钟内完成。你可以先在左侧描述想做的功能。
-                  </p>
-                </>
-              )}
-            </div>
+              </div>
+            ) : (
+              <AppDevSetupProgress
+                phase={phase || 'created'}
+                progress={status?.progress ?? 0}
+                detail={status?.detail}
+              />
+            )}
           </div>
         )
       ) : null}
 
-      {mode === 'git' ? <AppDevGitPanel workspaceId={workspaceId} /> : null}
+      {mode === 'git' ? (
+        <AppDevGitPanel
+          workspaceId={workspaceId}
+          canDeploy={canDeploy}
+          deployRunning={deployRunning}
+          deployHistory={deployHistory}
+          onOpenDeploy={onOpenDeploy}
+        />
+      ) : null}
 
       {mode === 'external-services' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
-
-      {mode === 'cloud' ? (
-        <AppDevCloudPanel workspaceId={workspaceId} appName={appName} />
-      ) : null}
 
       {mode === 'community' ? <AppDevCommunityPanel workspaceId={workspaceId} /> : null}
 
       {mode === 'code' ? (
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           <div className="flex w-10 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/40 py-2">
             <button
               type="button"
@@ -676,7 +671,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             </button>
           </div>
 
-          <aside className="flex w-[240px] shrink-0 flex-col border-r border-border bg-background/40">
+          <aside className="flex h-full min-h-0 w-[240px] shrink-0 flex-col overflow-hidden border-r border-border bg-background/40">
             {sidebar === 'files' ? (
               <>
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
@@ -692,7 +687,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     {filesLoading ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : '刷新'}
                   </Button>
                 </div>
-                <div className="min-h-0 flex-1 overflow-auto px-1 py-1">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-1">
                   {filesLoading && files.length === 0 ? (
                     <p className="px-3 py-6 text-center text-xs text-muted-foreground">加载中…</p>
                   ) : (
@@ -755,7 +750,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             )}
           </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {tabs.length > 0 ? (
               <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-muted/20 px-1">
                 {tabs.map((tab) => {

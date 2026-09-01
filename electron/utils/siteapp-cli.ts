@@ -211,6 +211,22 @@ export async function siteappDeployRefresh(input: {
   });
 }
 
+export async function siteappMenuList(appCode: string) {
+  const code = appCode.trim();
+  if (!code) return { ok: false, error: '缺少 app_code', exitCode: 1 };
+  logger.info(`[siteapp] menu list appCode=${code}`);
+  return runSiteapp(['siteapp', 'menu', 'list'], {
+    params: { app_code: code },
+  });
+}
+
+export async function siteappMenuSync(params: Record<string, unknown>) {
+  const appCode = typeof params.app_code === 'string' ? params.app_code.trim() : '';
+  if (!appCode) return { ok: false, error: '缺少 app_code', exitCode: 1 };
+  logger.info(`[siteapp] menu sync appCode=${appCode} mode=${String(params.mode ?? '')}`);
+  return runSiteapp(['siteapp', 'menu', 'sync'], { params, timeoutMs: 60_000 });
+}
+
 export function parseSiteappUploadRevision(data: unknown) {
   return parseSiteappRevision(data);
 }

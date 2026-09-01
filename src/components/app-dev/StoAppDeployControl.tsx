@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { AssetsPublishSuccess } from '@/components/app-dev/AssetsPublishSuccess';
 import { SitePublishSuccess } from '@/components/app-dev/SitePublishSuccess';
 import { cn } from '@/lib/utils';
@@ -11,8 +17,10 @@ import {
   type StoAppDeployJob,
 } from '@/hooks/use-sto-app-deploy';
 import {
-  codeDeployStatusLabel,
+  codeDeployProgressLabel,
   formatCodeDeployFailurePrompt,
+  isSpuriousPendingDeployFailure,
+  presentCodeDeployFields,
 } from '../../../shared/code-deploy-status';
 import type { CodeApplicationPageType } from '../../../shared/code-application-catalog';
 import { resolvePublishSuccessPresentation } from '../../../shared/code-publish-result';
@@ -25,6 +33,7 @@ interface StoAppDeployControlProps {
   onClearTerminalJob?: () => void;
   /** One-click fill the latest failure/timeout details into the AI composer. */
   onFillComposer?: (text: string) => void;
+  onPublishMenu?: () => void;
 }
 
 export function resolveStoAppDeployAskAiPrompt(job: StoAppDeployJob): string {
@@ -42,10 +51,12 @@ export function StoAppDeployControl({
   onOpenDialog,
   onClearTerminalJob,
   onFillComposer,
+  onPublishMenu,
 }: StoAppDeployControlProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const running = isStoAppDeployRunning(job);
+  const presentedFields = job ? presentCodeDeployFields(job.fields) : null;
   const successPresentation = job?.phase === 'success'
     ? resolvePublishSuccessPresentation({
         pageType,
@@ -98,19 +109,22 @@ export function StoAppDeployControl({
     if (canDeploy) onOpenDialog();
   };
 
+  const idleDisabled = !canDeploy && !job;
+
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative inline-flex items-stretch">
       <Button
         type="button"
         variant="ghost"
         size="sm"
         className={cn(
           'h-7 gap-1 px-2 text-xs',
+          onPublishMenu && 'rounded-r-none',
           running && 'text-amber-700 dark:text-amber-300',
           (job?.phase === 'failed' || job?.phase === 'error') && 'text-destructive',
           job?.phase === 'success' && 'text-emerald-700 dark:text-emerald-300',
         )}
-        disabled={!canDeploy && !job}
+        disabled={idleDisabled}
         title={
           running
             ? '点击查看当前发布进度'
@@ -137,6 +151,38 @@ export function StoAppDeployControl({
           '发布'
         )}
       </Button>
+      {onPublishMenu ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={idleDisabled}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'h-7 w-6 rounded-l-none border-l border-border/60 px-0 text-xs',
+                running && 'text-amber-700 dark:text-amber-300',
+                (job?.phase === 'failed' || job?.phase === 'error') && 'text-destructive',
+                job?.phase === 'success' && 'text-emerald-700 dark:text-emerald-300',
+              )}
+              aria-label="更多发布操作"
+              title="更多发布操作"
+            >
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="z-[260] min-w-[132px]">
+            <DropdownMenuItem
+              disabled={idleDisabled}
+              onSelect={() => {
+                setPanelOpen(false);
+                onPublishMenu();
+              }}
+            >
+              发布菜单
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
 
       {panelOpen && job ? (
         <div
@@ -161,8 +207,10 @@ export function StoAppDeployControl({
 
           <dl className="mt-3 space-y-1.5 text-[12px]">
             <StatusRow label="状态">
-              {job.fields.status
-                ? `${job.fields.status}（${codeDeployStatusLabel(job.fields.status)}）`
+              {presentedFields?.status
+                ? (isSpuriousPendingDeployFailure(job.fields)
+                  ? presentedFields.status
+                  : `${presentedFields.status}（${codeDeployProgressLabel(job.fields)}）`)
                 : running
                   ? '准备中'
                   : '-'}
@@ -177,12 +225,12 @@ export function StoAppDeployControl({
             {job.fields.pipelineInstanceId ? (
               <StatusRow label="流水线">{job.fields.pipelineInstanceId}</StatusRow>
             ) : null}
-            {job.fields.failureStage ? (
-              <StatusRow label="失败阶段">{job.fields.failureStage}</StatusRow>
+            {presentedFields?.failureStage ? (
+              <StatusRow label="失败阶段">{presentedFields.failureStage}</StatusRow>
             ) : null}
-            {job.fields.failureMessage || job.error ? (
+            {presentedFields?.failureMessage || job.error ? (
               <StatusRow label="失败原因">
-                {job.fields.failureMessage || job.error}
+                {presentedFields?.failureMessage || job.error}
               </StatusRow>
             ) : null}
           </dl>

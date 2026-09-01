@@ -77,6 +77,9 @@ export const AppDevInterfaceCatalogPicker = forwardRef<
   const [position, setPosition] = useState<PickerPosition | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const trimmedQuery = query.trim();
   const localMatched = filterSaiInterfaceCatalog(listItems, trimmedQuery);
@@ -171,9 +174,31 @@ export const AppDevInterfaceCatalogPicker = forwardRef<
     return () => observer.disconnect();
   }, [open, loading, loadMore, matchedItems.length, visibleCount, hasMore]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const openedAt = Date.now();
+    const handlePointerDown = (event: MouseEvent) => {
+      if (Date.now() - openedAt < 150) return;
+      const target = event.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (anchorRef?.current?.contains(target)) return;
+      onCloseRef.current();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCloseRef.current();
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, anchorRef]);
+
   if (!open) return null;
 
   const setRefs = (node: HTMLDivElement | null) => {
+    panelRef.current = node;
     if (typeof ref === 'function') ref(node);
     else if (ref) ref.current = node;
   };

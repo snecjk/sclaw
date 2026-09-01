@@ -104,4 +104,21 @@ describe('StoAppDeployControl typed success presentation', () => {
     expect(screen.getByText('失败原因')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '填入 AI 会话' })).toBeInTheDocument();
   });
+
+  it('opens a dropdown with 发布菜单', async () => {
+    const onPublishMenu = vi.fn();
+    render(<StoAppDeployControl
+      {...commonProps}
+      pageType="site"
+      job={null}
+      onPublishMenu={onPublishMenu}
+    />);
+    fireEvent.pointerDown(screen.getByRole('button', { name: '更多发布操作' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    const item = await screen.findByRole('menuitem', { name: '发布菜单' });
+    fireEvent.click(item);
+    expect(onPublishMenu).toHaveBeenCalledTimes(1);
+  });
 });

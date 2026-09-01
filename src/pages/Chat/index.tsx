@@ -20,7 +20,7 @@ import { ChatStaticItemsList, type ChatStaticItemsListHandle } from '@/component
 import { useChatDisplay } from './use-chat-display';
 import { resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
-import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
+import { ChatEngineModelCascade } from './ChatEngineModelSelectors';
 import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
@@ -792,10 +792,7 @@ export function Chat() {
         onEditDraftApplied={handleEditDraftApplied}
         composerLayout="home"
         toolbarInlineSelectors={(
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
-            <ChatModelSelector variant="inline" className="min-w-max shrink-0" />
-          </div>
+          <ChatEngineModelCascade className="min-w-0 max-w-full" />
         )}
       />
 

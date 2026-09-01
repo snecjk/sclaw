@@ -7,17 +7,22 @@
 
 import { app } from 'electron';
 import { spawn } from 'child_process';
-import { existsSync, statSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { homedir } from 'os';
 import { extname, dirname, join, relative, resolve, sep } from 'path';
 import {
+  buildSnpmInstallArgs,
   creepRatio,
+  isTransientNpmInstallFailure,
+  needsAppNpmInstall,
+  parseNpmrcRegistry,
   pipelineProgress,
   sanitizePackageName,
   type AppDevPhase,
 } from '../utils/app-dev-info';
-import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManagedNode, getManagedNodePaths } from '../utils/node-runtime';
+import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManagedNode } from '../utils/node-runtime';
+import { ensureSnpmBin, resolveSnpmBin } from '../utils/snpm-cli';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
 import { needsWinShell, quoteForCmd } from '../utils/paths';
@@ -74,6 +79,8 @@ export interface AppDevStatus {
   previewUrl?: string;
   /** Non-technical error hint; raw logs stay available for agent diagnosis. */
   error?: string;
+  /** Extra line for the active setup step (e.g. snpm found vs installing). */
+  detail?: string;
 }
 
 const statuses = new Map<string, AppDevStatus>();
@@ -116,6 +123,8 @@ export interface DevAppSummary {
   availability: 'local' | 'remote-only' | 'path-missing';
   /** Cloud preview page URL from site-apps list. */
   previewUrl?: string;
+  /** Permission-management URL configured by memory-center. */
+  permissionsUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
   listError?: string;
@@ -369,7 +378,11 @@ async function isAbandonedAppDevShell(appPath: string): Promise<boolean> {
   }
 }
 
-function buildAppDevAgentsContextBlock(vars: { name: string }): string {
+function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppPageType }): string {
+  const pageType = normalizeSiteAppPageType(vars.pageType);
+  const menuShape = pageType === 'assets'
+    ? '本应用 pageType 为 assets：云端菜单只同步 **一个一级菜单**'
+    : '本应用 pageType 为 site：云端菜单遵循用户导航，只同步 **一级目录 + 二级页面**';
   return `<!-- sclaw-app-dev-context -->
 你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
 
@@ -414,6 +427,15 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 - 生产 Network 若仍请求 \`https://page-*.sto.cn/proxy/...\`：检查是否未走 request 封装或缺 proxy 合约 key
 - 用户明确只要布局、先不接真接口：可用 mock 出页，并说明稍后指定 CLI 再接入
 - 详细步骤见 \`openspec/skills/nl-page-from-sai/SKILL.md\`（若已启用）
+
+## 发布后同步云端菜单
+- ${menuShape}
+- 发布成功或用户要求同步菜单时：先扫描 \`src/layouts/nav-config.ts\`、\`src/App.tsx\`、\`src/runtime/page-*\`、\`src/pages/\`，整理菜单树后**展示并询问是否同步**；未同意禁止 apply
+- 查询：\`sai-cli siteapp menu list --params '{"app_code":"<app_code>"}' -f json\`
+- 同意后：\`sai-cli siteapp menu sync --params '{"app_code":"<app_code>","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json\`
+- 菜单项字段：\`menu_code\` / \`parent_code\`（一级为 null） / \`menu_name\` / \`menu_type\`（directory 或 page，不要用 menu）
+- 不要同步 404、redirect、\`developerOnly\`；\`app_code\` 以 \`.sto/workspace.json\` 为准
+- 详细步骤见 \`openspec/skills/siteapp-menu-sync/SKILL.md\`（若已启用）
 <!-- /sclaw-app-dev-context -->`;
 }
 
@@ -493,7 +515,10 @@ async function writeAppDevBootstrap(
   const agentsPath = join(sclawDir, 'AGENTS.md');
   const contextBlock = marker.kind === 'app-template'
     ? buildAppTemplateAgentsContextBlock({ name: vars.name, pageType: normalizeSiteAppPageType(vars.pageType) })
-    : buildAppDevAgentsContextBlock({ name: vars.name });
+    : buildAppDevAgentsContextBlock({
+      name: vars.name,
+      pageType: normalizeSiteAppPageType(vars.pageType),
+    });
   if (existsSync(agentsPath)) {
     let content = await readFile(agentsPath, 'utf8');
     const start = content.indexOf('<!-- sclaw-app-dev-context -->');
@@ -521,6 +546,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
   let name = workspaceId;
   let projectType = 'frontend';
   let source: AppDevSource | undefined;
+  let pageType: SiteAppPageType | undefined;
   const markerFile = appDevMarkerPath(appPath);
   if (existsSync(markerFile)) {
     try {
@@ -528,6 +554,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
       if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
       if (typeof raw.projectType === 'string') projectType = raw.projectType;
       if (raw.source === 'created' || raw.source === 'imported') source = raw.source;
+      if (raw.pageType) pageType = normalizeSiteAppPageType(raw.pageType);
     } catch {
       // ignore
     }
@@ -538,7 +565,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
     if (match?.name) name = match.name;
   }
 
-  await writeAppDevBootstrap(appPath, { name, projectType, source });
+  await writeAppDevBootstrap(appPath, { name, projectType, source, pageType });
   await ensureAppOpenspecScaffold(appPath);
   await ensureDefaultAppDevAssistSkills(appPath);
   // Refresh already-enabled package skills from updated catalog copy.
@@ -549,7 +576,11 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
       const entries = await readdir(skillsDir, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        if (!entry.name.startsWith('pkg-') && entry.name !== 'nl-page-from-sai') continue;
+        if (
+          !entry.name.startsWith('pkg-')
+          && entry.name !== 'nl-page-from-sai'
+          && entry.name !== 'siteapp-menu-sync'
+        ) continue;
         const src = join(catalogRoot, entry.name);
         if (existsSync(join(src, 'SKILL.md'))) {
           await cp(src, join(skillsDir, entry.name), { recursive: true });
@@ -754,9 +785,13 @@ export async function openAppTemplateWorkspace(input: {
     let sourceDir: string;
     if (input.templateId) {
       if (input.source === 'local-resource') {
-        const expectedTemplateId = `${input.pageType}-minimal`;
-        if (templateId !== expectedTemplateId) throw new Error('本地内置模板与应用类型不一致');
-        sourceDir = resolveLocalBuiltinTemplateDir(templateId as 'site-minimal' | 'assets-minimal');
+        sourceDir = resolveLocalBuiltinTemplateDir(templateId);
+        const manifest = JSON.parse(await readFile(join(sourceDir, 'manifest.json'), 'utf8')) as {
+          pageType?: string;
+        };
+        if (manifest.pageType !== input.pageType) {
+          throw new Error('本地内置模板与应用类型不一致');
+        }
       } else {
         if (!input.latestVersion?.trim()) throw new Error('模板最新版本不能为空');
         sourceDir = await appTemplatePackageManager.ensureTemplate(
@@ -940,13 +975,18 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   if (templateSource === 'local-resource' && app.isPackaged) {
     throw new Error('本地资源模板仅用于开发调试');
   }
-  const expectedBuiltinId = `${pageType}-minimal` as 'site-minimal' | 'assets-minimal';
-  if (templateSource === 'local-resource' && templateId !== expectedBuiltinId) {
-    throw new Error(`本地资源模板与应用类型不一致: ${templateId}`);
-  }
   const template = templateSource === 'local-resource'
-    ? resolveLocalBuiltinTemplateDir(expectedBuiltinId)
+    ? resolveLocalBuiltinTemplateDir(templateId)
     : await appTemplatePackageManager.ensureTemplate(templateId, templateVersion, pageType);
+  if (templateSource === 'local-resource') {
+    const manifest = JSON.parse(await readFile(join(template, 'manifest.json'), 'utf8')) as {
+      templateId?: string;
+      pageType?: string;
+    };
+    if (manifest.templateId !== templateId || manifest.pageType !== pageType) {
+      throw new Error(`本地资源模板与应用类型不一致: ${templateId}`);
+    }
+  }
   if (!isValidReactTemplate(template)) {
     throw new Error(`应用模板缺失: ${template}`);
   }
@@ -1194,6 +1234,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         appCode: cloud.appCode,
         availability: 'local',
         previewUrl: cloud.previewUrl,
+        permissionsUrl: cloud.permissionsUrl,
         gitlabProjectId: cloud.gitlabProjectId,
         devopsApplicationId: cloud.devopsApplicationId,
         source: fields.source ?? 'created',
@@ -1213,6 +1254,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         appCode: cloud.appCode,
         availability: pathOk ? 'path-missing' : 'remote-only',
         previewUrl: cloud.previewUrl,
+        permissionsUrl: cloud.permissionsUrl,
         gitlabProjectId: cloud.gitlabProjectId,
         devopsApplicationId: cloud.devopsApplicationId,
         pageType: cloud.pageType,
@@ -1525,41 +1567,79 @@ export async function deleteDevApp(
   return { offline, ...removed };
 }
 
-async function runNpmInstall(
-  workspaceId: string,
-  appPath: string,
-  shouldReportProgress: () => boolean,
-): Promise<void> {
-  const { npmBin } = getManagedNodePaths();
-  const npmCwd = resolveAppNpmCwd(appPath);
-  let ratio = 0;
+function resolveAppNpmRegistry(npmCwd: string): string | undefined {
+  const npmrcPath = join(npmCwd, '.npmrc');
+  if (!existsSync(npmrcPath)) return undefined;
+  try {
+    return parseNpmrcRegistry(readFileSync(npmrcPath, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(npmBin, ['install', '--no-audit', '--no-fund'], {
+function spawnSnpmInstallOnce(
+  snpmBin: string,
+  npmCwd: string,
+  args: string[],
+  onActivity: (chunk: string) => void,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(snpmBin, args, {
       cwd: npmCwd,
       env: getNodeSpawnEnv() as NodeJS.ProcessEnv,
       windowsHide: true,
     });
     const tail: string[] = [];
-    const onActivity = (chunk: unknown) => {
-      tail.push(String(chunk));
+    const handleChunk = (chunk: unknown) => {
+      const text = String(chunk);
+      tail.push(text);
       if (tail.length > 40) tail.shift();
-      ratio = creepRatio(ratio);
-      if (shouldReportProgress()) {
-        setStatus(workspaceId, {
-          phase: 'installing',
-          progress: pipelineProgress('installing', ratio),
-        });
-      }
+      onActivity(text);
     };
-    child.stdout?.on('data', onActivity);
-    child.stderr?.on('data', onActivity);
+    child.stdout?.on('data', handleChunk);
+    child.stderr?.on('data', handleChunk);
     child.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`npm install failed (code ${code})\n${tail.join('').trim()}`));
+      else reject(new Error(`snpm install failed (code ${code})\n${tail.join('').trim()}`));
     });
     child.on('error', reject);
   });
+}
+
+async function runNpmInstall(
+  workspaceId: string,
+  appPath: string,
+  shouldReportProgress: () => boolean,
+): Promise<void> {
+  const npmCwd = resolveAppNpmCwd(appPath);
+  const registry = resolveAppNpmRegistry(npmCwd);
+  const snpmBin = await ensureSnpmBin();
+  const args = buildSnpmInstallArgs(registry);
+  logger.info(
+    `[app-dev] snpm install start bin=${snpmBin} cwd=${npmCwd}${registry ? ` registry=${registry}` : ''}`,
+  );
+  let ratio = 0;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await spawnSnpmInstallOnce(snpmBin, npmCwd, args, () => {
+        ratio = creepRatio(ratio);
+        if (shouldReportProgress()) {
+          setStatus(workspaceId, {
+            phase: 'installing',
+            progress: pipelineProgress('installing', ratio),
+          });
+        }
+      });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const retry = attempt < maxAttempts && isTransientNpmInstallFailure(message);
+      if (!retry) throw error;
+      logger.warn(`[app-dev] snpm install retry ${attempt}/${maxAttempts - 1}: ${message.split('\n')[0]}`);
+      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
 }
 
 /**
@@ -1591,17 +1671,48 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
       pipeline.throwIfCanceled();
     }
 
-    const nodeModules = join(resolveAppNpmCwd(appPath), 'node_modules');
-    if (!existsSync(nodeModules)) {
-      setStatus(workspaceId, { phase: 'installing', progress: pipelineProgress('installing', 0) });
+    const needsDeps = needsAppNpmInstall(resolveAppNpmCwd(appPath));
+    const foundSnpm = resolveSnpmBin();
+    setStatus(workspaceId, {
+      phase: 'checking-snpm',
+      progress: pipelineProgress('checking-snpm', foundSnpm ? 0.85 : 0.2),
+      detail: foundSnpm
+        ? '本机已安装 snpm'
+        : needsDeps
+          ? '未检测到 snpm，正在安装…'
+          : '未检测到 snpm（当前依赖已就绪，跳过安装）',
+    });
+    if (needsDeps) {
+      await ensureSnpmBin();
+      pipeline.throwIfCanceled();
+      setStatus(workspaceId, {
+        phase: 'checking-snpm',
+        progress: pipelineProgress('checking-snpm', 1),
+        detail: 'snpm 已就绪',
+      });
+      setStatus(workspaceId, {
+        phase: 'installing',
+        progress: pipelineProgress('installing', 0),
+        detail: '正在执行 snpm install',
+      });
       await runNpmInstall(workspaceId, appPath, isCurrent);
       pipeline.throwIfCanceled();
     }
 
-    setStatus(workspaceId, { phase: 'starting', progress: pipelineProgress('starting', 0.3) });
+    setStatus(workspaceId, {
+      phase: 'starting',
+      progress: pipelineProgress('starting', 0.3),
+      detail: '正在启动预览服务',
+    });
     const entry = await startDevServer(workspaceId, appPath);
     pipeline.throwIfCanceled();
-    setStatus(workspaceId, { phase: 'ready', progress: 100, previewUrl: entry.previewUrl, error: undefined });
+    setStatus(workspaceId, {
+      phase: 'ready',
+      progress: 100,
+      previewUrl: entry.previewUrl,
+      error: undefined,
+      detail: undefined,
+    });
   } catch (err) {
     if (err instanceof OperationCanceledError || !isCurrent()) return;
     const message = err instanceof Error ? err.message : String(err);
@@ -1968,17 +2079,18 @@ export async function installNpmPackage(
     await setupManagedNode();
   }
 
-  const { npmBin } = getManagedNodePaths();
+  const snpmBin = await ensureSnpmBin();
+  const registry = resolveAppNpmRegistry(npmCwd);
   const outputs: string[] = [];
   for (const name of packageNames) {
     const packageName = assertNpmPackageName(name);
     const result = await collectSpawnOutput(
-      npmBin,
-      ['install', packageName, '--save', '--no-audit', '--no-fund'],
+      snpmBin,
+      buildSnpmInstallArgs(registry, [packageName]),
       { cwd: npmCwd, env: getNodeSpawnEnv() as NodeJS.ProcessEnv },
     );
     if (!result.ok) {
-      throw new Error(`npm install ${packageName} 失败\n${result.output}`);
+      throw new Error(`snpm install ${packageName} 失败\n${result.output}`);
     }
     outputs.push(result.output);
   }
@@ -2276,7 +2388,7 @@ export async function listAppDevAssistSkills(appPath: string): Promise<AppDevAss
 
 /** Bake default assist skills into a user app (idempotent). */
 async function ensureDefaultAppDevAssistSkills(appPath: string): Promise<void> {
-  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual'] as const;
+  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual', 'siteapp-menu-sync'] as const;
   for (const skillId of defaults) {
     const installed = join(appPath, 'openspec', 'skills', skillId, 'SKILL.md');
     if (existsSync(installed)) continue;
@@ -2297,7 +2409,10 @@ export async function installAppDevAssistSkill(
   const skillId = assertOpenspecSkillId(skillIdRaw);
   await ensureAppOpenspecScaffold(appPath);
 
-  const sourceDir = join(appOpenspecCatalogRoot(appPath), skillId);
+  let sourceDir = join(appOpenspecCatalogRoot(appPath), skillId);
+  if (!existsSync(join(sourceDir, 'SKILL.md'))) {
+    sourceDir = join(templateDir(), 'openspec', 'skill-catalog', skillId);
+  }
   const skillMd = join(sourceDir, 'SKILL.md');
   if (!existsSync(skillMd)) {
     throw new Error(`工程模板中未找到开发技能: ${skillId}`);

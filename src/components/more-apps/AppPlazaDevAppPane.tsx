@@ -41,6 +41,7 @@ import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
 import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
 import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
+import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import {
@@ -198,6 +199,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
+  const [menuPublishOpen, setMenuPublishOpen] = useState(false);
   const [templatePublishConfirm, setTemplatePublishConfirm] = useState(false);
   const [templatePublishing, setTemplatePublishing] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
@@ -245,6 +247,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     workspaceId,
     appCode: stoStatus?.appCode,
     appName,
+    pageType,
     onFailedPrompt: (prompt) => {
       setComposerSeed((prev) => ({
         text: prompt,
@@ -252,6 +255,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       }));
       setChatOpen(true);
     },
+    onSuccess: () => setMenuPublishOpen(true),
     onStatusRefresh: async () => {
       const next = await getStoAppStatus(workspaceId).catch(() => null);
       if (next) setStoStatus(next);
@@ -581,6 +585,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               onOpenDialog={() => setDeployOpen(true)}
               onClearTerminalJob={deploy.clear}
               onFillComposer={handleFillComposerFromDiagnostics}
+              onPublishMenu={() => setMenuPublishOpen(true)}
             />
           ) : null}
 
@@ -666,6 +671,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
+          canDeploy={canDeploy}
+          deployRunning={deploy.running}
+          deployHistory={deploy.history}
+          onOpenDeploy={() => setDeployOpen(true)}
         />
       </AppDevSplitBody>
 
@@ -717,6 +726,14 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           setDeployOpen(false);
           deploy.start(input);
         }}
+      />
+      <StoAppMenuPublishDialog
+        open={menuPublishOpen}
+        workspaceId={workspaceId}
+        appName={appName}
+        appCode={stoStatus?.appCode}
+        pageType={pageType ?? 'site'}
+        onClose={() => setMenuPublishOpen(false)}
       />
     </div>
   );

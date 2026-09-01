@@ -334,6 +334,10 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       const el = webviewRef.current;
       if (!el) return;
 
+      // Electron requires the allowpopups *attribute*; React booleans on <webview>
+      // can omit it, which silently blocks guest window.open.
+      el.setAttribute('allowpopups', 'true');
+
       if (active && !embedRuntimeId) registerSclawBrowserWebview(null);
 
       let boundToPage = false;
@@ -510,7 +514,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           ref={webviewRef as React.RefObject<HTMLElement>}
           src="about:blank"
           partition={SCLAW_EMBED_BROWSER_PARTITION}
-          allowpopups={true}
+          allowpopups="true"
           webpreferences={EMBED_WEBVIEW_PREFERENCES}
           preload={guestPreloadUrl ?? undefined}
           className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"

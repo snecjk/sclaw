@@ -1,6 +1,5 @@
 /**
- * Git code management tab — local commit ("上传代码") + trigger DevOps build button.
- * Remote push / pipeline integration is deferred; build is a stub action for now.
+ * Git code management tab — local commit plus real Site App publish + local publish history.
  */
 import { useEffect, useState } from 'react';
 import { CloudUpload, GitBranch, Loader2, Rocket } from 'lucide-react';
@@ -11,11 +10,22 @@ import {
   createAppCheckpoint,
   listAppCheckpoints,
   type AppCheckpoint,
+  type StoAppDeployHistoryRecord,
 } from '@/lib/app-dev-api';
-import { delay } from '@/components/app-dev/app-dev-deploy-defaults';
+import { cn } from '@/lib/utils';
+import {
+  codeDeployProgressLabel,
+  isCodeDeploySuccess,
+  presentCodeDeployFields,
+} from '../../../shared/code-deploy-status';
+import { isStoAppDeployHistoryInProgress } from '../../../shared/sto-app-deploy-history';
 
 interface AppDevGitPanelProps {
   workspaceId: string;
+  canDeploy?: boolean;
+  deployRunning?: boolean;
+  deployHistory?: StoAppDeployHistoryRecord[];
+  onOpenDeploy?: () => void;
 }
 
 function formatTime(ts: number): string {
@@ -26,12 +36,22 @@ function formatTime(ts: number): string {
   }
 }
 
-export function AppDevGitPanel({ workspaceId }: AppDevGitPanelProps) {
+function historyStatusLabel(item: StoAppDeployHistoryRecord): string {
+  const presented = presentCodeDeployFields(item);
+  return codeDeployProgressLabel(presented);
+}
+
+export function AppDevGitPanel({
+  workspaceId,
+  canDeploy = false,
+  deployRunning = false,
+  deployHistory = [],
+  onOpenDeploy,
+}: AppDevGitPanelProps) {
   const [message, setMessage] = useState('上传代码');
   const [checkpoints, setCheckpoints] = useState<AppCheckpoint[]>([]);
   const [loadingList, setLoadingList] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [building, setBuilding] = useState(false);
 
   const refresh = async () => {
     setLoadingList(true);
@@ -82,18 +102,7 @@ export function AppDevGitPanel({ workspaceId }: AppDevGitPanelProps) {
     }
   };
 
-  const handleBuild = async () => {
-    if (building) return;
-    setBuilding(true);
-    try {
-      await delay(900);
-      toast.success('已触发构建（占位）', {
-        description: '后续将对接公司 DevOps 发布平台流水线。',
-      });
-    } finally {
-      setBuilding(false);
-    }
-  };
+  const publishDisabled = deployRunning || !canDeploy || !onOpenDeploy;
 
   return (
     <div className="min-h-0 flex-1 overflow-auto p-6">
@@ -104,7 +113,7 @@ export function AppDevGitPanel({ workspaceId }: AppDevGitPanelProps) {
             Git 代码管理
           </h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            「上传代码」会将当前改动提交到本地 Git。构建由公司 DevOps 平台执行，此处仅提供触发入口。
+            「上传代码」会将当前改动提交到本地 Git。「发布」会把代码推到云端并走 DevOps 流水线；进行中的发布会写入本地记录并继续查询到成功或失败。
           </p>
         </header>
 
@@ -139,20 +148,73 @@ export function AppDevGitPanel({ workspaceId }: AppDevGitPanelProps) {
               size="sm"
               variant="outline"
               className="gap-1.5"
-              disabled={building}
-              onClick={() => void handleBuild()}
+              disabled={publishDisabled}
+              title={
+                deployRunning
+                  ? '已有发布进行中'
+                  : canDeploy
+                    ? '选择环境并发布到云端'
+                    : '当前无法发布（未绑定云端应用或 sai-cli 不可用）'
+              }
+              onClick={() => onOpenDeploy?.()}
             >
-              {building ? (
+              {deployRunning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
               ) : (
                 <Rocket className="h-3.5 w-3.5" aria-hidden />
               )}
-              执行构建
+              {deployRunning ? '发布中' : '发布'}
             </Button>
           </div>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            构建按钮当前为占位：点击后提示成功，后续对接公司 DevOps 发布平台流水线。
-          </p>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-border bg-background/70 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            发布记录
+          </h3>
+          {deployHistory.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              暂无发布记录。从本机发起的发布会保存在应用目录 `.sto/deploy-history.json`。
+            </p>
+          ) : (
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {deployHistory.map((item) => {
+                const runningItem = isStoAppDeployHistoryInProgress(item);
+                const success = isCodeDeploySuccess(item.status);
+                return (
+                  <li key={item.deploymentId} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-foreground">
+                        {item.env || '未指定环境'}
+                        {item.deploymentVersion ? ` · ${item.deploymentVersion}` : ''}
+                      </p>
+                      <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                        {item.deploymentId}
+                        {item.startedAt ? ` · ${formatTime(item.startedAt)}` : ''}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        'shrink-0 text-[11px]',
+                        runningItem && 'text-amber-700 dark:text-amber-300',
+                        !runningItem && success && 'text-emerald-700 dark:text-emerald-300',
+                        !runningItem && !success && 'text-destructive',
+                      )}
+                    >
+                      {runningItem ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                          {historyStatusLabel(item)}
+                        </span>
+                      ) : (
+                        historyStatusLabel(item)
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <section className="space-y-3 rounded-xl border border-border bg-background/70 p-4">

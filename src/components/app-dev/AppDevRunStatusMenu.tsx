@@ -11,8 +11,9 @@ import {
 const APP_DEV_PHASE_LABELS: Record<AppDevPhase, string> = {
   created: '正在准备运行环境…',
   'preparing-env': '正在准备运行环境…',
-  installing: '正在安装应用组件…',
-  starting: '正在启动应用…',
+  'checking-snpm': '正在检测 snpm…',
+  installing: '正在执行依赖…',
+  starting: '正在执行启动…',
   ready: '运行中',
   stopped: '已停止',
   error: '出了点问题',
@@ -39,6 +40,7 @@ export function AppDevRunStatusMenu({
   const working = pending
     || phase === 'created'
     || phase === 'preparing-env'
+    || phase === 'checking-snpm'
     || phase === 'installing'
     || phase === 'starting';
   const canStart = phase === 'stopped' || phase === 'error';
