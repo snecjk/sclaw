@@ -33,18 +33,16 @@ describe('local built-in app template catalog', () => {
     }))).toEqual([
       { templateId: 'assets-minimal', pageType: 'assets', source: 'local-resource' },
       { templateId: 'site-minimal', pageType: 'site', source: 'local-resource' },
-      { templateId: 'react-a2ui-template', pageType: 'site', source: 'local-resource' },
     ]);
   });
 
-  it('lists both site local templates for 独立站点', async () => {
+  it('lists only the site-minimal local template for 独立站点', async () => {
     const items = await listLocalBuiltinAppTemplates(
       join(process.cwd(), 'resources', 'app-templates'),
       'site',
     );
     expect(items.map((item) => item.templateId)).toEqual([
       'site-minimal',
-      'react-a2ui-template',
     ]);
   });
 });

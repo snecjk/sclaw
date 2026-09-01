@@ -611,10 +611,6 @@ function resolveLocalReactTemplateDir(): string | null {
     join(app.getAppPath(), 'resources', 'app-templates', 'site-minimal'),
     join(process.resourcesPath, 'resources', 'app-templates', 'site-minimal'),
     join(process.resourcesPath, 'app-templates', 'site-minimal'),
-    join(process.cwd(), 'resources', 'app-templates', 'react-a2ui-template'),
-    join(app.getAppPath(), 'resources', 'app-templates', 'react-a2ui-template'),
-    join(process.resourcesPath, 'resources', 'app-templates', 'react-a2ui-template'),
-    join(process.resourcesPath, 'app-templates', 'react-a2ui-template'),
   ];
   for (const dir of candidates) {
     if (isValidReactTemplate(dir)) return dir;

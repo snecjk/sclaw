@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   proxiesFromContract,
   resolveApiUrl,
-} from '../../resources/app-templates/react-a2ui-template/src/lib/resolve-api-url';
+} from '../../resources/app-templates/site-minimal/src/lib/resolve-api-url';
 
 const proxies = proxiesFromContract({
   version: 'v1',

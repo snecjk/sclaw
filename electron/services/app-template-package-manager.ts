@@ -29,7 +29,8 @@ interface CachedTemplateMeta {
   fetchedAt: string;
 }
 
-const TEMPLATE_ID_PATTERN = /^(?:site-minimal|assets-minimal|react-a2ui-template|[0-9A-HJKMNP-TV-Z]{26})$/;
+const LOCAL_BUILTIN_TEMPLATE_IDS = new Set(['site-minimal', 'assets-minimal']);
+const TEMPLATE_ID_PATTERN = /^(?:site-minimal|assets-minimal|[0-9A-HJKMNP-TV-Z]{26})$/;
 const VERSION_PATTERN = /^1\.0\.\d+$/;
 
 function validTemplateRoot(dir: string): boolean {
@@ -47,8 +48,7 @@ function builtinTemplateResourcesRoot(): string {
   ];
   const resolved = candidates.find((candidate) =>
     existsSync(join(candidate, 'site-minimal'))
-    || existsSync(join(candidate, 'assets-minimal'))
-    || existsSync(join(candidate, 'react-a2ui-template')),
+    || existsSync(join(candidate, 'assets-minimal')),
   );
   if (!resolved) throw new Error('内置应用模板资源缺失');
   return resolved;
@@ -59,7 +59,7 @@ export function resolveLocalBuiltinTemplateDir(
   resourcesRoot = builtinTemplateResourcesRoot(),
 ): string {
   const id = templateId.trim();
-  if (!id || id.includes('/') || id.includes('\\') || id === '..') {
+  if (!LOCAL_BUILTIN_TEMPLATE_IDS.has(id) || id.includes('/') || id.includes('\\') || id === '..') {
     throw new Error(`内置模板 ID 不合法: ${templateId}`);
   }
   const resolved = join(resourcesRoot, id);
@@ -110,6 +110,7 @@ export async function listLocalBuiltinAppTemplates(
     if (manifest.templateId !== entry.name) {
       throw new Error(`内置模板 manifest.json 与资源目录不一致: ${entry.name}`);
     }
+    if (!LOCAL_BUILTIN_TEMPLATE_IDS.has(manifest.templateId)) continue;
     if (pageType && manifest.pageType !== pageType) continue;
     items.push({
       templateId: manifest.templateId,
