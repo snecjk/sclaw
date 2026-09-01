@@ -176,7 +176,7 @@ const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
 const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
   'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
-  'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
+  'sto-navigation-item--account-menu hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
 /** 收起态 / provincial 紧凑设置入口：圆形 #E5E6EB 底（展开态账号热区不再用齿轮） */
 const SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS = cn(
