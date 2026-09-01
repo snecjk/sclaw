@@ -103,8 +103,8 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
                 onChange={(event) => setNewPageType(event.target.value as CodeApplicationPageType)}
                 className="mt-1.5 block rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
               >
-                <option value="site">独立站点</option>
-                <option value="assets">托管应用</option>
+                <option value="site">Site</option>
+                <option value="assets">Assets</option>
               </select>
             </label>
             <Button
@@ -119,7 +119,7 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
         </div>
 
         <div className="flex items-center gap-1 px-6 py-3">
-          {([['all', '全部'], ['site', '独立站点'], ['assets', '托管应用']] as const).map(([value, label]) => (
+          {([['all', '全部'], ['site', 'Site'], ['assets', 'Assets']] as const).map(([value, label]) => (
             <button
               key={value}
               type="button"
@@ -155,7 +155,7 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{item.description || '暂无描述'}</p>
                       <p className="mt-2 text-[11px] text-muted-foreground">
-                        {item.pageType === 'site' ? '独立站点' : '托管应用'} · v{item.latestVersion}
+                        {item.pageType === 'site' ? 'Site' : 'Assets'} · v{item.latestVersion}
                       </p>
                     </div>
                     <Button

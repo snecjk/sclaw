@@ -48,7 +48,7 @@ describe('CreateAppDialog application type', () => {
       items: [{
         templateId: `${pageType}-minimal`,
         pageType,
-        name: pageType === 'site' ? '最简独立站点' : '最简托管应用',
+        name: pageType === 'site' ? '标准 Site 模版' : '标准 Assets 模版',
         description: '平台内置最简模板',
         status: 'ACTIVE',
         isBuiltin: true,
@@ -65,17 +65,17 @@ describe('CreateAppDialog application type', () => {
   it('defaults to site and explains both publishing modes', async () => {
     render(<CreateAppDialog open onClose={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: /独立站点/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Site/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('固定域名，发版不需要修改版本号')).toBeInTheDocument();
-    expect(screen.getByText('可以申请自定义域名，发版需要修改版本号')).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: /最简独立站点/ })).toBeInTheDocument();
+    expect(screen.getByText('内嵌子应用，发布后需依赖主应用访问')).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /标准 Site 模版/ })).toBeInTheDocument();
   });
 
   it('submits the selected assets pageType', async () => {
     render(<CreateAppDialog open onClose={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText('比如：快递查询助手'), { target: { value: '资源应用' } });
-    fireEvent.click(screen.getByRole('button', { name: /托管应用/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Assets/ }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: '创建应用' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '创建应用' }));
@@ -123,7 +123,7 @@ describe('CreateAppDialog application type', () => {
         {
           templateId: `${pageType}-minimal`,
           pageType,
-          name: pageType === 'site' ? '最简独立站点' : '最简托管应用',
+          name: pageType === 'site' ? '标准 Site 模版' : '标准 Assets 模版',
           description: '本地调试模板',
           status: 'ACTIVE',
           isBuiltin: true,
@@ -135,7 +135,7 @@ describe('CreateAppDialog application type', () => {
         {
           templateId: `${pageType}-minimal`,
           pageType,
-          name: pageType === 'site' ? '最简独立站点' : '最简托管应用',
+          name: pageType === 'site' ? '标准 Site 模版' : '标准 Assets 模版',
           description: '平台内置最简模板',
           status: 'ACTIVE',
           isBuiltin: true,
@@ -151,8 +151,8 @@ describe('CreateAppDialog application type', () => {
     }));
     render(<CreateAppDialog open onClose={vi.fn()} />);
 
-    expect(await screen.findByRole('option', { name: '最简独立站点 · 本地资源' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: '最简独立站点 · Memory Center · v1.0.0' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: '标准 Site 模版 · 本地资源' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '标准 Site 模版 · Memory Center · v1.0.0' })).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('比如：快递查询助手'), { target: { value: '本地模板应用' } });
     fireEvent.click(screen.getByRole('button', { name: '创建应用' }));
 
@@ -169,7 +169,7 @@ describe('CreateAppDialog application type', () => {
         {
           templateId: 'site-minimal',
           pageType: 'site',
-          name: '最简独立站点',
+          name: '标准 Site 模版',
           description: '本地调试模板',
           status: 'ACTIVE',
           isBuiltin: true,

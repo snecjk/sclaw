@@ -14,7 +14,7 @@ describe('local built-in app template catalog', () => {
       expect.objectContaining({
         templateId: 'assets-minimal',
         pageType: 'assets',
-        name: '最简托管应用',
+        name: '标准 Assets 模版',
         latestVersion: 'local',
         source: 'local-resource',
       }),
@@ -37,7 +37,7 @@ describe('local built-in app template catalog', () => {
     ]);
   });
 
-  it('lists both site local templates for 独立站点', async () => {
+  it('lists both local templates for Site', async () => {
     const items = await listLocalBuiltinAppTemplates(
       join(process.cwd(), 'resources', 'app-templates'),
       'site',

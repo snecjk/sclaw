@@ -29,7 +29,7 @@ async function fixture() {
     schemaVersion: 1,
     templateId: 'site-minimal',
     pageType: 'site',
-    name: '最简独立站点',
+    name: '标准 Site 模版',
   }));
   await writeFile(join(sourceRoot, 'package.json'), '{"scripts":{"dev":"vite"}}');
   await writeFile(join(sourceRoot, 'src', 'App.tsx'), 'source');
@@ -42,7 +42,7 @@ async function fixture() {
     kind: 'app-template',
     templateId: 'site-minimal',
     pageType: 'site',
-    name: '最简独立站点',
+    name: '标准 Site 模版',
     description: '',
     source: 'local-resource',
     sourceFingerprint,

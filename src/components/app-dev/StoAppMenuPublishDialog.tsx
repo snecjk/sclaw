@@ -242,7 +242,7 @@ export function StoAppMenuPublishDialog({
 
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
           根据「{appName}」当前导航配置整理云端菜单。可改名称；拖拽只调整同一父级下的顺序（根级之间，或某个一级目录内的页面），不能跨级或改父子关系。
-          {pageType === 'assets' ? '托管应用只同步一个一级菜单。' : '首页重定向不会生成「根目录」。'}
+          {pageType === 'assets' ? 'Assets 只同步一个一级菜单。' : '首页重定向不会生成「根目录」。'}
         </p>
 
         <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">

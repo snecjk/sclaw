@@ -26,7 +26,7 @@ describe('buildAppTemplateArchive', () => {
       schemaVersion: 1,
       templateId: 'site-minimal',
       pageType: 'site',
-      name: '最简独立站点',
+      name: '标准 Site 模版',
     }));
     await writeFile(join(root, 'package.json'), '{}');
     await writeFile(join(root, 'src', 'main.tsx'), 'export default null');
