@@ -9,6 +9,39 @@ export type BatchAdjustType = 'ADD' | 'SUBTRACT' | 'MULTIPLY' | 'DIVIDE' | 'SET'
 
 export type BatchAdjustSceneType = 'CUSTOMER' | 'SHOP' | 'MANAGER' | 'ZONE';
 
+/** VIP 报价对象类型：码值 ↔ 中文。SHOP 是店铺，不是电子面单。 */
+export const BATCH_ADJUST_SCENE_TYPES: Record<BatchAdjustSceneType, string> = {
+  CUSTOMER: '客户',
+  SHOP: '店铺',
+  MANAGER: '业务员',
+  ZONE: '承包区',
+};
+
+const SCENE_TYPE_ALIASES: Record<string, BatchAdjustSceneType> = {
+  customer: 'CUSTOMER',
+  客户: 'CUSTOMER',
+  shop: 'SHOP',
+  店铺: 'SHOP',
+  manager: 'MANAGER',
+  业务员: 'MANAGER',
+  zone: 'ZONE',
+  承包区: 'ZONE',
+};
+
+/** Map CLI/NL sceneType to canonical code. Does not treat 电子面单 as SHOP. */
+export function normalizeBatchAdjustSceneType(value: string): BatchAdjustSceneType | string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  const compact = trimmed.replace(/\s+/g, '');
+  const upper = compact.toUpperCase();
+  if (upper in BATCH_ADJUST_SCENE_TYPES) {
+    return upper as BatchAdjustSceneType;
+  }
+  return SCENE_TYPE_ALIASES[compact.toLowerCase()]
+    ?? SCENE_TYPE_ALIASES[compact]
+    ?? trimmed;
+}
+
 export interface BatchAdjustItem {
   areaDetail: string;
   startWeight: string;
@@ -108,10 +141,11 @@ export function parseCliJsonArray(value: unknown): unknown[] | null {
 function parseAdjustObject(raw: unknown): BatchAdjustObject | null {
   if (!isRecord(raw)) return null;
   const objectName = readString(raw.objectName);
-  const sceneType = readString(raw.sceneType);
+  const sceneTypeRaw = readString(raw.sceneType);
   const startDate = readString(raw.startDate);
   const endDate = readString(raw.endDate);
-  if (!objectName || !sceneType || !startDate || !endDate) return null;
+  if (!objectName || !sceneTypeRaw || !startDate || !endDate) return null;
+  const sceneType = normalizeBatchAdjustSceneType(sceneTypeRaw);
   const itemRows = parseCliJsonArray(raw.items);
   if (!itemRows) return null;
   const items = itemRows.map(parseAdjustItem).filter((item): item is BatchAdjustItem => item != null);
@@ -207,7 +241,7 @@ export function listMissingBatchAdjustFields(params: Partial<BatchAdjustParams> 
       missing.push({
         path: `${prefix}.sceneType`,
         label: '对象类型',
-        hint: '请说明对象类型：客户、电子面单、业务员或承包区（默认客户）。',
+        hint: '请说明对象类型：客户、店铺、业务员或承包区（默认客户）。',
       });
     }
     if (!obj.startDate?.trim()) {

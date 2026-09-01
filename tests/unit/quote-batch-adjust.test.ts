@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   listMissingBatchAdjustFields,
+  normalizeBatchAdjustSceneType,
   parseBatchAdjustDraft,
   parseBatchAdjustParams,
   parseCliJsonArray,
@@ -128,5 +129,35 @@ describe('quote-batch-adjust', () => {
     });
     expect(missing.some((field) => field.path.includes('startDate'))).toBe(true);
     expect(missing.some((field) => field.path.includes('endDate'))).toBe(true);
+  });
+
+  it('maps sceneType 店铺 to SHOP, not 电子面单', () => {
+    expect(normalizeBatchAdjustSceneType('店铺')).toBe('SHOP');
+    expect(normalizeBatchAdjustSceneType('shop')).toBe('SHOP');
+    expect(normalizeBatchAdjustSceneType('客户')).toBe('CUSTOMER');
+    expect(normalizeBatchAdjustSceneType('业务员')).toBe('MANAGER');
+    expect(normalizeBatchAdjustSceneType('承包区')).toBe('ZONE');
+    expect(normalizeBatchAdjustSceneType('电子面单')).toBe('电子面单');
+  });
+
+  it('normalizes Chinese sceneType when parsing objectList', () => {
+    const params = parseBatchAdjustParams({
+      objectList: [{
+        objectName: '测试店',
+        sceneType: '店铺',
+        startDate: '2026-08-01',
+        endDate: '2026-12-31',
+        items: [{
+          areaDetail: 'ALL',
+          startWeight: '0',
+          startWeightMark: '<',
+          endWeight: '1',
+          endWeightMark: '<=',
+          adjustType: 'ADD',
+          adjustValue: '0.1',
+        }],
+      }],
+    });
+    expect(params?.objectList[0]?.sceneType).toBe('SHOP');
   });
 });
