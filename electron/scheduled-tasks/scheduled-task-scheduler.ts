@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { getStoToken } from '../utils/auth-store';
 import { computeNextRunAt } from './cron-math';
 import { ScheduleTaskRepository } from '../db/repositories/schedule-task-repository';
 import { ScheduleTaskRunRepository } from '../db/repositories/schedule-task-run-repository';
@@ -275,6 +276,7 @@ export class ScheduledTaskScheduler {
    * fire-and-forget dispatch。到期点落后超过 `staleGraceMs` 时丢弃不补跑（休眠唤醒）。
    * busy（已有 active run）时丢弃该 missed-busy 瞬间、推进到 now 之后（不堆积）。
    * not-due 且 `next_run_at` 为空时补算（兜底新建任务）。
+   * cron 到期、真正执行前用 `getStoToken()` 校验登录态；未登录不 claim / 不推进，留给后续 tick。
    */
   async tick(now: Date = new Date()): Promise<void> {
     const tasks = await this.listScheduleTasks();
@@ -282,6 +284,8 @@ export class ScheduledTaskScheduler {
     // 先于 claim：释放挂起的 stale running run，避免 getActiveRun 永久阻塞
     // 到期任务的后续触发（引擎回调丢失时 status lease 无法自愈）。
     await this.reapStaleRuns(now, tasks);
+
+    let loggedIn: boolean | null = null;
 
     for (const task of tasks) {
       if (!task.enabled) continue;
@@ -314,6 +318,18 @@ export class ScheduledTaskScheduler {
           scheduledFor: currentNext,
           lateMs,
           staleGraceMs: this.staleGraceMs,
+        });
+        continue;
+      }
+
+      if (loggedIn === null) {
+        const token = await getStoToken();
+        loggedIn = Boolean(token);
+      }
+      if (!loggedIn) {
+        logger.info('[scheduled-task] tick skipped due task (not logged in)', {
+          taskId: task.id,
+          scheduledFor: currentNext,
         });
         continue;
       }
