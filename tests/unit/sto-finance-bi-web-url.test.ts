@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const PROD_PREVIEW =
-  'https://page.sto.cn/ux/sto-finance-bi-preview/index.html#/report-square';
-const PROD_FRONT = 'https://page.sto.cn/ux/sto-finance-bi-front/index.html';
+  'https://page.sto.cn/ux/sto-finance-bi-preview/index.html#/data-model/report-list';
+const PROD_LOGIN = 'https://page.sto.cn/ux/sto-finance-bi-preview/index.html';
+
+function expectedCodeLoginUrl(code: string): string {
+  const params = new URLSearchParams({
+    code,
+    returnUrl: PROD_PREVIEW,
+  });
+  // preview getCurLocation 只读 search 中的 returnUrl；hash 仅路由到 /login
+  return `${PROD_LOGIN}?${params.toString()}#/login`;
+}
 
 describe('sto-finance-bi-web-url', () => {
   afterEach(() => {
@@ -15,7 +24,7 @@ describe('sto-finance-bi-web-url', () => {
     const mod = await import('@/lib/sto-finance-bi-web-url');
     expect(mod.getStoFinanceBiPageOrigin()).toBe('https://page.sto.cn');
     expect(mod.getStoFinanceBiReportSquareUrl()).toBe(PROD_PREVIEW);
-    expect(mod.getStoFinanceBiLoginUrl()).toBe(PROD_FRONT);
+    expect(mod.getStoFinanceBiLoginUrl()).toBe(PROD_LOGIN);
   });
 
   it('extracts skip-login code from ticket url', async () => {
@@ -27,26 +36,31 @@ describe('sto-finance-bi-web-url', () => {
     ).toBe('ticket-code-123');
   });
 
-  it('builds front login url from mc front ticket', async () => {
+  it('builds search-param login url from mc front ticket', async () => {
     const mod = await import('@/lib/sto-finance-bi-web-url');
     expect(
       mod.buildStoFinanceBiEmbedUrl(
         'https://page.sto.cn/ux/sto-finance-bi-front/index.html#/login?code=ticket-code-123',
       ),
-    ).toBe(
-      `${PROD_FRONT}?code=ticket-code-123&returnUrl=${encodeURIComponent(PROD_PREVIEW)}#/login`,
-    );
+    ).toBe(expectedCodeLoginUrl('ticket-code-123'));
   });
 
-  it('builds front login url with code from sso skip-login ticket', async () => {
+  it('builds search-param login url from preview ticket', async () => {
+    const mod = await import('@/lib/sto-finance-bi-web-url');
+    expect(
+      mod.buildStoFinanceBiEmbedUrl(
+        'https://page-test.sto.cn/ux/sto-finance-bi-preview/index.html#/login?code=ticket-code-456',
+      ),
+    ).toBe(expectedCodeLoginUrl('ticket-code-456'));
+  });
+
+  it('builds search-param login url with code from sso skip-login ticket', async () => {
     const mod = await import('@/lib/sto-finance-bi-web-url');
     expect(
       mod.buildStoFinanceBiEmbedUrl(
         'https://page.sto.cn/sto-base-service/sto-sso-web/#/main?code=ticket-code-123&systemCode=sto-finance-bi',
       ),
-    ).toBe(
-      `${PROD_FRONT}?code=ticket-code-123&returnUrl=${encodeURIComponent(PROD_PREVIEW)}#/login`,
-    );
+    ).toBe(expectedCodeLoginUrl('ticket-code-123'));
   });
 
   it('falls back to hash redirect login when ticket has no code', async () => {
@@ -56,7 +70,7 @@ describe('sto-finance-bi-web-url', () => {
         'https://page.sto.cn/sto-base-service/sto-sso-web/#/main?systemCode=sto-finance-bi',
       ),
     ).toBe(
-      `${PROD_FRONT}#/login?redirect=${encodeURIComponent(PROD_PREVIEW)}`,
+      `${PROD_LOGIN}#/login?redirect=${encodeURIComponent(PROD_PREVIEW)}`,
     );
   });
 
@@ -64,10 +78,10 @@ describe('sto-finance-bi-web-url', () => {
     const mod = await import('@/lib/sto-finance-bi-web-url');
     expect(
       mod.alignFinanceBiSkipLoginUrl(
-        'https://page-test.sto.cn/ux/sto-finance-bi-front/index.html#/login?code=abc',
+        'https://page-test.sto.cn/ux/sto-finance-bi-preview/index.html#/login?code=abc',
       ),
     ).toBe(
-      'https://page.sto.cn/ux/sto-finance-bi-front/index.html#/login?code=abc',
+      'https://page.sto.cn/ux/sto-finance-bi-preview/index.html#/login?code=abc',
     );
   });
 

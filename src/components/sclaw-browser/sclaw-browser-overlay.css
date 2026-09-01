@@ -437,6 +437,8 @@ body.sclaw-browser-split-dragging * {
   width: 100%;
   min-height: inherit;
   height: 100%;
+  border: none;
+  outline: none;
 }
 
 webview.sclaw-browser-drawer__frame--webview {
