@@ -435,7 +435,6 @@ function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppP
 - 同意后：\`sai-cli siteapp menu sync --params '{"app_code":"<app_code>","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json\`
 - 菜单项字段：\`menu_code\` / \`parent_code\`（一级为 null） / \`menu_name\` / \`menu_type\`（directory 或 page，不要用 menu）
 - 不要同步 404、redirect、\`developerOnly\`；\`app_code\` 以 \`.sto/workspace.json\` 为准
-- 详细步骤见 \`openspec/skills/siteapp-menu-sync/SKILL.md\`（若已启用）
 <!-- /sclaw-app-dev-context -->`;
 }
 
@@ -579,7 +578,6 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
         if (
           !entry.name.startsWith('pkg-')
           && entry.name !== 'nl-page-from-sai'
-          && entry.name !== 'siteapp-menu-sync'
         ) continue;
         const src = join(catalogRoot, entry.name);
         if (existsSync(join(src, 'SKILL.md'))) {
@@ -2388,7 +2386,7 @@ export async function listAppDevAssistSkills(appPath: string): Promise<AppDevAss
 
 /** Bake default assist skills into a user app (idempotent). */
 async function ensureDefaultAppDevAssistSkills(appPath: string): Promise<void> {
-  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual', 'siteapp-menu-sync'] as const;
+  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual'] as const;
   for (const skillId of defaults) {
     const installed = join(appPath, 'openspec', 'skills', skillId, 'SKILL.md');
     if (existsSync(installed)) continue;

@@ -16,11 +16,6 @@
       "description": "建页需接口时先 list/describe 按需读取服务说明；无匹配再 discover/help；绝对地址通过 ensure-dev-proxy 接入。"
     },
     {
-      "id": "siteapp-menu-sync",
-      "name": "发布后同步云端菜单",
-      "description": "发布成功后扫描路由整理菜单；先询问用户，同意后再 sai-cli siteapp menu sync。"
-    },
-    {
       "id": "ui-checklist",
       "name": "UI 验收清单",
       "description": "页面改动后的浅色/深色、加载/空态/错误态验收清单。"

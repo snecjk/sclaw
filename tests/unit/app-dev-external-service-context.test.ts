@@ -82,13 +82,6 @@ describe('应用开发外部服务上下文', () => {
     expect(visualSkill).toContain('STO PC Visual');
     expect(visualSkill).toContain('#FF6700');
     expect(agents).toContain('openspec/skills/sto-pc-visual/SKILL.md');
-    expect(agents).toContain('openspec/skills/siteapp-menu-sync/SKILL.md');
-    const menuSkill = await readFile(
-      join(appPath, 'openspec', 'skills', 'siteapp-menu-sync', 'SKILL.md'),
-      'utf8',
-    );
-    expect(menuSkill).toContain('sai-cli siteapp menu sync');
-    expect(menuSkill).toContain('assets');
     await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'tokens.css'), 'utf8'))
       .resolves.toContain('--shell-topbar: 60px');
     await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'reference.html'), 'utf8'))

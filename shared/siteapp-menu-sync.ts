@@ -86,19 +86,5 @@ export function buildPostPublishMenuSyncPrompt(input: {
     '```bash',
     `sai-cli siteapp menu list --params '{"app_code":"${appCode || '<app_code>'}"}' -f json`,
     '```',
-    '',
-    '详细约定见 `openspec/skills/siteapp-menu-sync/SKILL.md`（若已启用）。',
   ].join('\n');
-}
-
-export function siteappMenuSyncAgentsSection(): string {
-  return `## 发布后同步云端菜单
-- 用户发布成功、或明确要求同步菜单时：先扫项目路由，整理菜单树，**展示给用户并询问是否同步**；未同意前禁止 \`menu sync --params\` 的 \`mode=apply\`
-- 查询现有菜单：\`sai-cli siteapp menu list --params '{"app_code":"<app_code>"}' -f json\`
-- 正式同步（用户同意后）：\`sai-cli siteapp menu sync --params '{"app_code":"<app_code>","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json\`
-- **site**：遵循用户导航结构，只同步一级目录 + 二级页面
-- **assets**：只同步一个一级菜单
-- 菜单项字段：\`menu_code\`、\`parent_code\`（一级为 null）、\`menu_name\`、\`menu_type\`（directory 或 page，不要用 menu）
-- 不要同步 404、redirect、\`developerOnly\` 开发页；\`app_code\` 以 \`.sto/workspace.json\` 为准
-- 详细步骤见 \`openspec/skills/siteapp-menu-sync/SKILL.md\`（若已启用）`;
 }
