@@ -1,4 +1,4 @@
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
+import { ChatEngineModelCascade } from '@/pages/Chat/ChatEngineModelSelectors';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 
 export interface AppDevComposerProps {
@@ -18,11 +18,12 @@ export function AppDevComposer({
       footerAlign="center"
       hideDingTalkMention
       showInterfaceCatalog
+      toolbarToolsLayout="dropdown"
       toolbarSelectors={(
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <ChatEngineSelector variant="inline" className="min-w-0 flex-1" allowSessionSwitch />
-          <ChatModelSelector variant="inline" className="min-w-max shrink-0" />
-        </div>
+        <ChatEngineModelCascade
+          className="min-w-0 max-w-full"
+          allowSessionSwitch
+        />
       )}
     />
   );

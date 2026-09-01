@@ -31,7 +31,7 @@ export interface NodeRuntimeStatus {
 }
 
 export type AppDevPhase =
-  | 'created' | 'preparing-env' | 'installing' | 'starting' | 'ready' | 'stopped' | 'error';
+  | 'created' | 'preparing-env' | 'checking-snpm' | 'installing' | 'starting' | 'ready' | 'stopped' | 'error';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -40,6 +40,8 @@ export interface AppDevStatus {
   progress: number;
   previewUrl?: string;
   error?: string;
+  /** Extra line for the active setup step (e.g. snpm found vs installing). */
+  detail?: string;
 }
 
 export interface AppDevEnvironment {
