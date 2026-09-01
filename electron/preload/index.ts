@@ -201,6 +201,7 @@ const electronAPI = {
         'workflow:stream:unsubscribe',
         // SClaw embed browser runtime
         'sclaw-browser:prepareSession',
+        'sclaw-browser:getEmbedSessionCookies',
         'sclaw-browser:hasStoPolicyAuth',
         'sclaw-browser:hasTeambitionAuth',
         'sclaw-browser:registerRuntime',

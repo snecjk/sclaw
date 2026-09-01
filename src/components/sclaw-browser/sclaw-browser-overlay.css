@@ -402,6 +402,12 @@ body.sclaw-browser-split-dragging * {
   background: var(--sto-card-panel-bg);
 }
 
+.sclaw-browser-drawer__frame-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .sclaw-browser-drawer__frame {
   display: block;
   flex: 1 1 auto;
@@ -411,6 +417,31 @@ body.sclaw-browser-split-dragging * {
   border: 0;
 }
 
+.sclaw-browser-drawer__frame-host .sclaw-browser-drawer__frame {
+  min-height: 560px;
+}
+
+.data-center-finance-embed {
+  min-height: max(560px, calc(100vh - 280px));
+}
+
+.data-center-finance-embed__frame-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: inherit;
+}
+
+.data-center-finance-embed__frame-host .sclaw-browser-drawer__frame,
+.data-center-finance-embed__frame-host webview.sclaw-browser-drawer__frame--webview {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: inherit;
+  height: 100%;
+}
+
 webview.sclaw-browser-drawer__frame--webview {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 560px;
 }
