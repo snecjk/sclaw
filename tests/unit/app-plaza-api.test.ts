@@ -74,6 +74,12 @@ describe('app plaza renderer API adapter', () => {
     expect(appendSkipLoginReturnUrl('https://sso.example.com/Login', 'javascript:alert(1)')).toBe(
       'https://sso.example.com/Login',
     );
+    expect(appendSkipLoginReturnUrl(
+      'https://page-test.sto.cn/sto-base-service/sto-sso-web/#/main?autoLogin=true&ticket=t-1',
+      'https://sclaw-test.sto.cn/sso/callback?redirect=%2Fpermissions%3FappId%3Dapp_test',
+    )).toBe(
+      'https://page-test.sto.cn/sto-base-service/sto-sso-web/#/main?autoLogin=true&ticket=t-1&returnUrl=https%3A%2F%2Fsclaw-test.sto.cn%2Fsso%2Fcallback%3Fredirect%3D%252Fpermissions%253FappId%253Dapp_test',
+    );
   });
 
   it('maps category id/name and preserves server ordering', async () => {

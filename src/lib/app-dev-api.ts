@@ -158,6 +158,7 @@ export interface DevAppSummary {
   appCode?: string;
   availability?: 'local' | 'remote-only' | 'path-missing';
   previewUrl?: string;
+  permissionsUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
   /** `imported` = 本地导入；`created` = 新建站 / 云端拉取 */
