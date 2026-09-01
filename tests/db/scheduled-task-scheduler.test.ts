@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupInMemoryDb, type InMemoryDb } from './helpers';
 import { ScheduleTaskRepository } from '../../electron/db/repositories/schedule-task-repository';
 import { ScheduleTaskRunRepository } from '../../electron/db/repositories/schedule-task-run-repository';
@@ -8,6 +8,12 @@ import {
 } from '../../electron/scheduled-tasks/scheduled-task-scheduler';
 import { validateCronExpr, computeNextRunAt } from '../../electron/scheduled-tasks/cron-math';
 import type { ScheduleTask, ScheduleTaskRun } from '../../electron/db/models/domain/schedule-task';
+import { getStoToken } from '../../electron/utils/auth-store';
+
+const getStoTokenMock = vi.mocked(getStoToken);
+vi.mock('../../electron/utils/auth-store', () => ({
+  getStoToken: vi.fn(async () => 'test-token'),
+}));
 
 function makeRecordingDispatcher() {
   const dispatched: Array<{ task: ScheduleTask; run: ScheduleTaskRun }> = [];
@@ -35,6 +41,8 @@ describe('ScheduledTaskScheduler', () => {
     env = setupInMemoryDb();
     taskRepo = new ScheduleTaskRepository();
     runRepo = new ScheduleTaskRunRepository();
+    getStoTokenMock.mockReset();
+    getStoTokenMock.mockResolvedValue('test-token');
   });
 
   afterEach(() => env.teardown());
@@ -259,6 +267,7 @@ describe('ScheduledTaskScheduler', () => {
 
       await scheduler.tick(new Date('2024-01-01T00:00:45.000Z')); // not due
       expect(dispatched).toHaveLength(0);
+      expect(getStoTokenMock).not.toHaveBeenCalled();
       expect((await taskRepo.getById('future'))?.nextRunAt).toBe('2024-01-01T00:01:00.000Z');
     });
 
@@ -287,6 +296,21 @@ describe('ScheduledTaskScheduler', () => {
       const after = await taskRepo.getById('stale');
       expect(after?.nextRunAt).toBe('2024-01-01T00:06:00.000Z');
       expect(after?.lastRecoveredAt).toBe(now.toISOString());
+    });
+
+    it('does not dispatch a due task when getStoToken reports logged out', async () => {
+      getStoTokenMock.mockResolvedValue(null);
+      const { dispatcher, dispatched } = makeRecordingDispatcher();
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, dispatcher);
+      await taskRepo.create({ id: 'nologin', name: 'NL', enabled: true, ...baseTaskInput });
+      await scheduler.refreshSchedule(new Date('2024-01-01T00:00:30.000Z')); // nextRunAt=00:01:00
+
+      await scheduler.tick(new Date('2024-01-01T00:01:30.000Z'));
+      expect(dispatched).toHaveLength(0);
+      expect(getStoTokenMock).toHaveBeenCalled();
+      expect(await runRepo.getActiveRun('nologin')).toBeNull();
+      // 未登录不消耗该拍：nextRunAt 保持 due，登录后仍可在 grace 内执行。
+      expect((await taskRepo.getById('nologin'))?.nextRunAt).toBe('2024-01-01T00:01:00.000Z');
     });
   });
 
