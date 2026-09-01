@@ -6,6 +6,7 @@ const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'gateway:status': 'gateway:status-changed',
   'gateway:error': 'gateway:error',
   'chat-runtime:event': 'chat-runtime:event',
+  'chat:result-open': 'chat:result-open',
   'workflow:status-update': 'workflow:status-update',
   'workflow:event': 'workflow:event',
   'workflow-runtime:recover': 'workflow-runtime:recover',

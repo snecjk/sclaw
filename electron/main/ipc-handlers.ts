@@ -174,7 +174,7 @@ export function registerIpcHandlers(
   registerFloatIconHandlers(getFloatIconWindow);
 
   // Workflow runtime（客户端执行下沉）：注册 workflow-runtime:* IPC + 注入生产依赖
-  installWorkflowRuntime(gatewayManager);
+  installWorkflowRuntime(gatewayManager, getMainWindow ?? (() => mainWindow));
   void import('./ipc/jsbridge-handlers').then(({ registerJsBridgeIpcHandlers }) => {
     registerJsBridgeIpcHandlers();
   });

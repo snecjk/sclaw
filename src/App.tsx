@@ -38,6 +38,7 @@ import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
+import { ChatResultNotificationNavigator } from './components/chat/ChatResultNotificationNavigator';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
 
 /**
@@ -311,6 +312,7 @@ function App() {
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
       <AppShellLayoutProvider>
+        <ChatResultNotificationNavigator />
         <WorkflowCompletionNotifier />
           <Routes>
             {/* SSO Login page */}
