@@ -48,8 +48,9 @@ function unwrapRecord(json: unknown): Record<string, unknown> | null {
 export function isStoWorkspaceWritableStatus(status?: string): boolean {
   if (!status?.trim()) return true;
   const normalized = status.trim().toLowerCase();
-  if (normalized === 'failed' || normalized === 'archived') return false;
-  return normalized === 'active' || normalized === 'ready';
+  // Persist the binding for any in-progress cloud app (draft/creating/active/ready).
+  // Only failed/archived apps must not be written, otherwise a later retry creates a second app.
+  return normalized !== 'failed' && normalized !== 'archived';
 }
 
 export function extractStoWorkspaceFields(json: unknown): StoWorkspaceFields {

@@ -100,6 +100,8 @@ export interface AppDevMarker {
   name: string;
   projectType: string;
   createdAt: string;
+  /** Cloud Site App id; written on first create so retries do not register a second app. */
+  appCode?: string;
   /** `imported` = local folder import; `created` = 新建站 / clone from cloud. */
   source?: AppDevSource;
   pageType?: SiteAppPageType;
@@ -504,6 +506,12 @@ async function writeAppDevBootstrap(
       }
       if (marker.packageEtag === undefined && existing.packageEtag !== undefined) {
         marker.packageEtag = existing.packageEtag;
+      }
+      if (typeof existing.workspaceId === 'string' && existing.workspaceId.trim()) {
+        marker.workspaceId = existing.workspaceId.trim();
+      }
+      if (typeof existing.appCode === 'string' && existing.appCode.trim()) {
+        marker.appCode = existing.appCode.trim();
       }
     } catch {
       // ignore

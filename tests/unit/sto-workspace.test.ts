@@ -33,7 +33,9 @@ describe('sto workspace fields', () => {
     expect(isStoWorkspaceWritableStatus(undefined)).toBe(true);
     expect(isStoWorkspaceWritableStatus('failed')).toBe(false);
     expect(isStoWorkspaceWritableStatus('archived')).toBe(false);
-    expect(isStoWorkspaceWritableStatus('creating')).toBe(false);
+    expect(isStoWorkspaceWritableStatus('creating')).toBe(true);
+    expect(isStoWorkspaceWritableStatus('draft')).toBe(true);
+    expect(isStoWorkspaceWritableStatus('active')).toBe(true);
   });
 
   it('does not write failed apps and keeps first-create null baselines', () => {
@@ -155,6 +157,15 @@ describe('writeStoWorkspaceBinding', () => {
     ) as { workspacePath: string; appCode: string };
     expect(raw.appCode).toBe('app_xxx');
     expect(raw.workspacePath).toBe(await realpath(appPath));
+  });
+
+  it('writes creating/draft apps so first-push retries can reuse appCode', async () => {
+    const appPath = await mkdtemp(join(tmpdir(), 'sto-workspace-creating-'));
+    const written = await writeStoWorkspaceBinding({
+      appPath,
+      fallback: { appCode: 'app_creating', status: 'creating' },
+    });
+    expect(written?.appCode).toBe('app_creating');
   });
 
   it('skips failed status', async () => {
