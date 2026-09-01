@@ -410,7 +410,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   };
 
   return (
-    <section className="relative flex min-w-0 flex-1 flex-col bg-muted/30">
+    <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5">
         {(
           [
@@ -639,7 +639,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       {mode === 'community' ? <AppDevCommunityPanel workspaceId={workspaceId} /> : null}
 
       {mode === 'code' ? (
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           <div className="flex w-10 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/40 py-2">
             <button
               type="button"
@@ -671,7 +671,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             </button>
           </div>
 
-          <aside className="flex w-[240px] shrink-0 flex-col border-r border-border bg-background/40">
+          <aside className="flex h-full min-h-0 w-[240px] shrink-0 flex-col overflow-hidden border-r border-border bg-background/40">
             {sidebar === 'files' ? (
               <>
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
@@ -687,7 +687,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     {filesLoading ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : '刷新'}
                   </Button>
                 </div>
-                <div className="min-h-0 flex-1 overflow-auto px-1 py-1">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-1">
                   {filesLoading && files.length === 0 ? (
                     <p className="px-3 py-6 text-center text-xs text-muted-foreground">加载中…</p>
                   ) : (
@@ -750,7 +750,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             )}
           </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {tabs.length > 0 ? (
               <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-muted/20 px-1">
                 {tabs.map((tab) => {
