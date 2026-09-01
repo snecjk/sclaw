@@ -456,11 +456,16 @@ function TimelineBody({
   const ThinkingIcon = resolveChatThinkingIcon();
   const sessionKey = useChatStore((state) => state.currentSessionKey);
   const toolEventCount = useChatSessionRuntimeView(sessionKey).toolEventCount;
-  const folded = foldThinkingTimelineTools(timeline);
+  // 完成态点开摘要后不再裁工具卡：折叠只为流式降载，展开必须能看完全部调用
+  const folded = foldThinkingTimelineTools(
+    timeline,
+    readonlyExpanded ? Number.POSITIVE_INFINITY : undefined,
+  );
   const displayTimeline = folded.visible;
   const displayToolCount = resolveTurnToolCount(toolEventCount, folded.totalToolCount);
   const showCollapsedToolSummary =
-    folded.hiddenToolCount > 0 || displayToolCount > folded.totalToolCount;
+    !readonlyExpanded
+    && (folded.hiddenToolCount > 0 || displayToolCount > folded.totalToolCount);
 
   const streamingStatusByKey = useMemo(() => {
     const map = new Map<string, StreamingTool['status']>();
@@ -512,6 +517,15 @@ function TimelineBody({
               isTypewriterActive={reveal.isTypewriterActive}
               resetKey={blockResetKey}
               onRevealComplete={markBlockRevealFinished}
+            />
+          );
+        }
+
+        if (item.type === 'narration') {
+          return (
+            <PhaseTextBlock
+              key={blockResetKey}
+              text={item.content}
             />
           );
         }

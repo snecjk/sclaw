@@ -549,6 +549,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                 showThinking={showThinking}
                 scrollRef={scrollRef}
                 variant="home"
+                sessionKey={currentSessionKey}
                 forceFullRender={isSearchOpen}
                 matchedMessageKeys={matchedMessageKeys}
                 activeSearchMessageKey={activeSearchMatch?.key ?? null}

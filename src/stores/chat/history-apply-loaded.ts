@@ -209,6 +209,7 @@ export function applyLoadedHistorySnapshot(input: {
   rawMessages: RawMessage[];
   thinkingLevel: string | null;
   runtimeState?: { isRunning?: boolean; runtimeResult?: unknown };
+  historyHasMore?: boolean;
 }): void {
   const {
     deps,
@@ -218,6 +219,7 @@ export function applyLoadedHistorySnapshot(input: {
     set,
     targetSessionKey,
     thinkingLevel,
+    historyHasMore,
   } = input;
   const {
     toMs,
@@ -294,6 +296,7 @@ export function applyLoadedHistorySnapshot(input: {
     optimisticUser: cachedOptimistic,
     getMessageText,
     cachedOptimistic,
+    historyHasMore,
   });
   markHistoryApplyPerf(targetSessionKey, 'apply.merge.done', {
     mergeMs: Math.round(performance.now() - mergeStartedAt),

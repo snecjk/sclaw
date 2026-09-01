@@ -58,6 +58,8 @@ export function mergeHistoryDisplayMessages(input: {
   getMessageText: (content: unknown) => string;
   /** Overlay 乐观用户消息——把 segments/展示写到 history 回显上。 */
   cachedOptimistic?: RawMessage | null;
+  /** Claude 分页尚未拉完更早消息时，禁止用会话标题冒充用户气泡。 */
+  historyHasMore?: boolean;
 }): RawMessage[] {
   const {
     gatewaySessionLabel,
@@ -67,8 +69,9 @@ export function mergeHistoryDisplayMessages(input: {
     optimisticUser,
     userMessageAt,
     cachedOptimistic,
+    historyHasMore,
   } = input;
-  const recoveryOptions = { sending, optimisticUser };
+  const recoveryOptions = { sending, optimisticUser, historyHasMore };
 
   let messages = input.messages;
   messages = mergeOptimisticUserIntoHistory(messages, input.currentMessages, {
