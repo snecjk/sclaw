@@ -1029,32 +1029,7 @@ function registerGatewayHandlers(
           clientFingerprint: readClientHistoryFingerprint(body.clientFingerprint),
           beforeId,
         });
-        const sanitizeStart = Date.now();
         const payload = sanitizeMemoryFromChatPayload(historyResult);
-        const sanitizeMs = Date.now() - sanitizeStart;
-        const messages = (payload as { messages?: unknown[] } | null)?.messages;
-        const messageCount = Array.isArray(messages) ? messages.length : 0;
-        let payloadBytes = 0;
-        try {
-          payloadBytes = JSON.stringify(payload).length;
-        } catch {
-          payloadBytes = 0;
-        }
-        logger.info('[chat-history-perf]', {
-          stage: 'ipc.rpc.done',
-          sessionKey: body.sessionKey ?? '',
-          engineType: adapter.type,
-          getMs,
-          sanitizeMs,
-          totalMs: Date.now() - perfStart,
-          messageCount,
-          payloadBytes,
-          unchanged: Boolean(historyResult.unchanged),
-          hasClientFingerprint: Boolean(readClientHistoryFingerprint(body.clientFingerprint)),
-          hasMore: Boolean(historyResult.hasMore),
-          totalCount: historyResult.totalCount ?? messageCount,
-          beforeId: beforeId ?? null,
-        });
         return { success: true, result: payload };
       }
 
