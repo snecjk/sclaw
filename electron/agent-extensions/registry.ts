@@ -12,6 +12,7 @@ import { stoWorkflowToolDefinition } from './extensions/sto-workflow-tool/defini
 import { stoDingTalkSendGuardDefinition } from './extensions/sto-dingtalk-send-guard/definition';
 import { stoUserSkillToolDefinition } from './extensions/sto-user-skill-tool/definition';
 import { stoBrowserToolDefinition } from './extensions/sto-browser-tool/definition';
+import { piBrowserUseDefinition } from './extensions/pi-browser-use/definition';
 
 export interface RegisteredAgentExtension {
   common: SclawAgentExtensionDefinition;
@@ -26,6 +27,8 @@ export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
   common: clawScheduledPathGuardDefinition,
 }, {
   common: stoBrowserToolDefinition,
+}, {
+  common: piBrowserUseDefinition,
 }, {
   common: stoScheduledTaskToolDefinition,
 }, {

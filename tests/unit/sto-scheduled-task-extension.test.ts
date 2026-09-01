@@ -101,7 +101,6 @@ describe('sto-scheduled-task-tool common extension', () => {
     const pi = await buildPiAgentExtensions({
       sessionKey: 'agent:main:chat', mode: 'interactive', entries, ...deps,
     });
-    expect(pi.registeredToolNames).toEqual(expectedTools);
     expect(pi.initiallyActiveToolNames).toEqual([]);
     const registered: string[] = [];
     const handlers = new Map<string, (...args: never[]) => unknown>();

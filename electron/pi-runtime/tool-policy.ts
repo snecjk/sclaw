@@ -23,11 +23,7 @@ export function getPiBuiltinToolNames(
 
 export const PI_BUILTIN_TOOL_NAMES = getPiBuiltinToolNames();
 
-/**
- * Pi treats createAgentSession.tools as a final allowlist for built-in,
- * custom, and extension tools. Keep extension tools in that allowlist while
- * preserving the SClaw-selected built-ins.
- */
+/** Build host-native built-ins plus SClaw's initially active static tools. */
 export function buildPiEnabledToolNames(
   extensionToolNames: readonly string[],
   platform: NodeJS.Platform = process.platform,
@@ -43,24 +39,23 @@ export function buildPiEnabledToolNames(
 }
 
 export interface PiToolSelection {
-  /** Final SDK allowlist: tools omitted here cannot be activated later. */
-  allowedToolNames: string[];
+  /** Built-ins that must never be exposed on this host. */
+  excludedToolNames: string[];
   /** Tools exposed before any lazy activation has matched. */
   initiallyActiveToolNames: string[];
 }
 
 /**
- * Pi's SDK uses createAgentSession.tools as both the initial selection and a
- * permanent allowlist. Keep every registered extension tool in that allowlist,
- * then explicitly restore the smaller active set after session creation/reload.
+ * SClaw does not use Pi's permanent exact-name allowlist because reviewed native
+ * extensions may discover tools after session_start. noExtensions keeps loading
+ * compile-time controlled, while excludeTools removes the wrong host shell.
  */
 export function buildPiToolSelection(
-  registeredExtensionToolNames: readonly string[],
   initiallyActiveExtensionToolNames: readonly string[],
   platform: NodeJS.Platform = process.platform,
 ): PiToolSelection {
   return {
-    allowedToolNames: buildPiEnabledToolNames(registeredExtensionToolNames, platform),
+    excludedToolNames: [platform === 'win32' ? 'bash' : 'powershell'],
     initiallyActiveToolNames: buildPiEnabledToolNames(initiallyActiveExtensionToolNames, platform),
   };
 }

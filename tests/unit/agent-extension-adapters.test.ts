@@ -60,6 +60,18 @@ function dependencies() {
 }
 
 describe('Claude agent extension adapter', () => {
+  it('skips the entire extension outside its declared session modes', async () => {
+    const scoped = { ...definition(), modes: ['interactive'] as const };
+    const result = await buildClaudeAgentExtensions({
+      sessionKey: 'claude-scheduled',
+      mode: 'scheduled',
+      entries: [{ common: scoped }],
+      ...dependencies(),
+    });
+    expect(result.options.mcpServers).toBeUndefined();
+    expect(result.options.systemPromptAppend).toBeUndefined();
+  });
+
   it('compiles common tools, prompts, and policies', async () => {
     const result = await buildClaudeAgentExtensions({
       sessionKey: 'claude-session',
@@ -225,6 +237,21 @@ describe('Claude agent extension adapter', () => {
 });
 
 describe('Pi agent extension adapter', () => {
+  it('skips common and native contributions outside the declared session modes', async () => {
+    const buildNative = vi.fn(() => ({ name: 'should-not-load', factory: () => {} }));
+    const result = await buildPiAgentExtensions({
+      sessionKey: 'pi-scheduled',
+      mode: 'scheduled',
+      entries: [{
+        common: { ...definition(), modes: ['interactive'] },
+        native: { pi: { mode: 'replace', build: buildNative } },
+      }],
+      ...dependencies(),
+    });
+    expect(result.extensions).toEqual([]);
+    expect(buildNative).not.toHaveBeenCalled();
+  });
+
   it('compiles common tools, prompts, and policies into InlineExtension', async () => {
     const result = await buildPiAgentExtensions({
       sessionKey: 'pi-session',
@@ -415,7 +442,6 @@ describe('agent extension lazy activation', () => {
     const result = await buildPiAgentExtensions({
       sessionKey: 'lazy-pi', mode: 'interactive', entries: [{ common: lazyDefinition }], ...dependencies(),
     });
-    expect(result.registeredToolNames).toEqual(['lazy_synthetic_tool']);
     expect(result.initiallyActiveToolNames).toEqual([]);
 
     const handlers = new Map<string, (event: Record<string, unknown>) => Promise<unknown>>();

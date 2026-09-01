@@ -101,7 +101,6 @@ describe('sto-user-skill-tool common extension', () => {
       entries: [{ common: stoUserSkillToolDefinition }],
       ...deps,
     });
-    expect(result.registeredToolNames).toContain('save_user_skill');
     expect(result.initiallyActiveToolNames).not.toContain('save_user_skill');
 
     const handlers = new Map<string, (event: Record<string, unknown>) => unknown>();

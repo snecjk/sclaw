@@ -33,6 +33,7 @@ import { filterPiSkills } from './skill-policy';
 import { buildPiToolSelection } from './tool-policy';
 import { createPiPromptLoggingExtension } from './prompt-logging-extension';
 import { buildPiSystemPromptOverride } from './system-prompt-policy';
+import { importNativeEsm } from './native-esm-import';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
 
 type PiSession = {
@@ -46,7 +47,6 @@ type PiSession = {
   lastRunStatus?: 'completed' | 'failed';
   lastRunError?: string;
   streamingAssistant?: Record<string, unknown> & { role: 'assistant'; content: Array<Record<string, unknown>> };
-  initiallyActiveToolNames: string[];
   clearExtensionSessionState: () => void;
   unsubscribe: () => void;
 };
@@ -71,6 +71,7 @@ function summarizeSessionConfig(config: PiSessionConfig): Record<string, unknown
     sessionKey: config.sessionKey,
     cwd: config.cwd,
     agentDir: config.agentDir,
+    projectTrusted: config.projectTrusted === true,
     sessionDir: config.sessionDir,
     sessionFile: config.sessionFile ?? null,
     provider: config.model.provider,
@@ -102,7 +103,7 @@ function loadPiSdk(): Promise<PiSdk> {
   if (!sdkPromise) {
     const startedAt = Date.now();
     logPiCore('sdk.load.start', { moduleName });
-    sdkPromise = (import(moduleName) as Promise<PiSdk>).then((sdk) => {
+    sdkPromise = importNativeEsm<PiSdk>(moduleName).then((sdk) => {
       logPiCore('sdk.load.ready', { moduleName, durationMs: Date.now() - startedAt });
       return sdk;
     }).catch((error: unknown) => {
@@ -137,6 +138,8 @@ function emit(sessionKey: string, event: NormalizedEngineEvent): void {
 function configKey(config: PiSessionConfig): string {
   return JSON.stringify({
     cwd: config.cwd,
+    agentDir: config.agentDir,
+    projectTrusted: config.projectTrusted === true,
     sessionFile: config.sessionFile,
     provider: config.model.provider,
     model: config.model.model,
@@ -158,10 +161,16 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   logPiCore('session.create.start', summarizeSessionConfig(config));
   await Promise.all([mkdir(config.agentDir, { recursive: true }), mkdir(config.sessionDir, { recursive: true }), mkdir(config.cwd, { recursive: true })]);
   logPiCore('session.create.directories-ready', { sessionKey: config.sessionKey, durationMs: Date.now() - startedAt });
+  // Scope extension settings and data to SClaw before managed native packages
+  // are imported. pi-browser-use computes its default profile during import.
+  process.env.PI_CODING_AGENT_DIR = config.agentDir;
+  process.env.PI_AGENT_HOME = config.agentDir;
   const sdk = await loadPiSdk();
   const settingsManager = sdk.SettingsManager.inMemory({
     compaction: { enabled: true },
     retry: { enabled: true, maxRetries: 2 },
+  }, {
+    projectTrusted: config.projectTrusted === true,
   });
   const unifiedExtensions = await buildPiAgentExtensions({
     sessionKey: config.sessionKey,
@@ -175,15 +184,14 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   for (const diagnostic of unifiedExtensions.diagnostics) {
     logPiCore('extension.diagnostic', diagnostic as unknown as Record<string, unknown>);
   }
-  const { allowedToolNames, initiallyActiveToolNames } = buildPiToolSelection(
-    unifiedExtensions.registeredToolNames,
+  const { excludedToolNames, initiallyActiveToolNames } = buildPiToolSelection(
     unifiedExtensions.initiallyActiveToolNames,
+    process.platform,
   );
   logPiCore('extension.tools-enabled', {
     sessionKey: config.sessionKey,
     mode: config.scheduledAllowedRoots?.length ? 'scheduled' : 'interactive',
-    allowedToolCount: allowedToolNames.length,
-    allowedTools: allowedToolNames,
+    excludedTools: excludedToolNames,
     initiallyActiveToolCount: initiallyActiveToolNames.length,
     initiallyActiveTools: initiallyActiveToolNames,
   });
@@ -295,19 +303,27 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     settingsManager,
     resourceLoader: loader,
     sessionManager,
-    tools: allowedToolNames,
+    excludeTools: excludedToolNames,
   });
-  // createAgentSession.tools is a permanent allowlist in Pi. It initially
-  // enables every listed tool, so restore the lazy-activation baseline after
-  // the complete registry has been admitted.
+  // Keep lazy static tools disabled before session_start. Pi automatically makes
+  // tools registered by reviewed factories during the event active.
   session.setActiveToolsByName(initiallyActiveToolNames);
+  await session.bindExtensions({
+    mode: 'rpc',
+    onError: (error) => logPiCore('extension.error', error as unknown as Record<string, unknown>),
+  });
+  logPiCore('extension.lifecycle.bound', {
+    sessionKey: config.sessionKey,
+    availableToolCount: session.getAllTools().length,
+    activeToolCount: session.getActiveToolNames().length,
+    activeTools: session.getActiveToolNames(),
+  });
 
   const entry: PiSession = {
     session,
     sessionId: session.sessionId,
     sessionFile: session.sessionFile,
     configKey: configKey(config),
-    initiallyActiveToolNames,
     clearExtensionSessionState: unifiedExtensions.clearSessionState,
     unsubscribe: () => {},
   };
@@ -442,18 +458,6 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       const config = payload.config as unknown as PiSessionConfig;
       const entry = await ensureSession(config);
       if (entry.activeRunId) throw new Error(`Pi session is already running: ${config.sessionKey}`);
-      // Skill installs/enables can change without changing the session config.
-      // Reload while idle so every turn sees the current SClaw-managed skill set.
-      const reloadStartedAt = Date.now();
-      await entry.session.reload();
-      // Reload reconstructs Pi's registry and re-enables every allowlisted
-      // extension tool. Reset to the baseline; before_agent_start will restore
-      // session-cached or newly matched lazy activations for this turn.
-      entry.session.setActiveToolsByName(entry.initiallyActiveToolNames);
-      logPiCore('session.prompt.resources-reloaded', {
-        sessionKey: config.sessionKey,
-        durationMs: Date.now() - reloadStartedAt,
-      });
       const runId = String(payload.runId || randomUUID());
       entry.activeRunId = runId;
       entry.settledRunId = undefined;

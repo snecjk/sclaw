@@ -34,11 +34,8 @@ import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtal
 import { createHostApiDingTalkSendGuardPort } from '../../extensions/sto-dingtalk-send-guard/host-api-capability';
 import { STO_USER_SKILL_CAPABILITY } from '../../extensions/sto-user-skill-tool/capability';
 import { createHostApiUserSkillPort } from '../../extensions/sto-user-skill-tool/host-api-capability';
-import { STO_BROWSER_BRIDGE_CAPABILITY } from '../../extensions/sto-browser-tool/capability';
-import { createHostApiBrowserBridgePort } from '../../extensions/sto-browser-tool/host-api-capability';
 
 const defaultCapabilities = new SclawCapabilityRegistry()
-  .provide(STO_BROWSER_BRIDGE_CAPABILITY, createHostApiBrowserBridgePort())
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
   .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())
   .provide(STO_USER_SKILL_CAPABILITY, createHostApiUserSkillPort());
@@ -68,8 +65,6 @@ export interface BuildPiAgentExtensionsInput {
 
 export interface BuildPiAgentExtensionsResult {
   extensions: InlineExtension[];
-  /** Every common/native tool registered in Pi's tool registry. */
-  registeredToolNames: string[];
   /** Exact extension tool names that are active before lazy activation. */
   initiallyActiveToolNames: string[];
   diagnostics: SclawExtensionDiagnostic[];
@@ -88,7 +83,7 @@ function resultIsError(result: unknown): boolean {
 
 function piToolKind(toolName: string): SclawToolKind {
   const normalized = normalizeSclawToolName(toolName);
-  if (normalized === 'bash') return 'shell';
+  if (normalized === 'bash' || normalized === 'powershell') return 'shell';
   if (['read', 'write', 'edit', 'grep', 'find', 'ls'].includes(normalized)) return 'filesystem';
   return 'other';
 }
@@ -108,7 +103,6 @@ export async function buildPiAgentExtensions(
   const extensions: InlineExtension[] = [];
   const usedExtensionIds = new Set<string>();
   const usedToolNames = new Set<string>();
-  const registeredToolNames: string[] = [];
   const initiallyActiveToolNames: string[] = [];
   const buildStartedAt = Date.now();
 
@@ -130,6 +124,7 @@ export async function buildPiAgentExtensions(
     if (
       usedExtensionIds.has(definition.id)
       || !supportsEngine(definition, 'pi')
+      || !supportsSessionMode(definition, input.mode)
       || !isValidAgentExtensionId(definition.id)
     ) continue;
     usedExtensionIds.add(definition.id);
@@ -184,7 +179,6 @@ export async function buildPiAgentExtensions(
         if (usedToolNames.has(normalizedName)) continue;
         tools.push(tool);
         usedToolNames.add(normalizedName);
-        registeredToolNames.push(tool.name);
         if (!tool.activation) initiallyActiveToolNames.push(tool.name);
       }
       const policies = (definition.policies ?? []).filter(
@@ -379,7 +373,6 @@ export async function buildPiAgentExtensions(
       extensions.push(...nativeExtensions);
       for (const name of native.claims?.tools ?? []) {
         usedToolNames.add(name.trim().toLowerCase());
-        registeredToolNames.push(name);
         initiallyActiveToolNames.push(name);
       }
       // extensionLogger.info('[agent-extension] native.build.completed', {
@@ -435,7 +428,6 @@ export async function buildPiAgentExtensions(
   });
   return {
     extensions,
-    registeredToolNames,
     initiallyActiveToolNames,
     diagnostics,
     clearSessionState: () => stateManager.clearSession(input.sessionKey),

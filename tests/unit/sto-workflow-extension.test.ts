@@ -105,7 +105,6 @@ describe('sto-workflow-tool common extension', () => {
       ...deps,
     });
     expect(result.extensions).toEqual([]);
-    expect(result.registeredToolNames).toEqual([]);
     expect(deps.port.isAvailable).not.toHaveBeenCalled();
   });
 

@@ -7,7 +7,7 @@ import { browserBridgePrompt } from './prompts';
 export const stoBrowserToolDefinition: SclawAgentExtensionDefinition = {
   id: 'sto-browser-tool',
   version: '1.0.0',
-  engines: ['claude', 'pi'],
+  engines: ['claude'],
   requiredCapabilities: [STO_BROWSER_BRIDGE_CAPABILITY],
   activations: [browserBridgeActivation],
   tools: stoBrowserBridgeTools,

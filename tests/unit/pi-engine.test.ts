@@ -89,7 +89,7 @@ describe('Pi system prompt policy', () => {
   });
 });
 
-describe('Pi session tool allowlist', () => {
+describe('Pi session tool selection', () => {
   it('uses native PowerShell on Windows and Bash on Unix hosts', () => {
     expect(getPiBuiltinToolNames('win32')).toContain('powershell');
     expect(getPiBuiltinToolNames('win32')).not.toContain('bash');
@@ -119,16 +119,9 @@ describe('Pi session tool allowlist', () => {
     ]);
   });
 
-  it('keeps lazy tools in the permanent allowlist but out of the initial active set', () => {
-    expect(buildPiToolSelection(
-      ['always_on_tool', 'lazy_browser_tool'],
-      ['always_on_tool'],
-    )).toEqual({
-      allowedToolNames: [
-        ...PI_BUILTIN_TOOL_NAMES,
-        'always_on_tool',
-        'lazy_browser_tool',
-      ],
+  it('keeps lazy tools out of the initial active set', () => {
+    expect(buildPiToolSelection(['always_on_tool'])).toEqual({
+      excludedToolNames: [process.platform === 'win32' ? 'bash' : 'powershell'],
       initiallyActiveToolNames: [
         ...PI_BUILTIN_TOOL_NAMES,
         'always_on_tool',
@@ -136,9 +129,9 @@ describe('Pi session tool allowlist', () => {
     });
   });
 
-  it('keeps the Windows shell selection in both tool sets', () => {
-    expect(buildPiToolSelection(['lazy_tool'], [], 'win32')).toEqual({
-      allowedToolNames: [...getPiBuiltinToolNames('win32'), 'lazy_tool'],
+  it('keeps the Windows shell selection in the active tools', () => {
+    expect(buildPiToolSelection([], 'win32')).toEqual({
+      excludedToolNames: ['bash'],
       initiallyActiveToolNames: getPiBuiltinToolNames('win32'),
     });
   });

@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SclawExtensionLogger } from '../../shared/agent-extensions';
 import { buildPiAgentExtensions } from '../../electron/agent-extensions/adapters/pi';
 
+vi.mock('../../electron/pi-runtime/native-esm-import', () => ({
+  importNativeEsm: vi.fn(async () => ({ default: vi.fn() })),
+}));
+
 type ToolCallHandler = (event: {
   toolName: string;
   toolCallId: string;
@@ -77,7 +81,7 @@ describe('claw scheduled path guard extension', () => {
       typeof extension === 'function' ? 'anonymous' : extension.name
     ))).toEqual([
       'sclaw-extension-lifecycle',
-      'sto-browser-tool',
+      'pi-browser-use',
       'sto-scheduled-task-tool',
       'sto-dingtalk-send-guard',
       'sto-user-skill-tool',
@@ -91,7 +95,6 @@ describe('claw scheduled path guard extension', () => {
     expect(guard.names).toEqual([
       'sclaw-extension-lifecycle',
       'sclaw-scheduled-path-guard',
-      'sto-browser-tool',
       'sto-scheduled-task-tool',
       'sto-dingtalk-send-guard',
       'sto-user-skill-tool',

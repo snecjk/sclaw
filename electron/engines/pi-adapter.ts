@@ -178,6 +178,7 @@ async function buildPiSessionConfig(
     sessionKey,
     cwd,
     agentDir: getPiConfigDir(),
+    projectTrusted: false,
     sessionDir: getPiSessionsDir(),
     sessionFile: existing?.piSessionFile,
     systemPrompt: workspaceNote,

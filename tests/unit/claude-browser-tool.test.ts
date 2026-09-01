@@ -90,32 +90,13 @@ describe('sto-browser-tool common extension', () => {
     expect(result.options.systemPromptAppend).not.toContain('仅使用 bridge_*');
   });
 
-  it('registers lazy PI tools and activates them before an agent turn', async () => {
+  it('does not expose bridge tools to PI sessions', async () => {
     const result = await buildPiAgentExtensions({
       sessionKey: 'pi-browser', mode: 'interactive',
       entries: [{ common: stoBrowserToolDefinition }], ...dependencies(),
     });
-    expect(result.registeredToolNames).toEqual(expectedTools);
     expect(result.initiallyActiveToolNames).toEqual([]);
-
-    const handlers = new Map<string, (event: Record<string, unknown>) => unknown>();
-    const activeTools: string[] = [];
-    const extension = result.extensions.find(
-      (item) => typeof item !== 'function' && item.name === 'sto-browser-tool',
-    );
-    if (!extension || typeof extension === 'function') throw new Error('missing extension');
-    await extension.factory({
-      registerTool() {},
-      on(event, handler) { handlers.set(event, handler as never); },
-      getActiveTools() { return activeTools; },
-      setActiveTools(names) { activeTools.splice(0, activeTools.length, ...names); },
-    } as never);
-
-    const prompt = await handlers.get('before_agent_start')?.({
-      prompt: '那你有浏览器工具吗', systemPrompt: 'base', systemPromptOptions: {},
-    }) as { systemPrompt?: string } | undefined;
-    expect(activeTools).toEqual(expectedTools);
-    expect(prompt?.systemPrompt).toContain(BRIDGE_SYSTEM_PROMPT);
+    expect(result.extensions).toEqual([]);
   });
 
   it('requires an explicit embed session and never falls back to another page', async () => {

@@ -24,6 +24,8 @@ export interface PiSessionConfig {
   sessionKey: string;
   cwd: string;
   agentDir: string;
+  /** Whether project-local Pi configuration may be honored. Defaults closed. */
+  projectTrusted?: boolean;
   sessionDir: string;
   sessionFile?: string;
   systemPrompt?: string;

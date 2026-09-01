@@ -157,7 +157,7 @@ export function getClaudeConfigDir(): string {
   return join(getClawXConfigDir(), '.claude');
 }
 
-/** StoClaw-managed Pi SDK state (sessions only; credentials stay in secure storage). */
+/** StoClaw-managed Pi SDK and approved extension state; credentials stay in secure storage. */
 export function getPiConfigDir(): string {
   return join(getStoClawHomeDir(), 'pi');
 }

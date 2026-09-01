@@ -228,6 +228,7 @@ export async function buildClaudeAgentExtensions(
     if (
       usedExtensionIds.has(definition.id)
       || !supportsEngine(definition, 'claude')
+      || !supportsSessionMode(definition, input.mode)
       || !isValidAgentExtensionId(definition.id)
     ) continue;
     usedExtensionIds.add(definition.id);

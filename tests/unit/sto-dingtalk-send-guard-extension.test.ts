@@ -130,7 +130,6 @@ describe('sto DingTalk send guard common extension', () => {
       entries: [{ common: stoDingTalkSendGuardDefinition }],
       ...dependencies,
     });
-    expect(result.registeredToolNames).toEqual([]);
     expect(result.initiallyActiveToolNames).toEqual([]);
 
     type Handler = (event: Record<string, unknown>) => Promise<unknown> | unknown;

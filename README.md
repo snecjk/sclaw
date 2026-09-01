@@ -136,7 +136,7 @@ Notes:
 
 StoClaw employs a **dual-process architecture** with a unified host API layer. The renderer talks to a single client abstraction, while Electron Main owns protocol selection and process lifecycle:
 
-Internal business tools shared by Claude Agent and Pi Agent use the static, common-first [Agent Extension Architecture](docs/agent-extension-architecture.md). Common tools and prompts can opt into engine-neutral turn/session activation so inactive tool schemas stay out of ordinary requests while safety policies remain active. Adapters provide mandatory shell/tool-kind runtime semantics and scheduled-task capabilities, keeping engine branches out of common business code. The migrated STO workflow tools use the same common contracts and typed Host API capability, but stay Claude-enabled until PI workflow execution is supported. The DingTalk send guard is now a shared Claude/PI extension: its prompt activates on DingTalk/send intent or pending mention context and stays active for session follow-ups, while its safety policy is always installed; one-shot mention context and rate-limit/dedup state remain owned by Main. User skill creation is also shared: `save_user_skill` and its guidance activate on skill authoring intent, while direct skill-directory write protection remains always active. Browser Bridge is shared as well: six `bridge_*` tools operate the existing Main-owned embed/Chrome bridge through a typed Host API capability, with automatic embed activation and strict embed session targeting. Engine-native contributions remain available as an explicit escape hatch; arbitrary project extensions are not auto-loaded.
+Internal business tools shared by Claude Agent and Pi Agent use the static, common-first [Agent Extension Architecture](docs/agent-extension-architecture.md). Common tools and prompts can opt into engine-neutral turn/session activation so inactive tool schemas stay out of ordinary requests while safety policies remain active. Adapters provide mandatory shell/tool-kind runtime semantics and scheduled-task capabilities, keeping engine branches out of common business code. The migrated STO workflow tools use the same common contracts and typed Host API capability, but stay Claude-enabled until PI workflow execution is supported. The DingTalk send guard is now a shared Claude/PI extension: its prompt activates on DingTalk/send intent or pending mention context and stays active for session follow-ups, while its safety policy is always installed; one-shot mention context and rate-limit/dedup state remain owned by Main. User skill creation is also shared: `save_user_skill` and its guidance activate on skill authoring intent, while direct skill-directory write protection remains always active. Browser Bridge remains Claude-only: six `bridge_*` tools operate the existing Main-owned embed/Chrome bridge through a typed Host API capability, with automatic embed activation and strict embed session targeting. Interactive Pi sessions instead load the reviewed `@amaster.ai/pi-browser-use` extension and let Pi activate every tool the extension registers at runtime. Scheduled Pi sessions do not load browser automation. Engine-native contributions remain available as an explicit escape hatch; arbitrary project extensions are not auto-loaded.
 
 ```┌─────────────────────────────────────────────────────────────────┐
 │                        StoClaw Desktop App                         │
@@ -325,6 +325,17 @@ workspace as their default working directory and otherwise inherit the desktop
 user's operating-system permissions, including access to files outside the
 workspace when requested. On Windows, Pi uses its native PowerShell tool instead
 of resolving `bash.exe` through WSL; macOS and Linux continue to use Bash.
+Interactive Pi browser automation uses the pinned
+`@amaster.ai/pi-browser-use@0.1.12` extension, which starts
+`chrome-devtools-mcp`; Pi directly activates every tool registered by the reviewed
+extension factory, without a tool-name prefix allowlist. The SClaw Browser Bridge
+`bridge_*` tools are not exposed to Pi, and scheduled Pi runs do not load browser
+automation. Package/project extension scanning remains disabled; SClaw loads the
+browser extension explicitly. On Windows, the MCP subprocess uses the bundled
+Node runtime first and a system `node.exe` second, avoiding Electron application
+output on the MCP stdio channel. Its profile and configuration resolve under the
+SClaw-managed `~/.stoclaw/pi` directory through `PI_AGENT_HOME` and
+`PI_CODING_AGENT_DIR`. Project-local Pi settings remain untrusted and are ignored.
 
 Pi scheduled tasks reuse the canonical scheduler and chat runtime, but restrict
 file tools to the task workspace and configured personal/shared artifact folders.
