@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Sheet,
-  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
@@ -959,12 +958,17 @@ export function ReportHistoryPage() {
         </DialogContent>
       </Dialog>
 
-      <Sheet open={downloadCenterOpen} onOpenChange={setDownloadCenterOpen}>
+      <Sheet
+        open={downloadCenterOpen}
+        onOpenChange={(open) => {
+          setDownloadCenterOpen(open);
+        }}
+      >
         <SheetContent
           side="right"
-          className="flex w-[min(72vw,880px)] flex-col gap-0 overflow-hidden bg-white p-0 dark:bg-card sm:max-w-none"
+          className="no-drag flex w-[min(72vw,880px)] flex-col gap-0 overflow-hidden bg-white p-0 dark:bg-card sm:max-w-none"
         >
-          <SheetHeader className="shrink-0 space-y-0 border-b border-[#E5E6EB] px-5 py-4 text-left dark:border-border">
+          <SheetHeader className="no-drag shrink-0 space-y-0 border-b border-[#E5E6EB] px-5 py-4 text-left dark:border-border">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <SheetTitle className="text-[16px] font-semibold text-[#1D2129] dark:text-foreground">
@@ -974,15 +978,14 @@ export function ReportHistoryPage() {
                   导出任务完成后可在此下载文件
                 </p>
               </div>
-              <SheetClose asChild>
-                <button
-                  type="button"
-                  aria-label="关闭"
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </SheetClose>
+              <button
+                type="button"
+                aria-label="关闭"
+                className="no-drag inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted"
+                onClick={() => setDownloadCenterOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </SheetHeader>
 
