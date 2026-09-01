@@ -106,6 +106,52 @@ describe('useChatDisplay', () => {
     expect(result.current.activeTurn?.activeStream.isProcessing).toBe(true);
   });
 
+  it('restores the connecting hint after preparation completes and before model output starts', () => {
+    const userMessage: RawMessage = {
+      id: 'u-preparation', role: 'user', content: '你能做啥', timestamp: 1_000,
+    };
+    const base = {
+      messages: [userMessage],
+      sending: true,
+      pendingFinal: false,
+      transcriptPending: false,
+      showThinking: true,
+      lastChatEventAt: Date.now(),
+      streamMsg: null,
+      streamText: '',
+      streamingToolResults: [],
+      streamingTools: [],
+      turnAnchorAt: 1_000,
+    };
+    const memoryProgress = (status: 'running' | 'completed'): RawMessage => ({
+      id: 'agent-preparation-memory-u-preparation',
+      role: 'assistant',
+      content: status === 'running' ? '正在检索相关记忆…' : '已检索到相关记忆',
+      metadata: { kind: 'agent-preparation-progress', stage: 'memory', status },
+    });
+
+    const { result, rerender } = renderHook(
+      ({ status }: { status: 'running' | 'completed' }) => useChatDisplay({
+        ...base,
+        streamingMessages: [memoryProgress(status)],
+      }),
+      { initialProps: { status: 'running' as const } },
+    );
+
+    expect(result.current.activeTurn?.activeStream.isConnecting).toBe(false);
+
+    rerender({ status: 'completed' });
+    expect(result.current.activeTurn?.activeStream.isConnecting).toBe(true);
+
+    const withFirstReply = renderHook(() => useChatDisplay({
+      ...base,
+      streamMsg: { id: 'assistant-first', role: 'assistant', content: '我可以' },
+      streamText: '我可以',
+      streamingMessages: [memoryProgress('completed')],
+    }));
+    expect(withFirstReply.result.current.activeTurn?.activeStream.isConnecting).toBe(false);
+  });
+
   it('keeps a completed final overlay visible until transcript takeover', () => {
     const userMessage: RawMessage = {
       id: 'u-final', role: 'user', content: 'who are you', timestamp: 1_000,

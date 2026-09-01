@@ -13,7 +13,9 @@ vi.mock('@/pages/Chat/ChatMessage', () => ({
 }));
 
 vi.mock('@/pages/Chat/ThinkingProcessPanel', () => ({
-  ThinkingTurnProcess: () => null,
+  ThinkingTurnProcess: ({ isConnecting }: { isConnecting?: boolean }) => (
+    isConnecting ? <div data-testid="connecting-indicator">connecting</div> : null
+  ),
 }));
 
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
@@ -75,7 +77,7 @@ describe('AssistantTurnMessage retained final overlay', () => {
         sessionMessages={[userMessage]}
         precedingUserMessage={userMessage}
         turnStableKey="turn-user-user-2"
-        showThinking={false}
+        showThinking={true}
         activeStream={{
           streamMessage: {
             id: 'skill-routing-run-2',
@@ -101,7 +103,7 @@ describe('AssistantTurnMessage retained final overlay', () => {
           }],
           streamingToolResults: [],
           isRunActive: true,
-          isConnecting: false,
+          isConnecting: true,
           isProcessing: false,
         }}
       />,
@@ -118,6 +120,7 @@ describe('AssistantTurnMessage retained final overlay', () => {
     expect(screen.getByText('Experience')).toBeInTheDocument();
     expect(screen.queryByText('匹配中')).not.toBeInTheDocument();
     expect(screen.queryByTestId('assistant-reply')).not.toBeInTheDocument();
+    expect(screen.getByTestId('connecting-indicator')).toBeInTheDocument();
     const memoryToggle = screen.getByRole('button', { name: 'Memory retrieval' });
     const skillToggle = screen.getByRole('button', { name: 'Skill matching' });
     expect(memoryToggle).toHaveAttribute('aria-expanded', 'false');
