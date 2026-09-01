@@ -47,6 +47,7 @@ import {
   pushStoApp,
 } from '../../services/sto-app-service';
 import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
+import { readStoAppPushHistory } from '../../services/sto-app-push-history-store';
 import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
 import { assertExternalServicesReadyForDeploy } from '../../services/app-dev-deploy-preflight';
@@ -456,6 +457,13 @@ export async function handleAppDevRoutes(
         status.syncLabel = status.syncLabel === '未绑定' ? '状态未知' : status.syncLabel;
       }
       sendJson(res, 200, { success: true, status });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/pushes' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, items: await readStoAppPushHistory(appPath) });
       return true;
     }
 

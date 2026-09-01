@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   createAppCheckpoint,
   listAppCheckpoints,
+  listStoAppPushes,
+  pushStoApp,
   type AppCheckpoint,
   type StoAppDeployHistoryRecord,
 } from '@/lib/app-dev-api';
@@ -19,13 +21,30 @@ import {
   presentCodeDeployFields,
 } from '../../../shared/code-deploy-status';
 import { isStoAppDeployHistoryInProgress } from '../../../shared/sto-app-deploy-history';
+import { stoAppPushToCheckpoint } from '../../../shared/sto-app-push-history';
 
 interface AppDevGitPanelProps {
   workspaceId: string;
   canDeploy?: boolean;
+  /** 建站应用：上传代码走 sai-cli push，与右上角提交同一条链路。 */
+  cloudPush?: boolean;
+  /** Bump after header 提交 / 发布 so 最近提交 reloads. */
+  recordsRevision?: number;
   deployRunning?: boolean;
   deployHistory?: StoAppDeployHistoryRecord[];
   onOpenDeploy?: () => void;
+}
+
+function mergeCommitRows(cloud: AppCheckpoint[], git: AppCheckpoint[]): AppCheckpoint[] {
+  const rows: AppCheckpoint[] = [];
+  const seen = new Set<string>();
+  for (const item of [...cloud, ...git]) {
+    const key = item.hash.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    rows.push(item);
+  }
+  return rows.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
 }
 
 function formatTime(ts: number): string {
@@ -44,6 +63,8 @@ function historyStatusLabel(item: StoAppDeployHistoryRecord): string {
 export function AppDevGitPanel({
   workspaceId,
   canDeploy = false,
+  cloudPush = false,
+  recordsRevision = 0,
   deployRunning = false,
   deployHistory = [],
   onOpenDeploy,
@@ -56,8 +77,15 @@ export function AppDevGitPanel({
   const refresh = async () => {
     setLoadingList(true);
     try {
-      const list = await listAppCheckpoints(workspaceId);
-      setCheckpoints(list);
+      if (cloudPush) {
+        const [pushes, git] = await Promise.all([
+          listStoAppPushes(workspaceId),
+          listAppCheckpoints(workspaceId).catch(() => [] as AppCheckpoint[]),
+        ]);
+        setCheckpoints(mergeCommitRows(pushes.map(stoAppPushToCheckpoint), git));
+      } else {
+        setCheckpoints(await listAppCheckpoints(workspaceId));
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '无法读取提交记录');
     } finally {
@@ -66,34 +94,30 @@ export function AppDevGitPanel({
   };
 
   useEffect(() => {
-    let cancelled = false;
-    setLoadingList(true);
-    void listAppCheckpoints(workspaceId)
-      .then((list) => {
-        if (!cancelled) setCheckpoints(list);
-      })
-      .catch((err) => {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : '无法读取提交记录');
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingList(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId]);
+    void refresh();
+    // refresh is recreated each render; key the load on workspace / cloud / parent bump.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, cloudPush, recordsRevision]);
 
   const handleUpload = async () => {
     if (uploading) return;
     setUploading(true);
     try {
-      const created = await createAppCheckpoint(workspaceId, message.trim() || '上传代码');
-      if (created) {
-        toast.success('代码已提交到本地 Git');
+      const note = message.trim() || '上传代码';
+      if (cloudPush) {
+        await pushStoApp(workspaceId, note);
+        toast.success('已提交到 STO 应用');
         setMessage('上传代码');
         await refresh();
       } else {
-        toast.message('没有可提交的改动，或 Git 不可用');
+        const created = await createAppCheckpoint(workspaceId, note);
+        if (created) {
+          toast.success('代码已提交到本地 Git');
+          setMessage('上传代码');
+          await refresh();
+        } else {
+          toast.message('没有可提交的改动，或 Git 不可用');
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '提交失败');
@@ -113,7 +137,9 @@ export function AppDevGitPanel({
             Git 代码管理
           </h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            「上传代码」会将当前改动提交到本地 Git。「发布」会把代码推到云端并走 DevOps 流水线；进行中的发布会写入本地记录并继续查询到成功或失败。
+            {cloudPush
+              ? '「上传代码」与右上角「提交」相同：调用 sai-cli 把代码提交到云端，并写入下方「最近提交」。「发布」会先提交再走 DevOps 流水线。'
+              : '「上传代码」会将当前改动提交到本地 Git。「发布」会把代码推到云端并走 DevOps 流水线；进行中的发布会写入本地记录并继续查询到成功或失败。'}
           </p>
         </header>
 
@@ -133,7 +159,7 @@ export function AppDevGitPanel({
               type="button"
               size="sm"
               className="gap-1.5"
-              disabled={uploading}
+              disabled={uploading || (cloudPush && deployRunning)}
               onClick={() => void handleUpload()}
             >
               {uploading ? (

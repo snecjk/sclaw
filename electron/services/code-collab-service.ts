@@ -49,6 +49,7 @@ import {
   readStoWorkspaceFile,
   writeStoWorkspaceBinding,
 } from './sto-workspace-store';
+import { upsertStoAppPushHistory } from './sto-app-push-history-store';
 
 export interface CodeCollabCommandResult {
   ok: boolean;
@@ -569,6 +570,13 @@ export async function pushCodeApplication(
       commitSha: revision.commitSha,
       sourceSha256: snapshot.sourceSha256,
     });
+    await upsertStoAppPushHistory(cwd, {
+      revisionId,
+      appCode: state.appCode,
+      message: trimmed,
+      commitSha: revision.commitSha,
+      createdAt: Date.now(),
+    }).catch((err) => logger.warn('[code-collab] push history write failed:', err));
     logger.info(`[code-collab] action=push success revisionId=${revisionId}`);
     return { ok: true, output: '提交成功', json: revision };
   } finally {

@@ -85,7 +85,10 @@ interface AppDevWorkbenchStageProps {
   sourceRevision?: number;
   /** Bumped for a process restart, including when the new server reuses a URL. */
   previewRevision?: number;
+  initialMode?: AppDevStageMode;
   canDeploy?: boolean;
+  cloudPush?: boolean;
+  recordsRevision?: number;
   deployRunning?: boolean;
   deployHistory?: StoAppDeployHistoryRecord[];
   onOpenDeploy?: () => void;
@@ -107,12 +110,15 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onFillComposerFromDiagnostics,
   sourceRevision = 0,
   previewRevision = 0,
+  initialMode = 'preview',
   canDeploy = false,
+  cloudPush = false,
+  recordsRevision = 0,
   deployRunning = false,
   deployHistory = [],
   onOpenDeploy,
 }: AppDevWorkbenchStageProps) {
-  const [mode, setMode] = useState<AppDevStageMode>('preview');
+  const [mode, setMode] = useState<AppDevStageMode>(initialMode);
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
   const [files, setFiles] = useState<AppSourceFileEntry[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -628,6 +634,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
         <AppDevGitPanel
           workspaceId={workspaceId}
           canDeploy={canDeploy}
+          cloudPush={cloudPush}
+          recordsRevision={recordsRevision}
           deployRunning={deployRunning}
           deployHistory={deployHistory}
           onOpenDeploy={onOpenDeploy}
