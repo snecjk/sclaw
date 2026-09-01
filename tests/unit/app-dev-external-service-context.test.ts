@@ -58,6 +58,11 @@ describe('应用开发外部服务上下文', () => {
     expect(agents).toContain('先引导用户指定 CLI 接口');
     expect(agents).toContain('请告诉我要用哪条 sai-cli 指令');
 
+    expect(agents).toContain('sai-cli siteapp menu sync');
+    expect(agents).toContain('sai-cli siteapp menu list');
+    expect(agents).toContain('一级目录 + 二级页面');
+    expect(agents).toContain('未同意禁止 apply');
+
     const pageSkill = await readFile(
       join(appPath, 'openspec', 'skills', 'nl-page-from-sai', 'SKILL.md'),
       'utf8',
@@ -77,6 +82,13 @@ describe('应用开发外部服务上下文', () => {
     expect(visualSkill).toContain('STO PC Visual');
     expect(visualSkill).toContain('#FF6700');
     expect(agents).toContain('openspec/skills/sto-pc-visual/SKILL.md');
+    expect(agents).toContain('openspec/skills/siteapp-menu-sync/SKILL.md');
+    const menuSkill = await readFile(
+      join(appPath, 'openspec', 'skills', 'siteapp-menu-sync', 'SKILL.md'),
+      'utf8',
+    );
+    expect(menuSkill).toContain('sai-cli siteapp menu sync');
+    expect(menuSkill).toContain('assets');
     await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'tokens.css'), 'utf8'))
       .resolves.toContain('--shell-topbar: 60px');
     await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'reference.html'), 'utf8'))

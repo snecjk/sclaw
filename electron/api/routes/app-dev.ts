@@ -643,6 +643,82 @@ export async function handleAppDevRoutes(
       return true;
     }
 
+    if (url.pathname === '/api/app-dev/sto-app/deploy/history' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      if (!workspaceId.trim()) throw new Error('缺少 workspaceId');
+      const appPath = await resolveAppPath(workspaceId.trim());
+      const { readStoAppDeployHistory } = await import('../../services/sto-app-deploy-history-store');
+      sendJson(res, 200, { success: true, items: await readStoAppDeployHistory(appPath) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/deploy/history' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        record?: unknown;
+      }>(req);
+      const workspaceId = (body.workspaceId ?? '').trim();
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const { parseStoAppDeployHistoryRecord } = await import('../../../shared/sto-app-deploy-history');
+      const record = parseStoAppDeployHistoryRecord(body.record);
+      if (!record) throw new Error('缺少有效的 deploymentId，无法写入发布记录');
+      const appPath = await resolveAppPath(workspaceId);
+      const { upsertStoAppDeployHistory } = await import('../../services/sto-app-deploy-history-store');
+      const items = await upsertStoAppDeployHistory(appPath, record);
+      sendJson(res, 200, { success: true, items });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/menu/preview' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        pageType?: string;
+        appName?: string;
+      }>(req);
+      const workspaceId = (body.workspaceId ?? '').trim();
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const appPath = await resolveAppPath(workspaceId);
+      const { previewSiteappMenusFromApp } = await import('../../services/siteapp-menu-preview');
+      const preview = await previewSiteappMenusFromApp({
+        appPath,
+        pageType: body.pageType,
+        appName: body.appName,
+      });
+      sendJson(res, 200, { success: true, ...preview });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/menu/sync' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        appCode?: string;
+        menus?: unknown;
+      }>(req);
+      const workspaceId = (body.workspaceId ?? '').trim();
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const appPath = await resolveAppPath(workspaceId);
+      const { previewSiteappMenusFromApp } = await import('../../services/siteapp-menu-preview');
+      const preview = await previewSiteappMenusFromApp({ appPath });
+      const appCode = (body.appCode ?? preview.appCode ?? '').trim();
+      if (!appCode) throw new Error('缺少 appCode：请先提交/发布以绑定云端应用');
+      const menus = Array.isArray(body.menus) ? body.menus : preview.menus;
+      if (!Array.isArray(menus) || menus.length === 0) {
+        throw new Error('没有可同步的菜单');
+      }
+      const { buildSiteappMenuSyncParams } = await import('../../../shared/siteapp-menu-sync');
+      const params = buildSiteappMenuSyncParams({
+        appCode,
+        menus: menus as import('../../../shared/siteapp-menu-sync').SiteappMenuItemInput[],
+      });
+      const { siteappMenuSync } = await import('../../utils/siteapp-cli');
+      const result = await siteappMenuSync(params);
+      if (!result.ok) {
+        throw new Error(siteappCliErrorMessage(result));
+      }
+      sendJson(res, 200, { success: true, appCode, data: result.data ?? null });
+      return true;
+    }
+
     return false;
   } catch (error) {
     logger.error('[app-dev] route error:', error);

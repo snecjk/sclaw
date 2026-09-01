@@ -40,7 +40,7 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-async function pollDeployUntilTerminal(
+export async function pollDeployUntilTerminal(
   deploymentId: string,
   options?: {
     intervalMs?: number;

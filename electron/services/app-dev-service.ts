@@ -376,7 +376,11 @@ async function isAbandonedAppDevShell(appPath: string): Promise<boolean> {
   }
 }
 
-function buildAppDevAgentsContextBlock(vars: { name: string }): string {
+function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppPageType }): string {
+  const pageType = normalizeSiteAppPageType(vars.pageType);
+  const menuShape = pageType === 'assets'
+    ? '本应用 pageType 为 assets：云端菜单只同步 **一个一级菜单**'
+    : '本应用 pageType 为 site：云端菜单遵循用户导航，只同步 **一级目录 + 二级页面**';
   return `<!-- sclaw-app-dev-context -->
 你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
 
@@ -421,6 +425,15 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 - 生产 Network 若仍请求 \`https://page-*.sto.cn/proxy/...\`：检查是否未走 request 封装或缺 proxy 合约 key
 - 用户明确只要布局、先不接真接口：可用 mock 出页，并说明稍后指定 CLI 再接入
 - 详细步骤见 \`openspec/skills/nl-page-from-sai/SKILL.md\`（若已启用）
+
+## 发布后同步云端菜单
+- ${menuShape}
+- 发布成功或用户要求同步菜单时：先扫描 \`src/layouts/nav-config.ts\`、\`src/App.tsx\`、\`src/runtime/page-*\`、\`src/pages/\`，整理菜单树后**展示并询问是否同步**；未同意禁止 apply
+- 查询：\`sai-cli siteapp menu list --params '{"app_code":"<app_code>"}' -f json\`
+- 同意后：\`sai-cli siteapp menu sync --params '{"app_code":"<app_code>","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json\`
+- 菜单项字段：\`menu_code\` / \`parent_code\`（一级为 null） / \`menu_name\` / \`menu_type\`（directory 或 page，不要用 menu）
+- 不要同步 404、redirect、\`developerOnly\`；\`app_code\` 以 \`.sto/workspace.json\` 为准
+- 详细步骤见 \`openspec/skills/siteapp-menu-sync/SKILL.md\`（若已启用）
 <!-- /sclaw-app-dev-context -->`;
 }
 
@@ -500,7 +513,10 @@ async function writeAppDevBootstrap(
   const agentsPath = join(sclawDir, 'AGENTS.md');
   const contextBlock = marker.kind === 'app-template'
     ? buildAppTemplateAgentsContextBlock({ name: vars.name, pageType: normalizeSiteAppPageType(vars.pageType) })
-    : buildAppDevAgentsContextBlock({ name: vars.name });
+    : buildAppDevAgentsContextBlock({
+      name: vars.name,
+      pageType: normalizeSiteAppPageType(vars.pageType),
+    });
   if (existsSync(agentsPath)) {
     let content = await readFile(agentsPath, 'utf8');
     const start = content.indexOf('<!-- sclaw-app-dev-context -->');
@@ -528,6 +544,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
   let name = workspaceId;
   let projectType = 'frontend';
   let source: AppDevSource | undefined;
+  let pageType: SiteAppPageType | undefined;
   const markerFile = appDevMarkerPath(appPath);
   if (existsSync(markerFile)) {
     try {
@@ -535,6 +552,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
       if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
       if (typeof raw.projectType === 'string') projectType = raw.projectType;
       if (raw.source === 'created' || raw.source === 'imported') source = raw.source;
+      if (raw.pageType) pageType = normalizeSiteAppPageType(raw.pageType);
     } catch {
       // ignore
     }
@@ -545,7 +563,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
     if (match?.name) name = match.name;
   }
 
-  await writeAppDevBootstrap(appPath, { name, projectType, source });
+  await writeAppDevBootstrap(appPath, { name, projectType, source, pageType });
   await ensureAppOpenspecScaffold(appPath);
   await ensureDefaultAppDevAssistSkills(appPath);
   // Refresh already-enabled package skills from updated catalog copy.
@@ -556,7 +574,11 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
       const entries = await readdir(skillsDir, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        if (!entry.name.startsWith('pkg-') && entry.name !== 'nl-page-from-sai') continue;
+        if (
+          !entry.name.startsWith('pkg-')
+          && entry.name !== 'nl-page-from-sai'
+          && entry.name !== 'siteapp-menu-sync'
+        ) continue;
         const src = join(catalogRoot, entry.name);
         if (existsSync(join(src, 'SKILL.md'))) {
           await cp(src, join(skillsDir, entry.name), { recursive: true });
@@ -2362,7 +2384,7 @@ export async function listAppDevAssistSkills(appPath: string): Promise<AppDevAss
 
 /** Bake default assist skills into a user app (idempotent). */
 async function ensureDefaultAppDevAssistSkills(appPath: string): Promise<void> {
-  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual'] as const;
+  const defaults = ['openspec', 'nl-page-from-sai', 'sto-pc-visual', 'siteapp-menu-sync'] as const;
   for (const skillId of defaults) {
     const installed = join(appPath, 'openspec', 'skills', skillId, 'SKILL.md');
     if (existsSync(installed)) continue;
@@ -2383,7 +2405,10 @@ export async function installAppDevAssistSkill(
   const skillId = assertOpenspecSkillId(skillIdRaw);
   await ensureAppOpenspecScaffold(appPath);
 
-  const sourceDir = join(appOpenspecCatalogRoot(appPath), skillId);
+  let sourceDir = join(appOpenspecCatalogRoot(appPath), skillId);
+  if (!existsSync(join(sourceDir, 'SKILL.md'))) {
+    sourceDir = join(templateDir(), 'openspec', 'skill-catalog', skillId);
+  }
   const skillMd = join(sourceDir, 'SKILL.md');
   if (!existsSync(skillMd)) {
     throw new Error(`工程模板中未找到开发技能: ${skillId}`);

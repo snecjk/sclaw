@@ -43,6 +43,7 @@ import {
   type AppDevStatus,
   type AppSourceFileEntry,
   type AppSourceSearchHit,
+  type StoAppDeployHistoryRecord,
 } from '@/lib/app-dev-api';
 import {
   stripLegacyAppDevPreviewAuth,
@@ -86,6 +87,10 @@ interface AppDevWorkbenchStageProps {
   sourceRevision?: number;
   /** Bumped for a process restart, including when the new server reuses a URL. */
   previewRevision?: number;
+  canDeploy?: boolean;
+  deployRunning?: boolean;
+  deployHistory?: StoAppDeployHistoryRecord[];
+  onOpenDeploy?: () => void;
 }
 
 function fileName(path: string): string {
@@ -104,6 +109,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onFillComposerFromDiagnostics,
   sourceRevision = 0,
   previewRevision = 0,
+  canDeploy = false,
+  deployRunning = false,
+  deployHistory = [],
+  onOpenDeploy,
 }: AppDevWorkbenchStageProps) {
   const [mode, setMode] = useState<AppDevStageMode>('preview');
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
@@ -618,7 +627,15 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
         )
       ) : null}
 
-      {mode === 'git' ? <AppDevGitPanel workspaceId={workspaceId} /> : null}
+      {mode === 'git' ? (
+        <AppDevGitPanel
+          workspaceId={workspaceId}
+          canDeploy={canDeploy}
+          deployRunning={deployRunning}
+          deployHistory={deployHistory}
+          onOpenDeploy={onOpenDeploy}
+        />
+      ) : null}
 
       {mode === 'external-services' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
 
