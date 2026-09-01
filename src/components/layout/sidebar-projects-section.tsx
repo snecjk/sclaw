@@ -424,7 +424,12 @@ export function SidebarProjectsSection({
 
             return (
               <div key={workspace.id} className="flex flex-col">
-                <div className="sto-navigation-item group relative flex w-full min-w-0 items-center rounded-lg">
+                <div
+                  className={cn(
+                    'group relative flex w-full min-w-0 items-center rounded-lg',
+                    !isEditingProject && 'sto-navigation-item',
+                  )}
+                >
                   {isEditingProject ? (
                     <input
                       type="text"
