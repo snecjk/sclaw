@@ -37,6 +37,7 @@ describe('auth login recovery', () => {
       if (path === '/api/auth/login') throw new Error('login response timed out');
       if (path === '/api/auth/status') return { isAuthenticated: true, user };
       if (path === '/api/auth/site-department-types') return { types: [] };
+      if (path === '/api/auth/app-dev-whitelist-users') return { users: [] };
       if (path === '/api/sto-model-sync') return { success: true, created: [], updated: [], deleted: [] };
       if (path === '/api/auth/crm-week-report-policy') return { allowed: false };
       return { success: true };

@@ -20,6 +20,7 @@ import { useChatStore } from '@/stores/chat';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
 
@@ -50,6 +51,7 @@ export function HomeProjectWorkPicker({ className }: { className?: string }) {
   const { t } = useTranslation('home');
   const { t: tc } = useTranslation('common');
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const appDevWorkspaceIds = useAppDevCatalogStore((s) => s.workspaceIds);
   const createProject = useSessionCatalogStore((s) => s.createProject);
   const pickFolder = useSessionCatalogStore((s) => s.pickFolder);
   const pendingProjectId = useChatStore((s) => s.pendingProjectId);
@@ -57,8 +59,10 @@ export function HomeProjectWorkPicker({ className }: { className?: string }) {
   const [usingExisting, setUsingExisting] = useState(false);
 
   const sortedWorkspaces = useMemo(
-    () => sortProjectsByCreatedAt(workspaces),
-    [workspaces],
+    () => sortProjectsByCreatedAt(
+      workspaces.filter((workspace) => !appDevWorkspaceIds.includes(workspace.id)),
+    ),
+    [workspaces, appDevWorkspaceIds],
   );
   const selectedProject = useMemo(
     () => sortedWorkspaces.find((workspace) => workspace.id === pendingProjectId) ?? null,

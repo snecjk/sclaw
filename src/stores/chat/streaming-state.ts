@@ -1,6 +1,7 @@
 import type { RawMessage } from './types';
+import { STREAMING_OVERLAY_BUFFER_LIMIT, truncateToolPayload } from '../../../shared/chat-tool-payload';
 
-const STREAMING_MESSAGE_BUFFER_LIMIT = 80;
+export { STREAMING_OVERLAY_BUFFER_LIMIT };
 
 export function appendStreamingAssistantSnapshot(
   messages: RawMessage[],
@@ -12,16 +13,20 @@ export function appendStreamingAssistantSnapshot(
     const index = messages.findIndex((item) => item.id === next.id);
     if (index >= 0) return replaceAt(messages, index, next);
   }
-  return [...messages, next].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+  return [...messages, next].slice(-STREAMING_OVERLAY_BUFFER_LIMIT);
 }
 
 export function appendStreamingToolResultSnapshot(messages: RawMessage[], message: RawMessage): RawMessage[] {
-  const key = message.toolCallId || message.id || message.toolName;
+  const bounded: RawMessage = {
+    ...message,
+    content: truncateToolPayload(message.content),
+  };
+  const key = bounded.toolCallId || bounded.id || bounded.toolName;
   if (key) {
     const index = messages.findIndex((item) => (item.toolCallId || item.id || item.toolName) === key);
-    if (index >= 0) return replaceAt(messages, index, message);
+    if (index >= 0) return replaceAt(messages, index, bounded);
   }
-  return [...messages, message].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+  return [...messages, bounded].slice(-STREAMING_OVERLAY_BUFFER_LIMIT);
 }
 
 function isAssistantStreamMessage(message: unknown): message is RawMessage {
@@ -36,5 +41,5 @@ function normalizeAssistantStreamMessage(message: RawMessage): RawMessage {
 function replaceAt(messages: RawMessage[], index: number, message: RawMessage): RawMessage[] {
   const updated = [...messages];
   updated[index] = message;
-  return updated.slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+  return updated.slice(-STREAMING_OVERLAY_BUFFER_LIMIT);
 }

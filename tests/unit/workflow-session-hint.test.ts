@@ -6,7 +6,9 @@ import {
   extractSubagentTaskLabel,
   isCorruptedSessionLabel,
   isSubagentContextOnlyLabel,
+  isTruncatedDerivedSessionLabel,
   normalizeDerivedSessionLabel,
+  truncateSessionLabel,
 } from '@/lib/workflow-session-hint';
 
 const SUBAGENT_KICKOFF = `[Subagent Context] You are running as a subagent (depth 1/1). Results auto-announce to your requester; do not busy-poll for status.
@@ -92,6 +94,14 @@ describe('subagent session label helpers', () => {
   it('normalizeDerivedSessionLabel rejects DingTalk marker titles', () => {
     expect(normalizeDerivedSessionLabel('[STOCLAW:DINGTALK_RECIPIENTS:v1]')).toBeUndefined();
     expect(normalizeDerivedSessionLabel('@赵志坚 今晚记得学习哦')).toBe('@赵志坚 今晚记得学习哦');
+  });
+
+  it('detects sidebar titles truncated by truncateSessionLabel', () => {
+    const full = '1. 帮我扫一下我本地 ~/Documents/project/robot/sclaw-portal-web/ 本月改动';
+    const truncated = truncateSessionLabel(full);
+    expect(truncated.endsWith('…')).toBe(true);
+    expect(isTruncatedDerivedSessionLabel(truncated)).toBe(true);
+    expect(isTruncatedDerivedSessionLabel('客户成本分析 创建工作流')).toBe(false);
   });
 
   it('strips the SClaw-Skill transcript marker from derived titles', () => {

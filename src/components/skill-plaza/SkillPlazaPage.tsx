@@ -15,7 +15,7 @@ import { SkillDetailModal } from './SkillDetailModal';
 import { ConnectorPanel } from '@/components/connectors/ConnectorPanel';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { cn } from '@/lib/utils';
-import { stoMainInnerShell } from '@/lib/surfaces';
+import { stoMainInnerShell, stoNeutralCardClass } from '@/lib/surfaces';
 import {
   normalizeMineCategoryBucket,
   resolveMineSkillCategoryCode,
@@ -218,7 +218,7 @@ export function SkillPlazaPage() {
           </div>
         ) : isMine && !isGrid ? (
           /* List view for mine tab */
-          <div className="flex flex-col border border-border rounded-[14px] bg-white dark:bg-background overflow-hidden">
+          <div className={cn(stoNeutralCardClass, 'flex flex-col overflow-hidden rounded-[14px]')}>
             {skills.map((skill) => (
               <SkillCardList
                 key={skill.slug}

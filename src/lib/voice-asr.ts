@@ -263,7 +263,8 @@ export class VoiceAsrSession {
       const input = event.inputBuffer.getChannelData(0);
       const pcm = floatToPcm16(input, inputRate, targetRate);
       if (pcm.length === 0) return;
-      const buffer = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength);
+      const buffer = new ArrayBuffer(pcm.byteLength);
+      new Uint8Array(buffer).set(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
       if (!this.ready) {
         this.pendingChunks.push(buffer);
         // 避免 ready 前无限堆积

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { cn } from '@/lib/utils';
@@ -16,7 +17,7 @@ export interface PhaseTextBlockProps {
   className?: string;
 }
 
-export function PhaseTextBlock({
+export const PhaseTextBlock = memo(function PhaseTextBlock({
   text,
   isStreaming = false,
   className,
@@ -37,4 +38,4 @@ export function PhaseTextBlock({
       )}
     </div>
   );
-}
+});

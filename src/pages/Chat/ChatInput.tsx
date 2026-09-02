@@ -13,6 +13,7 @@ import {
   X,
   Loader2,
   Mic,
+  ListTree,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
@@ -33,6 +34,7 @@ import {
   ComposerAttachMenu,
   useComposerAttachSource,
 } from '@/components/attachments';
+import { AppDevInterfaceCatalogPicker } from '@/components/app-dev/AppDevInterfaceCatalogPicker';
 import { DataCenterFilePickerModal } from '@/components/data-center-file-picker';
 import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
 import { EMPTY_MENTION_COMPOSER_SNAPSHOT } from '@/lib/dingtalk-mention-composer';
@@ -53,6 +55,7 @@ import {
   useInputComposerVoice,
   useInputComposerEditDraft,
   inputComposerHomeToolbarIconBtn,
+  InputComposerToolbarIconTooltip,
   CHAT_EDIT_DRAFT_EVENT,
 } from '@/components/input-composer';
 import type {
@@ -141,6 +144,10 @@ interface ChatInputProps {
   composerLayout?: 'default' | 'home';
   toolbarInlineSelectors?: ReactNode;
   showProjectPicker?: boolean;
+  /** 应用开发工作台：隐藏钉钉 @ 提及 */
+  hideDingTalkMention?: boolean;
+  /** 应用开发工作台：展示「接口清单」（sai-cli list 缓存） */
+  showInterfaceCatalog?: boolean;
   /** Scenario pills above composer (e.g. quote workbench quick actions). */
   composerScenarioActions?: EmbedComposerAction[];
   /** 工具栏布局：应用广场窄栏用 dropdown 收起附件/技能等 */
@@ -164,6 +171,8 @@ export function ChatInput({
   composerLayout = 'default',
   toolbarInlineSelectors,
   showProjectPicker = false,
+  hideDingTalkMention = false,
+  showInterfaceCatalog = false,
   composerScenarioActions,
   toolbarToolsLayout = 'inline',
 }: ChatInputProps) {
@@ -174,6 +183,9 @@ export function ChatInput({
   const pickerRef = useRef<HTMLDivElement>(null);
   const collapsedToolsAnchorRef = useRef<HTMLElement>(null);
   const handleSendRef = useRef<() => void>(() => undefined);
+  const interfaceCatalogRef = useRef<HTMLDivElement>(null);
+  const interfaceCatalogButtonRef = useRef<HTMLButtonElement>(null);
+  const [interfaceCatalogOpen, setInterfaceCatalogOpen] = useState(false);
 
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -199,20 +211,27 @@ export function ChatInput({
     [agents, currentAgentId],
   );
   const selectedTarget = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === targetAgentId) ?? null,
-    [agents, targetAgentId],
+    () => (agents ?? []).find(
+      (agent) => agent.id === targetAgentId && agent.id !== currentAgentId,
+    ) ?? null,
+    [agents, currentAgentId, targetAgentId],
   );
+  const effectiveTargetAgentId = selectedTarget?.id ?? null;
   const showAgentPicker = false;
 
   const layout = composerLayout;
   const isHomeLayout = layout === 'home';
   const targetAgentIdRef = useRef<string | null>(null);
-  targetAgentIdRef.current = targetAgentId;
   const coreRef = useRef<ReturnType<typeof useInputComposerCore> | null>(null);
+
+  useEffect(() => {
+    targetAgentIdRef.current = effectiveTargetAgentId;
+  }, [effectiveTargetAgentId]);
 
   const core = useInputComposerCore({
     submitMode: 'send',
     inlineAttachments: true,
+    enableDingTalkMention: !hideDingTalkMention,
     disabled,
     onSubmit: () => handleSendRef.current(),
     onClearPendingWorkflow: () => {
@@ -229,7 +248,10 @@ export function ChatInput({
     },
     toolbarAnchorRef: toolbarToolsLayout === 'dropdown' ? collapsedToolsAnchorRef : undefined,
   });
-  coreRef.current = core;
+
+  useEffect(() => {
+    coreRef.current = core;
+  }, [core]);
 
   const {
     mentionEditorRef,
@@ -308,7 +330,7 @@ export function ChatInput({
         onQueue(
           payload.displayText,
           payload.attachments,
-          targetAgentId,
+          effectiveTargetAgentId,
           undefined,
           null,
           undefined,
@@ -319,7 +341,7 @@ export function ChatInput({
       onSend(
         payload.displayText,
         payload.attachments,
-        targetAgentId,
+        effectiveTargetAgentId,
         undefined,
         null,
         null,
@@ -328,7 +350,16 @@ export function ChatInput({
         extras,
       );
     })();
-  }, [filePickerRequest, pickFiles, removeAttachment, disabled, sending, onQueue, onSend, targetAgentId]);
+  }, [
+    disabled,
+    effectiveTargetAgentId,
+    filePickerRequest,
+    onQueue,
+    onSend,
+    pickFiles,
+    removeAttachment,
+    sending,
+  ]);
 
   const voice = useInputComposerVoice({
     mentionEditorRef,
@@ -367,6 +398,7 @@ export function ChatInput({
       setTargetAgentId(null);
       setPickerOpen(false);
       pickerMutex.closeAll();
+      setInterfaceCatalogOpen(false);
       setMentionTrigger(null);
       closeDingTalkMention();
     },
@@ -377,19 +409,6 @@ export function ChatInput({
       mentionEditorRef.current?.focus();
     }
   }, [disabled, mentionEditorRef]);
-
-  useEffect(() => {
-    if (!targetAgentId) return;
-    if (targetAgentId === currentAgentId) {
-      setTargetAgentId(null);
-      setPickerOpen(false);
-      return;
-    }
-    if (!(agents ?? []).some((agent) => agent.id === targetAgentId)) {
-      setTargetAgentId(null);
-      setPickerOpen(false);
-    }
-  }, [agents, currentAgentId, targetAgentId]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -461,7 +480,7 @@ export function ChatInput({
       logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
         textLength: displayText.length,
         mentionCount: snapshot.mentions.length,
-        targetAgentId: targetAgentId ?? null,
+        targetAgentId: effectiveTargetAgentId,
         attachmentCount: payload.attachments.length,
         workflowCount: payload.workflows.length,
         skillCount: payload.skillMetas.length,
@@ -490,7 +509,7 @@ export function ChatInput({
         onQueue(
           displayText,
           attachmentsToSend,
-          targetAgentId,
+          effectiveTargetAgentId,
           mentionsToSend,
           workflowIdToSend,
           skillMetaToSend,
@@ -500,7 +519,7 @@ export function ChatInput({
         onSend(
           displayText,
           attachmentsToSend,
-          targetAgentId,
+          effectiveTargetAgentId,
           mentionsToSend,
           workflowIdToSend,
           workflowSourceToSend,
@@ -512,6 +531,7 @@ export function ChatInput({
       setTargetAgentId(null);
       setPickerOpen(false);
       pickerMutex.closeAll();
+      setInterfaceCatalogOpen(false);
       closeDingTalkMention();
     })();
   }, [
@@ -520,7 +540,6 @@ export function ChatInput({
     cancelVoiceConfirm,
     clearAttachments,
     closeDingTalkMention,
-    composerSnapshot.skill,
     currentSessionKey,
     disabled,
     getSnapshot,
@@ -533,10 +552,12 @@ export function ChatInput({
     sending,
     setComposerSnapshot,
     setMentionTrigger,
-    targetAgentId,
+    effectiveTargetAgentId,
   ]);
 
-  handleSendRef.current = handleSend;
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -553,7 +574,7 @@ export function ChatInput({
       open={pickerOpen}
       onOpenChange={setPickerOpen}
       agents={mentionableAgents}
-      selectedAgentId={targetAgentId}
+      selectedAgentId={effectiveTargetAgentId}
       pickerRef={pickerRef}
       disabled={disabled}
       title={t('composer.pickAgent')}
@@ -566,9 +587,50 @@ export function ChatInput({
     />
   ) : null;
 
+  const interfaceCatalogExtra = showInterfaceCatalog ? (
+    <InputComposerToolbarIconTooltip label="接口清单">
+      <Button
+        ref={interfaceCatalogButtonRef}
+        variant="ghost"
+        type="button"
+        className={cn(
+          isHomeLayout
+            ? cn(
+                inputComposerHomeToolbarIconBtn,
+                interfaceCatalogOpen && 'bg-[#F0F2F5] hover:bg-[#F0F2F5] dark:bg-muted dark:hover:bg-muted',
+              )
+            : cn(
+                'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                interfaceCatalogOpen && 'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]',
+              ),
+        )}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          mentionEditorRef.current?.rememberCaret();
+        }}
+        onClick={() => {
+          pickerMutex.closeAll();
+          setInterfaceCatalogOpen((open) => !open);
+        }}
+        disabled={disabled || voicePanelOpen}
+      >
+        <ListTree className="h-4 w-4" aria-hidden />
+      </Button>
+    </InputComposerToolbarIconTooltip>
+  ) : null;
+
+  const toolbarExtra = (
+    <>
+      {interfaceCatalogExtra}
+      {agentPickerExtra}
+    </>
+  );
   const useCollapsedToolbarTools = toolbarToolsLayout === 'dropdown';
-  const toolbarAttachButtonRef = useCollapsedToolbarTools
+  const attachMenuAnchorRef = useCollapsedToolbarTools
     ? collapsedToolsAnchorRef
+    : attachSource.attachButtonRef;
+  const toolbarAttachButtonRef = useCollapsedToolbarTools
+    ? undefined
     : attachSource.attachButtonRef;
   const toolbarSkillButtonRef = useCollapsedToolbarTools
     ? undefined
@@ -578,6 +640,9 @@ export function ChatInput({
     : workflowPicker.buttonRef;
   const toolbarQuickInputButtonRef = useCollapsedToolbarTools
     ? undefined
+    : quickInputPicker.buttonRef;
+  const quickInputFlyTargetRef = useCollapsedToolbarTools
+    ? collapsedToolsAnchorRef
     : quickInputPicker.buttonRef;
 
   const shell = (
@@ -593,7 +658,7 @@ export function ChatInput({
       topAccessory={
         voicePanelOpen && voiceMode === 'listening' ? <VoiceTopCrawlWave /> : null
       }
-      mentionPopover={<DingTalkMentionPopover {...dingTalkPopoverProps} />}
+      mentionPopover={hideDingTalkMention ? null : <DingTalkMentionPopover {...dingTalkPopoverProps} />}
       chips={null}
       aboveEditor={
         voicePanelOpen || !selectedTarget ? null : (
@@ -667,6 +732,19 @@ export function ChatInput({
               pickerRef={quickInputPicker.pickerRef}
               {...quickInputPicker.panelProps}
             />
+            {showInterfaceCatalog ? (
+              <AppDevInterfaceCatalogPicker
+                ref={interfaceCatalogRef}
+                open={interfaceCatalogOpen}
+                anchorRef={interfaceCatalogButtonRef}
+                onClose={() => setInterfaceCatalogOpen(false)}
+                onSelect={(item) => {
+                  mentionEditorRef.current?.insertSaiInterface(item.path, item.name);
+                  setInterfaceCatalogOpen(false);
+                  mentionEditorRef.current?.focus();
+                }}
+              />
+            ) : null}
           </div>
         </div>
       )}
@@ -695,7 +773,7 @@ export function ChatInput({
           workflowButtonRef={toolbarWorkflowButtonRef}
           quickInputButtonRef={toolbarQuickInputButtonRef}
           attachButtonRef={toolbarAttachButtonRef}
-          extra={agentPickerExtra}
+          extra={toolbarExtra}
         />
       )}
       toolbarRight={(
@@ -764,7 +842,7 @@ export function ChatInput({
 
   return (
     <div className={cn('w-full pb-0 pt-2 transition-all duration-300', className)}>
-      <FlyToTargetLayer targetRef={toolbarQuickInputButtonRef}>
+      <FlyToTargetLayer targetRef={quickInputFlyTargetRef}>
         <QuickInputIcon className="h-full w-full text-foreground" />
       </FlyToTargetLayer>
       {composerScenarioActions?.length ? (
@@ -790,7 +868,7 @@ export function ChatInput({
       <ComposerAttachMenu
         open={attachSource.menuOpen}
         onOpenChange={attachSource.setMenuOpen}
-        anchorRef={toolbarAttachButtonRef}
+        anchorRef={attachMenuAnchorRef}
         showSharedArtifact={attachSource.showSharedArtifact}
         onSelect={attachSource.handleMenuSelect}
         labels={{

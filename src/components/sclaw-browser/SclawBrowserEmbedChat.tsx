@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
 import { useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
-import { ChatMessage } from '@/pages/Chat/ChatMessage';
+import { ChatStaticItemsList } from '@/components/chat/ChatStaticItemsList';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
@@ -197,29 +197,17 @@ export function SclawBrowserEmbedChat({
             </div>
           ) : (
             <>
-              {staticItems.map((item) => {
-                if (item.type === 'assistant-turn') {
-                  return (
-                    <AssistantTurnMessage
-                      key={item.key}
-                      sessionMessages={messages}
-                      turnMessages={item.messages}
-                      turnToolResults={item.toolResults}
-                      precedingUserMessage={item.precedingUserMessage}
-                      showThinking={showThinking}
-                    />
-                  );
-                }
-                if (item.type === 'workflow-run') return null;
-                return (
-                  <ChatMessage
-                    key={item.key}
-                    message={item.message}
-                    sessionMessages={messages}
-                    showThinking={showThinking}
-                  />
-                );
-              })}
+              <ChatStaticItemsList
+                items={staticItems}
+                messages={messages}
+                showThinking={showThinking}
+                scrollRef={scrollRef}
+                variant="embed"
+                sessionKey={sessionKey}
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory();
+                }}
+              />
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"

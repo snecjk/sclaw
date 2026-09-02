@@ -1,5 +1,6 @@
 import type { GatewayManager } from '../gateway/manager';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
+import type { ChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 import type { ExecutionSnapshot } from './execution-snapshot';
 
@@ -27,6 +28,10 @@ export interface EngineHistoryResult {
     isError?: boolean;
     durationMs?: number;
   } | null;
+  fingerprint?: ChatHistoryFingerprint;
+  unchanged?: boolean;
+  hasMore?: boolean;
+  totalCount?: number;
 }
 
 /**
@@ -91,7 +96,7 @@ export interface EngineAdapter {
   abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{ success: boolean; error?: string }>;
   getHistory(
     ctx: EngineAdapterContext,
-    params: { sessionKey: string; limit: number },
+    params: { sessionKey: string; limit: number; beforeId?: string },
   ): Promise<{ success: boolean; result?: EngineHistoryResult; error?: string }>;
   getExecutionSnapshot(
     ctx: EngineAdapterContext,

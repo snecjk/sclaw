@@ -29,6 +29,10 @@ export function classifyGatewayStderrMessage(message: string): GatewayStderrClas
   if (msg.includes('ExperimentalWarning')) return { level: 'debug', normalized: msg };
   if (msg.includes('DeprecationWarning')) return { level: 'debug', normalized: msg };
   if (msg.includes('Debugger attached')) return { level: 'debug', normalized: msg };
+  if (msg.includes('loaded without install/load-path provenance')) {
+    return { level: 'debug', normalized: msg };
+  }
+  if (msg.includes('[bonjour] gateway')) return { level: 'debug', normalized: msg };
 
   // Electron restricts NODE_OPTIONS in packaged apps; this is expected and harmless.
   if (msg.includes('node: --require is not allowed in NODE_OPTIONS')) {

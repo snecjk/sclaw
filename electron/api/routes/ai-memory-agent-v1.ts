@@ -31,7 +31,6 @@ export async function handleAiMemoryAgentV1Routes(
   url: URL,
   _ctx: HostApiContext,
 ): Promise<boolean> {
-	console.log(`[AiMemoryAgentV1Proxy] ${req.method} ${url.pathname}${url.search}`);
   if (!url.pathname.startsWith('/ai-memory/agent/v1')) return false;
 
   const backendPath = url.pathname.replace('/ai-memory/agent/v1', '/agent/v1');
@@ -51,7 +50,7 @@ export async function handleAiMemoryAgentV1Routes(
     };
 
     const rawBody = await readRawBody(req);
-    logger.info(`[AiMemoryAgentV1Proxy] >>> ${req.method} ${targetUrl}`);
+    logger.debug(`[AiMemoryAgentV1Proxy] >>> ${req.method} ${targetUrl}`);
 
     const backendRes = await fetch(targetUrl, {
       method: req.method || 'GET',
@@ -60,7 +59,7 @@ export async function handleAiMemoryAgentV1Routes(
     });
 
     const text = await backendRes.text();
-    logger.info(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${targetUrl} status=${backendRes.status}`);
+    logger.debug(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${targetUrl} status=${backendRes.status} bytes=${text.length}`);
 
     let json: unknown;
     try {
@@ -68,11 +67,10 @@ export async function handleAiMemoryAgentV1Routes(
     } catch {
       json = { error: text };
     }
-		logger.info(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${url} json=${JSON.stringify(json)}`);
     sendJson(res, backendRes.status, json);
   } catch (error) {
     const message = String(error);
-		logger.info(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${url} error=${message}`);
+    logger.warn(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${url.pathname} error=${message}`);
     if (message.includes('401') || message.includes('未登录')) {
       sendJson(res, 401, { success: false, error: message });
     } else {

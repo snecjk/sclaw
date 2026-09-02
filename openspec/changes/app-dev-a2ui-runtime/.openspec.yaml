@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-30
+status: active
+summary: Adopt A2UI + AG-UI for app-dev page runtime; abandon custom AGUI renderer dual-track.

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>01 · 总体规划</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1280px;
+            height: 720px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            display: flex;
+            flex-direction: column;
+            padding: 48px 60px;
+            position: relative;
+        }
+        .header {
+            margin-bottom: 32px;
+        }
+        .section-tag {
+            font-size: 13px;
+            color: #4a90d9;
+            font-weight: 600;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1a2332;
+            line-height: 1.3;
+        }
+        .title-line {
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, #4a90d9, #6ab0e8);
+            margin-top: 12px;
+            border-radius: 2px;
+        }
+        
+        /* 流程图区域 */
+        .flow-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .main-flow {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            position: relative;
+        }
+        
+        /* 起点 */
+        .start-box {
+            width: 140px;
+            height: 80px;
+            background: linear-gradient(135deg, #1a2332 0%, #2d3a4a 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            margin-right: 24px;
+            box-shadow: 0 8px 24px rgba(26,35,50,0.3);
+        }
+        
+        /* 流程步骤 */
+        .flow-step {
+            width: 200px;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+            border: 2px solid #e8ecf1;
+            position: relative;
+        }
+        
+        .flow-step.highlight {
+            border-color: #4a90d9;
+            box-shadow: 0 4px 20px rgba(74,144,217,0.15);
+        }
+        
+        .flow-step .step-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1a2332;
+            margin-bottom: 6px;
+        }
+        
+        .flow-step .step-desc {
+            font-size: 12px;
+            color: #6b7c8e;
+            line-height: 1.5;
+        }
+        
+        /* 箭头 */
+        .arrow {
+            width: 40px;
+            height: 2px;
+            background: linear-gradient(90deg, #4a90d9, #6ab0e8);
+            position: relative;
+            margin: 0 4px;
+        }
+        .arrow::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: -4px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid #6ab0e8;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+        }
+        
+        /* 标签 */
+        .flow-label {
+            position: absolute;
+            top: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 12px;
+            color: #4a90d9;
+            font-weight: 600;
+        }
+        
+        /* 底部说明 */
+        .bottom-note {
+            margin-top: 40px;
+            padding: 16px 24px;
+            background: linear-gradient(90deg, rgba(74,144,217,0.08), rgba(74,144,217,0.03));
+            border-left: 4px solid #4a90d9;
+            border-radius: 0 8px 8px 0;
+        }
+        .bottom-note p {
+            font-size: 14px;
+            color: #4a5568;
+            line-height: 1.8;
+        }
+        .bottom-note strong {
+            color: #1a2332;
+        }
+        
+        /* 页脚 */
+        .footer {
+            position: absolute;
+            bottom: 24px;
+            left: 60px;
+            right: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .footer-left {
+            font-size: 12px;
+            color: #9aa5b3;
+        }
+        .footer-right {
+            font-size: 14px;
+            color: #9aa5b3;
+            font-weight: 600;
+        }
+        
+        /* 强调标签 */
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            background: #4a90d9;
+            color: white;
+            font-size: 11px;
+            border-radius: 10px;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+        
+        .badge-green {
+            background: #34c759;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="section-tag">01 · 总体规划</div>
+        <div class="title">建站总体规划：前端应用建站，一站式交付</div>
+        <div class="title-line"></div>
+    </div>
+    
+    <div class="flow-container">
+        <div class="main-flow">
+            <div class="start-box">用户建站</div>
+            
+            <div class="arrow"></div>
+            
+            <div class="flow-step highlight">
+                <div class="flow-label">核心链路</div>
+                <div class="step-title">创建前端应用</div>
+                <div class="step-desc">React + Vite 模板<br>Git 自动建仓</div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="flow-step highlight">
+                <div class="step-title">AI 生成页面</div>
+                <div class="step-desc">A2UI 协议驱动<br>自然语言 → 页面</div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="flow-step highlight">
+                <div class="step-title">推送 Git → DevOps</div>
+                <div class="step-desc">代码自动同步<br>构建流水线</div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <div class="flow-step highlight">
+                <div class="step-title">静态站点上线</div>
+                <div class="step-desc">托管访问 · 成本极低<br>域名自动分配</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bottom-note">
+        <p><strong>核心优势：</strong>前端应用建站 = 零后端成本 + 零运维负担。用户只需关注业务页面，Git 自动管理代码版本，AI 辅助生成界面，DevOps 自动完成构建部署。整个链路<span class="badge">低成本</span><span class="badge badge-green">高效率</span></p>
+    </div>
+    
+    <div class="footer">
+        <div class="footer-left">应用广场 · 用户应用开发 · 周会同步</div>
+        <div class="footer-right">01</div>
+    </div>
+</body>
+</html>

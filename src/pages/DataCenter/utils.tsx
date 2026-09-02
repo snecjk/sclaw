@@ -7,6 +7,8 @@ import type { DataCenterUiEntry } from './types';
 export { getEntryIcon, getEntryIconSrc } from '@/lib/data-center-entry-icon';
 
 export function normalizeSectionParam(value: string | null): DataCenterSection {
+  // 旧「我的报表1」实验入口兼容到「我的报表」
+  if (value === 'finance_report_v1') return 'data_source';
   return SECTION_PARAM_VALUES.includes(value as DataCenterSection)
     ? value as DataCenterSection
     : 'qa_artifact';

@@ -133,12 +133,14 @@
         "sections": {
             "qaArtifact": "Q&A artifacts",
             "drive": "My files",
-            "dataSource": "Data sources"
+            "dataSource": "Data sources",
+            "financeReport": "My reports"
         },
         "sectionDescriptions": {
             "qaArtifact": "Manage files saved from conversation and workflow artifact previews for tracing, downloads, and later analysis.",
             "drive": "Manage authorized local files and online data assets for AI and workflow references.",
-            "dataSource": "Data source management will be connected after the backend API is available."
+            "dataSource": "Data source management will be connected after the backend API is available.",
+            "financeReport": "Browse and search published data models."
         },
         "tabs": {
             "myArtifacts": "My artifacts",
@@ -173,6 +175,20 @@
             "authorizedCount": "{{count}} authorized files",
             "localSummary": "{{folders}} local folders, {{files}} uncategorized files",
             "usedPercent": "{{percent}}% used"
+        },
+        "financeReport": {
+            "loading": "Loading my reports…",
+            "loadFailedTitle": "Failed to load my reports",
+            "loadFailedDescription": "Could not load the report list. Sign in and try again.",
+            "totalCount": "{{count}} reports",
+            "listHint": "Search by model name, category, or description",
+            "searchPlaceholder": "Search model name, category, description",
+            "emptyDescription": "No published data models yet",
+            "allReports": "All reports",
+            "historyTitle": "Report data",
+            "historyDescription": "Select a template and run conditions to preview product data.",
+            "historyEmptyTitle": "Query to preview",
+            "historyEmptyDescription": "Choose a template and run record, then click Query to preview product data."
         },
         "feedback": {
             "loadFailed": "Failed to load",

@@ -1,0 +1,96 @@
+---
+description: SClaw 视觉、颜色主题与组件状态实现规范
+globs: "src/**/*.{css,ts,tsx,html}"
+alwaysApply: true
+---
+
+# SClaw 样式规范
+
+## 1. 唯一主题入口
+
+- `src/styles/theme/tokens.css`：浅色、深色与 System 解析后的唯一映射所有者；只存放原始色板、语义映射和仍有消费者的兼容变量。
+- `src/styles/theme/recipes.css`：唯一共享交互状态颜色所有者；跨组件复用的颜色、边框、阴影和状态配方只能在此定义。
+- `src/styles/globals.css`：只保留 reset、布局、尺寸、排版和动画，不定义主题映射或共享交互状态颜色。
+- 页面只能定义布局，不得拥有 `.dark` 调色板、颜色型 `dark:` 工具类或共享状态颜色分支。
+- 上述页面暗色调色板禁令对所有新增或修改的代码强制生效。当前存量违规仅由源审计中的精确非增长快照临时保留；任何变更不得扩大该账本，新增例外必须改为迁移或删除，不得写入快照。
+- 组件不得新增主题 Context、Hook、包装组件或 JavaScript 颜色分支。
+- `light | dark | system` 均由已解析的根节点 `.light/.dark`、`data-theme` 和 `color-scheme` 同步驱动。
+
+## 2. 浅色冻结原则
+
+- 浅色是当前视觉基线。主题整理不得改变已有颜色、层级、边框、阴影、透明度或任何布局值。
+- 搬迁浅色值时必须逐值等价；不能用“接近色”替换设计值。
+- 尺寸、间距、圆角、字体、排版和交互行为不属于主题整理范围。
+
+## 3. 基础语义
+
+| 语义 | 浅色 | 深色 |
+| --- | --- | --- |
+| 内容画布 | `#FAFAFA` | `#0D0D0D` |
+| 普通卡片 | `#FFFFFF` | `transparent` |
+| 普通卡片悬停 | `#FFFFFF` | `#181818` |
+| 面板 | `#FFFFFF` | `#181818` |
+| 内嵌面 | `#FAFBFC` | `#212121` |
+| 浮层 | `#FFFFFF` | `#282828` |
+| 主文字 | `#1D2129` | `#DFDFDF` |
+| 次文字 | `#4E5969` | `rgba(255,255,255,.70)` |
+| 弱文字 | `#86909C` | `rgba(255,255,255,.50)` |
+| 普通边框 | `#E5E6EB` | `rgba(255,255,255,.08)` |
+| 强边框 | `#C9CDD4` | `rgba(255,255,255,.16)` |
+
+- 侧边栏深色背景必须比内容画布高一个中性色阶；内容区更深，选中项再抬升一级。
+- 深色阴影只能使用中性黑，不得带蓝、青或紫色倾向。
+- 文字和图标分别使用 `--sto-text-*` 与 `--sto-icon-*`，不得叠加多层灰色与 opacity 制造不可预测的对比度。
+
+## 4. 功能色
+
+- 品牌：`#FF6F00`
+- 信息：`#4760FE`
+- 成功：`#00B54B`
+- 错误：`#FA3C3C`
+- 警告：`#FAAD14`
+
+功能色必须通过 `--sto-brand-*`、`--sto-info-*`、`--sto-success-*`、`--sto-danger-*`、`--sto-warning-*` 或既有兼容别名使用。业务状态、图表数据色和工作流分类色可保留独立含义，但不得冒充中性表面色。
+
+## 5. 卡片选择
+
+- 应用、技能、连接器、工作流等同类集合卡片统一使用 `collectionCardShellClass`，并使用兄弟层 `CollectionCardAction` 提供键盘安全的整卡操作；不得在页面重复组合背景、边框、过渡和 Focus。
+- 其他普通列表、任务和首页推荐：`.sto-card-flat`；可交互时再加 `.sto-card-flat-interactive`。
+- 有明确容器层级的内容面板：`.sto-card-panel`。
+- 面板内部的输入、分组和嵌套区域：使用 inset 语义。
+- Dialog、Dropdown、Popover、Tooltip 等脱离文档流的内容：使用 overlay 语义。
+- 卡片配方只负责颜色、边框、阴影和状态，不得写 padding、尺寸、圆角或布局。
+
+## 6. 控件与状态
+
+- 输入类控件使用 `.sto-control-field`。
+- 描边、次级、幽灵按钮分别使用 `.sto-control-outline`、`.sto-control-secondary`、`.sto-control-ghost`。
+- 分段控件使用 `.sto-segment-track` 与 `.sto-segment-item`。
+- 每个新增交互组件必须实现完整状态链 `default → hover → active/selected → focus → disabled → loading → empty → error`，所有状态在浅色和深色下均须可读。
+- 页面组件不得复制共享控件的 `dark:bg-*`、`dark:border-*`、`dark:text-*` 组合。
+
+## 7. 预览与独立窗口
+
+- 应用生成、允许适配的 HTML 使用 Adaptive 策略并继承语义 token；表格的 `table/th/td`、表单、代码块和引用块必须显式映射。
+- 用户文档、图片、PPT、Word 纸张等 Fidelity 内容保留作者外观，不得反色或改写内容颜色。
+- iframe 初始主题必须写入文档根节点，运行时通过统一 appearance 消息更新，不能仅依赖 `prefers-color-scheme`。
+- 主窗口、Sprite、Float 和后创建窗口必须接收同一已解析 appearance；系统主题变化需要实时同步。
+
+## 8. 禁止项
+
+- 禁止在页面或组件中新增未登记的中性十六进制色、蓝黑背景或带色阴影。
+- 禁止为同一语义同时保留变量、工具类和局部 `.dark` 三套实现。
+- 禁止为了迁移保留永久兼容别名、旧 CSS 备份或无消费者配方。
+- 禁止在主题代码、测试、注释、属性或运行时输出中写入外部产品标识。
+- 禁止用 `!important` 掩盖层级错误；预览隔离边界的必要覆盖除外。
+
+## 9. 变更自检
+
+每次主题改动至少完成：
+
+1. 浅色前后值逐项一致。
+2. 深色表面顺序、文字对比度、边框和阴影正确。
+3. 默认、hover、selected、focus、disabled、loading、empty、error 均检查。
+4. 主窗口、独立窗口、Adaptive iframe、Fidelity 内容均检查。
+5. 运行主题契约、预览、原生窗口、类型和 CSS 解析测试。
+6. 删除被替代的硬编码、`.dark` 分支、旧别名和死样式；生产样式代码不得净增长。

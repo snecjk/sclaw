@@ -5,6 +5,48 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom';
 
+function createMemoryStorage(): Storage {
+  const entries = new Map<string, string>();
+
+  return {
+    get length() {
+      return entries.size;
+    },
+    clear() {
+      entries.clear();
+    },
+    getItem(key) {
+      return entries.get(String(key)) ?? null;
+    },
+    key(index) {
+      return Array.from(entries.keys())[index] ?? null;
+    },
+    removeItem(key) {
+      entries.delete(String(key));
+    },
+    setItem(key, value) {
+      entries.set(String(key), String(value));
+    },
+  };
+}
+
+if (
+  typeof window !== 'undefined'
+  && typeof window.localStorage?.getItem !== 'function'
+) {
+  const localStorage = createMemoryStorage();
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: localStorage,
+    writable: true,
+  });
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: localStorage,
+    writable: true,
+  });
+}
+
 // Mock window.electron API
 const mockElectron = {
   ipcRenderer: {

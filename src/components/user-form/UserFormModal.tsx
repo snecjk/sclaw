@@ -24,48 +24,44 @@ interface UserFormModalProps {
   onError?: (error: unknown) => void;
 }
 
-export function UserFormModal({
+function buildInitialValues(config: UserFormConfig): FormResult {
+  const initialValues: FormResult = {};
+  for (const field of config.fields) {
+    if (field.defaultValue !== undefined) {
+      initialValues[field.name] = field.defaultValue;
+    } else if (field.type === 'checkbox' && !field.options) {
+      initialValues[field.name] = false;
+    } else if (field.type === 'multiselect') {
+      initialValues[field.name] = [];
+    }
+  }
+  return initialValues;
+}
+
+type UserFormModalContentProps = Omit<UserFormModalProps, 'config' | 'open'> & {
+  config: UserFormConfig;
+};
+
+function UserFormModalContent({
   config,
-  open,
   onSubmit,
   onCancel,
   onError,
-}: UserFormModalProps) {
-  const [values, setValues] = useState<FormResult>({});
+}: UserFormModalContentProps) {
+  const [values, setValues] = useState<FormResult>(() => buildInitialValues(config));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Initialize values when config changes
-  useEffect(() => {
-    if (config) {
-      const initialValues: FormResult = {};
-      for (const field of config.fields) {
-        if (field.defaultValue !== undefined) {
-          initialValues[field.name] = field.defaultValue;
-        } else if (field.type === 'checkbox' && !field.options) {
-          initialValues[field.name] = false;
-        } else if (field.type === 'multiselect') {
-          initialValues[field.name] = [];
-        }
-      }
-      setValues(initialValues);
-      setErrors({});
-      setSubmitting(false);
-    }
-  }, [config]);
-
   // Focus trap
   useEffect(() => {
-    if (open && modalRef.current) {
+    if (modalRef.current) {
       const focusable = modalRef.current.querySelector<HTMLElement>(
         'input, select, textarea, button, [tabindex]:not([tabindex="-1"])'
       );
       focusable?.focus();
     }
-  }, [open]);
-
-  if (!open || !config) return null;
+  }, []);
 
   const {
     title,
@@ -209,12 +205,12 @@ export function UserFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] px-4 overflow-y-auto"
+      className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] px-4 overflow-y-auto"
       onClick={handleCancel}
     >
       <div
         ref={modalRef}
-        className={cn('w-full bg-background rounded-2xl border border-border shadow-2xl overflow-hidden my-8', widthClass)}
+        className={cn('sto-overlay sto-overlay--dialog w-full rounded-[var(--sto-dialog-radius)] border overflow-hidden my-8', widthClass)}
         onClick={(e) => e.stopPropagation()}
         style={typeof width === 'number' ? { maxWidth: width } : undefined}
       >
@@ -269,5 +265,24 @@ export function UserFormModal({
         </div>
       </div>
     </div>
+  );
+}
+
+export function UserFormModal({
+  config,
+  open,
+  onSubmit,
+  onCancel,
+  onError,
+}: UserFormModalProps) {
+  if (!open || !config) return null;
+  return (
+    <UserFormModalContent
+      key={config.id}
+      config={config}
+      onSubmit={onSubmit}
+      onCancel={onCancel}
+      onError={onError}
+    />
   );
 }

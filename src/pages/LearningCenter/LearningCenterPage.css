@@ -448,9 +448,13 @@
   justify-content: flex-start;
   padding: 0 0.5rem 0 0.75rem;
   background: var(--lc-tab-active-bg);
-  color: var(--foreground);
+  color: hsl(var(--primary));
   font-weight: 700;
   box-shadow: none;
+}
+
+.learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__index {
+  opacity: 1;
 }
 
 .learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__tab-label {

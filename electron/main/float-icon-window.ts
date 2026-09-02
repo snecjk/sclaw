@@ -6,6 +6,7 @@
 import { BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { isQuitting } from './app-state';
+import { attachAppearanceReplay } from './appearance-replay';
 
 let floatIconWindow: BrowserWindow | null = null;
 
@@ -103,6 +104,7 @@ export function createFloatIconWindow(): BrowserWindow {
       sandbox: false,
     },
   });
+  attachAppearanceReplay(win);
 
   win.setAlwaysOnTop(true, 'screen-saver');
 

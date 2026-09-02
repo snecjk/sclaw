@@ -45,6 +45,41 @@ export function parseMemoryCenterErrorMessage(payload: unknown, fallback: string
   return fallback;
 }
 
+export function extractMemoryCenterErrorFields(payload: unknown): {
+  errCode?: string;
+  errMessage?: string;
+  traceId?: string;
+} {
+  if (!payload || typeof payload !== 'object') return {};
+  const record = payload as Record<string, unknown>;
+  const pick = (...values: unknown[]) => {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return undefined;
+  };
+  return {
+    errCode: pick(record.errCode, record.err_code),
+    errMessage: pick(record.errMessage, record.err_message, record.message),
+    traceId: pick(record.traceId, record.trace_id),
+  };
+}
+
+/** Human-readable downstream error for logs and UI (includes errCode / HTTP when present). */
+export function formatMemoryCenterErrorDetail(
+  payload: unknown,
+  fallback: string,
+  statusCode?: number,
+): string {
+  const { errCode, errMessage, traceId } = extractMemoryCenterErrorFields(payload);
+  const message = errMessage || parseMemoryCenterErrorMessage(payload, fallback);
+  const parts = [message];
+  if (errCode) parts.push(`errCode=${errCode}`);
+  if (statusCode != null && statusCode > 0) parts.push(`HTTP ${statusCode}`);
+  if (traceId) parts.push(`traceId=${traceId}`);
+  return parts.join(' · ');
+}
+
 /**
  * 主进程通用出站：带指定 token 直打 `{sto_base_url}{path}`。
  * 仅供本文件两个 wrapper 使用；业务代码请调 ForSession / ForAi，不要再套一层 Host 代理。
@@ -84,7 +119,7 @@ async function memoryCenterFetchWithToken(
 
   if (!response.ok) {
     throw new errorClass(
-      parseMemoryCenterErrorMessage(json, text || `请求失败 (${response.status})`),
+      formatMemoryCenterErrorDetail(json, text || `请求失败 (${response.status})`, response.status),
       response.status,
     );
   }
@@ -94,7 +129,7 @@ async function memoryCenterFetchWithToken(
     json !== null &&
     (json as { success?: boolean }).success === false
   ) {
-    throw new errorClass(parseMemoryCenterErrorMessage(json, '请求失败'), 400);
+    throw new errorClass(formatMemoryCenterErrorDetail(json, '请求失败', 400), 400);
   }
 
   return json;

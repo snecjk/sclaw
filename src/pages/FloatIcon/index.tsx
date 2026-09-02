@@ -11,7 +11,6 @@ import i18n from '@/i18n';
 
 export function FloatIcon() {
   const initSettings = useSettingsStore((s) => s.init);
-  const theme = useSettingsStore((s) => s.theme);
   const language = useSettingsStore((s) => s.language);
 
   const dragRef = useRef<{
@@ -33,20 +32,6 @@ export function FloatIcon() {
       i18n.changeLanguage(language);
     }
   }, [language]);
-
-  // Apply theme
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
 
   // 悬浮窗仅 56×56：锁定文档尺寸并禁止滚动（避免 macOS 出现滚动条）
   useEffect(() => {

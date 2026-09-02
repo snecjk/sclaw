@@ -31,6 +31,7 @@ export interface ChatSessionRuntimeView {
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
+  toolEventCount: number;
 }
 
 export interface ChatRuntimeIndicator {
@@ -80,6 +81,7 @@ const EMPTY_RUNTIME_VIEW: ChatSessionRuntimeView = {
   streamingMessages: [],
   streamingToolResults: [],
   streamingTools: [],
+  toolEventCount: 0,
 };
 const runtimeViewCache = new WeakMap<ClientSessionState, ChatSessionRuntimeView>();
 
@@ -128,6 +130,7 @@ export function buildChatSessionRuntimeView(
     streamingMessages: session?.overlay.streamingMessages ?? [],
     streamingToolResults: session?.overlay.streamingToolResults ?? [],
     streamingTools: session?.overlay.streamingTools ?? [],
+    toolEventCount: session?.overlay.toolEventCount ?? 0,
   };
   return view;
 }
@@ -144,6 +147,14 @@ function getCachedRuntimeView(session: ClientSessionState | undefined): ChatSess
 export function useChatSessionRuntimeView(sessionKey: string): ChatSessionRuntimeView {
   const session = useChatRuntimeV2Store((state) => state.sessionsByKey[sessionKey]);
   return getCachedRuntimeView(session);
+}
+
+/** Sending flag only — does not re-render on streaming deltas. */
+export function useChatSessionSending(sessionKey: string): boolean {
+  return useChatRuntimeV2Store((state) => {
+    const runtime = state.sessionsByKey[sessionKey]?.runtime;
+    return Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
+  });
 }
 
 export function useCurrentChatRuntimeView(): ChatSessionRuntimeView {

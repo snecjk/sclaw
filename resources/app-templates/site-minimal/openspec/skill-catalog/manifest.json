@@ -1,0 +1,34 @@
+{
+  "skills": [
+    {
+      "id": "openspec",
+      "name": "OpenSpec",
+      "description": "规格驱动开发：proposal → design → specs → tasks → apply（新应用默认已启用）。"
+    },
+    {
+      "id": "api-contract",
+      "name": "接口契约助手",
+      "description": "优先阅读 docs/api，校验接口调用与字段契约，避免臆造 URL 与字段。"
+    },
+    {
+      "id": "nl-page-from-sai",
+      "name": "自然语言建页（外部服务）",
+      "description": "建页需接口时先 list/describe 按需读取服务说明；无匹配再 discover/help；绝对地址通过 ensure-dev-proxy 接入。"
+    },
+    {
+      "id": "ui-checklist",
+      "name": "UI 验收清单",
+      "description": "页面改动后的浅色/深色、加载/空态/错误态验收清单。"
+    },
+    {
+      "id": "sto-pc-visual",
+      "name": "STO PC UI/UX 规范",
+      "description": "申通 PC 应用的主题、壳层、卡片、导航、页签和页面层级规范（新应用默认启用）。"
+    },
+    {
+      "id": "git-checkpoint",
+      "name": "变更检查点",
+      "description": "每轮有效改动后提醒做可回滚检查点，并用中文说明改了什么。"
+    }
+  ]
+}

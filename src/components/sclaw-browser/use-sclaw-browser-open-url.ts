@@ -26,15 +26,9 @@ export function useSclawBrowserOpenUrl(enabled = true): void {
     const unsubscribe = window.electron.ipcRenderer.on(
       'sclaw-browser:open-url',
       (...args: unknown[]) => {
-        // TEMP-DIAG: confirm Main→Renderer delivery
-        console.log('[sclaw-browser:open-url][diag] received', args[0]);
         const url = readOpenUrlPayload(args[0]);
-        if (!url) {
-          console.log('[sclaw-browser:open-url][diag] payload rejected, no url');
-          return;
-        }
+        if (!url) return;
         openInSclawBrowser({ url });
-        console.log('[sclaw-browser:open-url][diag] openInSclawBrowser called', url);
       },
     );
 

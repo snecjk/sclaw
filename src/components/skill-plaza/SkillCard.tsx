@@ -14,10 +14,12 @@ import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/compone
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { listCardHoverBorderShadowClass } from '@/lib/surfaces';
-import messageIcon from '@/assets/icons/message.svg';
+import { collectionCardShellClass } from '@/lib/surfaces';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
+import messageIcon from '@/assets/icons/message.svg?raw';
 import loadingIcon from '@/assets/icons/loading.svg';
-import moreIcon from '@/assets/icons/more.svg';
+import moreIcon from '@/assets/icons/more.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import { SkillIcon } from './SkillIcon';
 
 interface SkillCardProps {
@@ -28,7 +30,7 @@ interface SkillCardProps {
 }
 
 const actionIconBtnClass =
-  'inline-flex items-center justify-center w-7 h-7 p-0 border-none rounded-lg bg-transparent text-[#1D2129] cursor-pointer transition-colors hover:bg-[#F2F3F5] disabled:opacity-50 disabled:cursor-not-allowed dark:text-foreground dark:hover:bg-muted';
+  'inline-flex items-center justify-center w-7 h-7 p-0 border-none rounded-lg bg-transparent text-[#1D2129] cursor-pointer transition-colors hover:bg-[#F2F3F5] disabled:opacity-50 disabled:cursor-not-allowed dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]';
 
 const actionTooltipClass =
   'overflow-visible border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white shadow-none';
@@ -129,7 +131,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
               {isInstalling ? (
                 <img src={loadingIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain animate-spin" />
               ) : (
-                <RefreshCw className="h-3.5 w-3.5 dark:text-[#F2F3F5]" />
+                <RefreshCw className="h-3.5 w-3.5 dark:text-[var(--sto-text-primary)]" />
               )}
             </button>
           </TooltipTrigger>
@@ -150,7 +152,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
               disabled={isDisabled}
               className={actionIconBtnClass}
             >
-              <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
+              <ThemedMonochromeIcon source={messageIcon} className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
@@ -217,7 +219,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
           <button type="button" onClick={handleUse} disabled={isDisabled} className={actionIconBtnClass}>
-            <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
+            <ThemedMonochromeIcon source={messageIcon} className="h-3.5 w-3.5" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
@@ -235,7 +237,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
             onMouseLeave={scheduleCloseMoreMenu}
             aria-label={t('plaza.action.more', { defaultValue: '更多' })}
           >
-            <img src={moreIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
+            <ThemedMonochromeIcon source={moreIcon} className="h-3.5 w-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -269,13 +271,20 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
   return (
     <article
       className={cn(
-        'relative flex min-w-0 cursor-pointer flex-col overflow-visible rounded-2xl border border-border bg-white p-4',
-        'transition-[border-color,box-shadow] duration-150 dark:bg-background',
-        listCardHoverBorderShadowClass,
+        collectionCardShellClass,
+        'relative flex min-w-0 cursor-pointer flex-col overflow-visible rounded-2xl border p-4',
       )}
-      onClick={() => onOpenDetail?.(skill)}
       data-skill-installed={canUse}
     >
+      {onOpenDetail ? (
+        <CollectionCardAction
+          aria-label={t('plaza.action.openDetail', {
+            title: skill.title,
+            defaultValue: `查看${skill.title}`,
+          })}
+          onClick={() => onOpenDetail(skill)}
+        />
+      ) : null}
       <div className={cn('flex flex-col flex-1 min-h-0 no-underline text-inherit', isDisabled && 'opacity-50')}>
         {/* Top: icon + title + actions */}
         <div className="flex items-start gap-2.5 mb-3">

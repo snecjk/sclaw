@@ -11,6 +11,7 @@ import {
   messageHasWorkflowCard,
   type ThinkingTimelineItem,
 } from './message-utils';
+import { isClaudeRuntimeControlText } from '../../../shared/claude-runtime-control-text';
 
 export type ChatDisplayItem =
   | { type: 'single'; message: RawMessage; key: string }
@@ -633,6 +634,10 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
         i += 1;
         continue;
       }
+      if (isClaudeRuntimeControlText(extractText(msg))) {
+        i += 1;
+        continue;
+      }
       if (isHiddenWorkflowParamsUserMessage(msg, messages, i)) {
         i += 1;
         continue;
@@ -711,7 +716,8 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
 /** Pick the message that carries the user-visible assistant reply (last with text). */
 export function pickAssistantReplyMessage(messages: RawMessage[]): RawMessage | null {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (extractText(messages[i]).trim().length > 0) return messages[i];
+    const text = extractText(messages[i]).trim();
+    if (text.length > 0 && !isClaudeRuntimeControlText(text)) return messages[i];
   }
   return messages[messages.length - 1] ?? null;
 }

@@ -4,7 +4,7 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -14,13 +14,13 @@ import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
-import { collectSearchableChatMessages, findChatMessageSearchTarget, resolveChatMessageSearchKey } from './chat-message-search';
+import { collectSearchableChatMessages, findChatMessageSearchTarget } from './chat-message-search';
+import { ChatStaticItemsList, type ChatStaticItemsListHandle } from '@/components/chat/ChatStaticItemsList';
 import { useChatDisplay } from './use-chat-display';
-import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
+import { resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
-import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
+import { ChatEngineModelCascade } from './ChatEngineModelSelectors';
 import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
@@ -56,7 +56,6 @@ import { myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { useVoiceLoopStore } from '@/stores/voice-loop';
-import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import {
   EMPTY_WORKFLOW_CHAT_CARD_REFS,
   useWorkflowChatCardsStore,
@@ -139,6 +138,7 @@ export function Chat() {
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
+  const staticItemsListRef = useRef<ChatStaticItemsListHandle>(null);
   useNativeScrollbarActivity(scrollRef);
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -293,6 +293,11 @@ export function Chat() {
 
   useEffect(() => {
     if (!isSearchOpen) return;
+    void useChatStore.getState().loadOlderHistory(currentSessionKey, { drain: true });
+  }, [isSearchOpen, currentSessionKey]);
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
 
     const contentElement = contentRef.current;
     if (!contentElement) {
@@ -325,6 +330,9 @@ export function Chat() {
   );
 
   const scrollToMessageMatch = useCallback((searchKey: string, behavior: ScrollBehavior = 'smooth') => {
+    stopScroll();
+    if (staticItemsListRef.current?.scrollToSearchKey(searchKey, behavior)) return;
+
     const container = scrollRef.current;
     const contentElement = contentRef.current;
     if (!container || !contentElement) return;
@@ -332,7 +340,6 @@ export function Chat() {
     const target = findChatMessageSearchTarget(contentElement, searchKey);
     if (!target) return;
 
-    stopScroll();
     const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
     container.scrollBy({ top: delta, behavior });
   }, [contentRef, scrollRef, stopScroll]);
@@ -652,7 +659,7 @@ export function Chat() {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
-        <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px]" />
+        <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-[var(--sto-chat-ambient-cyan)] blur-[90px]" />
         <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
       </div>
 
@@ -672,58 +679,25 @@ export function Chat() {
             <WelcomeScreen />
           ) : (
             <>
-              {staticItems.map((item) => {
-                if (item.type === 'workflow-run') {
-                  return (
-                    <WorkflowCard
-                      key={item.key}
-                      runId={item.card.runId}
-                      templateName={item.card.title}
-                      paramsSummary={item.card.paramsSummary}
-                      onPreviewArtifact={openArtifactPreview}
-                      onCreateScheduledTask={openWorkflowCronTaskModal}
-                      onOpenWorkflow={openWorkflowList}
-                    />
-                  );
-                }
-                if (item.type === 'assistant-turn') {
-                  return (
-                    <AssistantTurnMessage
-                      key={item.key}
-                      sessionMessages={messages}
-                      turnMessages={item.messages}
-                      turnToolResults={item.toolResults}
-                      precedingUserMessage={item.precedingUserMessage}
-                      turnStableKey={item.key}
-                      showThinking={showThinking}
-                      matchedMessageKeys={matchedMessageKeys}
-                      activeMessageKey={activeSearchMatch?.key ?? null}
-                      onPreviewFile={openArtifactPreview}
-                      onCreateScheduledTask={openWorkflowCronTaskModal}
-                      onEditMessage={handleEditMessage}
-                    />
-                  );
-                }
-                const searchMessageKey = resolveChatMessageSearchKey(
-                  item.message.id,
-                  `single:${item.key}`,
-                );
-                return (
-                  <ChatMessage
-                    key={item.key}
-                    message={item.message}
-                    sessionMessages={messages}
-                    showThinking={showThinking}
-                    searchMessageKey={searchMessageKey}
-                    isSearchMatch={matchedMessageKeys.has(searchMessageKey)}
-                    isSearchActive={searchMessageKey === activeSearchMatch?.key}
-                    onPreviewFile={openArtifactPreview}
-                    onCreateScheduledTask={openWorkflowCronTaskModal}
-                    onEditMessage={handleEditMessage}
-                    isTurnDisplayReply={isAssistantRole(item.message.role)}
-                  />
-                );
-              })}
+              <ChatStaticItemsList
+                ref={staticItemsListRef}
+                items={staticItems}
+                messages={messages}
+                showThinking={showThinking}
+                scrollRef={scrollRef}
+                variant="page"
+                sessionKey={currentSessionKey}
+                forceFullRender={isSearchOpen}
+                matchedMessageKeys={matchedMessageKeys}
+                activeSearchMessageKey={activeSearchMatch?.key ?? null}
+                onPreviewFile={openArtifactPreview}
+                onCreateScheduledTask={openWorkflowCronTaskModal}
+                onEditMessage={handleEditMessage}
+                onOpenWorkflow={openWorkflowList}
+                onReachStart={() => {
+                  void useChatStore.getState().loadOlderHistory(currentSessionKey);
+                }}
+              />
 
               {activeTurn ? (
                 <AssistantTurnMessage
@@ -776,7 +750,7 @@ export function Chat() {
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
-            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
+            className="sto-control sto-control--neutral-outline pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--sto-chat-jump-border)] bg-[var(--sto-chat-jump-background)] px-2.5 text-[11px] font-medium leading-none text-[var(--sto-chat-jump-foreground)] shadow-none backdrop-blur-sm transition-colors hover:bg-[var(--sto-chat-jump-hover-background)] sm:h-8 sm:px-3 sm:text-xs"
             initial={false}
             animate={{
               opacity: showJumpToLatest ? 1 : 0,
@@ -819,16 +793,13 @@ export function Chat() {
         onEditDraftApplied={handleEditDraftApplied}
         composerLayout="home"
         toolbarInlineSelectors={(
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
-            <ChatModelSelector variant="inline" className="min-w-max shrink-0" />
-          </div>
+          <ChatEngineModelCascade className="min-w-0 max-w-full" />
         )}
       />
 
       {/* Transparent loading overlay */}
       {minLoading && !sending && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-[2px] rounded-xl pointer-events-auto">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--sto-chat-loading-scrim)] backdrop-blur-[2px] rounded-xl pointer-events-auto">
           <div className="glass shadow-glass rounded-full p-2.5 border border-glass-border">
             <LoadingSpinner size="md" />
           </div>
@@ -912,7 +883,7 @@ function WelcomeScreen() {
   return (
     <div className="relative flex h-[68vh] flex-col items-center justify-center overflow-hidden text-center">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-[18%] h-40 w-40 -translate-x-1/2 rounded-full bg-cyan-300/10 blur-[90px]" />
+        <div className="absolute left-1/2 top-[18%] h-40 w-40 -translate-x-1/2 rounded-full bg-[var(--sto-chat-ambient-cyan-soft)] blur-[90px]" />
       </div>
 
       <div className="relative z-10 flex max-w-4xl flex-col items-center justify-center">

@@ -27,8 +27,9 @@ function hasStreamPayload(
   showThinking: boolean,
 ): boolean {
   const hasStreamText = streamText.trim().length > 0;
-  const streamThinking = streamMsg ? extractThinking(streamMsg) : null;
-  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
+  // showThinking 关闭时不做思考提取，配合思考树整体跳过解析
+  const streamThinking = showThinking && streamMsg ? extractThinking(streamMsg) : null;
+  const hasStreamThinking = !!streamThinking && streamThinking.trim().length > 0;
   const hasStreamTools = streamMsg ? extractToolUse(streamMsg).length > 0 : false;
   const hasStreamImages = streamMsg ? extractImages(streamMsg).length > 0 : false;
   const hasStreamToolStatus = streamingTools.length > 0;
@@ -50,8 +51,8 @@ function hasActiveStreamContent(
   showThinking: boolean,
 ): boolean {
   const hasStreamText = streamText.trim().length > 0;
-  const streamThinking = streamMsg ? extractThinking(streamMsg) : null;
-  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
+  const streamThinking = showThinking && streamMsg ? extractThinking(streamMsg) : null;
+  const hasStreamThinking = !!streamThinking && streamThinking.trim().length > 0;
   const hasStreamTools = streamMsg ? extractToolUse(streamMsg).length > 0 : false;
   const hasStreamImages = streamMsg ? extractImages(streamMsg).length > 0 : false;
   const hasRunningStreamTool = streamingTools.some((tool) => tool.status === 'running');

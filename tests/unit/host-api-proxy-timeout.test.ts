@@ -17,6 +17,12 @@ describe('Host API proxy timeout routing', () => {
     expect(resolveHostApiTimeoutMs('/api/chat/history')).toBe(TIMEOUTS.DEFAULT_FETCH);
   });
 
+  it('honors caller timeoutMs, including 0 to disable the timer', () => {
+    expect(resolveHostApiTimeoutMs('/api/chat/history', 0)).toBe(0);
+    expect(resolveHostApiTimeoutMs('/api/chat/send', 0)).toBe(0);
+    expect(resolveHostApiTimeoutMs('/api/app-dev/sto-app/deploy', 120_000)).toBe(120_000);
+  });
+
   it('allows connector connect/token-connect up to DWS install budget (download CLI)', () => {
     expect(resolveHostApiTimeoutMs('/api/connectors/conn-27389885c97c/connect')).toBe(
       TIMEOUTS.DWS_INSTALL,

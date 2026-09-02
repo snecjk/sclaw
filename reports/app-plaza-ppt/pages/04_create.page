@@ -1,0 +1,211 @@
+pageType: content
+background:
+  type: solid
+  color: $bg
+elements:
+  - elementId: kicker
+    elementType: text
+    bounds: [60, 36, 500, 18]
+    content: {style: $kicker, wrap: false, text: 02 · 核心能力 · 代码管理}
+  - elementId: title
+    elementType: text
+    bounds: [60, 58, 900, 40]
+    content: {style: $pagetitle, wrap: false, text: 如何管理代码：建仓、同步、冲突、凭证全自动}
+  - elementId: rule
+    elementType: shape
+    bounds: [60, 110, 64, 4]
+    shapeName: rect
+    fill: {type: solid, color: $accent}
+  - elementId: hairline
+    elementType: shape
+    bounds: [60, 118, 840, 1]
+    shapeName: rect
+    fill: {type: solid, color: $hairline}
+  - elementId: flow-label
+    elementType: text
+    bounds: [60, 140, 840, 18]
+    content:
+      fontSize: 13
+      bold: true
+      color: $accent
+      wrap: false
+      text: 用户侧：只点「创建 / 保存」—— 系统侧自动完成整条代码生命周期
+  - elementId: f1-box
+    elementType: shape
+    bounds: [60, 170, 150, 70]
+    shapeName: rect
+    fill: {type: solid, color: $pale}
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f1-text
+    elementType: text
+    bounds: [60, 170, 150, 70]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>① 创建即建仓</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">sto-app CLI 自动建仓</span></p>
+  - elementId: a1
+    elementType: line
+    bounds: [210, 203, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f2-box
+    elementType: shape
+    bounds: [240, 170, 150, 70]
+    shapeName: rect
+    fill: {type: solid, color: $pale}
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f2-text
+    elementType: text
+    bounds: [240, 170, 150, 70]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>② 权威在云端</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">云端清单为唯一真相</span></p>
+  - elementId: a2
+    elementType: line
+    bounds: [390, 203, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f3-box
+    elementType: shape
+    bounds: [420, 170, 150, 70]
+    shapeName: rect
+    fill: {type: solid, color: $pale}
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f3-text
+    elementType: text
+    bounds: [420, 170, 150, 70]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>③ 改动自动快照</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">静默 push / pull</span></p>
+  - elementId: a3
+    elementType: line
+    bounds: [570, 203, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f4-box
+    elementType: shape
+    bounds: [600, 170, 150, 70]
+    shapeName: rect
+    fill: {type: solid, color: $pale}
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f4-text
+    elementType: text
+    bounds: [600, 170, 150, 70]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>④ 冲突 AI 兜底</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">也可手动二选一</span></p>
+  - elementId: a4
+    elementType: line
+    bounds: [750, 203, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f5-box
+    elementType: shape
+    bounds: [780, 170, 140, 70]
+    shapeName: rect
+    fill: {type: solid, color: $pale}
+    border: {style: solid, width: 2, color: $accent}
+  - elementId: f5-text
+    elementType: text
+    bounds: [780, 170, 140, 70]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>⑤ 凭证托管</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">一次粘贴 · 到期提醒</span></p>
+  - elementId: p1-box
+    elementType: shape
+    bounds: [60, 268, 280, 150]
+    shapeName: rect
+    fill: {type: solid, color: "#FFFFFF"}
+    border: {style: solid, width: 1, color: $hairline}
+  - elementId: p1-head
+    elementType: text
+    bounds: [76, 280, 248, 22]
+    content: {fontSize: 14, bold: true, color: $accent, wrap: false, text: 管什么}
+  - elementId: p1-body
+    elementType: text
+    bounds: [76, 308, 248, 96]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      text: 前端工程源码、A2UI 页面描述（page.json）、模板锁定壳与依赖清单。云端仓库是权威来源：换机、误删都能克隆恢复。
+  - elementId: p2-box
+    elementType: shape
+    bounds: [356, 268, 280, 150]
+    shapeName: rect
+    fill: {type: solid, color: "#FFFFFF"}
+    border: {style: solid, width: 1, color: $hairline}
+  - elementId: p2-head
+    elementType: text
+    bounds: [372, 280, 248, 22]
+    content: {fontSize: 14, bold: true, color: $accent, wrap: false, text: 怎么管}
+  - elementId: p2-body
+    elementType: text
+    bounds: [372, 308, 248, 96]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      text: 每轮对话 / 保存触发静默同步；提交前自动拉取，冲突先交给 AI。用户可选「保留我的 / 用云端的」，无需理解 commit、branch。
+  - elementId: p3-box
+    elementType: shape
+    bounds: [652, 268, 280, 150]
+    shapeName: rect
+    fill: {type: solid, color: "#FFFFFF"}
+    border: {style: solid, width: 1, color: $hairline}
+  - elementId: p3-head
+    elementType: text
+    bounds: [668, 280, 248, 22]
+    content: {fontSize: 14, bold: true, color: $accent, wrap: false, text: 用户不碰什么}
+  - elementId: p3-body
+    elementType: text
+    bounds: [668, 308, 248, 96]
+    content:
+      fontSize: 12
+      color: $text
+      lineHeight: 1.5
+      text: 不碰 Node / npm / Git 命令行，不碰冲突解决界面。凭证一次粘贴后长期托管——代码管理对用户完全透明。
+  - elementId: bottom-line
+    elementType: shape
+    bounds: [60, 440, 840, 1]
+    shapeName: rect
+    fill: {type: solid, color: $hairline}
+  - elementId: bottom-note
+    elementType: text
+    bounds: [60, 456, 840, 24]
+    content:
+      fontSize: 14
+      bold: true
+      color: $accent
+      wrap: false
+      text: 价值：代码始终有仓、有快照、可恢复 —— 为 A2UI 生成与低成本发布提供稳定底座。
+  - elementId: footer
+    elementType: text
+    bounds: [60, 506, 400, 16]
+    content: {style: $small, wrap: false, text: 应用广场 · 用户应用开发 · 周会同步}
+  - elementId: pagenum
+    elementType: text
+    bounds: [860, 506, 40, 16]
+    content: {style: $small, wrap: false, align: [right, top], text: "02"}

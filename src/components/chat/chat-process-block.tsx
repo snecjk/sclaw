@@ -5,6 +5,7 @@
  * 思考面板内 `collapsible` 仅流式中启用；结束后平铺展开、无 chevron。
  */
 import type { LucideIcon } from 'lucide-react';
+import { memo } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProcessBlockCollapse } from '@/hooks/use-process-block-collapse';
@@ -67,7 +68,7 @@ export interface ChatProcessBlockProps {
   className?: string;
 }
 
-export function ChatProcessBlock({
+export const ChatProcessBlock = memo(function ChatProcessBlock({
   title,
   icon: Icon,
   isRunning = false,
@@ -116,15 +117,24 @@ export function ChatProcessBlock({
       onClick={toggle}
       aria-expanded={expanded}
     >
-      <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      <Icon
+        className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+        aria-hidden
+      />
       {titleWithChevron}
     </button>
   ) : (
     <div className={chatProcessTitleRowClass}>
       {isRunning ? (
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-70" aria-hidden />
+        <Loader2
+          className="h-4 w-4 shrink-0 animate-spin text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+          aria-hidden
+        />
       ) : null}
-      <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      <Icon
+        className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+        aria-hidden
+      />
       {titleWithChevron}
     </div>
   );
@@ -164,7 +174,7 @@ export function ChatProcessBlock({
       ) : body}
     </div>
   );
-}
+});
 
 /** 过程块内容区默认正文样式（13px 灰色） */
 export const chatProcessBlockBodyClass = chatProcessSecondaryTextClass;

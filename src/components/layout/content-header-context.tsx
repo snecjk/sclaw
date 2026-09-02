@@ -181,7 +181,7 @@ export function useContentHeaderDisplay(): {
   const { t } = useTranslation();
   const defaultTitle = resolveDefaultTitle(pathname, t);
 
-  // primaryNav 路由：侧栏已标识功能，不展示兜底「首页 / 工作流」等；页面注入的会话 chip 仍走 slot.title
+// primaryNav / 开发工作台：侧栏或页内自有标题，不展示兜底「首页 / 工作流」等；页面注入的会话 chip 仍走 slot.title
   const title = slot?.title ?? (isSidebarPrimaryNavRoute(pathname) ? null : defaultTitle);
   const layoutMode = slot?.layoutMode ?? 'conversation';
 

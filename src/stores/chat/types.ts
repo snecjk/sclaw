@@ -238,6 +238,7 @@ export interface ChatState {
   }) => Promise<boolean>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
+  loadOlderHistory: (sessionKey?: string, options?: { drain?: boolean }) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: (sessionKey?: string) => Promise<boolean>;
   toggleThinking: () => void;

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "sto.sso-auth",
+  "displayName": "STO Site SSO",
+  "description": "为独立站点提供本地 SClaw 身份和发布态 STO 单点登录。",
+  "pageTypes": ["site"],
+  "runtime": {
+    "entry": "./runtime",
+    "activation": "bootstrap"
+  },
+  "provides": {
+    "hostCapabilities": ["auth.sto-token"]
+  },
+  "ai": {
+    "skills": [
+      {
+        "id": "sso-auth",
+        "path": "./skills/sso-auth"
+      }
+    ],
+    "schemas": "./schemas"
+  }
+}

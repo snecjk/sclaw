@@ -1024,7 +1024,7 @@ off();
 | `save.complete` | `ossKey?`, `quoteId?`, `scene?`, `detailUrl?` |
 | `batch-adjust.params-ready` | `objectList`, `objectListJson`, `freightFeeType?`, `summary?` |
 | `batch-adjust.validate-fail` | `pass: false`, `warnings?`, `preCheckErrors?`, … |
-| `batch-adjust.draft-complete` | `quotationList?`, `quoteId?` |
+| `batch-adjust.draft-complete` | `quotationList?`, `quotationListJson?`, `quoteId?` |
 
 catalog 应用默认允许订阅 `quote:*`；其它事件需在应用 `bridgePolicy.allowedEventPatterns` 中配置。
 

@@ -1,0 +1,197 @@
+pageType: content
+background:
+  type: solid
+  color: "$bg"
+elements:
+  - elementId: kicker
+    elementType: text
+    bounds: [60, 36, 500, 18]
+    content: {style: "$kicker", wrap: false, text: "04 · 如何使用公司接口"}
+  - elementId: title
+    elementType: text
+    bounds: [60, 58, 900, 40]
+    content: {style: "$pagetitle", wrap: false, text: "用户怎么用接口：自然语言指定 CLI，AI 接进页面"}
+  - elementId: rule
+    elementType: shape
+    bounds: [60, 110, 64, 4]
+    shapeName: rect
+    fill: {type: solid, color: "$accent"}
+  - elementId: hairline
+    elementType: shape
+    bounds: [60, 118, 840, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$hairline"}
+  - elementId: flow-label
+    elementType: text
+    bounds: [60, 138, 840, 18]
+    content:
+      fontSize: 13
+      bold: true
+      color: "$accent"
+      wrap: false
+      text: 用户不写接口地址 —— 只说业务需求，指定一条公司 CLI 指令即可
+  - elementId: f1-box
+    elementType: shape
+    bounds: [60, 168, 150, 68]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f1-text
+    elementType: text
+    bounds: [60, 168, 150, 68]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>① 说需求</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">「查本月结算数据」</span></p>
+  - elementId: a1
+    elementType: line
+    bounds: [210, 200, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f2-box
+    elementType: shape
+    bounds: [240, 168, 150, 68]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f2-text
+    elementType: text
+    bounds: [240, 168, 150, 68]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>② 指定 CLI</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">选一条 sai-cli 指令</span></p>
+  - elementId: a2
+    elementType: line
+    bounds: [390, 200, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f3-box
+    elementType: shape
+    bounds: [420, 168, 150, 68]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f3-text
+    elementType: text
+    bounds: [420, 168, 150, 68]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>③ AI 读 help</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">参数 / 字段 / 地址</span></p>
+  - elementId: a3
+    elementType: line
+    bounds: [570, 200, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f4-box
+    elementType: shape
+    bounds: [600, 168, 150, 68]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f4-text
+    elementType: text
+    bounds: [600, 168, 150, 68]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>④ 接进页面</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">action 契约取数</span></p>
+  - elementId: a4
+    elementType: line
+    bounds: [750, 200, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f5-box
+    elementType: shape
+    bounds: [780, 168, 140, 68]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2.5, color: "$accent"}
+  - elementId: f5-text
+    elementType: text
+    bounds: [780, 168, 140, 68]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>⑤ 渲染预览</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">表格 / 筛选出数</span></p>
+  - elementId: p1-box
+    elementType: shape
+    bounds: [60, 262, 280, 168]
+    shapeName: rect
+    fill: {type: solid, color: "#FFFFFF"}
+    border: {style: solid, width: 1, color: "$hairline"}
+  - elementId: p1-head
+    elementType: text
+    bounds: [76, 274, 248, 22]
+    content: {fontSize: 14, bold: true, color: "$accent", wrap: false, text: "用户怎么做"}
+  - elementId: p1-body
+    elementType: text
+    bounds: [76, 302, 248, 112]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.5
+      text: "用自然语言描述页面；需要数据时，指定要用的 sai-cli 指令（或从候选列表里选一条）。说不清命令名时，可让 AI 用 discover 搜候选，仍由用户确认指定。"
+  - elementId: p2-box
+    elementType: shape
+    bounds: [356, 262, 280, 168]
+    shapeName: rect
+    fill: {type: solid, color: "#FFFFFF"}
+    border: {style: solid, width: 1, color: "$hairline"}
+  - elementId: p2-head
+    elementType: text
+    bounds: [372, 274, 248, 22]
+    content: {fontSize: 14, bold: true, color: "$accent", wrap: false, text: "系统怎么接"}
+  - elementId: p2-body
+    elementType: text
+    bounds: [372, 302, 248, 112]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.5
+      text: "AI 执行 help 拿到参数与返回字段，注册开发代理，写入 action 契约。页面只认契约（actionId），不写死接口地址；权限与审计沿用 CLI 既有体系。"
+  - elementId: p3-box
+    elementType: shape
+    bounds: [652, 262, 280, 168]
+    shapeName: rect
+    fill: {type: solid, color: "#FFFFFF"}
+    border: {style: solid, width: 1, color: "$hairline"}
+  - elementId: p3-head
+    elementType: text
+    bounds: [668, 274, 248, 22]
+    content: {fontSize: 14, bold: true, color: "$accent", wrap: false, text: "扩展新接口"}
+  - elementId: p3-body
+    elementType: text
+    bounds: [668, 302, 248, 112]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.5
+      text: "总部新增业务能力 = 发一条 CLI 命令 + 技能说明，客户端零改动即时可用。用户指定新指令后，AI 即可按同样链路接到页面上。"
+  - elementId: footer
+    elementType: text
+    bounds: [60, 506, 400, 16]
+    content: {style: "$small", wrap: false, text: "应用广场 · 用户应用开发 · 周会同步"}
+  - elementId: pagenum
+    elementType: text
+    bounds: [860, 506, 40, 16]
+    content: {style: "$small", wrap: false, align: [right, top], text: "04"}

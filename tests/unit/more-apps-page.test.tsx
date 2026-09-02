@@ -9,6 +9,14 @@ const openInSclawBrowserMock = vi.fn();
 const fetchRegistryMock = vi.fn();
 const hasStoPolicyAuthInEmbedSessionMock = vi.fn();
 const hasTeambitionAuthInEmbedSessionMock = vi.fn();
+let mockCanUseAppDev = true;
+
+vi.mock('@/hooks/use-app-dev-permission', () => ({
+  useAppDevPermission: () => ({
+    canUseAppDev: mockCanUseAppDev,
+    loaded: true,
+  }),
+}));
 
 vi.mock('@/lib/app-plaza-api', () => ({
   fetchAppPlazaApps: (...args: unknown[]) => fetchAppsMock(...args),
@@ -42,6 +50,62 @@ vi.mock('@/lib/more-apps-api', () => ({
   fetchMoreAppsRegistry: (...args: unknown[]) => fetchRegistryMock(...args),
   saveMoreAppsRegistry: vi.fn(async (registry) => registry),
   migrateMoreAppsRegistry: vi.fn(async (registry) => ({ migrated: true, registry })),
+}));
+
+const refreshDevAppsMock = vi.fn(async () => undefined);
+let mockDevApps: Array<{
+  workspaceId: string;
+  name: string;
+  projectType: string;
+  path: string;
+  createdAt: number;
+  updatedAt: number;
+  pageType?: 'site' | 'assets';
+}> = [];
+
+vi.mock('@/stores/app-dev-catalog', () => ({
+  useAppDevCatalogStore: Object.assign(
+    (selector: (state: { apps: typeof mockDevApps; refresh: typeof refreshDevAppsMock }) => unknown) =>
+      selector({ apps: mockDevApps, refresh: refreshDevAppsMock }),
+    {
+      getState: () => ({
+        apps: mockDevApps,
+        refresh: refreshDevAppsMock,
+        registerWorkspaceId: vi.fn(),
+      }),
+    },
+  ),
+}));
+
+vi.mock('@/lib/session-catalog-api', () => ({
+  pickProjectFolder: vi.fn(async () => null),
+}));
+
+vi.mock('@/lib/app-dev-api', () => ({
+  importUserApp: vi.fn(),
+}));
+
+vi.mock('@/stores/session-catalog', () => ({
+  useSessionCatalogStore: Object.assign(
+    (selector: (state: { refreshWorkspaces: () => Promise<void> }) => unknown) =>
+      selector({ refreshWorkspaces: vi.fn(async () => undefined) }),
+    {
+      getState: () => ({
+        refreshWorkspaces: vi.fn(async () => undefined),
+      }),
+    },
+  ),
+}));
+
+vi.mock('@/stores/app-plaza-shell', () => ({
+  useAppPlazaShellStore: Object.assign(
+    () => ({}),
+    {
+      getState: () => ({
+        openOrFocusDevAppTab: vi.fn(),
+      }),
+    },
+  ),
 }));
 
 import { MoreAppsPage } from '@/components/more-apps/MoreAppsPage';
@@ -93,7 +157,10 @@ function resetStore() {
 describe('MoreAppsPage server catalog', () => {
   beforeEach(() => {
     localStorage.clear();
+    mockCanUseAppDev = true;
     resetStore();
+    mockDevApps = [];
+    refreshDevAppsMock.mockReset().mockResolvedValue(undefined);
     openInSclawBrowserMock.mockReset();
     fetchSkipLoginLinkMock.mockReset();
     hasStoPolicyAuthInEmbedSessionMock.mockReset().mockResolvedValue(false);
@@ -117,10 +184,10 @@ describe('MoreAppsPage server catalog', () => {
   it('renders mixed-delimiter server badges as one deduplicated ideographic-comma label', async () => {
     render(<MoreAppsPage />);
     const addButton = screen.getByRole('button', { name: '安装外部应用' });
-    expect(addButton.querySelector('.lucide-plus')).toBeInTheDocument();
+    expect(addButton.querySelector('.lucide-download')).toBeInTheDocument();
     expect(addButton.closest('.app-plaza-heading-row')).toBeInTheDocument();
     expect(screen.getByRole('tablist').closest('.more-apps-toolbar-row')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('搜索应用名称或关键词').closest('.more-apps-toolbar-row')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('搜索应用名称或描述').closest('.more-apps-toolbar-row')).toBeInTheDocument();
     expect(await screen.findByText('客户管理、部门岗位、客户对账')).toHaveClass('app-market__row-tags');
     expect(document.querySelectorAll('.app-market__row-tags')).toHaveLength(1);
     expect(screen.queryByText('维护客户归属关系')).not.toBeInTheDocument();
@@ -178,11 +245,11 @@ describe('MoreAppsPage server catalog', () => {
     expect(emptyTagRow).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('opens the card by keyboard and keeps favorite clicks isolated from opening', async () => {
+  it('opens the card through its overlay action and keeps favorite clicks isolated from opening', async () => {
     render(<MoreAppsPage />);
     const card = await screen.findByRole('button', { name: '打开客户关系' });
 
-    fireEvent.keyDown(card, { key: 'Enter' });
+    fireEvent.click(card, { detail: 0 });
     expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确定' }));
     await waitFor(() => {
@@ -401,7 +468,9 @@ describe('MoreAppsPage server catalog', () => {
 
     render(<MoreAppsPage />);
     fireEvent.click(await screen.findByRole('tab', { name: '我的应用' }));
-    fireEvent.click(screen.getByText('打开链接'));
+    expect(screen.getByText('外部')).toHaveClass('sto-feedback', 'sto-feedback--badge');
+    expect(screen.getByText('外部')).toHaveAttribute('data-variant', 'external');
+    fireEvent.click(screen.getByRole('button', { name: '打开外部应用' }));
 
     expect(screen.queryByText('需要二次登录')).not.toBeInTheDocument();
     expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
@@ -413,6 +482,28 @@ describe('MoreAppsPage server catalog', () => {
         systemCode: 'SITE_KEEPER',
       }),
     );
+  });
+
+  it('uses semantic status badges for official and hot installed-app metadata', async () => {
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{ ...serverApp, official: true, badge: '热门' }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['org-relation'],
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('tab', { name: '我的应用' }));
+
+    expect(screen.getByText('官方')).toHaveAttribute('data-variant', 'official');
+    expect(screen.getByText('热门')).toHaveAttribute('data-variant', 'hot');
+    expect(screen.getByText('打开')).not.toHaveClass('cursor-pointer');
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {
@@ -549,6 +640,7 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.getByRole('button', { name: '精选' })).toHaveTextContent('精选13');
     expect(screen.getByRole('tab', { name: '应用广场' })).toHaveTextContent(/^应用广场$/);
     expect(screen.getByRole('tab', { name: '我的应用' })).toHaveTextContent(/^我的应用$/);
+    expect(screen.getByRole('tab', { name: '开发应用' })).toHaveTextContent(/^开发应用$/);
   });
 
   it('shows the app link in my apps when a favorited server app has no recent usage', async () => {
@@ -612,12 +704,113 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.getByText('还没有收藏或安装应用，去应用广场看看')).toBeInTheDocument();
   });
 
+  it('keeps developing apps on a dedicated tab instead of 我的应用', async () => {
+    mockDevApps = [{
+      workspaceId: 'ws-dev-1',
+      name: 'test-app080503',
+      projectType: 'react-a2ui',
+      path: '/tmp/test-app080503',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }];
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['org-relation'],
+    });
+
+    render(<MoreAppsPage />);
+    expect(await screen.findByRole('tab', { name: '开发应用' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用' }));
+    expect(screen.getByText('客户关系')).toBeInTheDocument();
+    expect(screen.queryByText('test-app080503')).not.toBeInTheDocument();
+    expect(screen.queryByText('开发应用', { selector: 'h2' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '开发应用' }));
+    expect(screen.getByText('test-app080503')).toBeInTheDocument();
+    expect(screen.queryByText('客户关系')).not.toBeInTheDocument();
+  });
+
+  it('lists development apps of both page types without a type filter row', async () => {
+    mockDevApps = [
+      {
+        workspaceId: 'ws-site',
+        name: 'Site Alpha',
+        projectType: 'frontend',
+        path: '/tmp/site-alpha',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pageType: 'site',
+      },
+      {
+        workspaceId: 'ws-assets',
+        name: 'Assets Beta',
+        projectType: 'frontend',
+        path: '/tmp/assets-beta',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pageType: 'assets',
+      },
+    ];
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('tab', { name: '开发应用' }));
+
+    expect(screen.queryByRole('button', { name: '全部' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('开发应用类型筛选')).not.toBeInTheDocument();
+    expect(screen.getByText('Site Alpha')).toBeInTheDocument();
+    expect(screen.getByText('Assets Beta')).toBeInTheDocument();
+    expect(refreshDevAppsMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the APP list available when banners fail', async () => {
     fetchBannersMock.mockRejectedValueOnce(new Error('banner unavailable'));
     render(<MoreAppsPage />);
     expect(await screen.findByText('客户关系')).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toHaveTextContent('横幅加载失败');
     expect(screen.queryByText('客户运费')).not.toBeInTheDocument();
+  });
+
+  it('hides app-dev actions and tab when the user is not whitelisted', async () => {
+    mockCanUseAppDev = false;
+    useMoreAppsStore.setState({ activeTab: 'dev-apps' });
+
+    render(<MoreAppsPage />);
+
+    expect(await screen.findByRole('tab', { name: '应用广场' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '开发应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '创建应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '更多开发操作' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '安装外部应用' })).toBeInTheDocument();
+    expect(useMoreAppsStore.getState().activeTab).toBe('market');
+  });
+
+  it('opens create app directly and keeps import in the overflow menu', () => {
+    render(<MoreAppsPage />);
+
+    const createBtn = screen.getByRole('button', { name: '创建应用' });
+    expect(createBtn).toHaveClass('more-apps-add-btn');
+    expect(createBtn).not.toHaveAttribute('aria-haspopup');
+    expect(createBtn.querySelector('.lucide-chevron-down')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '更多开发操作' })).toHaveAttribute('aria-haspopup', 'menu');
+  });
+
+  it('shows template management to app-dev whitelist users', async () => {
+    render(<MoreAppsPage />);
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: '更多开发操作' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(await screen.findByRole('menuitem', { name: '管理应用模板' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '导入应用' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '创建应用' })).not.toBeInTheDocument();
   });
 
   it('shows a fallback when a banner image fails', async () => {

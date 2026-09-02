@@ -24,7 +24,7 @@ export function WorkflowCanvasNode({ data, selected }: NodeProps<Node<CanvasNode
   return (
     <div
       className={cn(
-        'wf-canvas-node',
+        'sto-card sto-card--canvas-node wf-canvas-node',
         template?.accent ? `shell-${template.accent}` : 'shell-trigger',
         isCondition && 'wf-canvas-node-diamond',
         selected && 'selected',
@@ -36,7 +36,7 @@ export function WorkflowCanvasNode({ data, selected }: NodeProps<Node<CanvasNode
           {canDelete ? (
             <button
               type="button"
-              className="wf-canvas-node-close nodrag nopan"
+              className="sto-control sto-control--canvas-icon wf-canvas-node-close nodrag nopan"
               aria-label="删除节点"
               onClick={(event) => {
                 event.stopPropagation();
@@ -97,6 +97,7 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
       <div className="wf-canvas-node-inline-form nodrag nowheel">
         <InlineField label="输出目标">
           <textarea
+            className="sto-control sto-control--compact-field"
             value={goal}
             onChange={(event) => {
               if (smartKind) {
@@ -114,6 +115,7 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
         </InlineField>
         <InlineField label="详细输出规则">
           <textarea
+            className="sto-control sto-control--compact-field"
             value={readConfigString(config, 'note') || `将结果输出到 ${target}${binding.nodeId ? `，来源：${binding.nodeId}` : ''}`}
             onChange={(event) => patchConfig({ note: event.target.value })}
           />
@@ -131,11 +133,12 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
       : readTaskValue(config, 'instruction');
     return (
       <div className="wf-canvas-node-inline-form nodrag nowheel">
-        <button type="button" className="wf-canvas-node-prompt-button">
+        <button type="button" className="sto-control sto-control--compact-action wf-canvas-node-prompt-button">
           查看最终 Prompt
         </button>
         <InlineField label={smartKind === 'agent_data_fetch' ? '获取目标' : '处理目标'}>
           <textarea
+            className="sto-control sto-control--compact-field"
             value={goal}
             onChange={(event) => {
               const nextGoal = event.target.value;
@@ -154,6 +157,7 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
         </InlineField>
         <InlineField label={smartKind === 'agent_data_fetch' ? '详细获取规则' : '详细处理规则'}>
           <textarea
+            className="sto-control sto-control--compact-field"
             value={instruction}
             onChange={(event) => {
               const nextInstruction = event.target.value;
@@ -179,6 +183,7 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
       <div className="wf-canvas-node-inline-form nodrag nowheel">
         <InlineField label="浏览器任务">
           <textarea
+            className="sto-control sto-control--compact-field"
             value={readConfigString(config, 'goal')}
             onChange={(event) => patchConfig({ goal: event.target.value })}
           />
@@ -198,7 +203,7 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
     return (
       <div className="wf-canvas-node-inline-form nodrag nowheel">
         <InlineField label="校验条件">
-          <textarea value={preview} readOnly />
+          <textarea className="sto-control sto-control--compact-field" value={preview} readOnly />
         </InlineField>
       </div>
     );
@@ -209,6 +214,7 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
       <div className="wf-canvas-node-inline-form nodrag nowheel">
         <InlineField label="暂停原因">
           <textarea
+            className="sto-control sto-control--compact-field"
             value={readConfigString(config, 'reason', '请完成验证码或人工确认后继续')}
             onChange={(event) => patchConfig({ reason: event.target.value })}
           />
@@ -221,7 +227,7 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
     return (
       <div className="wf-canvas-node-inline-form nodrag nowheel">
         <InlineField label="节点名称">
-          <input value={node.name} onChange={(event) => patchNodeName(event.target.value)} />
+          <input className="sto-control sto-control--compact-field" value={node.name} onChange={(event) => patchNodeName(event.target.value)} />
         </InlineField>
       </div>
     );

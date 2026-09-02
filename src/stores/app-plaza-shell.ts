@@ -51,6 +51,14 @@ function resolveEmbedComposerActionsForTab(tab: AppPlazaBrowserTab): EmbedCompos
 
 export type AppPlazaBrowserTabStatus = 'blank' | 'live' | 'suspended';
 
+/** Tab for an in-progress dev-app workbench (chat + preview). */
+export interface AppPlazaDevAppTab {
+  id: string;
+  workspaceId: string;
+  title: string;
+  kind?: 'app' | 'template';
+}
+
 export interface AppPlazaBrowserTab {
   id: string;
   url: string;
@@ -118,11 +126,20 @@ interface AppPlazaShellState {
   routeActive: boolean;
   activeTabId: string;
   browserTabs: AppPlazaBrowserTab[];
+  devAppTabs: AppPlazaDevAppTab[];
 
   setRouteActive: (active: boolean) => void;
   selectTab: (tabId: string) => void;
   addBlankTab: () => void;
   closeBrowserTab: (tabId: string) => void;
+  /** Open (or focus) a dev-app workbench tab. Returns the tab id. */
+  openOrFocusDevAppTab: (
+    workspaceId: string,
+    title: string,
+    kind?: 'app' | 'template',
+  ) => string;
+  closeDevAppTab: (tabId: string) => void;
+  closeDevAppTabsByWorkspaceId: (workspaceId: string) => void;
   submitBlankTabUrl: (tabId: string, rawUrl: string) => void;
   /**
    * Navigate an existing live/suspended/blank tab to a manually entered URL.
@@ -433,6 +450,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
   routeActive: false,
   activeTabId: APP_PLAZA_HOME_TAB_ID,
   browserTabs: [],
+  devAppTabs: [],
 
   setRouteActive: (active) => {
     const state = get();
@@ -459,6 +477,13 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         pauseEmbedChatForTab(previous);
       }
       set({ activeTabId: APP_PLAZA_HOME_TAB_ID });
+      return;
+    }
+
+    // Dev-app tab — simple focus, no webview lifecycle.
+    const devTab = state.devAppTabs.find((t) => t.id === tabId);
+    if (devTab) {
+      set({ activeTabId: tabId });
       return;
     }
 
@@ -555,6 +580,45 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     // Drop unused cleared reference noise
     void cleared;
     set({ browserTabs: remaining, activeTabId: nextActive });
+  },
+
+  openOrFocusDevAppTab: (workspaceId, title, kind: 'app' | 'template' = 'app') => {
+    const existing = get().devAppTabs.find((t) => t.workspaceId === workspaceId);
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return existing.id;
+    }
+    const id = `devapp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const tab: AppPlazaDevAppTab = { id, workspaceId, title, kind };
+    set((prev) => ({
+      devAppTabs: [...prev.devAppTabs, tab],
+      activeTabId: id,
+    }));
+    return id;
+  },
+
+  closeDevAppTab: (tabId) => {
+    const state = get();
+    const remaining = state.devAppTabs.filter((t) => t.id !== tabId);
+    let nextActive = state.activeTabId;
+    if (state.activeTabId === tabId) {
+      // Fall back to home
+      nextActive = APP_PLAZA_HOME_TAB_ID;
+    }
+    set({ devAppTabs: remaining, activeTabId: nextActive });
+  },
+
+  closeDevAppTabsByWorkspaceId: (workspaceId) => {
+    const state = get();
+    const remaining = state.devAppTabs.filter((t) => t.workspaceId !== workspaceId);
+    if (remaining.length === state.devAppTabs.length) return;
+    const closedActive = state.devAppTabs.some(
+      (t) => t.workspaceId === workspaceId && t.id === state.activeTabId,
+    );
+    set({
+      devAppTabs: remaining,
+      activeTabId: closedActive ? APP_PLAZA_HOME_TAB_ID : state.activeTabId,
+    });
   },
 
   submitBlankTabUrl: (tabId, rawUrl) => {

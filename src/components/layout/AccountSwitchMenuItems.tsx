@@ -14,11 +14,11 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 
-type AccountSwitchMenuItemsProps = {
+export interface AccountSwitchMenuItemsProps {
   itemClassName: string;
   itemHoverClassName: string;
   subContentClassName: string;
-};
+}
 
 export function AccountSwitchMenuItems({
   itemClassName,
@@ -72,7 +72,7 @@ export function AccountSwitchMenuItems({
         }}
         className={cn(itemClassName, itemHoverClassName)}
       >
-        {switching ? t('accountSwitch.switching') : t('accountSwitch.backToHq')}
+        {switching ? t('accountSwitch.switching', '切换中…') : t('accountSwitch.backToHq')}
       </DropdownMenuItem>
     );
   }
@@ -84,9 +84,9 @@ export function AccountSwitchMenuItems({
         className={cn(itemClassName, itemHoverClassName, 'gap-2')}
       >
         <span className="flex-1 truncate">
-          {switching ? t('accountSwitch.switching') : t('accountSwitch.menu')}
+          {switching ? t('accountSwitch.switching', '切换中…') : t('accountSwitch.menu')}
         </span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent sideOffset={4} className={subContentClassName}>
         {accountSwitchOptions.map((option) => (

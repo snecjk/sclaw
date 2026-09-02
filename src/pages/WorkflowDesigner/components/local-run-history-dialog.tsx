@@ -22,11 +22,11 @@ interface LocalRunHistoryDialogProps {
 }
 
 const STATUS_META: Record<LocalRunHistoryStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
-  success: { label: '成功', className: 'text-emerald-600 bg-emerald-50', Icon: CheckCircle2 },
-  failed: { label: '失败', className: 'text-destructive bg-destructive/10', Icon: XCircle },
-  cancelled: { label: '已取消', className: 'text-slate-500 bg-slate-100', Icon: Circle },
-  interrupted: { label: '已中断', className: 'text-amber-700 bg-amber-50', Icon: AlertCircle },
-  running: { label: '进行中', className: 'text-primary bg-primary/10', Icon: CircleDot },
+  success: { label: '成功', className: 'bg-[var(--sto-feature-success-background)] text-[var(--sto-feature-success-foreground)]', Icon: CheckCircle2 },
+  failed: { label: '失败', className: 'bg-destructive/10 text-[var(--sto-danger-primary)]', Icon: XCircle },
+  cancelled: { label: '已取消', className: 'bg-[var(--sto-feature-muted-background)] text-[var(--sto-feature-secondary-foreground)]', Icon: Circle },
+  interrupted: { label: '已中断', className: 'bg-[var(--sto-chat-engine-hint-background)] text-[var(--sto-feedback-caution-foreground)]', Icon: AlertCircle },
+  running: { label: '进行中', className: 'bg-primary/10 text-[var(--sto-brand-primary)]', Icon: CircleDot },
 };
 
 export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose, onSelectRun }: LocalRunHistoryDialogProps) {

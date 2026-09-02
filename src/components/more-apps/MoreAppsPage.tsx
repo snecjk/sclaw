@@ -7,20 +7,32 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Heart } from 'lucide-react';
+import { Search, Plus, Heart, FolderInput, FileCode2, PlugZap, Download, MoreHorizontal } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  collectionCardShellClass,
   stoMainInnerShell,
   stoPageTitleClass,
 } from '@/lib/surfaces';
 import { AppCard } from './AppCard';
+import { DevAppCard, formatDevAppCardDesc } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
+import { CreateAppDialog } from './CreateAppDialog';
+import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
+import { ExternalServiceManagerDialog } from './ExternalServiceManagerDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
+import { CollectionCardAction } from '@/components/ui/collection-card-action';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import {
@@ -33,6 +45,12 @@ import {
   isTeambitionAppUrl,
 } from '@/lib/embed-site-auth';
 import { formatAppBadges } from './format-app-badges';
+import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
+import { pickProjectFolder } from '@/lib/session-catalog-api';
+import { importUserApp } from '@/lib/app-dev-api';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
+import { useAppDevPermission } from '@/hooks/use-app-dev-permission';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 /** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
@@ -80,12 +98,73 @@ export function MoreAppsPage() {
   } = useMoreAppsStore();
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
+  const [createAppOpen, setCreateAppOpen] = useState(false);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [externalServiceManagerOpen, setExternalServiceManagerOpen] = useState(false);
+  const [importingApp, setImportingApp] = useState(false);
   const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
   // already fetches the first APP page, so we don't double-fire on initial render.
   const searchMountedRef = useRef(false);
+
+  const devApps = useAppDevCatalogStore((s) => s.apps);
+  const refreshDevApps = useAppDevCatalogStore((s) => s.refresh);
+  const { canUseAppDev } = useAppDevPermission();
+
+  useEffect(() => {
+    if (!canUseAppDev && activeTab === 'dev-apps') {
+      setActiveTab('market');
+    }
+  }, [activeTab, canUseAppDev, setActiveTab]);
+
+  useEffect(() => {
+    if (!canUseAppDev) {
+      setCreateAppOpen(false);
+      return;
+    }
+    if (activeTab === 'dev-apps' || createAppOpen) {
+      void refreshDevApps().catch((error) => {
+        toast.error(error instanceof Error ? error.message : '无法同步 STO 应用列表');
+      });
+    }
+  }, [activeTab, canUseAppDev, createAppOpen, refreshDevApps]);
+
+  const filteredDevApps = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return devApps;
+    return devApps.filter((app) => {
+      const haystack = [
+        app.name,
+        app.projectType,
+        formatDevAppCardDesc(app),
+      ].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [devApps, searchQuery]);
+
+  const handleImportApp = useCallback(async () => {
+    if (!canUseAppDev || importingApp) return;
+    setImportingApp(true);
+    try {
+      const picked = await pickProjectFolder();
+      if (!picked) return;
+      const result = await importUserApp({ appPath: picked });
+      useAppDevCatalogStore.getState().registerWorkspaceId(result.workspaceId);
+      await useSessionCatalogStore.getState().refreshWorkspaces().catch(() => undefined);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
+      useAppPlazaShellStore.getState().openOrFocusDevAppTab(
+        result.workspaceId,
+        result.workspaceName,
+      );
+      toast.success(`已导入「${result.workspaceName}」`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setImportingApp(false);
+    }
+  }, [canUseAppDev, importingApp]);
 
   // My apps use a stable session catalog so market category/search requests cannot
   // remove favorited apps from the installed view.
@@ -109,22 +188,22 @@ export function MoreAppsPage() {
       categoriesLoading || categoriesError
         ? []
         : categories
-            // 历史误建的「链接器/连接器」APP 分类不再展示；链接器入口已迁至技能广场页签
-            .filter((c) => {
-              const name = c.name.trim();
-              const id = c.id.trim().toLowerCase();
-              return !(
-                name === '链接器' ||
-                name === '连接器' ||
-                id === 'connectors' ||
-                id === 'connector'
-              );
-            })
-            .map((c) => ({
-              id: c.id as MarketCategory,
-              label: c.name,
-              count: categoryCounts[c.id] ?? 0,
-            }));
+          // 历史误建的「链接器/连接器」APP 分类不再展示；链接器入口已迁至技能广场页签
+          .filter((c) => {
+            const name = c.name.trim();
+            const id = c.id.trim().toLowerCase();
+            return !(
+              name === '链接器' ||
+              name === '连接器' ||
+              id === 'connectors' ||
+              id === 'connector'
+            );
+          })
+          .map((c) => ({
+            id: c.id as MarketCategory,
+            label: c.name,
+            count: categoryCounts[c.id] ?? 0,
+          }));
     return [featured, ...serverItems];
   }, [categories, categoryCounts, categoriesLoading, categoriesError, marketTotal, t]);
 
@@ -383,7 +462,11 @@ export function MoreAppsPage() {
             <span className="app-market__hero-error-text">
               {t('moreApps.bannerError', { defaultValue: '横幅加载失败' })}
             </span>
-            <button type="button" className="app-market__hero-retry" onClick={() => fetchBanners()}>
+            <button
+              type="button"
+              className="sto-control sto-control--showcase sto-control--showcase-retry app-market__hero-retry"
+              onClick={() => fetchBanners()}
+            >
               {t('moreApps.bannerRetry', { defaultValue: '重试' })}
             </button>
           </div>
@@ -406,7 +489,7 @@ export function MoreAppsPage() {
               banner.title || banner.subtitle || t('moreApps.banner', { defaultValue: '横幅' });
             const bannerClassName = cn(
               'app-market__hero-banner',
-              clickable && 'app-market__hero-banner--clickable',
+              clickable && 'sto-control sto-control--artwork-link app-market__hero-banner--clickable',
             );
             const content = imageFailed ? (
               <div className="app-market__hero-image-fallback" aria-hidden="true">
@@ -496,7 +579,7 @@ export function MoreAppsPage() {
           </span>
           <button
             type="button"
-            className="app-market__list-retry"
+            className="sto-control sto-control--brand-retry app-market__list-retry"
             onClick={() => fetchApps({ reset: true })}
           >
             {t('moreApps.retry', { defaultValue: '重试' })}
@@ -522,22 +605,20 @@ export function MoreAppsPage() {
             return (
               <article
                 key={app.id}
-                className={cn('app-market__row', installed && 'app-market__row--installed')}
+                className={cn(
+                  collectionCardShellClass,
+                  'app-market__row',
+                  installed && 'app-market__row--installed',
+                )}
                 data-app-id={app.id}
-                role="button"
-                tabIndex={0}
-                aria-label={t('moreApps.openApp', {
-                  appName: app.name,
-                  defaultValue: `打开${app.name}`,
-                })}
-                onClick={() => handleOpenApp(app)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    handleOpenApp(app);
-                  }
-                }}
               >
+                <CollectionCardAction
+                  aria-label={t('moreApps.openApp', {
+                    appName: app.name,
+                    defaultValue: `打开${app.name}`,
+                  })}
+                  onClick={() => handleOpenApp(app)}
+                />
                 <div className="app-market__row-main">
                   <AppIcon
                     iconKey={app.iconKey}
@@ -560,12 +641,13 @@ export function MoreAppsPage() {
                 {!app.external && (
                   <button
                     type="button"
-                    className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
+                    className={cn('sto-control sto-control--favorite app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
                     onClick={(event) => {
                       event.stopPropagation();
                       handleToggleFavorite(app.id);
                     }}
                     aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
+                    aria-pressed={favorite}
                   >
                     <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
                   </button>
@@ -578,7 +660,11 @@ export function MoreAppsPage() {
           <div className="app-market__load-more-wrap">
             <button
               type="button"
-              className={cn('app-market__load-more', loadingMore && 'app-market__load-more--loading')}
+              className={cn(
+                'sto-control sto-control--quiet app-market__load-more',
+                loadingMore && 'app-market__load-more--loading',
+              )}
+              data-sto-state={loadingMore ? 'loading' : undefined}
               onClick={() => loadMoreApps()}
               disabled={loadingMore}
             >
@@ -605,13 +691,13 @@ export function MoreAppsPage() {
             <button
               key={cat.id}
               type="button"
-              className={cn('app-market__cat', marketCategory === cat.id && 'app-market__cat--active')}
+              className={cn('sto-navigation-item sto-navigation-item--feature-filter app-market__cat', marketCategory === cat.id && 'app-market__cat--active')}
               data-market-cat={cat.id}
               aria-pressed={marketCategory === cat.id ? 'true' : 'false'}
               onClick={() => handleSelectCategory(cat.id)}
             >
               <span>{cat.label}</span>
-              <span className="app-market__cat-count" aria-hidden="true">
+              <span className="sto-navigation-item__count sto-navigation-item__count--metadata app-market__cat-count" aria-hidden="true">
                 {cat.count}
               </span>
             </button>
@@ -626,32 +712,58 @@ export function MoreAppsPage() {
 
   // ── Installed Tab View ───────────────────────────────────────
   const renderInstalledView = () => {
-    return (
-      <div className="more-apps-main">
-        {filteredInstalledApps.length > 0 ? (
-          <section className="more-apps-section">
-            <div className="more-apps-grid">
-              {filteredInstalledApps.map((app) => (
-                <AppCard
-                  key={app.id}
-                  app={app}
-                  isMineTab={true}
-                  isInstalled
-                  isFavorite={isAppFavorite(app.id)}
-                  onOpen={handleOpenApp}
-                  onInstall={installApp}
-                  onDelete={app.external ? handleDelete : undefined}
-                  onEdit={app.external ? handleEdit : undefined}
-                  onToggleFavorite={!app.external ? handleToggleFavorite : undefined}
-                />
-              ))}
-            </div>
-          </section>
-        ) : (
+    if (filteredInstalledApps.length === 0) {
+      return (
+        <div className="more-apps-main">
           <div className="more-apps-empty">
             {searchQuery
               ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
               : t('moreApps.emptyInstalled', { defaultValue: '还没有收藏或安装应用，去应用广场看看' })}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="more-apps-main">
+        <div className="more-apps-grid">
+          {filteredInstalledApps.map((app) => (
+            <AppCard
+              key={app.id}
+              app={app}
+              isMineTab={true}
+              isInstalled
+              isFavorite={isAppFavorite(app.id)}
+              onOpen={handleOpenApp}
+              onInstall={installApp}
+              onDelete={app.external ? handleDelete : undefined}
+              onEdit={app.external ? handleEdit : undefined}
+              onToggleFavorite={!app.external ? handleToggleFavorite : undefined}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Dev Apps Tab View ────────────────────────────────────────
+  const renderDevAppsView = () => {
+    const emptyMessage = searchQuery
+      ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
+      : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' });
+
+    return (
+      <div className="more-apps-main">
+        {filteredDevApps.length === 0 ? (
+          <div className="more-apps-empty">{emptyMessage}</div>
+        ) : (
+          <div className="more-apps-grid">
+            {filteredDevApps.map((app) => (
+              <DevAppCard
+                key={app.appCode || app.workspaceId || `${app.name}:${app.appPath}`}
+                app={app}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -672,45 +784,97 @@ export function MoreAppsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="more-apps-add-btn"
-          id="more-apps-add-external-btn"
-          onClick={openAddModal}
-        >
-          <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
-          {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
-        </button>
+        <div className="app-plaza-heading-actions">
+          {canUseAppDev ? (
+            <button
+              type="button"
+              className="sto-control sto-control--fill-action more-apps-add-btn"
+              id="more-apps-create-app-btn"
+              onClick={() => setCreateAppOpen(true)}
+            >
+              <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+              {t('moreApps.createApp', { defaultValue: '创建应用' })}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="sto-control more-apps-add-btn"
+            id="more-apps-add-external-btn"
+            onClick={openAddModal}
+          >
+            <Download className="more-apps-add-btn__icon" aria-hidden="true" />
+            {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
+          </button>
+          {canUseAppDev ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="sto-control more-apps-add-btn more-apps-add-btn--icon"
+                  aria-label="更多开发操作"
+                  aria-haspopup="menu"
+                >
+                  <MoreHorizontal className="more-apps-add-btn__icon" aria-hidden="true" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[10rem]">
+                <DropdownMenuItem onSelect={() => setTemplateManagerOpen(true)}>
+                  <FileCode2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  管理应用模板
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setExternalServiceManagerOpen(true)}>
+                  <PlugZap className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  管理外部服务
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  id="more-apps-import-app-btn"
+                  disabled={importingApp}
+                  onSelect={() => void handleImportApp()}
+                >
+                  <FolderInput className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  {importingApp
+                    ? t('moreApps.importingApp', { defaultValue: '导入中…' })
+                    : t('moreApps.importApp', { defaultValue: '导入应用' })}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
       </div>
 
       {/* Toolbar row: tabs at left, search at right */}
       <div className="more-apps-toolbar-row">
         <div className="more-apps-tabs" role="tablist" aria-label={t('moreApps.tabAria', { defaultValue: '应用类型' })}>
-          {(['market', 'installed'] as const).map((tab) => (
+          {([
+            { id: 'market' as const, label: t('moreApps.tabMarket', { defaultValue: '应用广场' }) },
+            { id: 'installed' as const, label: t('moreApps.tabInstalled', { defaultValue: '我的应用' }) },
+            ...(canUseAppDev
+              ? [{ id: 'dev-apps' as const, label: t('moreApps.tabDevApps', { defaultValue: '开发应用' }) }]
+              : []),
+          ]).map((tab) => (
             <button
-              key={tab}
+              key={tab.id}
               type="button"
-              className={cn('more-apps-tab', activeTab === tab && 'more-apps-tab--active')}
+              className={cn(
+                'sto-navigation-item sto-navigation-item--feature-tab more-apps-tab',
+                activeTab === tab.id && 'more-apps-tab--active',
+              )}
               role="tab"
-              data-tab={tab}
-              onClick={() => setActiveTab(tab)}
-              aria-selected={activeTab === tab}
+              data-tab={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              aria-selected={activeTab === tab.id}
             >
-              <span className="more-apps-tab__label">
-                {tab === 'market'
-                  ? t('moreApps.tabMarket', { defaultValue: '应用广场' })
-                  : t('moreApps.tabInstalled', { defaultValue: '我的应用' })}
-              </span>
+              <span className="more-apps-tab__label">{tab.label}</span>
             </button>
           ))}
         </div>
 
-        <label className="more-apps-search-wrap">
+        <label className="sto-control sto-control--search-shell more-apps-search-wrap">
           <span className="sr-only">{t('moreApps.search', { defaultValue: '搜索应用' })}</span>
           <Search className="more-apps-search__icon" aria-hidden="true" />
           <input
             type="search"
-            className="more-apps-search"
+            className="sto-control sto-control--search-input more-apps-search"
             placeholder={t('moreApps.searchPlaceholder', { defaultValue: '搜索应用名称或关键词' })}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -721,11 +885,30 @@ export function MoreAppsPage() {
 
       {/* Content */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]">
-        {activeTab === 'market' ? renderMarketView() : renderInstalledView()}
+        {activeTab === 'market'
+          ? renderMarketView()
+          : activeTab === 'dev-apps'
+            ? renderDevAppsView()
+            : renderInstalledView()}
       </div>
 
       {/* Modals */}
       <AddExternalAppModal />
+      {canUseAppDev ? (
+        <CreateAppDialog open={createAppOpen} onClose={() => setCreateAppOpen(false)} />
+      ) : null}
+      {canUseAppDev ? (
+        <AppTemplateManagerDialog
+          open={templateManagerOpen}
+          onClose={() => setTemplateManagerOpen(false)}
+        />
+      ) : null}
+      {canUseAppDev ? (
+        <ExternalServiceManagerDialog
+          open={externalServiceManagerOpen}
+          onClose={() => setExternalServiceManagerOpen(false)}
+        />
+      ) : null}
       <ConfirmDialog
         open={!!pendingStoPolicyApp}
         title={t('moreApps.stoPolicyLoginTitle', { defaultValue: '需要二次登录' })}
