@@ -35,6 +35,13 @@ describe('foldThinkingTimelineTools', () => {
     expect(folded.visible[0]).toEqual({ type: 'thinking', content: 'plan' });
     expect(folded.visible[folded.visible.length - 1]).toEqual({ type: 'narration', content: 'done' });
   });
+
+  it('keeps every tool card when the limit is unbounded', () => {
+    const timeline: ThinkingTimelineItem[] = Array.from({ length: 12 }, (_, index) => tool(`t${index}`));
+    const folded = foldThinkingTimelineTools(timeline, Number.POSITIVE_INFINITY);
+    expect(folded.hiddenToolCount).toBe(0);
+    expect(folded.visible.filter((item) => item.type === 'tool')).toHaveLength(12);
+  });
 });
 
 describe('resolveTurnToolCount', () => {

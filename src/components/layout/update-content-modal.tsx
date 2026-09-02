@@ -98,7 +98,7 @@ export function UpdateContentModal({
           </h2>
 
           {showReleaseTitle ? (
-            <p className="mt-1 shrink-0 text-[13px] text-[#86909C]">{releaseTitle}</p>
+            <p className="mt-1 shrink-0 text-[13px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{releaseTitle}</p>
           ) : null}
 
           <div className="mt-3 min-h-0 flex-1 overflow-y-auto">

@@ -17,19 +17,19 @@ import type { ArtifactCardMenuItem } from '@/lib/artifact-card-menu';
 import { cn } from '@/lib/utils';
 
 const artifactActionSplitClass =
-  'flex shrink-0 items-stretch overflow-hidden rounded-md bg-[#F5F6F7] dark:bg-muted';
+  'flex shrink-0 items-stretch overflow-hidden rounded-md bg-[var(--sto-form-disabled-background)]';
 
 const artifactActionPrimaryClass =
-  'px-3 py-1.5 text-sm leading-[18px] text-foreground transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
+  'px-3 py-1.5 text-sm leading-[18px] text-foreground transition-colors hover:bg-[var(--sto-content-hover-background)]';
 
 const artifactActionChevronClass =
-  'flex items-center border-l border-[#E5E6EB] px-2 text-muted-foreground transition-colors hover:bg-black/[0.04] dark:border-border dark:hover:bg-white/[0.06]';
+  'flex items-center border-l border-[var(--sto-border-default)] px-2 text-muted-foreground transition-colors hover:bg-[var(--sto-content-hover-background)]';
 
 const artifactActionPillClass =
-  'shrink-0 rounded-md bg-[#F5F6F7] px-3 py-1.5 text-sm leading-[18px] text-foreground dark:bg-muted';
+  'shrink-0 rounded-md bg-[var(--sto-form-disabled-background)] px-3 py-1.5 text-sm leading-[18px] text-foreground';
 
 const artifactMenuContentClass =
-  'min-w-[11rem] rounded-lg border border-[#E8EAEF] bg-card p-1 shadow-[0_4px_16px_rgba(15,23,42,0.08)] dark:border-border';
+  'sto-overlay sto-overlay--content-border min-w-[11rem] rounded-lg border p-1 shadow-[var(--sto-shadow-content-popover)]';
 
 const artifactMenuItemClass =
   'gap-2 rounded-md px-2.5 py-2 text-sm text-foreground';

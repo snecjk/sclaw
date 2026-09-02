@@ -1,23 +1,38 @@
-import type { SideNavItem } from './nav-config';
+import type { SideNavPageItem } from './nav-config';
 
 interface OpenTabsProps {
-  activeItem: SideNavItem;
-  items: readonly SideNavItem[];
+  activeItem: SideNavPageItem;
+  items: readonly SideNavPageItem[];
   openPaths: readonly string[];
+  pinnedPath: string;
   onNavigate: (path: string) => void;
   onClose: (path: string) => void;
 }
 
-export function OpenTabs({ activeItem, items, openPaths, onNavigate, onClose }: OpenTabsProps) {
+export function getOpenTabPresentation(path: string, pinnedPath: string) {
+  return {
+    isHome: path === 'home',
+    isPinned: path === pinnedPath,
+  };
+}
+
+export function OpenTabs({
+  activeItem,
+  items,
+  openPaths,
+  pinnedPath,
+  onNavigate,
+  onClose,
+}: OpenTabsProps) {
   const tabs = openPaths
     .map((path) => items.find((item) => item.path === path))
-    .filter((item): item is SideNavItem => Boolean(item));
+    .filter((item): item is SideNavPageItem => Boolean(item));
 
   return (
     <nav className="sto-opentabs" aria-label="已打开页面">
       <div className="sto-opentabs-list">
         {tabs.map((item) => {
-          const isHome = item.path === 'home';
+          const { isHome, isPinned } = getOpenTabPresentation(item.path, pinnedPath);
           const isActive = item.key === activeItem.key;
           return (
             <div
@@ -39,7 +54,7 @@ export function OpenTabs({ activeItem, items, openPaths, onNavigate, onClose }: 
               >
                 <span className="sto-opentab-label">{item.label}</span>
               </button>
-              {!isHome ? (
+              {!isPinned ? (
                 <button
                   type="button"
                   className="sto-opentab-close"

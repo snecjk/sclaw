@@ -111,7 +111,7 @@ export function DesignerEdge({
               type="button"
               aria-label="插入节点"
               title="插入节点"
-              className="edge-action-button edge-action-button-primary"
+              className="sto-control sto-control--floating-action sto-control--floating-action-primary edge-action-button edge-action-button-primary"
               onClick={(event) => {
                 event.stopPropagation();
                 data?.onOpenInsertMenu?.(id);
@@ -123,7 +123,7 @@ export function DesignerEdge({
               type="button"
               aria-label="删除连线"
               title="删除连线"
-              className="edge-action-button"
+              className="sto-control sto-control--floating-action edge-action-button"
               onClick={(event) => {
                 event.stopPropagation();
                 void deleteElements({ edges: [{ id }] });
@@ -153,14 +153,14 @@ function InsertNodeMenu({
 }) {
   return (
     <div
-      className="insert-node-popover nodrag nopan"
+      className="sto-overlay sto-overlay--selection-popover insert-node-popover nodrag nopan"
       role="dialog"
       aria-label="选择要插入的节点类型"
       onClick={(event) => event.stopPropagation()}
     >
       <div className="insert-node-popover-header">
         <h3 className="insert-node-menu-title">插入节点</h3>
-        <button type="button" className="insert-node-popover-close" aria-label="关闭" onClick={onClose}>
+        <button type="button" className="sto-control sto-control--dismiss insert-node-popover-close" aria-label="关闭" onClick={onClose}>
           ×
         </button>
       </div>
@@ -173,7 +173,7 @@ function InsertNodeMenu({
             <button
               key={template.type}
               type="button"
-              className={`template-tile tile-${template.accent}`}
+              className={`sto-card sto-card--selection-option template-tile tile-${template.accent}`}
               onClick={() => onSelect(template.type)}
             >
               <span

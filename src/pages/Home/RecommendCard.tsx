@@ -165,7 +165,6 @@ export function RecommendCard({
           type="button"
           className={cn(
             homeHubInteractiveCardShellClass,
-            'text-left transition-shadow hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)] dark:hover:border-border',
             disabled && 'cursor-not-allowed opacity-60',
           )}
           onClick={handleCardClick}
@@ -177,10 +176,10 @@ export function RecommendCard({
 
           {busy ? (
             <div
-              className="absolute inset-0 flex items-center justify-center rounded-[18px] bg-card/70 dark:bg-secondary/70"
+              className="sto-card-busy-overlay absolute inset-0 flex items-center justify-center rounded-[18px]"
               aria-hidden
             >
-              <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#1D2129]/20 border-t-[#1D2129] dark:border-foreground/20 dark:border-t-foreground" />
+              <span className="sto-card-busy-spinner h-5 w-5 animate-spin rounded-full border-2" />
             </div>
           ) : null}
         </button>

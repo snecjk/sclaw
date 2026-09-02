@@ -43,7 +43,7 @@ describe('AppTemplatePackageManager', () => {
         schemaVersion: 1,
         templateId: 'site-minimal',
         pageType: 'site',
-        name: '最简独立站点',
+        name: '标准 Site 模版',
       }));
     });
     const manager = new AppTemplatePackageManager({

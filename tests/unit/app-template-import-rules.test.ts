@@ -13,7 +13,6 @@ describe('app template import rules', () => {
     '.sclaw/app-template.json',
     'manifest.json',
     'src/sclaw/bootstrap.ts',
-    'scripts/external-services.mjs',
     'contracts/external-services.v1.json',
     'contracts/dev-proxy.v1.json',
     'vite.config.ts',

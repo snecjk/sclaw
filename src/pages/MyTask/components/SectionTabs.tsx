@@ -5,7 +5,7 @@
 
 import { Clock, Workflow } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { myTaskSectionTabClass, myTaskSectionTabsTrackClass } from '@/lib/surfaces';
+import { StoSegmentTabs } from '@/components/ui/sto-neutral-controls';
 import type { MyTaskSection } from '../types';
 
 interface SectionTabsProps {
@@ -27,30 +27,16 @@ export function SectionTabs({ activeSection, onSectionChange, className }: Secti
   const { t } = useTranslation('tasks');
 
   return (
-    <div
+    <StoSegmentTabs
+      value={activeSection}
+      items={SECTION_TABS.map((tab) => ({
+        value: tab.value,
+        label: t(tab.i18nKey),
+        icon: tab.icon,
+      }))}
+      onValueChange={onSectionChange}
+      ariaLabel={t('myTask.sectionTabs.aria')}
       className={className}
-      role="tablist"
-      aria-label={t('myTask.sectionTabs.aria')}
-    >
-      <div className={myTaskSectionTabsTrackClass}>
-        {SECTION_TABS.map((tab) => {
-          const isActive = activeSection === tab.value;
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => onSectionChange(tab.value)}
-              className={myTaskSectionTabClass(isActive)}
-            >
-              <Icon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
-              {t(tab.i18nKey)}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    />
   );
 }

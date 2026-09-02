@@ -13,7 +13,6 @@ const PROTECTED_EXACT = new Set([
   'vite.config.sclaw.ts',
   'scripts/dev-proxy.mjs',
   'scripts/ensure-dev-proxy.mjs',
-  'scripts/external-services.mjs',
   'scripts/sso-env.mjs',
   'contracts/external-services.v1.json',
   'contracts/dev-proxy.v1.json',

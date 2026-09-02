@@ -31,6 +31,7 @@ import { inspectTranscript } from './chat-runtime-inspection';
 import { logUserSend } from '../../shared/user-send-log';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
+import { isClaudeRuntimeControlText } from '../../shared/claude-runtime-control-text';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -428,6 +429,19 @@ function isHistoryBridgeUserText(text: string): boolean {
   return text.includes(HISTORY_BRIDGE_SYSTEM_MARKER);
 }
 
+function isClaudeRuntimeControlAssistantEntry(messagePayload: unknown): boolean {
+  const blocks = extractClaudeMessageBlocks(messagePayload);
+  if (blocks.length === 0) {
+    return typeof messagePayload === 'string' && isClaudeRuntimeControlText(messagePayload);
+  }
+  const hasNonText = blocks.some((block) => block.type && block.type !== 'text');
+  if (hasNonText) return false;
+  const combined = blocks
+    .map((block) => (typeof block.text === 'string' ? block.text : ''))
+    .join('\n');
+  return isClaudeRuntimeControlText(combined);
+}
+
 function shouldHideClaudeUserMessage(
   entryRecord: Record<string, unknown>,
   messagePayload: unknown,
@@ -447,6 +461,10 @@ function shouldHideClaudeUserMessage(
     .map((block) => (typeof block.text === 'string' ? block.text : ''))
     .filter(Boolean)
     .join('\n');
+
+  if (combinedText && isClaudeRuntimeControlText(combinedText)) {
+    return true;
+  }
 
   if (combinedText && (isSkillReplayText(combinedText) || isHistoryBridgeUserText(combinedText))) {
     return true;
@@ -517,7 +535,9 @@ async function loadPersistedClaudeMessagesForSdkSession(
 
   return sessionMessages
     .filter((entry) => {
-      if (entry.type === 'assistant') return true;
+      if (entry.type === 'assistant') {
+        return !isClaudeRuntimeControlAssistantEntry(entry.message);
+      }
       if (entry.type !== 'user') return false;
       const entryRecord = entry as Record<string, unknown>;
       return shouldKeepClaudeWorkflowToolResult(entry.message)

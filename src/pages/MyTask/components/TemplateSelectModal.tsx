@@ -26,22 +26,6 @@ interface TemplateSelectModalProps {
   onSelect: (item: RecommendItem) => void;
 }
 
-/** 由推荐条目生成写入任务描述的文案 */
-export function buildRecommendTaskMessage(item: RecommendItem): string {
-  switch (item.item_type) {
-    case 'workflow_template':
-      return `/${item.title}`.trim();
-    case 'workflow_instance':
-      return `帮我执行 id 为：${item.item_ref_id} 的工作流 【${item.title}】`;
-    case 'prompt':
-      return (item.content || item.title || '').trim();
-    case 'skill':
-      return (item.skill_default_prompt || item.title || '').trim();
-    default:
-      return (item.title || '').trim();
-  }
-}
-
 export function TemplateSelectModal({
   open,
   onClose,
@@ -67,7 +51,7 @@ export function TemplateSelectModal({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
+          className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center px-4"
           onClick={onClose}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -75,7 +59,7 @@ export function TemplateSelectModal({
           transition={{ duration: 0.2, ease: 'easeInOut' }}
         >
           <motion.div
-            className="w-full max-w-[min(728px,100%)] bg-background rounded-[22px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
+            className="sto-overlay sto-overlay--dialog w-full max-w-[min(728px,100%)] rounded-[var(--sto-dialog-radius)] border flex flex-col max-h-[calc(100vh-4rem)]"
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

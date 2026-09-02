@@ -5,6 +5,13 @@ import { describe, expect, it } from 'vitest';
 const resources = join(process.cwd(), 'resources', 'app-templates');
 
 describe('built-in app template resources', () => {
+  it.each(['site-minimal', 'assets-minimal'])('%s 配置 STO 私有包 scope registry', (templateId) => {
+    const npmrc = readFileSync(join(resources, templateId, '.npmrc'), 'utf8');
+
+    expect(npmrc).toContain('@sto:registry=http://snpm-registry.sto.cn');
+    expect(npmrc).toContain('@alifd:registry=http://snpm-registry.sto.cn');
+  });
+
   for (const pageType of ['site', 'assets'] as const) {
     it(`${pageType}-minimal 提供可发布的根目录 manifest`, () => {
       const templateId = `${pageType}-minimal`;
@@ -31,11 +38,11 @@ describe('built-in app template resources', () => {
     );
 
     expect(sitePackage.dependencies).toMatchObject({
-      '@sto/sclaw-plugin-sso-auth': '0.1.3',
+      '@sto/sclaw-plugin-sso-auth': '0.1.5',
     });
     expect(siteMain).toContain('bootstrapInstalledPlugins');
     expect(assetsPackage.dependencies).toMatchObject({
-      '@sto/sclaw-plugin-sso-auth': '0.1.3',
+      '@sto/sclaw-plugin-sso-auth': '0.1.5',
     });
     expect(assetsMain).toContain('bootstrapSsoAuth');
     expect(assetsMain).toContain("runtimeMode === 'local'");

@@ -98,26 +98,26 @@ describe('TestRunDrawer trial mode', () => {
 
     expect(screen.getByTestId('trial-run-header')).not.toHaveClass('border-b');
     expect(screen.getByTestId('trial-run-notice')).toHaveClass(
-      'border-[#FFD6BA]',
-      'bg-[#FFF1E8]',
+      'border-[var(--sto-feedback-notice-border)]',
+      'bg-[var(--sto-feedback-notice-background)]',
     );
-    expect(screen.getByTestId('trial-run-notice-icon')).toHaveClass('text-[#FF6700]');
+    expect(screen.getByTestId('trial-run-notice-icon')).toHaveClass('text-[var(--sto-feature-brand-legacy)]');
     fireEvent.click(screen.getByRole('button', { name: '关闭运行提示' }));
     expect(screen.queryByTestId('trial-run-notice')).not.toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it.each([
-    ['running', 'text-[#FF6700]'],
-    ['cancelled', 'text-[#FAAD14]'],
-    ['failed', 'text-[#FA3C3C]'],
-    ['completed', 'text-[#00B54B]'],
+    ['running', 'text-[var(--sto-feature-brand-legacy)]'],
+    ['cancelled', 'text-[var(--sto-chat-error-icon)]'],
+    ['failed', 'text-[var(--sto-feedback-error-foreground)]'],
+    ['completed', 'text-[var(--sto-workflow-trial-success)]'],
   ] as const)('uses the approved semantic color for %s', (status, colorClass) => {
     renderDrawer(status);
 
     expect(screen.getByTestId('trial-run-status')).toHaveClass(
-      'border-[#E5E6EB]',
-      'bg-white',
+      'sto-card',
+      'sto-card--flat',
       colorClass,
     );
   });
@@ -132,9 +132,12 @@ describe('TestRunDrawer trial mode', () => {
 
     expect(screen.getAllByTestId('trial-run-timeline-dot')).toHaveLength(3);
     screen.getAllByTestId('trial-run-timeline-dot').forEach((dot) => {
-      expect(dot).toHaveClass('bg-[#C9CDD4]');
+      expect(dot).toHaveClass('bg-[var(--sto-border-heavy)]');
     });
     expect(screen.getAllByTestId('trial-run-timeline-line')).toHaveLength(2);
+    screen.getAllByTestId('trial-run-timeline-line').forEach((line) => {
+      expect(line).toHaveClass('bg-[var(--sto-border-default)]');
+    });
   });
 
   it('renders consecutive answer deltas as one realtime output row', () => {

@@ -86,7 +86,7 @@ export function AccountSwitchMenuItems({
         <span className="flex-1 truncate">
           {switching ? t('accountSwitch.switching', '切换中…') : t('accountSwitch.menu')}
         </span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent sideOffset={4} className={subContentClassName}>
         {accountSwitchOptions.map((option) => (

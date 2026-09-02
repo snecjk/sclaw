@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import fileIcon from '@/assets/icons/file.svg';
+import { StoIconSurface } from '@/components/ui/sto-neutral-controls';
 
 type SkillIconSize = 'sm' | 'md';
 
@@ -76,20 +77,26 @@ export function SkillIcon({ icon, size = 'sm', disabled, className }: SkillIconP
       return <span className={cn(classes.text, 'leading-none')}>{trimmedIcon}</span>;
     }
 
-    return <img src={fileIcon} alt="" aria-hidden className={cn(classes.content, 'object-contain')} />;
+    return (
+      <img
+        src={fileIcon}
+        alt=""
+        aria-hidden
+        className={cn(classes.content, 'object-contain dark:invert')}
+      />
+    );
   })();
 
   return (
-    <span
+    <StoIconSurface
       className={cn(
-        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-white text-foreground',
+        'relative overflow-hidden text-foreground shadow-[0_1px_4px_rgba(15,23,42,0.05),0_4px_12px_rgba(15,23,42,0.04)] dark:shadow-none',
         classes.shell,
         disabled && 'opacity-50',
         className,
       )}
-      style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
     >
       {content}
-    </span>
+    </StoIconSurface>
   );
 }

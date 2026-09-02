@@ -32,17 +32,17 @@ html[data-sclaw-browser-open] .drag-region {
   padding: 0;
   margin: 0;
   cursor: default;
-  background: rgba(15, 23, 42, 0.12);
+  background: var(--sto-browser-backdrop);
   pointer-events: auto;
   animation: sclaw-browser-backdrop-in var(--sclaw-browser-drawer-duration) var(--sclaw-browser-drawer-ease) both;
 }
 
 @keyframes sclaw-browser-backdrop-in {
   from {
-    background: rgba(15, 23, 42, 0);
+    background: transparent;
   }
   to {
-    background: rgba(15, 23, 42, 0.12);
+    background: var(--sto-browser-backdrop);
   }
 }
 
@@ -75,8 +75,8 @@ html[data-sclaw-browser-open] .drag-region {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #f7f8fa;
-  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.12);
+  background: var(--sto-surface-canvas);
+  box-shadow: -8px 0 32px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent);
   /* clip-path — avoid transform; transform breaks Electron iframe sizing */
   animation: sclaw-browser-drawer-in var(--sclaw-browser-drawer-duration) var(--sclaw-browser-drawer-ease) both;
 }
@@ -109,8 +109,8 @@ html[data-sclaw-browser-open] .drag-region {
   flex-shrink: 0;
   min-height: var(--sclaw-browser-toolbar-h);
   padding: 8px var(--sto-content-pad-x, 16px) 8px var(--sclaw-browser-toolbar-pad-start, var(--sto-content-pad-x, 16px));
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: #fff;
+  border-bottom: 1px solid color-mix(in srgb, var(--sto-feature-foreground-strong) 8%, transparent);
+  background: var(--sto-card-panel-bg);
   pointer-events: auto;
   -webkit-app-region: no-drag;
 }
@@ -126,7 +126,7 @@ html[data-sclaw-browser-open] .drag-region {
 .sclaw-browser-toolbar__sidebar-toggle {
   width: 28px;
   height: 28px;
-  color: #64748b;
+  color: var(--sto-feature-secondary-foreground);
 }
 
 .sclaw-browser-toolbar__back {
@@ -139,7 +139,7 @@ html[data-sclaw-browser-open] .drag-region {
   font: inherit;
   font-size: 13px;
   font-weight: 500;
-  color: #64748b;
+  color: var(--sto-feature-secondary-foreground);
   cursor: pointer;
   white-space: nowrap;
   transition: color 0.12s ease;
@@ -148,13 +148,13 @@ html[data-sclaw-browser-open] .drag-region {
 }
 
 .sclaw-browser-toolbar__back:hover {
-  color: #0f172a;
+  color: var(--sto-feature-foreground-strong);
 }
 
 .sclaw-browser-toolbar__title {
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--sto-feature-foreground-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -171,7 +171,7 @@ html[data-sclaw-browser-open] .drag-region {
   font: inherit;
   font-size: 13px;
   font-weight: 500;
-  color: #ff6700;
+  color: var(--sto-feature-brand-legacy);
   cursor: pointer;
   text-decoration: none;
   pointer-events: auto;
@@ -199,15 +199,15 @@ html[data-sclaw-browser-open] .drag-region {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #64748b;
+  color: var(--sto-feature-secondary-foreground);
   cursor: pointer;
   transition: color 0.12s ease, background 0.12s ease;
 }
 
 .sclaw-browser-toolbar__chat:hover,
 .sclaw-browser-toolbar__chat--active {
-  color: #ff6700;
-  background: rgba(255, 103, 0, 0.08);
+  color: var(--sto-feature-brand-legacy);
+  background: color-mix(in srgb, var(--sto-feature-brand-legacy) 8%, transparent);
 }
 
 .sclaw-browser-split {
@@ -217,7 +217,7 @@ html[data-sclaw-browser-open] .drag-region {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: #fff;
+  background: var(--sto-card-panel-bg);
 }
 
 .sclaw-browser-split--browser-only {
@@ -254,15 +254,15 @@ body.sclaw-browser-split-dragging * {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #f7f8fa;
+  background: var(--sto-surface-canvas);
 }
 
 .sclaw-browser-split__chat {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-left: 1px solid rgba(15, 23, 42, 0.08);
-  background: #fff;
+  border-left: 1px solid color-mix(in srgb, var(--sto-feature-foreground-strong) 8%, transparent);
+  background: var(--sto-card-panel-bg);
 }
 
 .sclaw-browser-split__resizer {
@@ -275,7 +275,7 @@ body.sclaw-browser-split-dragging * {
 }
 
 .sclaw-browser-split__resizer:hover {
-  background: rgba(255, 103, 0, 0.25);
+  background: color-mix(in srgb, var(--sto-feature-brand-legacy) 25%, transparent);
 }
 
 .sclaw-browser-embed-chat {
@@ -283,7 +283,7 @@ body.sclaw-browser-split-dragging * {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: #fff;
+  background: var(--sto-card-panel-bg);
 }
 
 .sclaw-browser-embed-chat__header {
@@ -293,7 +293,7 @@ body.sclaw-browser-split-dragging * {
   gap: 6px;
   flex-shrink: 0;
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--sto-feature-foreground-strong) 8%, transparent);
 }
 
 .sclaw-browser-embed-chat__sessions {
@@ -314,8 +314,8 @@ body.sclaw-browser-split-dragging * {
   height: 28px;
   border: 0;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.04);
-  color: #64748b;
+  background: color-mix(in srgb, var(--sto-feature-foreground-strong) 4%, transparent);
+  color: var(--sto-feature-secondary-foreground);
   cursor: pointer;
   font: inherit;
   line-height: 1;
@@ -330,26 +330,26 @@ body.sclaw-browser-split-dragging * {
 
 .sclaw-browser-embed-chat__session-btn:hover,
 .sclaw-browser-embed-chat__session-picker:hover {
-  color: #0f172a;
-  background: rgba(15, 23, 42, 0.08);
+  color: var(--sto-feature-foreground-strong);
+  background: color-mix(in srgb, var(--sto-feature-foreground-strong) 8%, transparent);
 }
 
 .sclaw-browser-embed-chat__session-picker[data-state='open'] {
-  color: #ff6700;
-  background: rgba(255, 103, 0, 0.08);
+  color: var(--sto-feature-brand-legacy);
+  background: color-mix(in srgb, var(--sto-feature-brand-legacy) 8%, transparent);
 }
 
 .sclaw-browser-embed-chat__title {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--sto-feature-foreground-strong);
 }
 
 .sclaw-browser-embed-chat__subtitle {
   margin: 2px 0 0;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--sto-feature-muted-foreground);
 }
 
 .sclaw-browser-embed-chat__close {
@@ -361,13 +361,13 @@ body.sclaw-browser-split-dragging * {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #94a3b8;
+  color: var(--sto-feature-muted-foreground);
   cursor: pointer;
 }
 
 .sclaw-browser-embed-chat__close:hover {
-  color: #475569;
-  background: rgba(15, 23, 42, 0.06);
+  color: var(--sto-feature-hover-foreground);
+  background: color-mix(in srgb, var(--sto-feature-foreground-strong) 6%, transparent);
 }
 
 .sclaw-browser-embed-chat__scroll-host {
@@ -391,15 +391,21 @@ body.sclaw-browser-split-dragging * {
   gap: 8px;
   flex-shrink: 0;
   padding: 8px 12px;
-  border-top: 1px solid rgba(239, 68, 68, 0.15);
-  background: rgba(239, 68, 68, 0.06);
+  border-top: 1px solid color-mix(in srgb, var(--sto-danger-primary) 15%, transparent);
+  background: color-mix(in srgb, var(--sto-danger-primary) 6%, transparent);
 }
 
 .sclaw-browser-embed-chat__composer {
   flex-shrink: 0;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  border-top: 1px solid color-mix(in srgb, var(--sto-feature-foreground-strong) 8%, transparent);
   padding-top: 10px;
-  background: #fff;
+  background: var(--sto-card-panel-bg);
+}
+
+.sclaw-browser-drawer__frame-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .sclaw-browser-drawer__frame {
@@ -411,6 +417,33 @@ body.sclaw-browser-split-dragging * {
   border: 0;
 }
 
+.sclaw-browser-drawer__frame-host .sclaw-browser-drawer__frame {
+  min-height: 560px;
+}
+
+.data-center-finance-embed {
+  min-height: max(560px, calc(100vh - 280px));
+}
+
+.data-center-finance-embed__frame-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: inherit;
+}
+
+.data-center-finance-embed__frame-host .sclaw-browser-drawer__frame,
+.data-center-finance-embed__frame-host webview.sclaw-browser-drawer__frame--webview {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: inherit;
+  height: 100%;
+  border: none;
+  outline: none;
+}
+
 webview.sclaw-browser-drawer__frame--webview {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 560px;
 }

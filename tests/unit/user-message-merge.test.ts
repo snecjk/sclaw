@@ -395,6 +395,48 @@ describe('user-message-merge', () => {
     expect(merged.filter((message) => message.role === 'user')).toHaveLength(1);
   });
 
+  it('does not fill the user bubble from a truncated session title', () => {
+    const truncatedLabel = '1. 帮我扫一下我本地 ~/Documents/project/robot/sclaw-portal…';
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '分析完成',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': truncatedLabel },
+    );
+
+    expect(merged).toEqual(enriched);
+    expect(merged.some((message) => message.id?.startsWith('session-label-user-'))).toBe(false);
+  });
+
+  it('does not fill from the session title while older history pages remain', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '分析完成',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '客户成本分析 创建工作流' },
+      undefined,
+      { historyHasMore: true },
+    );
+
+    expect(merged).toEqual(enriched);
+  });
+
   it.each([
     '执行技能冷笑话工作流工作流（Claude）',
     '执行3日看天计划工作流（OpenClaw）',

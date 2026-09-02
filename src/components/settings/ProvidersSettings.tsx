@@ -1115,7 +1115,7 @@ function ProviderCard({
                             type="checkbox"
                             checked={fallbackProviderIds.includes(candidate.account.id)}
                             onChange={() => toggleFallbackProvider(candidate.account.id)}
-                            className="rounded border-black/20 dark:border-white/20 text-link focus:ring-ring/40"
+                            className="sto-native-checkbox rounded border-black/20 text-link focus:ring-ring/40"
                           />
                           <span className="font-medium group-hover/label:text-link transition-colors">{candidate.account.label}</span>
                           <span className="text-[12px] text-muted-foreground">

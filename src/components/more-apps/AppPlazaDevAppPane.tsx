@@ -140,6 +140,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
                 showThinking={showThinking}
                 scrollRef={scrollRef}
                 variant="home"
+                sessionKey={sessionKey}
                 onReachStart={() => {
                   void useChatStore.getState().loadOlderHistory(sessionKey);
                 }}
@@ -239,12 +240,12 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     void startRun();
   }, [startRun]);
   const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
-  const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
+  const showCloudActions = !isTemplateWorkspace && shouldShowStoCloudActions(listedApp, stoStatus);
   const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable, stoStatus);
-  const stoCloudPipelineReady = canUseStoCloudPipeline(listedApp, stoStatus);
+  const stoCloudPipelineReady = !isTemplateWorkspace && canUseStoCloudPipeline(listedApp, stoStatus);
   const canDeploy = stoCloudPipelineReady;
   const deploy = useStoAppDeploy({
-    workspaceId,
+    workspaceId: isTemplateWorkspace ? '' : workspaceId,
     appCode: stoStatus?.appCode,
     appName,
     pageType,
@@ -286,11 +287,14 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   }, []);
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId || isTemplateWorkspace) {
+      setStoStatus(null);
+      return;
+    }
     void getStoAppStatus(workspaceId)
       .then((res) => setStoStatus(res))
       .catch(() => setStoStatus(null));
-  }, [workspaceId]);
+  }, [workspaceId, isTemplateWorkspace]);
 
   useAppDevStatusPoll(workspaceId, setStatus, active);
 

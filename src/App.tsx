@@ -28,6 +28,7 @@ import { FloatIcon } from './pages/FloatIcon';
 import AppDevIdePage from './pages/AppDev/AppDevIdePage';
 import { WorkflowTestPage } from './pages/Workflow';
 import { DataCenter } from './pages/DataCenter';
+import { ReportHistoryPage } from './pages/DataCenter/reports/ReportHistoryPage';
 import { TutorialDetailPage } from './pages/LearningCenter/TutorialDetailPage';
 import { LearningCenterPage } from './pages/LearningCenter/LearningCenterPage';
 import { useSettingsStore } from './stores/settings';
@@ -41,6 +42,7 @@ import { isAuxiliaryWindowPath } from './lib/auxiliary-window-route';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
+import { ThemeController } from './components/theme/ThemeController';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -70,7 +72,7 @@ class ErrorBoundary extends Component<
           style={{
             padding: '40px',
             color: '#f87171',
-            background: '#0f172a',
+            background: '#0d0d0d',
             minHeight: '100vh',
             fontFamily: 'monospace',
           }}
@@ -80,7 +82,7 @@ class ErrorBoundary extends Component<
             style={{
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-all',
-              background: '#1e293b',
+              background: '#212121',
               padding: '16px',
               borderRadius: '8px',
               fontSize: '14px',
@@ -119,7 +121,6 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const initSettings = useSettingsStore((state) => state.init);
-  const theme = useSettingsStore((state) => state.theme);
   const language = useSettingsStore((state) => state.language);
   const setupComplete = useSettingsStore((state) => state.setupComplete);
   const initGateway = useGatewayStore((state) => state.init);
@@ -278,21 +279,6 @@ function App() {
     };
   }, []);
 
-  // Apply theme
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
-
   useEffect(() => {
     applyGatewayTransportPreference();
   }, []);
@@ -311,10 +297,11 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <TooltipProvider delayDuration={300}>
-      <AppShellLayoutProvider>
-        <WorkflowCompletionNotifier />
-          <Routes>
+      <ThemeController>
+        <TooltipProvider delayDuration={300}>
+          <AppShellLayoutProvider>
+            <WorkflowCompletionNotifier />
+            <Routes>
             {/* SSO Login page */}
             <Route path="/login" element={<Login />} />
 
@@ -342,21 +329,23 @@ function App() {
               <Route path="/subscriptions" element={<Subscriptions />} />
               <Route path="/my-tasks" element={<MyTask />} />
               <Route path="/data-center" element={<DataCenter />} />
+              <Route path="/data-center/reports/history" element={<ReportHistoryPage />} />
               <Route path="/learning-center" element={<LearningCenterPage />} />
               <Route path="/learning-center/tutorial/:tutorialId" element={<TutorialDetailPage />} />
               <Route path="/workflow/*" element={<WorkflowTestPage />} />
               <Route path="/settings/*" element={<Settings />} />
             </Route>
-          </Routes>
+            </Routes>
 
-{/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
-          {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
-          <JsBridgeHostPortal />
-          {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-            <UserWatermark />
-          ) : null}
-        </AppShellLayoutProvider>
-      </TooltipProvider>
+            {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
+            {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
+            <JsBridgeHostPortal />
+            {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
+              <UserWatermark />
+            ) : null}
+          </AppShellLayoutProvider>
+        </TooltipProvider>
+      </ThemeController>
     </ErrorBoundary>
   );
 }

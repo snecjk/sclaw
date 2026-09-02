@@ -17,9 +17,9 @@ import {
 type DialogStep = 'preview' | 'too_long';
 
 const SHARE_DIALOG_PANEL_CLASS =
-  'mx-4 w-full max-w-[480px] rounded-2xl border border-[#E8EAEF] bg-white p-6 text-foreground shadow-2xl focus:outline-none dark:border-border dark:bg-card';
+  'mx-4 w-full max-w-[480px] rounded-2xl border border-[#E8EAEF] bg-white p-6 text-foreground shadow-2xl focus:outline-none dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)] dark:text-[var(--sto-text-primary)]';
 const SHARE_DIALOG_CONTENT_CLASS =
-  'box-border flex w-full flex-col gap-3 self-stretch rounded-xl border border-[#E8EAEF] bg-[#FAFBFC] px-4 py-3 dark:border-border dark:bg-muted/40';
+  'box-border flex w-full flex-col gap-3 self-stretch rounded-xl border border-[#E8EAEF] bg-[#FAFBFC] px-4 py-3 dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]';
 
 type TooLongPayload = {
   defaultMsg: string;

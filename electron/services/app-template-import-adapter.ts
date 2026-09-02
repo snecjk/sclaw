@@ -9,7 +9,7 @@ import type {
 type JsonObject = Record<string, unknown>;
 type StringMap = Record<string, string>;
 
-const PLATFORM_SCRIPT_NAMES = ['dev', 'build', 'preview', 'sclaw:services'] as const;
+const PLATFORM_SCRIPT_NAMES = ['dev', 'build', 'preview'] as const;
 
 function stringMap(value: unknown): StringMap {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};

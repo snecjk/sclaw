@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { parseThinkingTurnLayout } from '@/pages/Chat/thinking-turn-segments';
 import {
   dedupePhaseTextsAgainstFinalReply,
+  isLikelyDeliverableReply,
   isLikelyPlanningNarration,
   isLikelyUserClarificationReply,
+  mergeFinalReplyCandidate,
   shouldPromoteTextToFinalReply,
 } from '@/pages/Chat/thinking/classify-text';
 
@@ -52,6 +54,20 @@ describe('isLikelyPlanningNarration (English)', () => {
     const table = '| Col A | Col B |\n| --- | --- |\n| 1 | 2 |';
     expect(isLikelyPlanningNarration(table)).toBe(false);
   });
+
+  it('does not treat a multi-section report as planning just because a line mentions 使用工具', () => {
+    const report = [
+      '## 八月改动',
+      '',
+      '| 仓库 | 工时 |',
+      '| --- | --- |',
+      '| sto-claw | 140 |',
+      '',
+      '本月技能广场与工作流发送均使用工具完成验证。',
+    ].join('\n');
+    expect(isLikelyPlanningNarration(report)).toBe(false);
+    expect(isLikelyDeliverableReply(report)).toBe(true);
+  });
 });
 
 describe('isLikelyPlanningNarration (Chinese tool planning)', () => {
@@ -89,6 +105,34 @@ describe('shouldPromoteTextToFinalReply', () => {
     expect(
       shouldPromoteTextToFinalReply(text, true, 0, 0, false),
     ).toBe(false);
+  });
+
+  it('promotes mid-turn deliverable reports even when more tools follow', () => {
+    const table = '| 仓库 | 工时 |\n| --- | --- |\n| sto-claw | 140 |';
+    expect(shouldPromoteTextToFinalReply(table, false, 1, 4, true)).toBe(true);
+    expect(shouldPromoteTextToFinalReply(table, true, 1, 4, true)).toBe(true);
+  });
+});
+
+describe('mergeFinalReplyCandidate', () => {
+  it('keeps a deliverable report when a short trailing note arrives later', () => {
+    const report = '| 仓库 | 工时 |\n| --- | --- |\n| sto-claw | 140 |';
+    expect(mergeFinalReplyCandidate(report, '已修正。')).toContain('sto-claw');
+    expect(mergeFinalReplyCandidate(report, '已修正。')).toContain('已修正。');
+  });
+
+  it('concatenates distinct deliverable chunks', () => {
+    const first = '| A | B |\n| --- | --- |\n| 1 | 2 |';
+    const second = '## 明细\n\n技能广场与定时任务已完成。';
+    const merged = mergeFinalReplyCandidate(first, second);
+    expect(merged).toContain('| 1 | 2 |');
+    expect(merged).toContain('技能广场');
+  });
+
+  it('lets a trailing clarification replace a non-deliverable draft', () => {
+    const clarification =
+      '好的，客户发件总部科目成本查询。还需要确认两个信息：\n\n查询月份：哪个月？';
+    expect(mergeFinalReplyCandidate('先看一下命令。', clarification)).toBe(clarification);
   });
 });
 
@@ -132,6 +176,28 @@ describe('parseThinkingTurnLayout text ownership (acceptance)', () => {
         (s) => s.kind === 'phase-text' && s.text.includes('让我查看'),
       ),
     ).toBe(true);
+  });
+
+  it('does not promote Claude SDK control lines to the reply bubble', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'checking files' },
+          { type: 'tool_use', id: 't1', name: 'Bash', input: {} },
+          { type: 'text', text: 'No response requested.' },
+        ],
+      },
+    ];
+    const layout = parseThinkingTurnLayout(messages, { isLiveStream: false });
+    expect(layout.finalReplyText).toBeNull();
+    expect(layout.segments.some((s) => s.kind === 'phase-text' && s.text.includes('No response requested'))).toBe(false);
+
+    const interrupted = parseThinkingTurnLayout(
+      [{ role: 'assistant', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] }],
+      { isLiveStream: false },
+    );
+    expect(interrupted.finalReplyText).toBeNull();
   });
 
   it('ordinary deliverable reply becomes final reply', () => {

@@ -1027,7 +1027,7 @@ export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[var(--sto-shadow-brand-icon)]">
               <Bot className="h-5 w-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">

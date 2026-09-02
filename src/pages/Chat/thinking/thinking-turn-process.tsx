@@ -83,7 +83,7 @@ const thinkingPanelBodyGridClass = (expanded: boolean, animate: boolean) =>
 /** §5.6 / §6.2：箭头 200ms ease；收起向下，展开向上（rotate-180） */
 const thinkingPanelChevronClass = (expanded: boolean, animate: boolean) =>
   cn(
-    'h-3.5 w-3.5 shrink-0 opacity-70 transition-transform',
+    'h-3.5 w-3.5 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)] transition-transform',
     animate ? 'duration-200 ease-[ease]' : 'transition-none',
     expanded && 'rotate-180',
   );
@@ -456,11 +456,16 @@ function TimelineBody({
   const ThinkingIcon = resolveChatThinkingIcon();
   const sessionKey = useChatStore((state) => state.currentSessionKey);
   const toolEventCount = useChatSessionRuntimeView(sessionKey).toolEventCount;
-  const folded = foldThinkingTimelineTools(timeline);
+  // 完成态点开摘要后不再裁工具卡：折叠只为流式降载，展开必须能看完全部调用
+  const folded = foldThinkingTimelineTools(
+    timeline,
+    readonlyExpanded ? Number.POSITIVE_INFINITY : undefined,
+  );
   const displayTimeline = folded.visible;
   const displayToolCount = resolveTurnToolCount(toolEventCount, folded.totalToolCount);
   const showCollapsedToolSummary =
-    folded.hiddenToolCount > 0 || displayToolCount > folded.totalToolCount;
+    !readonlyExpanded
+    && (folded.hiddenToolCount > 0 || displayToolCount > folded.totalToolCount);
 
   const streamingStatusByKey = useMemo(() => {
     const map = new Map<string, StreamingTool['status']>();
@@ -512,6 +517,15 @@ function TimelineBody({
               isTypewriterActive={reveal.isTypewriterActive}
               resetKey={blockResetKey}
               onRevealComplete={markBlockRevealFinished}
+            />
+          );
+        }
+
+        if (item.type === 'narration') {
+          return (
+            <PhaseTextBlock
+              key={blockResetKey}
+              text={item.content}
             />
           );
         }

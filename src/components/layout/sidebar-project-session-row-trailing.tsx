@@ -5,8 +5,9 @@
  */
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import sidebarPinIcon from '@/assets/icons/sidebar-pin.svg';
-import sidebarUnpinIcon from '@/assets/icons/sidebar-unpin.svg';
+import sidebarPinIcon from '@/assets/icons/sidebar-pin.svg?raw';
+import sidebarUnpinIcon from '@/assets/icons/sidebar-unpin.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import { SidebarChannelSourceBadge } from '@/components/layout/sidebar-channel-source-badge';
 import type { SidebarChannelSource } from '@/lib/session-channel-source';
 import {
@@ -78,7 +79,10 @@ export function SidebarProjectSessionRowTrailing({
       >
         {channelSource ? <SidebarChannelSourceBadge source={channelSource} className="ml-0" /> : null}
         {channelSource && isPinned ? (
-          <img src={sidebarPinIcon} alt="" className="h-4 w-4 shrink-0" aria-hidden />
+          <ThemedMonochromeIcon
+            source={sidebarPinIcon}
+            className="h-4 w-4 text-[var(--sto-sidebar-text-icon)]"
+          />
         ) : !channelSource && showUnreadDot ? (
           <span
             className={cn(sidebarUnreadDotClass, 'shrink-0')}
@@ -87,7 +91,10 @@ export function SidebarProjectSessionRowTrailing({
         ) : !channelSource && hasStatusMarker ? (
           <SidebarRecentSessionStatus sessionKey={sessionKey} />
         ) : !channelSource && isPinned ? (
-          <img src={sidebarPinIcon} alt="" className="h-4 w-4 shrink-0" aria-hidden />
+          <ThemedMonochromeIcon
+            source={sidebarPinIcon}
+            className="h-4 w-4 text-[var(--sto-sidebar-text-icon)]"
+          />
         ) : null}
       </div>
       <div
@@ -124,11 +131,14 @@ export function SidebarProjectSessionRowTrailing({
                   onPin();
                 }}
               >
-                <img
-                  src={isPinned ? sidebarUnpinIcon : sidebarPinIcon}
-                  alt=""
-                  className="h-4 w-4 shrink-0"
-                  aria-hidden
+                <ThemedMonochromeIcon
+                  source={isPinned ? sidebarUnpinIcon : sidebarPinIcon}
+                  className={cn(
+                    'h-4 w-4 shrink-0',
+                    isPinned
+                      ? 'sto-icon--neutral-quiet'
+                      : 'sto-icon--neutral',
+                  )}
                 />
                 {isPinned ? t('sidebar.unpinInProject') : t('sidebar.pinInProject')}
               </DropdownMenuItem>

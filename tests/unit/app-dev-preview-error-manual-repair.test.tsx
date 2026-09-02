@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
+  getStoAppStatus: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -84,7 +85,7 @@ vi.mock('@/lib/app-dev-api', () => ({
   continueStoAppMerge: vi.fn(),
   drainAppErrors: vi.fn().mockResolvedValue([]),
   getAppDevEnvironment: vi.fn().mockResolvedValue({ gitAvailable: false }),
-  getStoAppStatus: vi.fn().mockResolvedValue(null),
+  getStoAppStatus: mocks.getStoAppStatus,
   pullStoApp: vi.fn(),
   publishAppTemplateWorkspace: vi.fn(),
   pushStoApp: vi.fn(),
@@ -118,6 +119,7 @@ vi.mock('@/components/app-dev/AppDevRunStatusMenu', () => ({ AppDevRunStatusMenu
 vi.mock('@/components/ui/confirm-dialog', () => ({ ConfirmDialog: () => null }));
 vi.mock('@/components/more-apps/TemplatePublishConfirmDialog', () => ({ TemplatePublishConfirmDialog: () => null }));
 vi.mock('@/components/more-apps/TemplateProjectUploadControl', () => ({ TemplateProjectUploadControl: () => null }));
+vi.mock('@/components/more-apps/BuiltinTemplateDebugControl', () => ({ BuiltinTemplateDebugControl: () => null }));
 vi.mock('@/stores/chat/chat-flow-log', () => ({ logChatFlow: vi.fn() }));
 vi.mock('@/stores/chat/session-identity', () => ({ getAgentIdFromSessionKey: () => 'app-dev' }));
 
@@ -147,5 +149,19 @@ describe('app development preview error repair', () => {
 
     expect(screen.getByText('runtime boom')).toBeInTheDocument();
     expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not show or query STO application status in a template workspace', async () => {
+    render(<AppPlazaDevAppPane
+      tab={{ id: 'template-tab', kind: 'template', workspaceId: 'ws-1', title: '模板：标准 Site 模版' }}
+      active
+    />);
+
+    expect(screen.queryByText('STO 未绑定')).not.toBeInTheDocument();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.getStoAppStatus).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,24 @@
+{
+  "light": {
+    "canvas": "#f7f8fa",
+    "panel": "#fafafa",
+    "sidebar": "#ededed",
+    "elevated": "#ffffff",
+    "textPrimary": "#1d2129",
+    "textSecondary": "#4e5969",
+    "textTertiary": "#86909c",
+    "border": "#e5e6eb",
+    "borderStrong": "#c9cdd4"
+  },
+  "dark": {
+    "canvas": "#0D0D0D",
+    "panel": "#181818",
+    "sidebar": "#212121",
+    "elevated": "#282828",
+    "textPrimary": "#DFDFDF",
+    "textSecondary": "rgba(255, 255, 255, 0.70)",
+    "textTertiary": "rgba(255, 255, 255, 0.50)",
+    "border": "rgba(255, 255, 255, 0.08)",
+    "borderStrong": "rgba(255, 255, 255, 0.16)"
+  }
+}

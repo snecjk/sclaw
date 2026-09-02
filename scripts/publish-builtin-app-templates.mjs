@@ -73,5 +73,5 @@ async function publishBuiltin({ templateId, pageType, name }) {
   );
 }
 
-await publishBuiltin({ templateId: 'site-minimal', pageType: 'site', name: '最简独立站点' });
-await publishBuiltin({ templateId: 'assets-minimal', pageType: 'assets', name: '最简托管应用' });
+await publishBuiltin({ templateId: 'site-minimal', pageType: 'site', name: '标准 Site 模版' });
+await publishBuiltin({ templateId: 'assets-minimal', pageType: 'assets', name: '标准 Assets 模版' });

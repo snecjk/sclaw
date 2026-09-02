@@ -708,20 +708,22 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
 }
 
 function boundaryAtEditorEnd(root: HTMLElement): PlainTextBoundary {
-  let lastText: Text | null = null;
-  const walk = (node: Node) => {
+  const findLastText = (node: Node): Text | null => {
     if (node.nodeType === Node.TEXT_NODE) {
-      if (stripComposerCaretAnchor(node.textContent ?? '').length > 0) {
-        lastText = node as Text;
-      }
-      return;
+      return stripComposerCaretAnchor(node.textContent ?? '').length > 0
+        ? node as Text
+        : null;
     }
-    if (node instanceof HTMLElement) {
-      if (isInlineTokenSpan(node)) return;
-      node.childNodes.forEach(walk);
+    if (!(node instanceof HTMLElement) || isInlineTokenSpan(node)) return null;
+    const children = Array.from(node.childNodes);
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const match = findLastText(children[index]);
+      if (match) return match;
     }
+    return null;
   };
-  root.childNodes.forEach(walk);
+
+  const lastText = findLastText(root);
   if (lastText) {
     return { node: lastText, offset: lastText.data.length };
   }

@@ -31,7 +31,6 @@ export function Sprite() {
 
   // Store initialization
   const initSettings = useSettingsStore((s) => s.init);
-  const theme = useSettingsStore((s) => s.theme);
   const language = useSettingsStore((s) => s.language);
   const initGateway = useGatewayStore((s) => s.init);
 
@@ -55,20 +54,6 @@ export function Sprite() {
       i18n.changeLanguage(language);
     }
   }, [language]);
-
-  // Apply theme (same as App.tsx)
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
 
   // Scroll to bottom when streaming
   useEffect(() => {

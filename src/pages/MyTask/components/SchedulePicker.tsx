@@ -523,7 +523,7 @@ function TimeRowAction({
       onClick={onClick}
       className={cn(
         schedulePickerTriggerClass,
-        'h-[42px] w-[42px] shrink-0 justify-center px-0 text-[#1D2129]',
+        'h-[42px] w-[42px] shrink-0 justify-center px-0 text-[#1D2129] dark:text-[var(--sto-text-primary)]',
       )}
     >
       {children}

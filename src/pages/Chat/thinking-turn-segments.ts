@@ -38,6 +38,7 @@ import {
   findLastTextEventIndex,
   hasToolEventsAfter,
   isEchoOfUserQuery,
+  isClaudeRuntimeControlText,
   isLikelyDeliverableReply,
   mergeFinalReplyCandidate,
   reclaimLeadingDeliverablePhaseText,
@@ -361,6 +362,7 @@ function rebuildDoneSegmentsFromEvents(
     if (event.type === 'text') {
       const trimmed = event.text.trim();
       if (!trimmed) continue;
+      if (isClaudeRuntimeControlText(trimmed)) continue;
       if (
         shouldPromoteTextToFinalReply(
           trimmed,
@@ -1482,6 +1484,7 @@ export function parseThinkingTurnLayout(
     const event = mergedEvents[eventIndex]!;
     if (event.type === 'text') {
       const trimmed = event.text.trim();
+      if (!trimmed || isClaudeRuntimeControlText(trimmed)) continue;
       const toolsKnownInTurn = hasSeenToolInTurn;
       const promoteAsFinal = shouldPromoteTextToFinalReply(
         trimmed,

@@ -2889,6 +2889,14 @@ function registerSessionHandlers(): void {
     return { ok: true };
   });
 
+  ipcMain.handle('sclaw-browser:getEmbedSessionCookies', async (_, payload: { url?: string }) => {
+    const url = typeof payload?.url === 'string' ? payload.url.trim() : '';
+    if (!url) return { ok: false, cookies: [] };
+    const { listSclawEmbedSessionCookies } = await import('./services/sclaw-embed-browser-session');
+    const cookies = await listSclawEmbedSessionCookies(url);
+    return { ok: true, cookies };
+  });
+
   ipcMain.handle('sclaw-browser:hasStoPolicyAuth', async () => {
     const { hasStoPolicyAuthInEmbedSession } = await import('./services/sclaw-embed-browser-session');
     const authenticated = await hasStoPolicyAuthInEmbedSession();

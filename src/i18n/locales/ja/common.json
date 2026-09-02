@@ -133,12 +133,14 @@
         "sections": {
             "qaArtifact": "Q&A成果物",
             "drive": "マイファイル",
-            "dataSource": "データソース"
+            "dataSource": "データソース",
+            "financeReport": "マイレポート"
         },
         "sectionDescriptions": {
             "qaArtifact": "会話やワークフローの成果物プレビューから保存したファイルを管理し、追跡、ダウンロード、後続分析に利用できます。",
             "drive": "許可済みのローカルファイルとオンラインデータ資産を管理し、AI とワークフローで参照できます。",
-            "dataSource": "データソース管理はバックエンド API 公開後に接続します。"
+            "dataSource": "データソース管理はバックエンド API 公開後に接続します。",
+            "financeReport": "公開済みデータモデルを閲覧・検索します。"
         },
         "tabs": {
             "myArtifacts": "自分の成果物",
@@ -173,6 +175,20 @@
             "authorizedCount": "{{count}} 件のファイルを許可済み",
             "localSummary": "ローカルフォルダ {{folders}} 個、未分類ファイル {{files}} 個",
             "usedPercent": "{{percent}}% 使用済み"
+        },
+        "financeReport": {
+            "loading": "マイレポートを読み込み中…",
+            "loadFailedTitle": "マイレポートの読み込みに失敗しました",
+            "loadFailedDescription": "帳票一覧を取得できませんでした。ログイン後に再試行してください。",
+            "totalCount": "全 {{count}} 件",
+            "listHint": "モデル名・分類・説明で検索",
+            "searchPlaceholder": "モデル名・分類・説明を検索",
+            "emptyDescription": "公開済みデータモデルはありません",
+            "allReports": "すべての帳票",
+            "historyTitle": "帳票データ",
+            "historyDescription": "テンプレートと実行条件を選択して成果物データを確認します。",
+            "historyEmptyTitle": "先に照会してください",
+            "historyEmptyDescription": "テンプレートと実行記録を選び、「照会」をクリックすると成果物をプレビューできます。"
         },
         "feedback": {
             "loadFailed": "読み込みに失敗しました",

@@ -96,7 +96,7 @@ function QuickInputCreateModalInner({
 
   return createPortal(
     <motion.div
-      className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
+      className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-[10050] flex items-center justify-center px-4"
       onClick={() => {
         if (!submitting) onClose();
       }}
@@ -109,7 +109,7 @@ function QuickInputCreateModalInner({
         role="dialog"
         aria-modal="true"
         aria-labelledby="quick-input-create-title"
-        className="flex h-[354px] w-[460px] flex-col overflow-hidden rounded-[18px] bg-white p-0 dark:bg-background"
+        className="sto-overlay sto-overlay--dialog flex h-[354px] w-[460px] flex-col overflow-hidden rounded-[var(--sto-dialog-radius)] border p-0"
         onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -117,7 +117,7 @@ function QuickInputCreateModalInner({
         transition={{ duration: 0.2, ease: 'easeOut' }}
         data-quick-input-id={id || undefined}
       >
-        <div className="flex h-[52px] w-full shrink-0 items-center justify-between bg-white p-4 dark:bg-background">
+        <div className="flex h-[52px] w-full shrink-0 items-center justify-between bg-[var(--sto-dialog-background)] p-4">
           <h2
             id="quick-input-create-title"
             className="text-base font-semibold leading-6 text-[#1D2129] dark:text-foreground"
@@ -180,13 +180,13 @@ function QuickInputCreateModalInner({
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>
 
-        <div className="flex h-16 w-full items-center justify-end gap-4 bg-white p-4 dark:bg-background">
+        <div className="sto-dialog-footer h-16 w-full items-center p-4">
           <Button
             type="button"
             variant="outline"
             onClick={onClose}
             disabled={submitting}
-            className="box-border flex h-[34px] w-[60px] flex-col items-center justify-center rounded-xl border border-[#E5E6EB] bg-white px-4 py-2 text-sm font-medium text-[#1D2129] hover:bg-white dark:border-border dark:bg-background dark:text-foreground"
+            className="box-border flex h-[34px] w-[60px] flex-col items-center justify-center rounded-xl border border-[#E5E6EB] bg-white px-4 py-2 text-sm font-medium text-[#1D2129] hover:bg-white dark:border-[var(--sto-dialog-border)] dark:bg-[var(--sto-dialog-background)] dark:text-[var(--sto-text-primary)]"
           >
             {t('composer.quickInputCreateCancel')}
           </Button>
@@ -194,7 +194,7 @@ function QuickInputCreateModalInner({
             type="button"
             onClick={() => void handleConfirm()}
             disabled={submitting}
-            className="box-border flex h-[34px] min-w-[60px] flex-col items-center justify-center rounded-xl border-none bg-[#1D2129] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D2129]/90 dark:bg-foreground dark:text-background"
+            className="box-border flex h-[34px] min-w-[60px] flex-col items-center justify-center rounded-xl border-none bg-[#1D2129] px-4 py-2 text-sm font-medium text-white hover:bg-[#1D2129]/90 dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

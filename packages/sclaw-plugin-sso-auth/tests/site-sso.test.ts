@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPublishedSiteSsoAuth } from '../src/site-sso';
 import type { StoSsoAuthConfig } from '../src/types';
 import { TestBrowserPlatform } from './test-browser';
@@ -24,7 +24,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function jwtWithExpiration(exp: number): string {
+  const payload = Buffer.from(JSON.stringify({ exp })).toString('base64url');
+  return `header.${payload}.signature`;
+}
+
 describe('published Site SSO', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('uses an existing cookie without network or redirect', async () => {
     const platform = new TestBrowserPlatform();
     platform.cookie = 'stoToken=token-existing';
@@ -36,6 +45,32 @@ describe('published Site SSO', () => {
     expect(auth.getToken()).toBe('token-existing');
     expect(fetcher).not.toHaveBeenCalled();
     expect(platform.redirects).toEqual([]);
+  });
+
+  it('clears an expired JWT cookie and starts a fresh login', async () => {
+    const platform = new TestBrowserPlatform();
+    platform.cookie = `stoToken=${jwtWithExpiration(1)}`;
+    const auth = createPublishedSiteSsoAuth({ config, platform, fetch: vi.fn<typeof fetch>() });
+
+    await expect(auth.bootstrap()).rejects.toMatchObject({ code: 'AUTH_REQUIRED' });
+
+    expect(platform.cookie).toBe('');
+    expect(auth.getToken()).toBeNull();
+    expect(platform.redirects).toHaveLength(1);
+  });
+
+  it('stops returning a JWT that expires while the app is running', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-31T00:00:00.000Z'));
+    const platform = new TestBrowserPlatform();
+    platform.cookie = `stoToken=${jwtWithExpiration(1_788_134_401)}`;
+    const auth = createPublishedSiteSsoAuth({ config, platform, fetch: vi.fn<typeof fetch>() });
+    await auth.bootstrap();
+
+    vi.advanceTimersByTime(1_000);
+
+    expect(auth.getToken()).toBeNull();
+    expect(platform.cookie).toBe('');
   });
 
   it('exchanges callback code once, persists identity, and preserves business URL state', async () => {

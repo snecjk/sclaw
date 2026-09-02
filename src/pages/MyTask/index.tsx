@@ -11,7 +11,6 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search } from 'lucide-react';
 import { useCronStore } from '@/stores/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
@@ -31,14 +30,12 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { StoSearchField } from '@/components/ui/sto-neutral-controls';
 import { cn } from '@/lib/utils';
 import {
   myTaskPageSubtitleClass,
   stoMainInnerShell,
   stoPageTitleClass,
-  workflowListSearchIconWrapClass,
-  workflowListSearchLabelClass,
-  myTaskSearchInputClass,
   workflowListToolbarClass,
   workflowPageRootClass,
 } from '@/lib/surfaces';
@@ -46,10 +43,8 @@ import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
-import {
-  TemplateSelectModal,
-  buildRecommendTaskMessage,
-} from './components/TemplateSelectModal';
+import { TemplateSelectModal } from './components/TemplateSelectModal';
+import { buildRecommendTaskMessage } from './components/template-select-message';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { MyTaskSection, TaskView, TaskViewModel, ExecutionRecord } from './types';
@@ -288,7 +283,7 @@ export default function MyTask() {
         toast.error(String(err));
       }
     },
-    [toggleJob]
+    [t, toggleJob]
   );
 
   const handleTrigger = useCallback(
@@ -359,7 +354,7 @@ export default function MyTask() {
         useChatStore.getState().releaseScheduledSessionActivating(sessionKey);
       }
     },
-    [triggerJob, navigate, location.pathname, t]
+    [triggerJob, navigate, location.pathname]
   );
 
   const handleSave = useCallback(
@@ -486,20 +481,14 @@ export default function MyTask() {
                 <TaskRunGuardBar />
                 {isTasksView ? (
                   <>
-                    <label className={workflowListSearchLabelClass}>
-                      <span className="sr-only">{t('myTask.toolbar.searchSrOnly')}</span>
-                      <span className={workflowListSearchIconWrapClass} aria-hidden="true">
-                        <Search className="h-3.5 w-3.5" />
-                      </span>
-                      <input
-                        type="search"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className={myTaskSearchInputClass}
-                        placeholder={t('myTask.toolbar.searchPlaceholder')}
-                        autoComplete="off"
-                      />
-                    </label>
+                    <StoSearchField
+                      value={searchQuery}
+                      onValueChange={setSearchQuery}
+                      placeholder={t('myTask.toolbar.searchPlaceholder')}
+                      aria-label={t('myTask.toolbar.searchSrOnly')}
+                      autoComplete="off"
+                      className="h-[34px] w-[184px] shrink-0 gap-1 border-[#E8EAEF] pr-[10px] focus-within:shadow-none"
+                    />
                     <NewTaskDropdownButton
                       onSelfCreate={() => {
                         setEditingJob(null);

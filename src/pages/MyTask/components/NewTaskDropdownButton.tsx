@@ -9,6 +9,7 @@
  */
 
 import { useTranslation } from 'react-i18next';
+import { StoOutlineButton } from '@/components/ui/sto-neutral-controls';
 // import { ChevronDown } from 'lucide-react';
 // import {
 //   DropdownMenu,
@@ -33,10 +34,10 @@ export function NewTaskDropdownButton({
 
   // 临时：点击直接打开创建弹窗；ChevronDown icon 一并注释
   return (
-    <button type="button" className={myTaskCreateButtonClass} onClick={onSelfCreate}>
+    <StoOutlineButton className={myTaskCreateButtonClass} onClick={onSelfCreate}>
       {t('myTask.newTask')}
       {/* <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> */}
-    </button>
+    </StoOutlineButton>
   );
 
   // 原下拉实现（直接创建 + 官方推荐）：

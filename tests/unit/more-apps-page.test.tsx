@@ -245,11 +245,11 @@ describe('MoreAppsPage server catalog', () => {
     expect(emptyTagRow).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('opens the card by keyboard and keeps favorite clicks isolated from opening', async () => {
+  it('opens the card through its overlay action and keeps favorite clicks isolated from opening', async () => {
     render(<MoreAppsPage />);
     const card = await screen.findByRole('button', { name: '打开客户关系' });
 
-    fireEvent.keyDown(card, { key: 'Enter' });
+    fireEvent.click(card, { detail: 0 });
     expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确定' }));
     await waitFor(() => {
@@ -468,7 +468,9 @@ describe('MoreAppsPage server catalog', () => {
 
     render(<MoreAppsPage />);
     fireEvent.click(await screen.findByRole('tab', { name: '我的应用' }));
-    fireEvent.click(screen.getByText('打开链接'));
+    expect(screen.getByText('外部')).toHaveClass('sto-feedback', 'sto-feedback--badge');
+    expect(screen.getByText('外部')).toHaveAttribute('data-variant', 'external');
+    fireEvent.click(screen.getByRole('button', { name: '打开外部应用' }));
 
     expect(screen.queryByText('需要二次登录')).not.toBeInTheDocument();
     expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
@@ -480,6 +482,28 @@ describe('MoreAppsPage server catalog', () => {
         systemCode: 'SITE_KEEPER',
       }),
     );
+  });
+
+  it('uses semantic status badges for official and hot installed-app metadata', async () => {
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{ ...serverApp, official: true, badge: '热门' }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['org-relation'],
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('tab', { name: '我的应用' }));
+
+    expect(screen.getByText('官方')).toHaveAttribute('data-variant', 'official');
+    expect(screen.getByText('热门')).toHaveAttribute('data-variant', 'hot');
+    expect(screen.getByText('打开')).not.toHaveClass('cursor-pointer');
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {

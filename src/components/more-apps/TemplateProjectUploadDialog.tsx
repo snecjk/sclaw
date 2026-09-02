@@ -57,7 +57,7 @@ export function TemplateProjectUploadDialog({
         <div className="border-b border-border px-5 py-4">
           <h2 id="template-project-upload-title" className="text-base font-semibold">确认覆盖模板工作区</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            来源：{preview.sourceName} · React / Vite · {preview.pageType === 'site' ? '独立站点' : '托管应用'}
+            来源：{preview.sourceName} · React / Vite · {preview.pageType === 'site' ? 'Site' : 'Assets'}
           </p>
         </div>
 

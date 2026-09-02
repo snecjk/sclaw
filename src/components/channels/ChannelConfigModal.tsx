@@ -59,7 +59,7 @@ interface ChannelConfigModalProps {
 const inputClasses = cn(
   'h-10 rounded-md border-[#E5E6EB] bg-white text-[13px] text-[#1D2129] shadow-none',
   'placeholder:text-[#C9CDD4] focus-visible:ring-2 focus-visible:ring-ring/30',
-  'dark:border-border dark:bg-transparent dark:text-foreground',
+  'dark:border-border dark:bg-transparent dark:text-foreground dark:placeholder:text-[var(--sto-text-tertiary)]',
 );
 const labelClasses = 'text-[13px] font-medium text-[#1D2129] dark:text-foreground';
 const outlineButtonClasses = cn(
@@ -509,7 +509,7 @@ export function ChannelConfigModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 dark:bg-black/60"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -540,7 +540,7 @@ export function ChannelConfigModal({
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]"
+            className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:hover:text-[var(--sto-icon-secondary)]"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -584,7 +584,7 @@ export function ChannelConfigModal({
                       <p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
                         {t(channelMeta.description.replace('channels:', ''))}
                       </p>
-                      <p className="mt-2 text-[12px] font-medium text-[#86909C]/80">
+                      <p className="mt-2 text-[12px] font-medium text-[#86909C]/80 dark:text-[var(--sto-text-tertiary)]">
                         {channelMeta.connectionType === 'qr' ? t('dialog.qrCode') : t('dialog.token')}
                       </p>
                     </div>
@@ -608,7 +608,7 @@ export function ChannelConfigModal({
                   />
                 ) : (
                   <div className="flex h-56 w-56 items-center justify-center rounded-[8px] border border-[#E5E6EB] bg-white dark:bg-background">
-                    <QrCode className="h-28 w-28 text-[#C9CDD4]" />
+                    <QrCode className="h-28 w-28 text-[#C9CDD4] dark:text-[var(--sto-icon-tertiary)]" />
                   </div>
                 )}
               </div>
@@ -628,8 +628,8 @@ export function ChannelConfigModal({
             </div>
           ) : loadingConfig ? (
             <div className={cn(insetCardClass, 'flex items-center justify-center py-10')}>
-              <Loader2 className="h-5 w-5 animate-spin text-[#86909C]" />
-              <span className="ml-2 text-[13px] text-[#86909C]">{t('dialog.loadingConfig')}</span>
+              <Loader2 className="h-5 w-5 animate-spin text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" />
+              <span className="ml-2 text-[13px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('dialog.loadingConfig')}</span>
             </div>
           ) : (
             <div className="space-y-5">
@@ -689,7 +689,7 @@ export function ChannelConfigModal({
                     placeholder={t('account.customIdPlaceholder')}
                     className={inputClasses}
                   />
-                  <p className="text-[12px] text-[#86909C]">{t('account.customIdHint')}</p>
+                  <p className="text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('account.customIdHint')}</p>
                 </div>
               )}
 
@@ -863,7 +863,7 @@ function ConfigField({ field, value, onChange, showSecret, onToggleSecret }: Con
             variant="outline"
             size="icon"
             onClick={onToggleSecret}
-            className="h-10 w-10 shrink-0 rounded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent"
+            className="h-10 w-10 shrink-0 rounded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:hover:text-[var(--sto-icon-secondary)]"
           >
             {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
@@ -875,7 +875,7 @@ function ConfigField({ field, value, onChange, showSecret, onToggleSecret }: Con
         </p>
       )}
       {field.envVar && (
-        <p className="font-mono text-[12px] text-[#86909C]/70">
+        <p className="font-mono text-[12px] text-[#86909C]/70 dark:text-[var(--sto-text-tertiary)]">
           {t('dialog.envVar', { var: field.envVar })}
         </p>
       )}

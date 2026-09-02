@@ -160,7 +160,7 @@ export function StoAppDeployDialog({
 
         {showAssetsIdentityWarning ? (
           <p className="mt-3 rounded-lg bg-[var(--sto-functional-warning)]/10 px-3 py-2 text-[12px] text-[var(--sto-functional-warning)] dark:text-amber-300">
-            托管应用发布后由 iframe 宿主提供身份；请确认宿主已接入 Token Bridge。
+            Assets 发布后由 iframe 宿主提供身份；请确认宿主已接入 Token Bridge。
           </p>
         ) : null}
 

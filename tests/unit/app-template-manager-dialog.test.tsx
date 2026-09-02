@@ -25,7 +25,7 @@ describe('AppTemplateManagerDialog', () => {
       items: [{
         templateId: 'site-minimal',
         pageType: 'site',
-        name: '最简独立站点',
+        name: '标准 Site 模版',
         description: '平台内置最简模板',
         status: 'ACTIVE',
         isBuiltin: true,
@@ -40,7 +40,7 @@ describe('AppTemplateManagerDialog', () => {
     openWorkspaceMock.mockResolvedValue({
       workspaceId: 'workspace-1',
       appPath: '/tmp/template',
-      workspaceName: '模板：最简独立站点',
+      workspaceName: '模板：标准 Site 模版',
       templateId: 'site-minimal',
     });
   });
@@ -49,7 +49,7 @@ describe('AppTemplateManagerDialog', () => {
     const onClose = vi.fn();
     render(<AppTemplateManagerDialog open onClose={onClose} />);
 
-    expect(await screen.findByText('最简独立站点')).toBeInTheDocument();
+    expect(await screen.findByText('标准 Site 模版')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     await waitFor(() => expect(openWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -57,7 +57,7 @@ describe('AppTemplateManagerDialog', () => {
       pageType: 'site',
       latestVersion: '1.0.0',
     })));
-    expect(openTabMock).toHaveBeenCalledWith('workspace-1', '模板：最简独立站点', 'template');
+    expect(openTabMock).toHaveBeenCalledWith('workspace-1', '模板：标准 Site 模版', 'template');
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -66,7 +66,7 @@ describe('AppTemplateManagerDialog', () => {
       items: [{
         templateId: 'assets-minimal',
         pageType: 'assets',
-        name: '最简托管应用',
+        name: '标准 Assets 模版',
         description: '本地资源模板',
         status: 'ACTIVE',
         isBuiltin: true,

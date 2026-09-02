@@ -14,7 +14,7 @@ describe('StoAppDeployDialog external service warning', () => {
     listMock.mockResolvedValue([{ alias: 'policy', auth: { type: 'stoToken' } }]);
   });
 
-  it('托管应用绑定 stoToken 服务时展示宿主 Bridge 提示', async () => {
+  it('Assets 绑定 stoToken 服务时展示宿主 Bridge 提示', async () => {
     render(<StoAppDeployDialog open appName="Demo" workspaceId="ws-1" pageType="assets" onCancel={vi.fn()} onConfirm={vi.fn()} />);
     expect(await screen.findByText(/iframe 宿主提供身份/)).toBeInTheDocument();
   });

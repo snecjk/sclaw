@@ -12,6 +12,15 @@ import { logger } from './logger';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { normalizeSsoRoleCodes } from '../../shared/sso-roles';
 
+/** 登出 / 切号时丢弃进程内 BI token，避免沿用上一账号的 x-bi-token。 */
+function clearFinanceBiAuthBestEffort(): void {
+  void import('../services/finance-bi-auth-service')
+    .then(({ clearFinanceBiAuth }) => clearFinanceBiAuth())
+    .catch((error) => {
+      logger.warn('[auth] clearFinanceBiAuth failed:', error);
+    });
+}
+
 export type SsoEnvironment =
   | 'daily-external'
   | 'production-external'
@@ -189,6 +198,7 @@ export async function isAuthSessionCurrent(snapshot: AuthSessionSnapshot): Promi
 
 export async function setAuthUser(user: SsoUserInfo): Promise<void> {
   authSessionGeneration++;
+  clearFinanceBiAuthBestEffort();
   // Primary storage: ~/.sai/sso-auth.json
   await syncSsoAuthToSaiCli(user);
   
@@ -211,6 +221,7 @@ export async function setAuthUser(user: SsoUserInfo): Promise<void> {
 
 export async function clearAuthUser(): Promise<void> {
   authSessionGeneration++;
+  clearFinanceBiAuthBestEffort();
   const store = await getAuthStore();
   const previousUser = store.get('user', null) as SsoUserInfo | null;
   logger.info('Clear auth user...');
@@ -384,6 +395,9 @@ export async function stopSaiAuthWatcher(): Promise<void> {
   logger.info('[AuthWatcher] Stopped watching ~/.sai/ for sso-auth.json changes');
 }
 
+/** Treat a StoToken as expired when remaining lifetime is under 2 hours. */
+const STO_TOKEN_EXPIRY_SKEW_MS = 1 * 60 * 60 * 1000;
+
 /**
  * Get the stored StoToken (if present and not expired).
  * When an expired token is detected the auth state is automatically cleared
@@ -395,7 +409,7 @@ export async function getStoToken(): Promise<string | null> {
   const auth = await readSaiCliSsoAuthFile(filePath);
   if (!auth?.stoToken || !auth.expiresAt) return null;
   const expiresAtStr = String(auth.expiresAt);
-  if (new Date(expiresAtStr) <= new Date()) {
+  if (new Date(expiresAtStr).getTime() < Date.now() + STO_TOKEN_EXPIRY_SKEW_MS) {
     logger.info('StoToken expired, clearing auth state and notifying renderer to redirect to login');
     await clearAuthUser();
     void notifyRendererTokenExpired();

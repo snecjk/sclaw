@@ -1,47 +1,51 @@
-export type TopNavKey = 'workspace' | 'ops' | 'system';
-
-export interface SideNavItem {
+interface SideNavItemBase {
   key: string;
   label: string;
-  /** Route path without leading slash, e.g. home / demo / docs */
-  path: string;
+  developerOnly?: boolean;
 }
 
-export interface TopNavItem {
-  key: TopNavKey;
-  label: string;
+export interface SideNavPageItem extends SideNavItemBase {
+  /** Route path without leading slash, e.g. home / demo / docs. */
+  path: string;
+  children?: never;
+}
+
+export interface SideNavDirectoryItem extends SideNavItemBase {
+  path?: never;
   children: SideNavItem[];
 }
 
-export const TOP_NAV: TopNavItem[] = [
-  {
-    key: 'workspace',
-    label: '工作台',
-    children: [
-      { key: 'home', label: '首页概览', path: 'home' },
-      { key: 'demo', label: '组件示例', path: 'demo' },
-    ],
-  },
-  {
-    key: 'ops',
-    label: '业务办理',
-    children: [
-      { key: 'orders', label: '业务列表', path: 'orders' },
-      { key: 'reports', label: '数据报表', path: 'reports' },
-    ],
-  },
-  {
-    key: 'system',
-    label: '系统设置',
-    children: [
-      { key: 'profile', label: '个人中心', path: 'profile' },
-      { key: 'settings', label: '偏好设置', path: 'settings' },
-    ],
-  },
+export type SideNavItem = SideNavPageItem | SideNavDirectoryItem;
+
+export const SIDE_NAV: SideNavPageItem[] = [
+  { key: 'home', label: '首页', path: 'home' },
+  { key: 'example', label: '开发示例', path: 'example', developerOnly: true },
 ];
 
-export const DEFAULT_TOP_KEY: TopNavKey = 'workspace';
 export const DEFAULT_PATH = 'home';
+
+export function flattenPageNavItems(items: readonly SideNavItem[]): SideNavPageItem[] {
+  return items.flatMap((item) => (
+    item.children ? flattenPageNavItems(item.children) : [item]
+  ));
+}
+
+export function findSideNavByPath(path: string): SideNavPageItem;
+export function findSideNavByPath(
+  items: readonly SideNavItem[],
+  path: string,
+): SideNavPageItem | undefined;
+export function findSideNavByPath(
+  itemsOrPath: readonly SideNavItem[] | string,
+  maybePath?: string,
+): SideNavPageItem | undefined {
+  const items = typeof itemsOrPath === 'string' ? SIDE_NAV : itemsOrPath;
+  const path = typeof itemsOrPath === 'string' ? itemsOrPath : (maybePath ?? '');
+  const key = path.replace(/^\//, '');
+  const found = flattenPageNavItems(items).find((item) => item.path === key);
+  if (typeof itemsOrPath === 'string') return found ?? SIDE_NAV[0]!;
+  return found;
+}
 
 export function toRoutePath(path: string): string {
   const normalized = path.replace(/^#\/?/, '').replace(/^\//, '').trim();
@@ -61,24 +65,4 @@ export function pathFromLocation(pathnameOrHash: string, search = ''): string {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const page = params.get('page')?.trim();
   return page || DEFAULT_PATH;
-}
-
-export function findNavByPath(path: string): {
-  topKey: TopNavKey;
-  sideKey: string;
-  sideItems: SideNavItem[];
-} {
-  const key = path.replace(/^\//, '');
-  for (const top of TOP_NAV) {
-    const hit = top.children.find((child) => child.path === key);
-    if (hit) {
-      return { topKey: top.key, sideKey: hit.key, sideItems: top.children };
-    }
-  }
-  const fallback = TOP_NAV[0]!;
-  return {
-    topKey: fallback.key,
-    sideKey: fallback.children[0]!.key,
-    sideItems: fallback.children,
-  };
 }

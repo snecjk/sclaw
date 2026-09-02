@@ -43,6 +43,7 @@ const manifest: ExternalServicesManifest = {
 describe('external service template runtime', () => {
   beforeEach(() => {
     requestMock.mockReset().mockResolvedValue({ ok: true });
+    delete (window as unknown as { __SCLAW_APP_CONFIG__?: unknown }).__SCLAW_APP_CONFIG__;
     delete (window as unknown as { __STO_SSO_AUTH_CONFIG__?: unknown }).__STO_SSO_AUTH_CONFIG__;
   });
 
@@ -70,6 +71,21 @@ describe('external service template runtime', () => {
       'https://zc-hybrid-stage.sto.cn/sto-policy/api/v1/search',
       expect.anything(),
     );
+  });
+
+  it.each([
+    ['app-test.sto.cn', 'https://zc-hybrid-test.sto.cn/sto-policy/api/v1/search'],
+    ['app-pre.sto.cn', 'https://zc-hybrid-stage.sto.cn/sto-policy/api/v1/search'],
+    ['app.sto.cn', 'https://zc-hybrid.sto.cn/sto-policy/api/v1/search'],
+  ])('发布配置缺失时根据域名 %s 选择服务环境', async (hostname, expectedUrl) => {
+    const client = createExternalServiceClient('policyOntology', {
+      manifest,
+      isDev: false,
+      request: requestMock,
+      hostname,
+    });
+    await client.request({ method: 'GET', path: '/v1/search' });
+    expect(requestMock).toHaveBeenCalledWith(expectedUrl, expect.anything());
   });
 
   it('none 认证明确禁用 stoToken 且拒绝绝对 path', async () => {

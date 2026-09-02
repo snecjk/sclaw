@@ -549,6 +549,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                 showThinking={showThinking}
                 scrollRef={scrollRef}
                 variant="home"
+                sessionKey={currentSessionKey}
                 forceFullRender={isSearchOpen}
                 matchedMessageKeys={matchedMessageKeys}
                 activeSearchMessageKey={activeSearchMatch?.key ?? null}
@@ -616,7 +617,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
             'pointer-events-none absolute inset-x-0 bottom-full z-[1] overflow-hidden transition-[height] duration-200',
             showJumpToLatest ? 'h-[72px]' : 'h-0',
             showJumpToLatest &&
-              'bg-[linear-gradient(180deg,#fafafa00_0%,#fafafa66_35%,#fafafab0_70%,#fafafae6_100%)] dark:bg-[linear-gradient(180deg,hsl(220_22%_11%/0)_0%,hsl(220_22%_11%/0.4)_35%,hsl(220_22%_11%/0.69)_70%,hsl(220_22%_11%/0.9)_100%)]',
+              'bg-[linear-gradient(180deg,#fafafa00_0%,#fafafa66_35%,#fafafab0_70%,#fafafae6_100%)] dark:bg-[linear-gradient(180deg,hsl(0_0%_5.1%/0)_0%,hsl(0_0%_5.1%/0.4)_35%,hsl(0_0%_5.1%/0.69)_70%,hsl(0_0%_5.1%/0.9)_100%)]',
           )}
         >
           <div className="flex h-full items-center justify-center">

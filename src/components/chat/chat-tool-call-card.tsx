@@ -219,7 +219,10 @@ export const ChatToolCallCard = memo(function ChatToolCallCard({
           onClick={toggleThinkingBlock}
           aria-expanded={thinkingExpanded}
         >
-          <ToolIcon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          <ToolIcon
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+            aria-hidden
+          />
           <span className="flex min-w-0 items-center gap-1">
             <span
               className={cn(
@@ -243,7 +246,10 @@ export const ChatToolCallCard = memo(function ChatToolCallCard({
     return (
       <div className={cn(chatToolCallShellClass, className)}>
         <div className={chatProcessTitleRowClass}>
-          <ToolIcon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          <ToolIcon
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+            aria-hidden
+          />
           <span className="min-w-0 truncate">{label}</span>
         </div>
         {toolBody}
@@ -260,13 +266,25 @@ export const ChatToolCallCard = memo(function ChatToolCallCard({
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          <ChevronDown
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+            aria-hidden
+          />
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+            aria-hidden
+          />
         )}
-        <ToolIcon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+        <ToolIcon
+          className="h-4 w-4 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+          aria-hidden
+        />
         {isRunning ? (
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-70" aria-hidden />
+          <Loader2
+            className="h-4 w-4 shrink-0 animate-spin text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)]"
+            aria-hidden
+          />
         ) : null}
         <span className="min-w-0 truncate">{label}</span>
       </button>
