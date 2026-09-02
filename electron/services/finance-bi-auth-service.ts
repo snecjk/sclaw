@@ -465,6 +465,7 @@ export async function ensureFinanceBiAuth(options?: { force?: boolean }): Promis
 
 export function clearFinanceBiAuth(): void {
   cachedAuth = null;
+  inflight = null;
   console.info('[finance-bi][我的报表1][auth] cleared（对齐 preview clearAuth）');
 }
 

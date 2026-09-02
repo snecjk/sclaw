@@ -116,10 +116,10 @@ afterEach(() => {
 });
 
 describe('data center toolbar theme', () => {
-  it('temporarily hides the finance report tab', () => {
+  it('shows the finance report tab', () => {
     renderToolbar();
 
-    expect(screen.queryByRole('tab', { name: '我的报表' })).toBeNull();
+    expect(screen.getByRole('tab', { name: '我的报表' })).toBeTruthy();
   });
 
   it('uses one dark resting surface for search, filter, view switch, and create action', () => {

@@ -22,6 +22,7 @@ import { DataCenterToolbarSearch, TabButton } from '../components/navigation';
 import { dataCenterToolbarButtonClass } from '../components/toolbar-styles';
 import { actionTooltipClass } from '../constants';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuthStore } from '@/stores/auth';
 
 const PAGE_SIZE = 20;
 
@@ -69,6 +70,7 @@ function applyButtonText(model: FinanceBiModelMenuItem): string {
 export function ReportListPage() {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
+  const authUserCode = useAuthStore((s) => s.user?.code ?? '');
   const [loading, setLoading] = useState(false);
   const [list, setList] = useState<FinanceBiModelMenuItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -109,8 +111,20 @@ export function ReportListPage() {
   }, [t]);
 
   useEffect(() => {
+    if (!authUserCode) {
+      setList([]);
+      setTotal(0);
+      setError(null);
+      setKeyword('');
+      setKeywordDraft('');
+      setPage(1);
+      return;
+    }
+    setKeyword('');
+    setKeywordDraft('');
+    setPage(1);
     void fetchList(1, '');
-  }, [fetchList]);
+  }, [fetchList, authUserCode]);
 
   const onSearchChange = (value: string) => {
     setKeywordDraft(value);
