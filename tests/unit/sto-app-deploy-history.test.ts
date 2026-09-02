@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  deployFieldsFromHistoryRecord,
   findInProgressStoAppDeploy,
   historyRecordFromDeployFields,
+  parseStoAppDeployHistoryRecord,
   parseStoAppDeployHistoryFile,
   upsertStoAppDeployHistoryItems,
 } from '../../shared/sto-app-deploy-history';
@@ -49,6 +51,45 @@ describe('sto app deploy history', () => {
     expect(historyRecordFromDeployFields({ deploymentId: 'dep_1', env: 'daily', status: 'CREATED' }, 1)).toMatchObject({
       deploymentId: 'dep_1',
       env: 'daily',
+    });
+  });
+
+  it('parses optional pipeline metadata while keeping old records compatible', () => {
+    expect(parseStoAppDeployHistoryRecord({
+      deploymentId: 'dep_1',
+      startedAt: 1,
+      updatedAt: 2,
+      pipeline_instance_id: 5587,
+      failure_stage: 'build',
+      revision_id: 'rev_1',
+    })).toMatchObject({
+      pipelineInstanceId: '5587',
+      failureStage: 'build',
+      revisionId: 'rev_1',
+    });
+    expect(parseStoAppDeployHistoryRecord({
+      deploymentId: 'dep_old',
+      startedAt: 1,
+      updatedAt: 2,
+    })).toMatchObject({ deploymentId: 'dep_old', startedAt: 1, updatedAt: 2 });
+  });
+
+  it('round-trips optional pipeline metadata through deploy fields', () => {
+    const record = historyRecordFromDeployFields({
+      deploymentId: 'dep_1',
+      pipelineInstanceId: '5587',
+      failureStage: 'build',
+      revisionId: 'rev_1',
+    }, 1);
+    expect(record).toMatchObject({
+      pipelineInstanceId: '5587',
+      failureStage: 'build',
+      revisionId: 'rev_1',
+    });
+    expect(deployFieldsFromHistoryRecord(record!)).toMatchObject({
+      pipelineInstanceId: '5587',
+      failureStage: 'build',
+      revisionId: 'rev_1',
     });
   });
 });

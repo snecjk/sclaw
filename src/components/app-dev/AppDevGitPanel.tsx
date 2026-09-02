@@ -33,6 +33,7 @@ interface AppDevGitPanelProps {
   deployRunning?: boolean;
   deployHistory?: StoAppDeployHistoryRecord[];
   onOpenDeploy?: () => void;
+  onOpenDeployHistory?: (deploymentId: string) => void;
 }
 
 function mergeCommitRows(cloud: AppCheckpoint[], git: AppCheckpoint[]): AppCheckpoint[] {
@@ -68,6 +69,7 @@ export function AppDevGitPanel({
   deployRunning = false,
   deployHistory = [],
   onOpenDeploy,
+  onOpenDeployHistory,
 }: AppDevGitPanelProps) {
   const [message, setMessage] = useState('上传代码');
   const [checkpoints, setCheckpoints] = useState<AppCheckpoint[]>([]);
@@ -94,6 +96,8 @@ export function AppDevGitPanel({
   };
 
   useEffect(() => {
+    // The async refresh owns the external workspace synchronization for this panel.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
     // refresh is recreated each render; key the load on workspace / cloud / parent bump.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,7 +212,12 @@ export function AppDevGitPanel({
                 const runningItem = isStoAppDeployHistoryInProgress(item);
                 const success = isCodeDeploySuccess(item.status);
                 return (
-                  <li key={item.deploymentId} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                  <li key={item.deploymentId}>
+                    <button
+                      type="button"
+                      className="flex w-full cursor-pointer items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => onOpenDeployHistory?.(item.deploymentId)}
+                    >
                     <div className="min-w-0">
                       <p className="truncate text-sm text-foreground">
                         {item.env || '未指定环境'}
@@ -236,6 +245,7 @@ export function AppDevGitPanel({
                         historyStatusLabel(item)
                       )}
                     </span>
+                    </button>
                   </li>
                 );
               })}

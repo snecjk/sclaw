@@ -28,6 +28,7 @@ import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
 import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
 import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
+import { StoAppDeployHistoryDialog } from '@/components/app-dev/StoAppDeployHistoryDialog';
 import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { Button } from '@/components/ui/button';
@@ -186,6 +187,8 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [menuPublishOpen, setMenuPublishOpen] = useState(false);
+  const [deployHistoryOpen, setDeployHistoryOpen] = useState(false);
+  const [initialDeploymentId, setInitialDeploymentId] = useState<string>();
   const [sourceRevision, setSourceRevision] = useState(0);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
@@ -490,6 +493,10 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
             onClearTerminalJob={deploy.clear}
             onFillComposer={handleFillComposerFromDiagnostics}
             onPublishMenu={() => setMenuPublishOpen(true)}
+            onOpenHistory={() => {
+              setInitialDeploymentId(undefined);
+              setDeployHistoryOpen(true);
+            }}
           />
         ) : null}
 
@@ -541,6 +548,10 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
           deployRunning={deploy.running}
           deployHistory={deploy.history ?? []}
           onOpenDeploy={() => setDeployOpen(true)}
+          onOpenDeployHistory={(deploymentId) => {
+            setInitialDeploymentId(deploymentId);
+            setDeployHistoryOpen(true);
+          }}
         />
       </AppDevSplitBody>
 
@@ -581,6 +592,14 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
         appCode={stoStatus?.appCode}
         pageType={pageType ?? 'site'}
         onClose={() => setMenuPublishOpen(false)}
+      />
+      <StoAppDeployHistoryDialog
+        open={deployHistoryOpen}
+        workspaceId={workspaceId}
+        appCode={stoStatus?.appCode}
+        history={deploy.history ?? []}
+        initialDeploymentId={initialDeploymentId}
+        onOpenChange={setDeployHistoryOpen}
       />
     </div>
   );

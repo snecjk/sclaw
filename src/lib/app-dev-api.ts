@@ -684,6 +684,24 @@ export async function refreshStoAppDeploy(input: {
   });
 }
 
+export async function getStoAppDeployResources(input: {
+  workspaceId: string;
+  appCode?: string;
+  pipelineInstanceId: string | number;
+}): Promise<{
+  success: boolean;
+  appCode: string;
+  pipelineInstanceId: number;
+  data: unknown;
+}> {
+  return hostApiFetch('/api/app-dev/sto-app/deploy/resource/list', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
 export async function listStoAppDeployHistory(workspaceId: string): Promise<StoAppDeployHistoryRecord[]> {
   const res = await hostApiFetch<{ items?: StoAppDeployHistoryRecord[] }>(
     `/api/app-dev/sto-app/deploy/history?workspaceId=${encodeURIComponent(workspaceId)}`,

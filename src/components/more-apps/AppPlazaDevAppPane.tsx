@@ -41,6 +41,7 @@ import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
 import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
 import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
+import { StoAppDeployHistoryDialog } from '@/components/app-dev/StoAppDeployHistoryDialog';
 import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
@@ -201,6 +202,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [menuPublishOpen, setMenuPublishOpen] = useState(false);
+  const [deployHistoryOpen, setDeployHistoryOpen] = useState(false);
+  const [initialDeploymentId, setInitialDeploymentId] = useState<string>();
   const [templatePublishConfirm, setTemplatePublishConfirm] = useState(false);
   const [templatePublishing, setTemplatePublishing] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
@@ -591,6 +594,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               onClearTerminalJob={deploy.clear}
               onFillComposer={handleFillComposerFromDiagnostics}
               onPublishMenu={() => setMenuPublishOpen(true)}
+              onOpenHistory={() => {
+                setInitialDeploymentId(undefined);
+                setDeployHistoryOpen(true);
+              }}
             />
           ) : null}
 
@@ -682,6 +689,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           deployRunning={deploy.running}
           deployHistory={deploy.history ?? []}
           onOpenDeploy={() => setDeployOpen(true)}
+          onOpenDeployHistory={(deploymentId) => {
+            setInitialDeploymentId(deploymentId);
+            setDeployHistoryOpen(true);
+          }}
         />
       </AppDevSplitBody>
 
@@ -741,6 +752,14 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         appCode={stoStatus?.appCode}
         pageType={pageType ?? 'site'}
         onClose={() => setMenuPublishOpen(false)}
+      />
+      <StoAppDeployHistoryDialog
+        open={deployHistoryOpen}
+        workspaceId={workspaceId}
+        appCode={stoStatus?.appCode}
+        history={deploy.history ?? []}
+        initialDeploymentId={initialDeploymentId}
+        onOpenChange={setDeployHistoryOpen}
       />
     </div>
   );

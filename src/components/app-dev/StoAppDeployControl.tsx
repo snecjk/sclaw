@@ -34,6 +34,7 @@ interface StoAppDeployControlProps {
   /** One-click fill the latest failure/timeout details into the AI composer. */
   onFillComposer?: (text: string) => void;
   onPublishMenu?: () => void;
+  onOpenHistory?: () => void;
 }
 
 export function resolveStoAppDeployAskAiPrompt(job: StoAppDeployJob): string {
@@ -52,6 +53,7 @@ export function StoAppDeployControl({
   onClearTerminalJob,
   onFillComposer,
   onPublishMenu,
+  onOpenHistory,
 }: StoAppDeployControlProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -110,6 +112,7 @@ export function StoAppDeployControl({
   };
 
   const idleDisabled = !canDeploy && !job;
+  const hasMoreActions = Boolean(onPublishMenu || onOpenHistory);
 
   return (
     <div ref={rootRef} className="relative inline-flex items-stretch">
@@ -119,7 +122,7 @@ export function StoAppDeployControl({
         size="sm"
         className={cn(
           'h-7 gap-1 px-2 text-xs',
-          onPublishMenu && 'rounded-r-none',
+          hasMoreActions && 'rounded-r-none',
           running && 'text-amber-700 dark:text-amber-300',
           (job?.phase === 'failed' || job?.phase === 'error') && 'text-destructive',
           job?.phase === 'success' && 'text-emerald-700 dark:text-emerald-300',
@@ -151,9 +154,9 @@ export function StoAppDeployControl({
           '发布'
         )}
       </Button>
-      {onPublishMenu ? (
+      {hasMoreActions ? (
         <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={idleDisabled}>
+          <DropdownMenuTrigger asChild disabled={idleDisabled && !onOpenHistory}>
             <Button
               type="button"
               variant="ghost"
@@ -171,15 +174,25 @@ export function StoAppDeployControl({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="z-[260] min-w-[132px]">
-            <DropdownMenuItem
-              disabled={idleDisabled}
-              onSelect={() => {
+            {onPublishMenu ? (
+              <DropdownMenuItem
+                disabled={idleDisabled}
+                onSelect={() => {
+                  setPanelOpen(false);
+                  onPublishMenu();
+                }}
+              >
+                发布菜单
+              </DropdownMenuItem>
+            ) : null}
+            {onOpenHistory ? (
+              <DropdownMenuItem onSelect={() => {
                 setPanelOpen(false);
-                onPublishMenu();
-              }}
-            >
-              发布菜单
-            </DropdownMenuItem>
+                onOpenHistory();
+              }}>
+                查看发布记录
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}

@@ -92,6 +92,7 @@ interface AppDevWorkbenchStageProps {
   deployRunning?: boolean;
   deployHistory?: StoAppDeployHistoryRecord[];
   onOpenDeploy?: () => void;
+  onOpenDeployHistory?: (deploymentId: string) => void;
 }
 
 function fileName(path: string): string {
@@ -117,6 +118,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   deployRunning = false,
   deployHistory = [],
   onOpenDeploy,
+  onOpenDeployHistory,
 }: AppDevWorkbenchStageProps) {
   const [mode, setMode] = useState<AppDevStageMode>(initialMode);
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
@@ -639,6 +641,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
           deployRunning={deployRunning}
           deployHistory={deployHistory}
           onOpenDeploy={onOpenDeploy}
+          onOpenDeployHistory={onOpenDeployHistory}
         />
       ) : null}
 

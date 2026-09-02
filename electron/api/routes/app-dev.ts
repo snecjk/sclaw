@@ -50,6 +50,7 @@ import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-st
 import { readStoAppPushHistory } from '../../services/sto-app-push-history-store';
 import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
+import { handleAppDevDeployResourceRoute } from './app-dev-deploy-resource';
 import { assertExternalServicesReadyForDeploy } from '../../services/app-dev-deploy-preflight';
 import { ensureSiteAppActiveForDeploy, probeSiteAppDeployCreateDownstream, probeSiteAppDeployRefreshDownstream } from '../../services/site-app-api';
 import { siteappCliErrorMessage } from '../../../shared/siteapp-cli-payload';
@@ -186,6 +187,7 @@ export async function handleAppDevRoutes(
 
   try {
     if (await handleAppDevSsoAuthRoute(req, res, url)) return true;
+    if (await handleAppDevDeployResourceRoute(req, res, url)) return true;
 
     // --- Managed Node runtime (capability: service-node-runtime) ---
     if (url.pathname === '/api/app-dev/environment' && req.method === 'GET') {

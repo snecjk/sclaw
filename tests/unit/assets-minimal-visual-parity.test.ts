@@ -47,4 +47,12 @@ describe('assets-minimal visual parity with site-minimal', () => {
     expect(layout).not.toContain('useAuthorizedMenu');
     expect(main).toContain("import './theme/theme.css'");
   });
+
+  it('emits stable production asset filenames without content hashes', () => {
+    const viteConfig = read(assetsRoot, 'vite.config.ts');
+
+    expect(viteConfig).toContain("entryFileNames: 'assets/[name].js'");
+    expect(viteConfig).toContain("chunkFileNames: 'assets/[name].js'");
+    expect(viteConfig).toContain("assetFileNames: 'assets/[name][extname]'");
+  });
 });
