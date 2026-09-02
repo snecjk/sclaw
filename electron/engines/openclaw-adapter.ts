@@ -24,6 +24,7 @@ import {
 } from '../../shared/system-prompt-append';
 import { logUserSend } from '../../shared/user-send-log';
 import { hasPendingRuntimeToolUse, hasRuntimeAssistantOutput, inspectTranscript, runtimeRecord } from './chat-runtime-inspection';
+import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -189,6 +190,10 @@ function sessionsFromOpenClawStoreMetadata(
 }
 
 export const openClawAdapter: EngineAdapter = {
+  historyCapabilities: {
+    paginationMode: 'none',
+    defaultPageSize: CHAT_HISTORY_LENGTH_MAX_LIMIT,
+  },
   type: 'openclaw',
   scheduledTaskCapabilities: {
     requiresWorkspacePath: false,

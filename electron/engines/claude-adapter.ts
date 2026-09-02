@@ -44,6 +44,7 @@ import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecu
 import { inspectTranscript } from './chat-runtime-inspection';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
+import { CHAT_HISTORY_LIMIT } from '../../shared/chat-config';
 import { isClaudeRuntimeControlText } from '../../shared/claude-runtime-control-text';
 import {
   applyClaudeStreamEvent,
@@ -1632,6 +1633,10 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
 }
 
 export const claudeAdapter: EngineAdapter = {
+  historyCapabilities: {
+    paginationMode: 'before-id',
+    defaultPageSize: CHAT_HISTORY_LIMIT,
+  },
   type: 'claude',
   scheduledTaskCapabilities: {
     defaultPermissionProfile: 'dangerous-bypass',

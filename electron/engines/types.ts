@@ -5,6 +5,7 @@ import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 import type { ExecutionSnapshot } from './execution-snapshot';
 import type { AgentEngineType } from '../../shared/agent-engine';
 import type { ModelMessageMediaInput, NormalizedModelTurn } from '../services/model-message-normalizer';
+import type { ChatHistoryCapabilities } from '../../shared/chat-history-capabilities';
 
 export type { AgentEngineType } from '../../shared/agent-engine';
 
@@ -34,6 +35,7 @@ export interface EngineHistoryResult {
   unchanged?: boolean;
   hasMore?: boolean;
   totalCount?: number;
+  historyCapabilities?: ChatHistoryCapabilities;
 }
 
 /**
@@ -103,6 +105,7 @@ export interface EngineScheduledTaskCapabilities {
 
 export interface EngineAdapter {
   type: AgentEngineType;
+  historyCapabilities: ChatHistoryCapabilities;
   chatCapabilities: EngineChatCapabilities;
   scheduledTaskCapabilities: EngineScheduledTaskCapabilities;
   inspectRun(

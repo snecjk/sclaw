@@ -57,12 +57,15 @@ export function createSessionNavigationActions(
       }
       // 本地已有 transcript 时静默刷新：立即展示缓存，避免 loading 遮罩与 minLoading 人为延迟。
       const cachedTranscript = useChatRuntimeV2Store.getState().sessionsByKey[key]?.transcript;
+      const historyPaginationMode = useChatRuntimeV2Store.getState()
+        .sessionsByKey[key]?.historyCapabilities?.paginationMode ?? null;
       const hasCachedHistory = (cachedTranscript?.length ?? 0) > 0;
       markHistoryLoadPerf(key, 'session.switch', {
         hasCachedHistory,
         cachedTranscriptCount: cachedTranscript?.length ?? 0,
         displayMessageCount: getSessionDisplayMessages(key).length,
         engineType: dependencies.resolveEngineType(key),
+        historyPaginationMode,
         quietReload: hasCachedHistory,
       });
       void get().loadHistory(hasCachedHistory);

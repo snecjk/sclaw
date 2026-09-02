@@ -5,8 +5,8 @@ import { AppError } from '@/lib/error-model';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import { trimHistoryTail } from '../../../shared/chat-history-page';
-import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
 import type { ChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
+import type { ChatHistoryCapabilities } from '../../../shared/chat-history-capabilities';
 import type { RawMessage } from './types';
 import { findHistoryUserEcho } from './user-message-merge';
 import { materializeCompletedOverlay } from './display-model';
@@ -25,6 +25,7 @@ interface ChatRuntimeV2State {
   setTranscript: (sessionKey: string, transcript: RawMessage[]) => void;
   setHistoryFingerprint: (sessionKey: string, fingerprint: ChatHistoryFingerprint | null) => void;
   setHistoryTotalCount: (sessionKey: string, totalCount: number) => void;
+  setHistoryCapabilities: (sessionKey: string, capabilities: ChatHistoryCapabilities) => void;
   trimSessionHistoryTail: (sessionKey: string, limit?: number) => void;
   setDisplayProjection: (sessionKey: string, messages: RawMessage[] | null) => void;
   setOptimisticUserMessage: (sessionKey: string, message: RawMessage | null) => void;
@@ -380,12 +381,30 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
       },
     };
   }),
-  trimSessionHistoryTail: (sessionKey, limit = CHAT_HISTORY_LIMIT) => set((state) => {
+  setHistoryCapabilities: (sessionKey, capabilities) => set((state) => {
+    const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
+    if (
+      current.historyCapabilities?.paginationMode === capabilities.paginationMode
+        && current.historyCapabilities.defaultPageSize === capabilities.defaultPageSize
+    ) return state;
+    return {
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...current,
+          historyCapabilities: capabilities,
+        },
+      },
+    };
+  }),
+  trimSessionHistoryTail: (sessionKey, limit) => set((state) => {
     const current = state.sessionsByKey[sessionKey];
     if (!current) return state;
+    if (current.historyCapabilities?.paginationMode !== 'before-id') return state;
     if (current.runtime && !isTerminalChatRunPhase(current.runtime.phase)) return state;
-    if (current.transcript.length <= limit) return state;
-    const trimmed = trimHistoryTail(current.transcript, limit);
+    const effectiveLimit = limit ?? current.historyCapabilities.defaultPageSize;
+    if (current.transcript.length <= effectiveLimit) return state;
+    const trimmed = trimHistoryTail(current.transcript, effectiveLimit);
     const totalCount = Math.max(current.historyTotalCount, current.transcript.length);
     return {
       sessionsByKey: {

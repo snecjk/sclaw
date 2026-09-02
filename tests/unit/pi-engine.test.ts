@@ -26,6 +26,7 @@ import {
   getPiBuiltinToolNames,
 } from '../../electron/pi-runtime/tool-policy';
 import { buildPiSystemPromptOverride } from '../../electron/pi-runtime/system-prompt-policy';
+import { buildPiHistoryPage, projectPiHistoryMessages } from '../../electron/pi-runtime/history-page';
 
 describe('Pi engine descriptor', () => {
   it('registers chat and scheduled tasks but rejects workflow capability', () => {
@@ -81,6 +82,63 @@ describe('Pi system prompt policy', () => {
     const linuxPrompt = buildPiSystemPromptOverride({ cwd: '/workspace', platform: 'linux' });
     expect(linuxPrompt).toContain('- bash: run commands');
     expect(linuxPrompt).not.toContain('- powershell:');
+  });
+});
+
+describe('Pi history pagination', () => {
+  const messages = Array.from({ length: 60 }, (_, index) => ({
+    id: `m${index}`,
+    role: index === 0 ? 'user' : 'assistant',
+  }));
+
+  it('returns the newest fixed-size page and reports older history', () => {
+    const page = buildPiHistoryPage(messages, { limit: 50 });
+    expect(page.messages.map((message) => message.id)).toEqual(
+      messages.slice(10).map((message) => message.id),
+    );
+    expect(page.totalCount).toBe(60);
+    expect(page.hasMore).toBe(true);
+  });
+
+  it('loads the page before the oldest cached message', () => {
+    const page = buildPiHistoryPage(messages, { limit: 50, beforeId: 'm10' });
+    expect(page.messages.map((message) => message.id)).toEqual(
+      messages.slice(0, 10).map((message) => message.id),
+    );
+    expect(page.hasMore).toBe(false);
+    expect(page.totalCount).toBe(60);
+  });
+
+  it('exposes stable session-entry ids and ignores non-message entries', () => {
+    const projected = projectPiHistoryMessages([
+      { type: 'model_change', id: 'model-1', modelId: 'test' },
+      { type: 'message', id: 'user-1', message: { role: 'user', content: 'hello' } },
+      { type: 'thinking_level_change', id: 'thinking-1', thinkingLevel: 'off' },
+      { type: 'message', id: 'assistant-1', message: { role: 'assistant', content: 'hi' } },
+    ]);
+
+    expect(projected).toEqual([
+      { id: 'user-1', role: 'user', content: 'hello' },
+      { id: 'assistant-1', role: 'assistant', content: 'hi' },
+    ]);
+  });
+
+  it('uses projected Pi ids as beforeId pagination anchors', () => {
+    const projected = projectPiHistoryMessages(Array.from({ length: 60 }, (_, index) => ({
+      type: 'message',
+      id: `entry-${index}`,
+      message: { role: index === 0 ? 'user' : 'assistant', content: String(index) },
+    })));
+
+    const latest = buildPiHistoryPage(projected, { limit: 50 });
+    const older = buildPiHistoryPage(projected, {
+      limit: 50,
+      beforeId: latest.messages[0]?.id,
+    });
+    expect(latest.messages[0]?.id).toBe('entry-10');
+    expect(older.messages).toHaveLength(10);
+    expect(older.messages[0]?.id).toBe('entry-0');
+    expect(older.hasMore).toBe(false);
   });
 });
 

@@ -33,6 +33,7 @@ import { KeyedTaskQueue } from './keyed-task-queue';
 import { filterPiSkills } from './skill-policy';
 import { buildPiToolSelection } from './tool-policy';
 import { createPiPromptLoggingExtension } from './prompt-logging-extension';
+import { buildPiHistoryPage, projectPiHistoryMessages } from './history-page';
 import { buildPiSystemPromptOverride } from './system-prompt-policy';
 import { importNativeEsm } from './native-esm-import';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
@@ -546,10 +547,28 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       // config used by chat.history; reopening here races Pi's final JSONL flush
       // and briefly projects a stale transcript over the completed live reply.
       const entry = sessions.get(config.sessionKey) ?? await ensureSession(config);
-      respond(request.requestId, true, { messages: entry.session.messages, isRunning: Boolean(entry.activeRunId) });
+      const limit = typeof payload.limit === 'number' && Number.isFinite(payload.limit) && payload.limit > 0
+        ? Math.floor(payload.limit)
+        : 50;
+      const beforeId = typeof payload.beforeId === 'string' && payload.beforeId
+        ? payload.beforeId
+        : undefined;
+      const branchEntries = entry.session.sessionManager.getBranch();
+      const historyMessages = projectPiHistoryMessages(branchEntries);
+      const page = buildPiHistoryPage(historyMessages, { limit, beforeId });
+      respond(request.requestId, true, {
+        messages: page.messages,
+        isRunning: Boolean(entry.activeRunId),
+        hasMore: page.hasMore,
+        totalCount: page.totalCount,
+      });
       logPiCore('session.history.completed', {
         sessionKey: config.sessionKey,
-        messageCount: entry.session.messages.length,
+        messageCount: page.messages.length,
+        branchEntryCount: branchEntries.length,
+        totalCount: page.totalCount,
+        hasMore: page.hasMore,
+        beforeId: beforeId ?? null,
         isRunning: Boolean(entry.activeRunId),
         durationMs: Date.now() - commandStartedAt,
       });

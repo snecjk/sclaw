@@ -83,6 +83,8 @@ export interface PiPromptResult {
 export interface PiHistoryResult {
   messages: unknown[];
   isRunning: boolean;
+  hasMore: boolean;
+  totalCount: number;
 }
 
 export interface PiInspectResult {

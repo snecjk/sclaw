@@ -1011,11 +1011,14 @@ function registerGatewayHandlers(
         const adapter = await getAdapterForSession(body.sessionKey ?? '', engineType);
         const beforeId = typeof body.beforeId === 'string' && body.beforeId ? body.beforeId : undefined;
         const getStart = Date.now();
+        const requestedLimit = Number.isFinite(body.limit) && (body.limit ?? 0) > 0
+          ? Number(body.limit)
+          : adapter.historyCapabilities.defaultPageSize;
         const result = await adapter.getHistory(
           { gatewayManager },
           {
             sessionKey: body.sessionKey ?? '',
-            limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000,
+            limit: requestedLimit,
             beforeId,
           },
         );
@@ -1025,6 +1028,8 @@ function registerGatewayHandlers(
             stage: 'ipc.rpc.failed',
             sessionKey: body.sessionKey ?? '',
             engineType: body.engineType ?? adapter.type,
+            historyPaginationMode: adapter.historyCapabilities.paginationMode,
+            requestedLimit,
             getMs,
             totalMs: Date.now() - perfStart,
             error: result.error || 'chat.history failed',
@@ -1033,7 +1038,10 @@ function registerGatewayHandlers(
         }
         const projectedResult = await projectUserTurnCompositions(
           body.sessionKey ?? '',
-          result.result ?? { messages: [] },
+          {
+            ...(result.result ?? { messages: [] }),
+            historyCapabilities: adapter.historyCapabilities,
+          },
           adapter.type,
         );
         const historyResult = omitUnchangedHistoryMessages({
@@ -1061,6 +1069,8 @@ function registerGatewayHandlers(
           stage: 'ipc.rpc.done',
           sessionKey: body.sessionKey ?? '',
           engineType: adapter.type,
+          historyPaginationMode: adapter.historyCapabilities.paginationMode,
+          requestedLimit,
           getMs,
           sanitizeMs,
           totalMs: Date.now() - perfStart,

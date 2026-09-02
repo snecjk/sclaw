@@ -45,6 +45,7 @@ import type {
   PiPromptResult,
   PiSessionConfig,
 } from '../../shared/pi-runtime-protocol';
+import { CHAT_HISTORY_LIMIT } from '../../shared/chat-config';
 
 const BUILTIN_PI_PROVIDERS = new Set(['anthropic', 'openai', 'google', 'openrouter']);
 const attachedEventSinks = new WeakSet<object>();
@@ -266,6 +267,10 @@ export async function deletePiSession(sessionKey: string): Promise<void> {
 }
 
 export const piAdapter: EngineAdapter = {
+  historyCapabilities: {
+    paginationMode: 'before-id',
+    defaultPageSize: CHAT_HISTORY_LIMIT,
+  },
   type: 'pi',
   scheduledTaskCapabilities: {
     enforcedPermissionProfile: 'workspace-write',
@@ -324,12 +329,18 @@ export const piAdapter: EngineAdapter = {
       const { config } = await buildPiSessionConfig(params.sessionKey);
       const result = await getPiRuntimeService().request<PiHistoryResult>('session.history', {
         sessionKey: params.sessionKey,
-        payload: { config, limit: params.limit },
+        payload: {
+          config,
+          limit: params.limit,
+          ...(params.beforeId ? { beforeId: params.beforeId } : {}),
+        },
       });
       const history: EngineHistoryResult = {
-        messages: result.messages.slice(-params.limit),
+        messages: result.messages,
         thinkingLevel: null,
         isRunning: result.isRunning,
+        hasMore: result.hasMore,
+        totalCount: result.totalCount,
       };
       return { success: true, result: history };
     } catch (error) {

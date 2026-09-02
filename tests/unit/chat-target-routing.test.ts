@@ -160,7 +160,7 @@ describe('chat target routing', () => {
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
-    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000, engineType: 'openclaw' });
+    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', engineType: 'openclaw' });
 
     const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
     expect(sendCall?.[1]).toMatchObject({
@@ -214,6 +214,70 @@ describe('chat target routing', () => {
     expect(invokeIpcMock.mock.calls.some(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     )).toBe(false);
+  });
+
+  it('loads older history from any adapter that declares before-id pagination', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    const { useChatRuntimeV2Store } = await import('@/stores/chat/runtime-v2-store');
+    const { createClientSessionState } = await import('@/stores/chat/client-session-reducer');
+    const sessionKey = 'pi:main:paged-history';
+    const latest = Array.from({ length: 50 }, (_, index) => ({
+      id: `m${index + 10}`,
+      role: 'assistant' as const,
+      content: String(index + 10),
+      timestamp: index + 10,
+    }));
+    useChatRuntimeV2Store.setState((state) => ({
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...createClientSessionState(),
+          transcript: latest,
+          historyTotalCount: 60,
+          historyCapabilities: { paginationMode: 'before-id', defaultPageSize: 50 },
+        },
+      },
+    }));
+    useChatStore.setState({
+      currentSessionKey: sessionKey,
+      currentAgentId: 'main',
+      sessions: [{ key: sessionKey, engineType: 'pi' }],
+      loading: false,
+    });
+    invokeIpcMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel !== 'gateway:rpc' || args[0] !== 'chat.history') {
+        throw new Error(`Unexpected invokeIpc call: ${channel}`);
+      }
+      return {
+        success: true,
+        result: {
+          messages: Array.from({ length: 10 }, (_, index) => ({
+            id: `m${index}`,
+            role: index === 0 ? 'user' : 'assistant',
+            content: String(index),
+            timestamp: index,
+          })),
+          totalCount: 60,
+          hasMore: false,
+          historyCapabilities: { paginationMode: 'before-id', defaultPageSize: 50 },
+        },
+      };
+    });
+
+    await useChatStore.getState().loadOlderHistory(sessionKey);
+
+    const historyCall = invokeIpcMock.mock.calls.find(
+      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
+    );
+    expect(historyCall?.[2]).toEqual({
+      sessionKey,
+      limit: 50,
+      beforeId: 'm10',
+      engineType: 'pi',
+    });
+    const transcript = useChatRuntimeV2Store.getState().sessionsByKey[sessionKey]?.transcript ?? [];
+    expect(transcript).toHaveLength(60);
+    expect(transcript[0]?.id).toBe('m0');
   });
 
   it('materializes and binds a project draft before its first dispatch', async () => {

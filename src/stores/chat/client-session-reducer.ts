@@ -10,6 +10,7 @@ import type {
 } from '../../../shared/chat-runtime-protocol';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
 import type { ChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
+import type { ChatHistoryCapabilities } from '../../../shared/chat-history-capabilities';
 import type { AttachedFileMeta, RawMessage, ToolStatus } from './types';
 import { truncateToolPayload } from '../../../shared/chat-tool-payload';
 import { collectToolUpdates, isToolResultRole, upsertToolStatuses } from './helpers';
@@ -68,6 +69,7 @@ export interface ClientSessionState {
   updatedAt: number;
   historyFingerprint: ChatHistoryFingerprint | null;
   historyTotalCount: number;
+  historyCapabilities: ChatHistoryCapabilities | null;
 }
 
 export interface SessionEventReduction {
@@ -114,6 +116,7 @@ export function createClientSessionState(): ClientSessionState {
     updatedAt: 0,
     historyFingerprint: null,
     historyTotalCount: 0,
+    historyCapabilities: null,
   };
 }
 

@@ -132,15 +132,19 @@ export async function handleGatewayRoutes(
   if (url.pathname === '/api/chat/history' && req.method === 'GET') {
     try {
       const sessionKey = (url.searchParams.get('sessionKey') ?? '').trim();
-      const limit = Number(url.searchParams.get('limit') ?? '1000');
+      const requestedLimit = Number(url.searchParams.get('limit'));
+      const beforeId = (url.searchParams.get('beforeId') ?? '').trim() || undefined;
       if (!sessionKey) {
         sendJson(res, 400, { success: false, error: 'sessionKey is required' });
         return true;
       }
       const adapter = await getAdapterForSession(sessionKey, parseEngineType(url.searchParams.get('engineType')));
+      const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+        ? requestedLimit
+        : adapter.historyCapabilities.defaultPageSize;
       const result = await adapter.getHistory(
         { gatewayManager: ctx.gatewayManager },
-        { sessionKey, limit: Number.isFinite(limit) && limit > 0 ? limit : 1000 },
+        { sessionKey, limit, beforeId },
       );
       if (!result.success) {
         sendJson(res, 500, result);
@@ -148,7 +152,10 @@ export async function handleGatewayRoutes(
       }
       const projected = await projectUserTurnCompositions(
         sessionKey,
-        result.result ?? { messages: [] },
+        {
+          ...(result.result ?? { messages: [] }),
+          historyCapabilities: adapter.historyCapabilities,
+        },
         adapter.type,
       );
       sendJson(res, 200, sanitizeMemoryFromChatPayload({ ...result, result: projected }));
