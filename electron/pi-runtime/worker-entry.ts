@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { access, mkdir, readFile, rm, stat } from 'node:fs/promises';
+import { access, mkdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   AgentSession,
@@ -8,6 +8,7 @@ import type {
 } from '@earendil-works/pi-coding-agent';
 import type {
   PiPromptResult,
+  PiPromptPayload,
   PiSessionConfig,
   PiWorkerMessage,
   PiWorkerRequest,
@@ -36,6 +37,7 @@ import { buildPiSystemPromptOverride } from './system-prompt-policy';
 import { importNativeEsm } from './native-esm-import';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
 import { piSessionConfigurationKey } from './session-config-policy';
+import { preparePiPromptAttachments } from './prompt-attachments';
 
 type PiSession = {
   session: AgentSession;
@@ -54,9 +56,6 @@ type PiSession = {
 };
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent');
-type PiPromptOptions = NonNullable<Parameters<AgentSession['prompt']>[1]>;
-type PiPromptImages = NonNullable<PiPromptOptions['images']>;
-
 const sessions = new Map<string, PiSession>();
 const sessionCommandQueue = new KeyedTaskQueue();
 let sdkPromise: Promise<PiSdk> | null = null;
@@ -89,11 +88,6 @@ function summarizeSessionConfig(config: PiSessionConfig): Record<string, unknown
     hasApiKey: Boolean(config.model.apiKey),
     headerNames: Object.keys(config.model.headers ?? {}),
     systemPromptChars: config.systemPrompt?.length ?? 0,
-    media: (config.media ?? []).map((item) => ({
-      fileName: item.fileName,
-      mimeType: item.mimeType,
-      filePath: item.filePath,
-    })),
     sessionMode: config.sessionMode ?? 'interactive',
     skillRoots: config.skillRoots ?? [],
     selectedSkills: config.selectedSkills?.map((item) => item.slug) ?? [],
@@ -441,10 +435,42 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       return;
     }
     case 'session.prompt': {
-      const config = payload.config as unknown as PiSessionConfig;
+      const promptPayload = payload as unknown as PiPromptPayload;
+      const config = promptPayload.config;
       const entry = await ensureSession(config);
       if (entry.activeRunId) throw new Error(`Pi session is already running: ${config.sessionKey}`);
-      const runId = String(payload.runId || randomUUID());
+      const sdk = await loadPiSdk();
+      const media = Array.isArray(promptPayload.media) ? promptPayload.media : [];
+      let prepared: Awaited<ReturnType<typeof preparePiPromptAttachments>>;
+      try {
+        prepared = await preparePiPromptAttachments({
+          message: String(promptPayload.message ?? ''),
+          media,
+          cwd: config.cwd,
+          modelSupportsImages: entry.session.model.input.includes('image'),
+          imageApi: sdk,
+        });
+      } catch (error) {
+        logPiCore('session.prompt.attachments-failed', {
+          requestId: request.requestId,
+          sessionKey: config.sessionKey,
+          attachmentCount: media.length,
+          attachments: media.map((attachment) => ({
+            fileName: attachment.fileName,
+            suppliedMimeType: attachment.mimeType,
+          })),
+          failureReason: serializeError(error).message,
+        });
+        throw error;
+      }
+      logPiCore('session.prompt.attachments-prepared', {
+        requestId: request.requestId,
+        sessionKey: config.sessionKey,
+        imageCount: prepared.imageCount,
+        fileReferenceCount: prepared.fileReferenceCount,
+        attachments: prepared.attachments,
+      });
+      const runId = String(promptPayload.runId || randomUUID());
       entry.activeRunId = runId;
       entry.settledRunId = undefined;
       entry.lastRunId = runId;
@@ -458,14 +484,12 @@ async function handle(request: PiWorkerRequest): Promise<void> {
         requestId: request.requestId,
         sessionKey: config.sessionKey,
         runId,
-        messageChars: String(payload.message ?? '').length,
-        mediaCount: config.media?.length ?? 0,
+        messageChars: prepared.message.length,
+        imageCount: prepared.imageCount,
+        fileReferenceCount: prepared.fileReferenceCount,
         durationMs: Date.now() - commandStartedAt,
       });
-      const images: PiPromptImages = await Promise.all((config.media ?? []).map(async (media) => ({
-        type: 'image', data: (await readFile(media.filePath)).toString('base64'), mimeType: media.mimeType,
-      })));
-      void entry.session.prompt(String(payload.message ?? ''), { images, source: 'rpc' })
+      void entry.session.prompt(prepared.message, { images: prepared.images, source: 'rpc' })
         .then(() => {
           if (!shouldCompletePiRun(entry.activeRunId, entry.settledRunId, runId)) return;
           logPiCore('session.prompt.completed', { sessionKey: config.sessionKey, runId });

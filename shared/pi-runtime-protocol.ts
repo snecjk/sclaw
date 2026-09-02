@@ -30,7 +30,6 @@ export interface PiSessionConfig {
   sessionFile?: string;
   systemPrompt?: string;
   model: PiModelConfig;
-  media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
   /** Keeps scheduled-only extension semantics without changing filesystem access. */
   sessionMode?: 'interactive' | 'scheduled';
   /** SClaw-managed Skill roots selected for Pi's native Skill loader. */
@@ -39,6 +38,19 @@ export interface PiSessionConfig {
   selectedSkills?: Array<{ slug: string; path: string; sourceHash: string }>;
   /** Stable hash of the native Skill selection. */
   skillSetHash?: string;
+}
+
+export interface PiPromptAttachment {
+  filePath: string;
+  mimeType: string;
+  fileName: string;
+}
+
+export interface PiPromptPayload {
+  config: PiSessionConfig;
+  message: string;
+  runId: string;
+  media: PiPromptAttachment[];
 }
 
 export interface PiWorkerRequest {

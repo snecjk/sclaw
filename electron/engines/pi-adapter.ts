@@ -40,6 +40,8 @@ import type {
   PiHistoryResult,
   PiInspectResult,
   PiModelConfig,
+  PiPromptAttachment,
+  PiPromptPayload,
   PiPromptResult,
   PiSessionConfig,
 } from '../../shared/pi-runtime-protocol';
@@ -184,7 +186,6 @@ async function buildPiSessionConfig(
     sessionFile: existing?.piSessionFile,
     systemPrompt: workspaceNote,
     model: selection.model,
-    media: params?.media,
     sessionMode,
     skillRoots: selectedSkills.map((skill) => skill.sourceDir),
     selectedSkills: selectedSkills.map((skill) => ({
@@ -216,9 +217,15 @@ async function sendPiMessage(
     await upsertEngineSessionRegistryEntry(entry);
     let result: PiPromptResult;
     try {
+      const payload = {
+        config,
+        message: params.message,
+        runId,
+        media: (params.media ?? []) satisfies PiPromptAttachment[],
+      } satisfies PiPromptPayload;
       result = await getPiRuntimeService().request<PiPromptResult>('session.prompt', {
         sessionKey: params.sessionKey,
-        payload: { config, message: params.message, runId },
+        payload,
       });
     } catch (error) {
       if (error instanceof Error && error.message.includes('timed out')) {

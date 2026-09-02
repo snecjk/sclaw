@@ -337,6 +337,15 @@ output on the MCP stdio channel. Its profile and configuration resolve under the
 SClaw-managed `~/.stoclaw/pi` directory through `PI_AGENT_HOME` and
 `PI_CODING_AGENT_DIR`. Project-local Pi settings remain untrusted and are ignored.
 
+Pi chat and scheduled-task prompts support mixed text, image, and file attachments.
+The worker validates every attachment before accepting the turn, detects images
+from file contents, and uses Pi's native image conversion/resizing pipeline before
+sending official `{ type: "image", data, mimeType }` image inputs. Every attachment
+also keeps its ordered absolute-path `<file>` anchor and original display name in
+the prompt. Non-image files
+are never base64-inlined into model input; Pi can open them through its native file
+tools. A model without image input support rejects image attachments explicitly.
+
 Pi scheduled tasks reuse the canonical scheduler and chat runtime. Their file and
 shell tools follow the same path-access behavior as ordinary Pi conversations: the
 workspace is the default working directory, not an application-level allowlist.
