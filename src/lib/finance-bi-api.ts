@@ -14,6 +14,8 @@ export interface FinanceBiModelMenuItem {
   scheduleEnabled?: boolean;
   status: number;
   publishTime?: string;
+  createBy?: string;
+  createByName?: string;
   hasPermission?: boolean;
   accessRequestStatus?: 'pending' | 'approved' | 'rejected' | null;
 }
@@ -156,6 +158,13 @@ export function formatFinanceBiAutoUpdate(
   if (!enabled) return '未开启';
   const trimmed = item.scheduleText?.trim();
   return trimmed || '已开启';
+}
+
+export function formatFinanceBiCreator(
+  item: { createByName?: string; createBy?: string },
+): string {
+  const name = item.createByName?.trim() || item.createBy?.trim() || '';
+  return name ? `创建人：${name}` : '创建人：—';
 }
 
 /** —— 报表产物（对齐 preview /data-model/history） —— */
