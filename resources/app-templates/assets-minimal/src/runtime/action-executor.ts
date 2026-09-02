@@ -1,4 +1,5 @@
 import { request, RequestError } from '@/lib/request';
+import { services } from '@/sclaw/services.generated';
 
 export type A2uiMessage = Record<string, unknown>;
 
@@ -9,6 +10,10 @@ export type ActionDefinition = {
   method?: string;
   /** Prefer relative `/proxy/<key>/...` (dev: Vite proxy; prod: request.ts → absolute target). */
   url?: string;
+  /** Registered service alias. Production requests use its environment-specific base URL. */
+  service?: string;
+  /** Relative path for `service`, such as `/v1/orders`. */
+  path?: string;
   mockResponse?: unknown;
 };
 
@@ -79,6 +84,26 @@ export async function executeAction(
   }
 
   const url = (def.url ?? '').trim();
+  const serviceAlias = (def.service ?? '').trim();
+  const servicePath = (def.path ?? '').trim();
+  if (serviceAlias || servicePath) {
+    if (!serviceAlias || !servicePath) {
+      return { actionId, ok: false, error: '注册服务 action 必须同时提供 service 和 path' };
+    }
+    const service = (services as Record<string, { request: (input: { path: string; method: string; data?: unknown }) => Promise<unknown> }>)[serviceAlias];
+    if (!service) return { actionId, ok: false, error: `未绑定的外部服务：${serviceAlias}` };
+    try {
+      const method = (def.method ?? 'GET').toUpperCase();
+      const data = method === 'GET' || method === 'HEAD' ? undefined : (payload.context ?? {});
+      return { actionId, ok: true, data: await service.request({
+        path: servicePath,
+        method: method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD',
+        data,
+      }) };
+    } catch (err) {
+      return { actionId, ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
   if (!url) {
     return {
       actionId,

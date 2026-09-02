@@ -6,10 +6,12 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import {
-  getExternalServiceDraft,
-  pageExternalServicesAdmin,
-  publishExternalService,
-  saveExternalServiceDraft,
+  createMyExternalService,
+  getMyExternalServiceDraft,
+  pageMyExternalServices,
+  publishMyExternalService,
+  saveMyExternalServiceDraft,
+  setMyExternalServiceVisibility,
 } from '@/lib/external-service-api';
 import { cn } from '@/lib/utils';
 import type {
@@ -68,6 +70,8 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [query, setQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [serviceId, setServiceId] = useState('');
+  const [visibility, setVisibility] = useState<'PRIVATE' | 'PUBLIC'>('PRIVATE');
   const [isNew, setIsNew] = useState(false);
   const [draft, setDraft] = useState<ExternalServiceDraftInput>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
@@ -76,7 +80,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setItems((await pageExternalServicesAdmin({ pageSize: 100 })).items);
+      setItems((await pageMyExternalServices({ pageSize: 100 })).items);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '外部服务列表加载失败');
     } finally {
@@ -101,11 +105,13 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
 
   if (!open) return null;
 
-  const edit = async (serviceId: string) => {
+  const edit = async (serviceUid: string) => {
     setLoadingDraft(true);
     try {
-      const value = await getExternalServiceDraft(serviceId);
-      setEditingId(value.serviceId);
+      const value = await getMyExternalServiceDraft(serviceUid);
+      setEditingId(value.serviceUid);
+      setServiceId(value.serviceId);
+      setVisibility(value.visibility);
       setIsNew(false);
       setDraft({
         name: value.name,
@@ -124,18 +130,27 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
 
   const createNew = () => {
     setEditingId('');
+    setServiceId('');
+    setVisibility('PRIVATE');
     setIsNew(true);
     setDraft(EMPTY_DRAFT);
   };
 
   const save = async () => {
-    const serviceId = editingId?.trim() ?? '';
-    if (!serviceId || !draft.name.trim() || !draft.owner.trim()
+    const normalizedServiceId = serviceId.trim();
+    if (!normalizedServiceId || !draft.name.trim() || !draft.owner.trim()
       || Object.values(draft.environments).some((value) => !value.trim())) {
       throw new Error('请填写外部服务编码、名称、维护团队和三个环境地址');
     }
-    const saved = await saveExternalServiceDraft(serviceId, draft);
-    setEditingId(saved.serviceId);
+    const creating = isNew;
+    const saved = creating
+      ? await createMyExternalService(normalizedServiceId, draft)
+      : await saveMyExternalServiceDraft(editingId!, draft);
+    setEditingId(saved.serviceUid);
+    setServiceId(saved.serviceId);
+    if (!creating || visibility !== 'PRIVATE') {
+      await setMyExternalServiceVisibility(saved.serviceUid, visibility);
+    }
     setIsNew(false);
     await load();
     return saved;
@@ -210,10 +225,10 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
               ) : (
                 <div className="space-y-2">
                   {visibleItems.map((item) => {
-                    const selected = editingId === item.serviceId;
+                    const selected = editingId === item.serviceUid;
                     return (
                       <article
-                        key={item.serviceId}
+                        key={item.serviceUid}
                         className={cn(
                           'group rounded-xl border p-3 transition-all',
                           selected
@@ -239,7 +254,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
                               <span className="text-[10px] text-muted-foreground">{item.latestVersion ? `v${item.latestVersion}` : '未发布'}</span>
                             </div>
                           </div>
-                          <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void edit(item.serviceId)}>编辑</Button>
+                          <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void edit(item.serviceUid)}>编辑</Button>
                         </div>
                       </article>
                     );
@@ -270,7 +285,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
                     <div className="mb-5">
                       <div className="flex items-center gap-2">
                         <h3 className="text-base font-semibold text-foreground">{isNew ? '新建外部服务' : draft.name}</h3>
-                        {!isNew && editingId ? <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">{editingId}</span> : null}
+                        {!isNew && serviceId ? <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">{serviceId}</span> : null}
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">修改内容会先保存为草稿，发布后才对应用可见。</p>
                     </div>
@@ -278,7 +293,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
                     <FormSection icon={FileText} title="基本信息" description="用于识别服务及明确维护责任。">
                       <div className="grid grid-cols-2 gap-4">
                         <label className="text-xs font-medium text-foreground">外部服务编码
-                          <input aria-label="外部服务编码" disabled={!isNew} value={editingId} onChange={(event) => setEditingId(event.target.value)} className={fieldClass()} placeholder="lowercase-kebab-case" />
+                          <input aria-label="外部服务编码" disabled={!isNew} value={serviceId} onChange={(event) => setServiceId(event.target.value)} className={fieldClass()} placeholder="lowercase-kebab-case" />
                         </label>
                         <label className="text-xs font-medium text-foreground">服务名称
                           <input aria-label="名称" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className={fieldClass()} placeholder="例如：策略本体服务" />
@@ -289,6 +304,11 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
                         <label className="text-xs font-medium text-foreground">认证方式
                           <select aria-label="认证方式" value={draft.auth.type} onChange={(event) => setDraft({ ...draft, auth: { type: event.target.value as ExternalServiceAuthType } })} className={fieldClass()}>
                             <option value="stoToken">StoToken（推荐）</option><option value="none">无需认证</option>
+                          </select>
+                        </label>
+                        <label className="text-xs font-medium text-foreground">可见范围
+                          <select aria-label="可见范围" value={visibility} onChange={(event) => setVisibility(event.target.value as 'PRIVATE' | 'PUBLIC')} className={fieldClass()}>
+                            <option value="PRIVATE">仅自己可见</option><option value="PUBLIC">公司内公开</option>
                           </select>
                         </label>
                         <label className="col-span-2 text-xs font-medium text-foreground">服务描述
@@ -360,7 +380,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
         onError={(error) => toast.error(error instanceof Error ? error.message : '发布失败')}
         onConfirm={async () => {
           const saved = await save();
-          const result = await publishExternalService(saved.serviceId);
+          const result = await publishMyExternalService(saved.serviceUid);
           toast.success(`已发布 v${result.version}`);
           setPublishConfirm(false);
           await load();

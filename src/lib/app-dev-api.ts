@@ -112,7 +112,7 @@ export async function listAppExternalServiceBindings(
 
 export async function bindAppExternalService(input: {
   workspaceId: string;
-  serviceId: string;
+  serviceUid: string;
   version: string;
   alias: string;
 }): Promise<AppExternalServiceChangeResult> {

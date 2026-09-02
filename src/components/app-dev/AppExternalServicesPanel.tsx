@@ -68,7 +68,7 @@ export function AppExternalServicesPanel({ workspaceId }: { workspaceId: string 
     }
   };
 
-  const boundIds = new Set(bindings.map((item) => item.serviceId));
+  const boundIds = new Set(bindings.map((item) => item.serviceUid));
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-5">
@@ -100,11 +100,14 @@ export function AppExternalServicesPanel({ workspaceId }: { workspaceId: string 
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3">
             {items.map((item) => {
-              const bound = boundIds.has(item.serviceId);
-              return <article key={item.serviceId} className="rounded-lg border border-border bg-background p-4">
+              const bound = boundIds.has(item.serviceUid);
+              return <article key={item.serviceUid} className="rounded-lg border border-border bg-background p-4">
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1"><p className="text-sm font-medium">{item.name}</p><p className="mt-1 text-xs text-muted-foreground">{item.description || '暂无说明'}</p><p className="mt-2 text-[11px] text-muted-foreground">{item.owner} · {item.authType} · {item.latestVersion ? `v${item.latestVersion}` : '未发布'}</p></div>
-                  <Button type="button" size="sm" disabled={bound || !item.latestVersion || busyKey === item.serviceId} onClick={() => void run(item.serviceId, () => bindAppExternalService({ workspaceId, serviceId: item.serviceId, version: item.latestVersion!, alias: defaultAlias(item.serviceId) }), '服务已添加到应用')}>{bound ? '已添加' : '添加到应用'}</Button>
+                  <Button type="button" size="sm" disabled={bound || !item.latestVersion || busyKey === item.serviceUid} onClick={() => {
+                    if (!window.confirm(`将 ${item.name} v${item.latestVersion} 安装到当前应用，并写入代码依赖。是否继续？`)) return;
+                    void run(item.serviceUid, () => bindAppExternalService({ workspaceId, serviceUid: item.serviceUid, version: item.latestVersion!, alias: defaultAlias(item.serviceId) }), '服务已添加到应用');
+                  }}>{bound ? '已添加' : '添加到应用'}</Button>
                 </div>
               </article>;
             })}

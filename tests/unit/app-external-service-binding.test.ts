@@ -10,6 +10,10 @@ const roots: string[] = [];
 const POLICY_VERSION: ExternalServiceVersionConfig = {
   schemaVersion: 'external-service/v1',
   serviceId: 'sto-policy-ontology',
+  serviceUid: 'platform-policy-ontology',
+  scopeType: 'PLATFORM',
+  companyCode: '__PLATFORM__',
+  visibility: 'PUBLIC',
   version: '1.0.0',
   name: '策略本体服务',
   description: '提供策略本体查询能力',
@@ -67,7 +71,7 @@ describe('app external service binding', () => {
 
     const result = await service.bind({
       appPath,
-      serviceId: 'sto-policy-ontology',
+      serviceUid: POLICY_VERSION.serviceUid,
       version: '1.0.0',
       alias: 'policyOntology',
     });
@@ -96,14 +100,14 @@ describe('app external service binding', () => {
     const service = createBindingService({
       getVersion: vi.fn().mockResolvedValue({
         ...POLICY_VERSION,
-        serviceId: 'evil',
+        serviceId: 'evil', serviceUid: 'evil-service',
         environments: { ...POLICY_VERSION.environments, online: 'https://evil.example/api' },
       }),
       installNpmPackage: vi.fn(),
     });
     await expect(service.bind({
       appPath,
-      serviceId: 'evil',
+      serviceUid: 'evil-service',
       version: '1.0.0',
       alias: 'evil',
     })).rejects.toThrow('stoToken');
@@ -114,7 +118,7 @@ describe('app external service binding', () => {
     const getVersion = vi.fn().mockResolvedValue(POLICY_VERSION);
     const install = vi.fn().mockResolvedValue({ packageName: 'sdk', output: '' });
     const service = createBindingService({ getVersion, installNpmPackage: install });
-    await service.bind({ appPath, serviceId: POLICY_VERSION.serviceId, version: '1.0.0', alias: 'policy' });
+    await service.bind({ appPath, serviceUid: POLICY_VERSION.serviceUid, version: '1.0.0', alias: 'policy' });
     const before = await readFile(join(appPath, 'contracts/external-services.v1.json'), 'utf8');
     install.mockRejectedValueOnce(new Error('install failed'));
     getVersion.mockResolvedValueOnce({ ...POLICY_VERSION, version: '1.0.1' });
@@ -129,7 +133,7 @@ describe('app external service binding', () => {
       getVersion: vi.fn().mockResolvedValue(POLICY_VERSION),
       installNpmPackage: vi.fn().mockResolvedValue({ packageName: 'sdk', output: '' }),
     });
-    await service.bind({ appPath, serviceId: POLICY_VERSION.serviceId, version: '1.0.0', alias: 'policy' });
+    await service.bind({ appPath, serviceUid: POLICY_VERSION.serviceUid, version: '1.0.0', alias: 'policy' });
     await writeFile(join(appPath, 'src/sclaw/services.generated.ts'), '// drift\n');
     expect((await service.validate(appPath)).valid).toBe(false);
 
@@ -145,7 +149,7 @@ describe('app external service binding', () => {
       getVersion: vi.fn().mockResolvedValue(POLICY_VERSION),
       installNpmPackage: vi.fn().mockResolvedValue({ packageName: 'sdk', output: '' }),
     });
-    await service.bind({ appPath, serviceId: POLICY_VERSION.serviceId, version: '1.0.0', alias: 'policy' });
+    await service.bind({ appPath, serviceUid: POLICY_VERSION.serviceUid, version: '1.0.0', alias: 'policy' });
 
     const proxyPath = join(appPath, 'contracts/dev-proxy.v1.json');
     const proxy = JSON.parse(await readFile(proxyPath, 'utf8'));
@@ -169,7 +173,7 @@ describe('app external service binding', () => {
       getVersion: vi.fn().mockResolvedValue(POLICY_VERSION),
       installNpmPackage: vi.fn().mockResolvedValue({ packageName: 'sdk', output: '' }),
     });
-    await service.bind({ appPath, serviceId: POLICY_VERSION.serviceId, version: '1.0.0', alias: 'policy' });
+    await service.bind({ appPath, serviceUid: POLICY_VERSION.serviceUid, version: '1.0.0', alias: 'policy' });
 
     const proxyPath = join(appPath, 'contracts/dev-proxy.v1.json');
     const proxy = JSON.parse(await readFile(proxyPath, 'utf8'));

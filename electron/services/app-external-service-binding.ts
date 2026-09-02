@@ -26,7 +26,7 @@ type ProxyEntry = {
 type DevProxyManifest = { version: string; proxies: ProxyEntry[] };
 
 type BindingDependencies = {
-  getVersion?: (serviceId: string, version: string) => Promise<ExternalServiceVersionConfig>;
+  getVersion?: (serviceUid: string, version: string) => Promise<ExternalServiceVersionConfig>;
   installNpmPackage?: (appPath: string, packageName: string) => Promise<{ packageName: string; output: string }>;
 };
 
@@ -35,8 +35,19 @@ async function defaultInstallNpmPackage(appPath: string, packageName: string) {
   return installNpmPackage(appPath, packageName);
 }
 
-type BindInput = { appPath: string; serviceId: string; version: string; alias: string };
-type UpgradeInput = { appPath: string; alias: string; version: string };
+type BindInput = {
+  appPath: string;
+  serviceUid: string;
+  version: string;
+  alias: string;
+  resolvedConfig?: ExternalServiceVersionConfig;
+};
+type UpgradeInput = {
+  appPath: string;
+  alias: string;
+  version: string;
+  resolvedConfig?: ExternalServiceVersionConfig;
+};
 type RemoveInput = { appPath: string; alias: string };
 
 export type ExternalServiceWorkspaceValidation = {
@@ -53,8 +64,8 @@ function assertSafeSnapshot(config: ExternalServiceVersionConfig): void {
   if (config.schemaVersion !== 'external-service/v1') {
     throw new Error('外部服务 schemaVersion 不受支持');
   }
-  if (!config.serviceId || !/^1\.0\.\d+$/.test(config.version)) {
-    throw new Error('外部服务 serviceId 或 version 不合法');
+  if (!config.serviceId || !config.serviceUid || !/^1\.0\.\d+$/.test(config.version)) {
+    throw new Error('外部服务 serviceId、serviceUid 或 version 不合法');
   }
   if (!['none', 'stoToken'].includes(config.auth?.type)) {
     throw new Error('外部服务认证方式不受支持');
@@ -105,9 +116,9 @@ async function loadManifest(appPath: string): Promise<ExternalServicesManifest> 
     assertSafeSnapshot(service);
   }
   const aliases = value.services.map((item) => item.alias);
-  const serviceIds = value.services.map((item) => item.serviceId);
-  if (new Set(aliases).size !== aliases.length || new Set(serviceIds).size !== serviceIds.length) {
-    throw new Error('外部服务绑定存在重复 alias 或 serviceId');
+  const serviceUids = value.services.map((item) => item.serviceUid);
+  if (new Set(aliases).size !== aliases.length || new Set(serviceUids).size !== serviceUids.length) {
+    throw new Error('外部服务绑定存在重复 alias 或 serviceUid');
   }
   return { schemaVersion: 'external-services/v1', services: [...value.services] };
 }
@@ -143,6 +154,7 @@ function renderFiles(manifest: ExternalServicesManifest, proxy: DevProxyManifest
     changeOrigin: true,
     managedBy: 'external-services',
     serviceId: service.serviceId,
+    serviceUid: service.serviceUid,
   }));
   const normalizedManifest: ExternalServicesManifest = {
     schemaVersion: 'external-services/v1',
@@ -199,7 +211,7 @@ async function writeFiles(appPath: string, files: ReturnType<typeof renderFiles>
 
 export function createBindingService(deps: BindingDependencies = {}) {
   const getVersion = deps.getVersion
-    ?? ((serviceId: string, version: string) => externalServiceApiClient.getVersion(serviceId, version));
+    ?? ((serviceUid: string, version: string) => externalServiceApiClient.getVersion(serviceUid, version));
   const installNpmPackage = deps.installNpmPackage ?? defaultInstallNpmPackage;
 
   async function bind(input: BindInput) {
@@ -207,14 +219,14 @@ export function createBindingService(deps: BindingDependencies = {}) {
     const [manifest, proxy, config] = await Promise.all([
       loadManifest(input.appPath),
       loadProxy(input.appPath),
-      getVersion(input.serviceId, input.version),
+      input.resolvedConfig ?? getVersion(input.serviceUid, input.version),
     ]);
     assertSafeSnapshot(config);
-    if (config.serviceId !== input.serviceId || config.version !== input.version) {
+    if (config.serviceUid !== input.serviceUid || config.version !== input.version) {
       throw new Error('外部服务版本响应与请求不一致');
     }
-    if (manifest.services.some((item) => item.alias === input.alias || item.serviceId === input.serviceId)) {
-      throw new Error('外部服务 alias 或 serviceId 已绑定');
+    if (manifest.services.some((item) => item.alias === input.alias || item.serviceUid === input.serviceUid)) {
+      throw new Error('外部服务 alias 或 serviceUid 已绑定');
     }
     const integration = config.integration;
     const installed = integration?.npmPackage && integration.packageVersion
@@ -236,9 +248,9 @@ export function createBindingService(deps: BindingDependencies = {}) {
     const [manifest, proxy] = await Promise.all([loadManifest(input.appPath), loadProxy(input.appPath)]);
     const existing = manifest.services.find((item) => item.alias === input.alias);
     if (!existing) throw new Error('外部服务绑定不存在');
-    const config = await getVersion(existing.serviceId, input.version);
+    const config = input.resolvedConfig ?? await getVersion(existing.serviceUid, input.version);
     assertSafeSnapshot(config);
-    if (config.serviceId !== existing.serviceId || config.version !== input.version) {
+    if (config.serviceUid !== existing.serviceUid || config.version !== input.version) {
       throw new Error('外部服务版本响应与请求不一致');
     }
     const integration = config.integration;

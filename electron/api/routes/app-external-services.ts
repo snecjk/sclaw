@@ -8,6 +8,7 @@ import {
 } from '../../services/app-external-service-binding';
 import { externalServiceApiClient } from '../../services/external-service-api-client';
 import { getWorkspaceRootPath } from '../../services/session-catalog-service';
+import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -56,24 +57,28 @@ export async function handleAppExternalServiceRoutes(
     if (url.pathname === `${PREFIX}/bind` && req.method === 'POST') {
       const body = await parseJsonBody<{
         workspaceId?: string;
-        serviceId?: string;
+        serviceUid?: string;
         version?: string;
         alias?: string;
       }>(req);
       const appPath = await resolveAppPath(body.workspaceId);
-      const serviceId = body.serviceId?.trim() ?? '';
-      if (!serviceId) throw new Error('缺少 serviceId');
+      const serviceUid = body.serviceUid?.trim() ?? '';
+      if (!serviceUid) throw new Error('缺少 serviceUid');
       let version = body.version?.trim() ?? '';
       if (!version) {
-        const page = await externalServiceApiClient.page({ keyword: serviceId, pageNum: 1, pageSize: 20 });
-        version = page.items.find((item) => item.serviceId === serviceId)?.latestVersion ?? '';
+        const page = await externalServiceApiClient.page({ pageNum: 1, pageSize: 100 });
+        version = page.items.find((item) => item.serviceUid === serviceUid)?.latestVersion ?? '';
       }
       if (!version) throw new Error('外部服务没有可绑定的已发布版本');
+      const binding = await getStoAppBindingByWorkspaceId(body.workspaceId?.trim() ?? '');
+      if (!binding?.appCode) throw new Error('当前工作区尚未绑定云端应用，无法安装外部服务');
+      const resolvedConfig = await externalServiceApiClient.resolveInstall(serviceUid, version, binding.appCode);
       const result = await bindExternalService({
         appPath,
-        serviceId,
+        serviceUid,
         version,
-        alias: body.alias?.trim() || defaultAlias(serviceId),
+        alias: body.alias?.trim() || defaultAlias(resolvedConfig.serviceId),
+        resolvedConfig,
       });
       sendJson(res, 200, { success: true, ...result });
       return true;
@@ -85,7 +90,14 @@ export async function handleAppExternalServiceRoutes(
       const alias = body.alias?.trim() ?? '';
       const version = body.version?.trim() ?? '';
       if (!alias || !version) throw new Error('upgrade 需要 alias 和 version');
-      const result = await upgradeExternalService({ appPath, alias, version });
+      const existing = (await listExternalServiceBindings(appPath)).find((item) => item.alias === alias);
+      if (!existing) throw new Error('外部服务绑定不存在');
+      const binding = await getStoAppBindingByWorkspaceId(body.workspaceId?.trim() ?? '');
+      if (!binding?.appCode) throw new Error('当前工作区尚未绑定云端应用，无法升级外部服务');
+      const resolvedConfig = await externalServiceApiClient.resolveInstall(
+        existing.serviceUid, version, binding.appCode,
+      );
+      const result = await upgradeExternalService({ appPath, alias, version, resolvedConfig });
       sendJson(res, 200, { success: true, ...result });
       return true;
     }

@@ -101,17 +101,32 @@ export class ExternalServiceApiClient {
     });
   }
 
-  listVersions(serviceId: string): Promise<ExternalServiceVersionSummary[]> {
+  listVersions(serviceUid: string): Promise<ExternalServiceVersionSummary[]> {
     return this.request(
-      `/agent/v1/external-services/${encodeURIComponent(serviceId)}/versions`,
+      `/agent/v1/external-services/uid/${encodeURIComponent(serviceUid)}/versions`,
       { method: 'GET' },
     );
   }
 
-  getVersion(serviceId: string, version: string): Promise<ExternalServiceVersionConfig> {
+  getVersion(serviceUid: string, version: string): Promise<ExternalServiceVersionConfig> {
     return this.request(
-      `/agent/v1/external-services/${encodeURIComponent(serviceId)}/versions/${encodeURIComponent(version)}`,
+      `/agent/v1/external-services/uid/${encodeURIComponent(serviceUid)}/versions/${encodeURIComponent(version)}`,
       { method: 'GET' },
+    );
+  }
+
+  resolveInstall(
+    serviceUid: string,
+    version: string,
+    appCode: string,
+  ): Promise<ExternalServiceVersionConfig> {
+    return this.request(
+      `/agent/v1/external-services/uid/${encodeURIComponent(serviceUid)}/versions/${encodeURIComponent(version)}/resolve-install`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appCode, version }),
+      },
     );
   }
 }
