@@ -39,6 +39,7 @@ import { importNativeEsm } from './native-esm-import';
 import { buildPiAgentExtensions } from '../agent-extensions/adapters/pi';
 import { piSessionConfigurationKey } from './session-config-policy';
 import { preparePiPromptAttachments } from './prompt-attachments';
+import { disposePiSession } from './session-disposal';
 
 type PiSession = {
   session: AgentSession;
@@ -135,6 +136,38 @@ function respond(requestId: string, success: boolean, result?: unknown, error?: 
 
 function emit(sessionKey: string, event: NormalizedEngineEvent): void {
   post({ type: 'engine.event', sessionKey, event });
+}
+
+async function disposeSessionEntry(
+  entry: PiSession,
+  event: {
+    type: 'session_shutdown';
+    reason: 'quit' | 'reload' | 'new' | 'resume' | 'fork';
+    targetSessionFile?: string;
+  },
+): Promise<void> {
+  const startedAt = Date.now();
+  logPiCore('session.dispose.start', {
+    sessionId: entry.sessionId,
+    reason: event.reason,
+    targetSessionFile: event.targetSessionFile ?? null,
+  });
+  const result = await disposePiSession(entry, event);
+  for (const failure of result.failures) {
+    logPiCore('session.dispose.failed', {
+      sessionId: entry.sessionId,
+      reason: event.reason,
+      stage: failure.stage,
+      error: serializeError(failure.error).message,
+    });
+  }
+  logPiCore('session.dispose.completed', {
+    sessionId: entry.sessionId,
+    reason: event.reason,
+    shutdownEmitted: result.shutdownEmitted,
+    failureCount: result.failures.length,
+    durationMs: Date.now() - startedAt,
+  });
 }
 
 async function createSession(config: PiSessionConfig): Promise<PiSession> {
@@ -404,9 +437,11 @@ async function ensureSession(config: PiSessionConfig): Promise<PiSession> {
       sessionId: existing.sessionId,
       reason: 'configuration-changed',
     });
-    existing.unsubscribe();
-    existing.session.dispose();
-    existing.clearExtensionSessionState();
+    await disposeSessionEntry(existing, {
+      type: 'session_shutdown',
+      reason: existing.sessionFile ? 'resume' : 'new',
+      targetSessionFile: existing.sessionFile,
+    });
     sessions.delete(config.sessionKey);
   }
   const created = await createSession(config);
@@ -607,9 +642,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       if (entry) {
         logPiCore('session.delete.dispose', { sessionKey: request.sessionKey ?? null, sessionId: entry.sessionId });
         await entry.session.abort().catch(() => {});
-        entry.unsubscribe();
-        entry.session.dispose();
-        entry.clearExtensionSessionState();
+        await disposeSessionEntry(entry, { type: 'session_shutdown', reason: 'quit' });
         sessions.delete(request.sessionKey!);
       }
       const sessionFile = typeof payload.sessionFile === 'string' ? payload.sessionFile : undefined;
@@ -622,9 +655,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       logPiCore('runtime.shutdown.start', { sessionCount: sessions.size });
       for (const entry of sessions.values()) {
         await entry.session.abort().catch(() => {});
-        entry.unsubscribe();
-        entry.session.dispose();
-        entry.clearExtensionSessionState();
+        await disposeSessionEntry(entry, { type: 'session_shutdown', reason: 'quit' });
       }
       sessions.clear();
       respond(request.requestId, true, { stopped: true });
