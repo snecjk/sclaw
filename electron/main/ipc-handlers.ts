@@ -94,7 +94,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   getSpriteWindow?: () => BrowserWindow | null,
   getFloatIconWindow?: () => BrowserWindow | null,
-  _getMainWindow?: () => BrowserWindow | null,
+  getMainWindow?: () => BrowserWindow | null,
 ): void {
   // Catch embed webview window.open as early as guest WebContents are created.
   void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
@@ -174,7 +174,7 @@ export function registerIpcHandlers(
   registerFloatIconHandlers(getFloatIconWindow);
 
   // Workflow runtime（客户端执行下沉）：注册 workflow-runtime:* IPC + 注入生产依赖
-  installWorkflowRuntime(gatewayManager);
+  installWorkflowRuntime(gatewayManager, getMainWindow ?? (() => mainWindow));
   void import('./ipc/jsbridge-handlers').then(({ registerJsBridgeIpcHandlers }) => {
     registerJsBridgeIpcHandlers();
   });

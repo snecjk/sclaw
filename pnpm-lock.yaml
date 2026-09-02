@@ -351,8 +351,6 @@ importers:
 
   sto-plugin/openclaw/sto-browser-automation: {}
 
-  sto-plugin/openclaw/sto-browser-automation/sto-toolkit: {}
-
   sto-plugin/openclaw/sto-browser-bridge: {}
 
   sto-plugin/openclaw/sto-browser-bridge/sto-toolkit: {}

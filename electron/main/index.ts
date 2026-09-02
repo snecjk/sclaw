@@ -703,6 +703,21 @@ async function initialize(): Promise<void> {
     () => mainWindow,
   );
 
+  // Register the canonical chat observer before workflow/scheduled runtimes can
+  // start background work, so even an immediate terminal event is notified.
+  const [
+    { getChatRuntimeSupervisor },
+    { createChatResultNotificationObserver },
+  ] = await Promise.all([
+    import('../services/chat-runtime-supervisor'),
+    import('../services/chat-result-notification'),
+  ]);
+  const observeChatResult = createChatResultNotificationObserver(() => mainWindow);
+  getChatRuntimeSupervisor(gm).on('event', (event) => {
+    heb.emit('chat-runtime:event', event);
+    observeChatResult(event);
+  });
+
   // Workflow runtime（客户端执行下沉）：收口在途 run + 起 outbox flushLoop
   const { startWorkflowRuntimeOnLaunch } = await import('../services/workflow-runtime/bootstrap');
   startWorkflowRuntimeOnLaunch();
@@ -873,14 +888,6 @@ async function initialize(): Promise<void> {
 
   gm.on('exit', (code) => {
     heb.emit('gateway:exit', { code });
-  });
-
-  void import('../services/chat-runtime-supervisor').then(({ getChatRuntimeSupervisor }) => {
-    getChatRuntimeSupervisor(gm).on('event', (event) => {
-      heb.emit('chat-runtime:event', event);
-    });
-  }).catch((error) => {
-    logger.warn('[chat-runtime] host event bridge failed:', error);
   });
 
   deviceOAuthManager.on('oauth:code', (payload) => {

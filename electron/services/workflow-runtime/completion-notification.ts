@@ -1,6 +1,9 @@
-import { Notification, type BrowserWindow } from 'electron';
+import type { BrowserWindow } from 'electron';
 import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
-import { getClientAppIcon } from '../../main/app-icon';
+import {
+  notifyTaskResult,
+  resetTaskResultNotificationDedupeForTest,
+} from '../task-result-notification';
 
 export interface WorkflowCompletionNotificationPayload {
   runId: string;
@@ -11,16 +14,8 @@ export interface WorkflowCompletionNotificationPayload {
   error?: string;
 }
 
-const deliveredRunIds = new Set<string>();
-
 export function isWorkflowCompletionStatus(status: WorkflowRunStatus): boolean {
   return status === 'completed' || status === 'failed';
-}
-
-export function shouldShowWorkflowSystemNotification(
-  window: Pick<BrowserWindow, 'isFocused' | 'isMinimized' | 'isVisible'> | null,
-): boolean {
-  return !window || !window.isVisible() || window.isMinimized() || !window.isFocused();
 }
 
 export function buildWorkflowSystemNotification(payload: WorkflowCompletionNotificationPayload): {
@@ -43,29 +38,22 @@ export function notifyWorkflowCompletion(
   mainWindow: BrowserWindow | null,
   payload: WorkflowCompletionNotificationPayload,
 ): void {
-  if (!isWorkflowCompletionStatus(payload.status) || deliveredRunIds.has(payload.runId)) return;
-  deliveredRunIds.add(payload.runId);
-  if (!shouldShowWorkflowSystemNotification(mainWindow)) return;
-  if (!Notification.isSupported()) return;
+  if (!isWorkflowCompletionStatus(payload.status)) return;
 
   const message = buildWorkflowSystemNotification(payload);
-  const notification = new Notification({
+  notifyTaskResult(mainWindow, {
+    id: `workflow-result:${payload.runId}`,
     ...message,
-    icon: getClientAppIcon(),
+    onClick: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send('workflow:completion-open', {
+        runId: payload.runId,
+        sessionKey: payload.sessionKey,
+      });
+    },
   });
-  notification.on('click', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.webContents.send('workflow:completion-open', {
-      runId: payload.runId,
-      sessionKey: payload.sessionKey,
-    });
-  });
-  notification.show();
 }
 
 export function resetWorkflowCompletionNotificationDedupeForTest(): void {
-  deliveredRunIds.clear();
+  resetTaskResultNotificationDedupeForTest();
 }
