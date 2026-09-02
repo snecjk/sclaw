@@ -262,7 +262,8 @@ describe('Pi agent extension adapter', () => {
       }],
       ...dependencies(),
     });
-    expect(result.extensions).toEqual([]);
+    expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
+      .toEqual(['sclaw-extension-lifecycle']);
     expect(buildNative).not.toHaveBeenCalled();
   });
 
@@ -317,12 +318,56 @@ describe('Pi agent extension adapter', () => {
     expect(beforeResult).toBeUndefined();
     expect(input).toEqual({ command: 'echo ok', patched: true });
 
-    const promptResult = await handlers.get('before_agent_start')?.[0]?.({
-      type: 'before_agent_start', prompt: 'hello', systemPrompt: 'base', systemPromptOptions: {},
-    });
-    expect(promptResult).toEqual({ systemPrompt: 'base\n\nshared prompt' });
+    let systemPrompt = 'base';
+    for (const handler of handlers.get('before_agent_start') ?? []) {
+      const promptResult = await handler({
+        type: 'before_agent_start', prompt: 'hello', systemPrompt, systemPromptOptions: {},
+      }) as { systemPrompt?: string } | undefined;
+      systemPrompt = promptResult?.systemPrompt ?? systemPrompt;
+    }
+    expect(systemPrompt).toBe('base\n\nshared prompt');
 
     result.setTurnContext({ runId: 'run-1' });
+  });
+
+  it('injects PI systemPromptAppend for one turn and clears it at turn end', async () => {
+    const result = await buildPiAgentExtensions({
+      sessionKey: 'pi-turn-context',
+      mode: 'interactive',
+      entries: [{ common: definition() }],
+      ...dependencies(),
+    });
+    type FakeHandler = (event: Record<string, unknown>) => Promise<unknown> | unknown;
+    const handlers = new Map<string, FakeHandler[]>();
+    const lifecycle = result.extensions.find(
+      (extension) => typeof extension !== 'function' && extension.name === 'sclaw-extension-lifecycle',
+    );
+    if (!lifecycle || typeof lifecycle === 'function') throw new Error('missing PI lifecycle extension');
+    await lifecycle.factory({
+      on(event, handler) {
+        handlers.set(event, [...(handlers.get(event) ?? []), handler as FakeHandler]);
+      },
+    } as never);
+
+    const beforeHandler = handlers.get('before_agent_start')?.[0];
+    expect(await beforeHandler?.({
+      type: 'before_agent_start', prompt: 'hello', systemPrompt: 'base', systemPromptOptions: {},
+    })).toBeUndefined();
+
+    result.setTurnContext({ runId: 'run-memory', systemPromptAppend: '  retrieved memory  ' });
+    expect(await beforeHandler?.({
+      type: 'before_agent_start', prompt: 'hello', systemPrompt: 'base', systemPromptOptions: {},
+    })).toEqual({ systemPrompt: 'base\n\nretrieved memory' });
+
+    await handlers.get('turn_end')?.[0]?.({ type: 'turn_end' });
+    expect(await beforeHandler?.({
+      type: 'before_agent_start', prompt: 'next', systemPrompt: 'base', systemPromptOptions: {},
+    })).toBeUndefined();
+
+    result.setTurnContext({ runId: 'run-next', systemPromptAppend: 'next memory' });
+    expect(await beforeHandler?.({
+      type: 'before_agent_start', prompt: 'next', systemPrompt: 'base', systemPromptOptions: {},
+    })).toEqual({ systemPrompt: 'base\n\nnext memory' });
   });
 
   it('uses only the native PI contribution in replace mode', async () => {

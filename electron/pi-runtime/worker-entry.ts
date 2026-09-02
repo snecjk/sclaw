@@ -53,7 +53,7 @@ type PiSession = {
   lastRunError?: string;
   streamingAssistant?: Record<string, unknown> & { role: 'assistant'; content: Array<Record<string, unknown>> };
   clearExtensionSessionState: () => void;
-  setExtensionTurnContext: (context: { runId?: string }) => void;
+  setExtensionTurnContext: (context: { runId?: string; systemPromptAppend?: string }) => void;
   unsubscribe: () => void;
 };
 
@@ -514,7 +514,10 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       entry.lastRunStatus = undefined;
       entry.lastRunError = undefined;
       entry.streamingAssistant = undefined;
-      entry.setExtensionTurnContext({ runId });
+      entry.setExtensionTurnContext({
+        runId,
+        systemPromptAppend: promptPayload.systemPromptAppend,
+      });
       const result: PiPromptResult = { runId, sessionId: entry.sessionId, sessionFile: entry.sessionFile };
       respond(request.requestId, true, result);
       logPiCore('session.prompt.accepted', {

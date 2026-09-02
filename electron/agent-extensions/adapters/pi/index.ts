@@ -71,7 +71,7 @@ export interface BuildPiAgentExtensionsResult {
   /** Exact extension tool names that are active before lazy activation. */
   initiallyActiveToolNames: string[];
   diagnostics: SclawExtensionDiagnostic[];
-  setTurnContext(context: { runId?: string }): void;
+  setTurnContext(context: { runId?: string; systemPromptAppend?: string }): void;
   /** Clears framework-owned session/turn/tool-call state on worker disposal. */
   clearSessionState(): void;
 }
@@ -109,7 +109,7 @@ export async function buildPiAgentExtensions(
   const usedToolNames = new Set<string>();
   const initiallyActiveToolNames: string[] = [];
   const buildStartedAt = Date.now();
-  let turnContext: { runId?: string } = {};
+  let turnContext: { runId?: string; systemPromptAppend?: string } = {};
 
   extensionLogger.info('[agent-extension] build.start', {
     engine: 'pi',
@@ -402,27 +402,33 @@ export async function buildPiAgentExtensions(
     }
   }
 
-  if (extensions.length > 0) {
-    extensions.unshift({
-      name: 'sclaw-extension-lifecycle',
-      hidden: true,
-      factory(pi) {
-        pi.on('turn_start', () => stateManager.beginTurn(input.sessionKey));
-        pi.on('turn_end', () => {
-          stateManager.endTurn(input.sessionKey);
-          turnContext = {};
-          clearRuntimeSkillAccess(input.sessionKey);
-        });
-        pi.on('session_shutdown', (event) => {
-          // Pi tears down and recreates its extension runtime on every resource
-          // reload. That is not the end of the SClaw conversation, so keep
-          // session-scoped activation/state across reloads and only clear it
-          // when Pi is actually leaving or replacing the session.
-          if (event.reason !== 'reload') stateManager.clearSession(input.sessionKey);
-        });
-      },
-    });
-  }
+  // This lifecycle extension is runtime infrastructure, not a business
+  // contribution. Keep it installed even when no user-facing extension is
+  // active so per-turn context never falls back into session identity.
+  extensions.unshift({
+    name: 'sclaw-extension-lifecycle',
+    hidden: true,
+    factory(pi) {
+      pi.on('turn_start', () => stateManager.beginTurn(input.sessionKey));
+      pi.on('before_agent_start', (event) => {
+        const append = turnContext.systemPromptAppend?.trim();
+        if (!append) return undefined;
+        return { systemPrompt: `${event.systemPrompt}\n\n${append}` };
+      });
+      pi.on('turn_end', () => {
+        stateManager.endTurn(input.sessionKey);
+        turnContext = {};
+        clearRuntimeSkillAccess(input.sessionKey);
+      });
+      pi.on('session_shutdown', (event) => {
+        // Pi tears down and recreates its extension runtime on every resource
+        // reload. That is not the end of the SClaw conversation, so keep
+        // session-scoped activation/state across reloads and only clear it
+        // when Pi is actually leaving or replacing the session.
+        if (event.reason !== 'reload') stateManager.clearSession(input.sessionKey);
+      });
+    },
+  });
 
   extensionLogger.info('[agent-extension] build.completed', {
     engine: 'pi',

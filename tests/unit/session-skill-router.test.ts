@@ -166,4 +166,91 @@ describe('session Skill router discovery setting', () => {
       '已匹配技能：SAI CLI、spreadsheets',
     ]);
   });
+
+  it('does not fall back to local matching when remote search succeeds with no results', async () => {
+    mocks.getSetting.mockResolvedValue(true);
+    mocks.listDesiredPackages.mockResolvedValue([{
+      slug: 'custom-report-skill',
+      name: 'Custom Report Skill',
+      description: 'create custom reports',
+      sourceDir: 'D:/skills/custom-report-skill',
+      version: '1.0.0',
+      enabled: true,
+      scope: 'user',
+      userCode: '1200287',
+      source: 'local',
+    }]);
+    mocks.getSessionSkillState.mockResolvedValue({
+      sessionKey: 'pi:empty-remote:session',
+      turnNo: 0,
+      manifestRevision: '',
+      skills: [],
+      pendingTurns: {},
+    });
+    mocks.upsertCards.mockResolvedValue(undefined);
+    mocks.search.mockResolvedValue({ items: [], degraded: false });
+    mocks.beginSkillTurn.mockResolvedValue(undefined);
+    const onProgress = vi.fn();
+
+    const result = await routeSessionSkills({
+      sessionKey: 'pi:empty-remote:session',
+      runId: 'run-empty-remote',
+      agentId: 'empty-remote',
+      engine: 'pi',
+      mode: 'interactive',
+      query: 'use custom-report-skill to create a report',
+      onProgress,
+    });
+
+    expect(result.selected).toEqual([]);
+    expect(result.remoteSearched).toBe(true);
+    expect(result.degraded).toBe(false);
+    expect(onProgress.mock.calls.map(([message]) => message)).toEqual([
+      '正在匹配技能…',
+      '未匹配到相关技能，正在直接处理…',
+    ]);
+  });
+
+  it('uses local matching only when remote search throws', async () => {
+    mocks.getSetting.mockResolvedValue(true);
+    mocks.listDesiredPackages.mockResolvedValue([{
+      slug: 'custom-report-skill',
+      name: 'Custom Report Skill',
+      description: 'create custom reports',
+      sourceDir: 'D:/skills/custom-report-skill',
+      version: '1.0.0',
+      enabled: true,
+      scope: 'user',
+      userCode: '1200287',
+      source: 'local',
+    }]);
+    mocks.getSessionSkillState.mockResolvedValue({
+      sessionKey: 'pi:failed-remote:session',
+      turnNo: 0,
+      manifestRevision: '',
+      skills: [],
+      pendingTurns: {},
+    });
+    mocks.upsertCards.mockResolvedValue(undefined);
+    mocks.search.mockRejectedValue(new Error('remote unavailable'));
+    mocks.beginSkillTurn.mockResolvedValue(undefined);
+
+    const result = await routeSessionSkills({
+      sessionKey: 'pi:failed-remote:session',
+      runId: 'run-failed-remote',
+      agentId: 'failed-remote',
+      engine: 'pi',
+      mode: 'interactive',
+      query: 'use custom-report-skill to create a report',
+    });
+
+    expect(result.selected).toEqual([
+      expect.objectContaining({
+        slug: 'custom-report-skill',
+        reasons: ['local-match'],
+      }),
+    ]);
+    expect(result.remoteSearched).toBe(false);
+    expect(result.degraded).toBe(true);
+  });
 });

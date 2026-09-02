@@ -166,7 +166,6 @@ async function buildPiSessionConfig(
     `The default working directory is: ${cwd}`,
     'For an interactive chat this directory is context and the default cwd, not a security boundary. You may access other paths allowed to the current operating-system user when the user asks.',
     'Do not install Pi packages or load project .pi settings, extensions, or package configuration.',
-    params?.systemPromptAppend?.trim(),
   ].filter(Boolean).join('\n\n');
   const entry: EngineSessionRegistryEntry = {
     ...existing,
@@ -223,6 +222,7 @@ async function sendPiMessage(
         config,
         message: params.normalizedTurn?.modelText ?? params.message,
         runId,
+        systemPromptAppend: params.systemPromptAppend?.trim() || undefined,
         media: (params.media ?? []) satisfies PiPromptAttachment[],
         referencesEmbedded: Boolean(params.normalizedTurn && !params.normalizedTurn.legacy),
       } satisfies PiPromptPayload;

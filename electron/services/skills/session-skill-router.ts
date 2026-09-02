@@ -206,6 +206,7 @@ export async function routeSessionSkills(input: {
 
   let remoteItems: Array<{ slug: string; score: number; sourceHash?: string; reasons?: string[] }> = [];
   let degraded = false;
+  let remoteSearchFailed = false;
   if (shouldSearchRemote) {
     try {
       const response = await skillRoutingRemoteService.search({
@@ -221,6 +222,7 @@ export async function routeSessionSkills(input: {
       degraded = Boolean(response.degraded);
     } catch (error) {
       degraded = true;
+      remoteSearchFailed = true;
       logger.warn('[skill-router] remote search unavailable; using local candidates', {
         sessionKey: input.sessionKey,
         engine: input.engine,
@@ -270,11 +272,13 @@ export async function routeSessionSkills(input: {
     ));
   }
   remoteItems.forEach((item) => add(item.slug, 'selected', 2_000_000 + item.score * 1_000, item.reasons ?? ['remote-hybrid']));
-  desired
-    .map((pkg) => ({ pkg, score: localScore(input.query, pkg, extensions) }))
-    .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score)
-    .forEach(({ pkg, score }) => add(pkg.slug, 'selected', 1_000_000 + score, ['local-match']));
+  if (remoteSearchFailed) {
+    desired
+      .map((pkg) => ({ pkg, score: localScore(input.query, pkg, extensions) }))
+      .filter((item) => item.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .forEach(({ pkg, score }) => add(pkg.slug, 'selected', 1_000_000 + score, ['local-match']));
+  }
   if (!topicChanged) {
     active.filter((lease) => lease.state === 'selected').forEach((lease) => add(
       lease.slug,

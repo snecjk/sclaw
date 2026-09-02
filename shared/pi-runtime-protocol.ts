@@ -50,6 +50,8 @@ export interface PiPromptPayload {
   config: PiSessionConfig;
   message: string;
   runId: string;
+  /** Per-turn Memory/business context appended only for this model turn. */
+  systemPromptAppend?: string;
   media: PiPromptAttachment[];
   /** Structured Main prompt already contains canonical <file> references. */
   referencesEmbedded?: boolean;
