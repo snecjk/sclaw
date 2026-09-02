@@ -94,7 +94,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   getSpriteWindow?: () => BrowserWindow | null,
   getFloatIconWindow?: () => BrowserWindow | null,
-  _getMainWindow?: () => BrowserWindow | null,
+  getMainWindow?: () => BrowserWindow | null,
 ): void {
   // Catch embed webview window.open as early as guest WebContents are created.
   void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
