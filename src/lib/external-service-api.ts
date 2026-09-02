@@ -43,6 +43,12 @@ export function pageMyExternalServices(input: { keyword?: string; pageNum?: numb
   return request<ExternalServicePageResult>('/mine/page', json({ pageNum: 1, pageSize: 20, ...input }));
 }
 
+export function getVisibleExternalServiceVersion(serviceUid: string, version: string) {
+  return request<ExternalServiceVersionConfig>(
+    `/uid/${encodeURIComponent(serviceUid)}/versions/${encodeURIComponent(version)}`,
+  );
+}
+
 export function createMyExternalService(serviceId: string, draft: ExternalServiceDraftInput) {
   return request<ExternalServiceDraft>('/', json({ serviceId, draft }));
 }

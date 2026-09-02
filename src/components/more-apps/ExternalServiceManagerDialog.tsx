@@ -7,7 +7,9 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import {
   createMyExternalService,
+  getVisibleExternalServiceVersion,
   getMyExternalServiceDraft,
+  pageExternalServices,
   pageMyExternalServices,
   publishMyExternalService,
   saveMyExternalServiceDraft,
@@ -18,6 +20,7 @@ import type {
   ExternalServiceAuthType,
   ExternalServiceDraftInput,
   ExternalServiceSummary,
+  ExternalServiceVersionConfig,
 } from '../../../shared/external-service-contract';
 
 const EMPTY_DRAFT: ExternalServiceDraftInput = {
@@ -68,7 +71,9 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
   const [items, setItems] = useState<ExternalServiceSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
+  const [marketDetail, setMarketDetail] = useState<ExternalServiceVersionConfig | null>(null);
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<'mine' | 'market'>('mine');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [serviceId, setServiceId] = useState('');
   const [visibility, setVisibility] = useState<'PRIVATE' | 'PUBLIC'>('PRIVATE');
@@ -80,13 +85,16 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setItems((await pageMyExternalServices({ pageSize: 100 })).items);
+      const page = await (view === 'mine'
+        ? pageMyExternalServices({ pageSize: 100 })
+        : pageExternalServices({ pageSize: 100 }));
+      setItems(page.items);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '外部服务列表加载失败');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     if (!open) return;
@@ -136,6 +144,30 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
     setDraft(EMPTY_DRAFT);
   };
 
+  const switchView = (nextView: 'mine' | 'market') => {
+    if (nextView === view) return;
+    setView(nextView);
+    setEditingId(null);
+    setMarketDetail(null);
+    setIsNew(false);
+    setPublishConfirm(false);
+  };
+
+  const inspectMarketService = async (item: ExternalServiceSummary) => {
+    if (!item.latestVersion) {
+      toast.error('该服务尚未发布可查看的版本');
+      return;
+    }
+    setLoadingDraft(true);
+    try {
+      setMarketDetail(await getVisibleExternalServiceVersion(item.serviceUid, item.latestVersion));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '外部服务详情加载失败');
+    } finally {
+      setLoadingDraft(false);
+    }
+  };
+
   const save = async () => {
     const normalizedServiceId = serviceId.trim();
     if (!normalizedServiceId || !draft.name.trim() || !draft.owner.trim()
@@ -180,11 +212,15 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
               <h2 id="external-service-manager-title" className="text-lg font-semibold text-foreground">外部服务管理</h2>
               <p className="mt-0.5 truncate text-xs text-muted-foreground">统一维护服务地址、身份认证与应用集成说明</p>
             </div>
-          </div>
+            </div>
+            <div className="flex items-center rounded-lg bg-muted p-1 text-xs">
+              <button type="button" onClick={() => switchView('mine')} className={cn('rounded-md px-3 py-1.5 transition-colors', view === 'mine' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground')}>我的服务</button>
+              <button type="button" onClick={() => switchView('market')} className={cn('rounded-md px-3 py-1.5 transition-colors', view === 'market' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground')}>服务广场</button>
+            </div>
           <div className="flex-1" />
-          <Button type="button" size="sm" onClick={createNew}>
+          {view === 'mine' ? <Button type="button" size="sm" onClick={createNew}>
             <Plus className="mr-1.5 h-4 w-4" />新建服务
-          </Button>
+          </Button> : null}
           <button
             type="button"
             aria-label="关闭外部服务管理"
@@ -208,7 +244,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
                 />
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                <span>服务列表</span><span>{visibleItems.length} / {items.length}</span>
+                <span>{view === 'mine' ? '我创建的服务' : '当前可见服务'}</span><span>{visibleItems.length} / {items.length}</span>
               </div>
             </div>
 
@@ -254,7 +290,11 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
                               <span className="text-[10px] text-muted-foreground">{item.latestVersion ? `v${item.latestVersion}` : '未发布'}</span>
                             </div>
                           </div>
-                          <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void edit(item.serviceUid)}>编辑</Button>
+                          {view === 'mine' ? (
+                            <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void edit(item.serviceUid)}>编辑</Button>
+                          ) : (
+                            <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" disabled={!item.latestVersion} onClick={() => void inspectMarketService(item)}>查看详情</Button>
+                          )}
                         </div>
                       </article>
                     );
@@ -271,7 +311,47 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
               </div>
             ) : null}
 
-            {editingId === null ? (
+            {view === 'market' ? (
+              marketDetail ? (
+                <div className="min-h-0 flex-1 overflow-y-auto p-6">
+                  <div className="mx-auto max-w-[840px] space-y-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-semibold text-foreground">{marketDetail.name}</h3>
+                        <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">{marketDetail.serviceId}</span>
+                        <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-700 dark:text-violet-300">v{marketDetail.version}</span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{marketDetail.description || '暂无服务说明'}</p>
+                    </div>
+                    <FormSection icon={FileText} title="服务信息" description="服务广场中的配置为只读不可变版本。">
+                      <dl className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                        <div><dt className="text-xs text-muted-foreground">维护方</dt><dd className="mt-1">{marketDetail.owner}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">认证方式</dt><dd className="mt-1">{marketDetail.auth.type === 'stoToken' ? 'StoToken' : '无需认证'}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">服务范围</dt><dd className="mt-1">{marketDetail.scopeType === 'PLATFORM' ? '平台公共服务' : marketDetail.visibility === 'PUBLIC' ? '公司内公开' : '仅自己可见'}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">SDK</dt><dd className="mt-1 font-mono text-xs">{marketDetail.integration?.npmPackage ? `${marketDetail.integration.npmPackage}@${marketDetail.integration.packageVersion}` : '未提供'}</dd></div>
+                      </dl>
+                    </FormSection>
+                    <FormSection icon={ShieldCheck} title="环境地址" description="应用安装后将按部署环境自动选择对应地址。">
+                      <div className="space-y-3">
+                        {ENVIRONMENTS.map((environment) => <div key={environment.key}>
+                          <span className="text-xs text-muted-foreground">{environment.label}</span>
+                          <p className="mt-1 break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">{marketDetail.environments[environment.key]}</p>
+                        </div>)}
+                      </div>
+                    </FormSection>
+                    <FormSection icon={Package} title="AI 对接说明" description="安装到应用前可先核对接口约束和调用方式。">
+                      <pre className="whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-sans text-xs leading-5 text-foreground">{marketDetail.integration?.usageGuide || '该服务暂未提供 usageGuide。'}</pre>
+                    </FormSection>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground"><Server className="h-6 w-6" /></div>
+                  <h3 className="text-sm font-medium text-foreground">选择一个服务查看详情</h3>
+                  <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">可查看服务的固定版本、环境地址、认证方式、SDK 与 AI 对接说明。</p>
+                </div>
+              )
+            ) : editingId === null ? (
               <div className="flex h-full flex-col items-center justify-center px-8 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground"><Server className="h-6 w-6" /></div>
                 <h3 className="text-sm font-medium text-foreground">选择一个服务开始编辑</h3>
