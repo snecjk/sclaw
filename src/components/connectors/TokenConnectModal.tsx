@@ -54,16 +54,16 @@ export function TokenConnectModal({ item, onClose, onSubmit }: TokenConnectModal
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      className="sto-overlay-scrim sto-overlay-scrim--dialog fixed inset-0 z-50 flex items-center justify-center"
       onClick={onClose}
     >
       <div
-        className="relative w-[420px] rounded-2xl bg-white p-6 shadow-xl dark:bg-background"
+        className="sto-overlay sto-overlay--dialog relative w-[420px] rounded-[var(--sto-dialog-radius)] border p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
-          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full hover:bg-[#F2F3F5] transition-colors"
+          className="sto-control sto-dialog-close absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full transition-colors"
           onClick={onClose}
         >
           <X className="h-4 w-4 text-muted-foreground" />
@@ -153,7 +153,7 @@ export function TokenConnectModal({ item, onClose, onSubmit }: TokenConnectModal
         </div>
 
         {/* Actions */}
-        <div className="mt-6 flex items-center justify-end gap-3">
+        <div className="sto-dialog-footer mt-6">
           <button
             type="button"
             className="inline-flex h-9 items-center justify-center rounded-[10px] border border-border px-5 text-[13px] font-medium text-[#1D2129] hover:bg-[#F2F3F5] transition-colors dark:text-foreground"
@@ -163,7 +163,7 @@ export function TokenConnectModal({ item, onClose, onSubmit }: TokenConnectModal
           </button>
           <button
             type="button"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] bg-primary px-5 text-[13px] font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="sto-control sto-control--dialog-primary inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] px-5 text-[13px] font-medium transition-colors"
             disabled={!canSubmit}
             onClick={() => void handleSubmit()}
           >

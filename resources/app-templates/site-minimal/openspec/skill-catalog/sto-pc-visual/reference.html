@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sto-pc-visual 框架实样</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: var(--font-body);
+      color: var(--fg);
+      background: #e8eaed;
+    }
+
+    .ref-banner {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 16px 16px 12px;
+      font-size: 12px;
+      line-height: 18px;
+      color: var(--fg-2);
+    }
+    .ref-banner strong { color: var(--fg); font-size: 14px; }
+    .ref-dims {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .ref-dims span {
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: var(--fg-2);
+    }
+    .ref-dims b { color: var(--accent); font-weight: 600; }
+
+    .sto-shell {
+      width: 1440px;
+      max-width: 100%;
+      margin: 0 auto 24px;
+      min-height: 640px;
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      overflow: hidden;
+    }
+    .sto-topbar {
+      display: flex;
+      align-items: center;
+      height: var(--shell-topbar);
+      padding: 0 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-soft);
+      gap: 24px;
+    }
+    .sto-brand {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+    .sto-brand-mark {
+      width: 68px;
+      height: 26px;
+      color: var(--accent);
+    }
+    .sto-brand-mark svg { width: 68px; height: 26px; display: block; }
+    .sto-brand-name {
+      font-family: var(--font-brand);
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 26px;
+      color: var(--fg);
+      white-space: nowrap;
+    }
+    .sto-l1-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .sto-l1-item {
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 12px;
+      color: var(--fg-2);
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 16px;
+      white-space: nowrap;
+    }
+    .sto-l1-item.is-active { color: var(--accent); }
+
+    .sto-opentabs {
+      display: flex;
+      align-items: flex-end;
+      height: var(--shell-tabs);
+      background: var(--surface);
+      border-bottom: 1px solid var(--fill);
+    }
+    .sto-opentabs-list {
+      display: flex;
+      align-items: flex-end;
+      height: 24px;
+      margin-top: 4px;
+    }
+    .sto-opentab {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      width: 125px;
+      padding: 0 28px 0 12px;
+      color: var(--fg-2);
+      font-size: 12px;
+      line-height: 16px;
+      z-index: 1;
+    }
+    .sto-opentab-bg {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      color: var(--th);
+    }
+    .sto-opentab-bg svg { display: block; width: 100%; height: 100%; }
+    .sto-opentab.is-home { width: 52px; padding: 0 12px; justify-content: center; }
+    .sto-opentab.is-active { color: var(--accent-on); z-index: 2; }
+    .sto-opentab.is-active .sto-opentab-bg { color: var(--accent); }
+    .sto-opentab-close {
+      position: absolute;
+      top: 6px;
+      right: 12px;
+      width: 12px;
+      height: 12px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--meta);
+    }
+    .sto-opentab.is-active .sto-opentab-close { color: var(--accent-on); }
+    .sto-opentab-close svg { width: 12px; height: 12px; display: block; }
+
+    .sto-body { display: flex; min-height: 552px; }
+    .sto-sidebar {
+      width: var(--shell-side);
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border-soft);
+    }
+    .sto-side-title {
+      display: flex;
+      align-items: center;
+      height: 40px;
+      padding: 12px 32px;
+      color: var(--fg-2);
+      font-size: 16px;
+      font-weight: 500;
+    }
+    .sto-side-l2 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 40px;
+      padding: 11px 16px 11px 32px;
+      color: var(--fg-2);
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .sto-side-l2.is-open { color: var(--accent); }
+    .sto-side-kids { display: none; }
+    .sto-side-l2.is-open + .sto-side-kids { display: block; }
+    .sto-side-l3 {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      padding: 10px 16px 10px 60px;
+      color: var(--fg-2);
+      font-size: 12px;
+      background: var(--surface-side);
+      cursor: pointer;
+    }
+    .sto-side-l3:hover { color: var(--accent); }
+    .sto-side-l3.is-active {
+      color: var(--accent);
+      background: var(--surface-warm);
+      font-weight: 500;
+    }
+    .sto-main {
+      flex: 1;
+      min-width: 0;
+      padding: 16px;
+      background: var(--bg);
+    }
+    .sto-crumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 12px;
+      color: var(--fg-2);
+      font-size: 14px;
+      line-height: 18px;
+    }
+    .sto-crumb .sep {
+      width: 16px;
+      height: 16px;
+      flex: none;
+      color: var(--fg-2);
+      display: block;
+    }
+    .sto-crumb .sep.is-before-current { color: var(--fg); }
+    .sto-crumb .current { color: var(--fg); font-weight: 500; }
+
+    .sto-card {
+      background: var(--surface);
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .sto-card:last-child { margin-bottom: 0; }
+    .sto-card.is-embed {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+    .sto-section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .sto-section-title .bar {
+      width: 3px;
+      height: 14px;
+      border-radius: 1px;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .sto-section-extra {
+      margin-left: auto;
+      font-weight: 400;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .sto-slot {
+      height: 72px;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      background: var(--fill-lighter);
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .sto-tabs-pc1 {
+      display: flex;
+      align-items: flex-end;
+      height: 40px;
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+      border-radius: 8px 8px 0 0;
+    }
+    .sto-tabs-pc1 .tab {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      height: 40px;
+      padding: 0 16px;
+      font-size: 14px;
+      color: var(--fg-2);
+      cursor: pointer;
+      background: none;
+      border: 0;
+      font-family: inherit;
+    }
+    .sto-tabs-pc1 .tab.is-active {
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .sto-tabs-pc1 .tab.is-active::after {
+      content: "";
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 0;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 1px 1px 0 0;
+    }
+    .sto-tabs-pc2 {
+      display: inline-flex;
+      align-items: center;
+      gap: 24px;
+      height: 28px;
+      margin-bottom: 12px;
+    }
+    .sto-tabs-pc2 .tab {
+      font-size: 14px;
+      line-height: 22px;
+      color: var(--fg-2);
+      cursor: pointer;
+      background: none;
+      border: 0;
+      padding: 0;
+      font-family: inherit;
+    }
+    .sto-tabs-pc2 .tab.is-active {
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .sto-opentab { cursor: pointer; }
+    [hidden] { display: none !important; }
+    .sto-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .sto-grid-2 .sto-card { margin-bottom: 0; }
+
+    .ref-block {
+      max-width: 1440px;
+      margin: 0 auto 32px;
+      padding: 0 16px;
+    }
+    .ref-block h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .swatch-row { display: flex; flex-wrap: wrap; gap: 12px; }
+    .swatch {
+      width: 120px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+    }
+    .swatch i {
+      display: block;
+      height: 40px;
+    }
+    .swatch p {
+      margin: 0;
+      padding: 8px;
+      font-size: 11px;
+      line-height: 16px;
+      color: var(--fg-2);
+    }
+    .swatch b { display: block; color: var(--fg); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="ref-banner">
+    <strong>sto-pc-visual 框架实样</strong>
+    稿宽 1440 · 灰底白卡 · 系统页签用文件夹 SVG，禁止圆角色块贴死
+    点侧栏叶子菜单开/切页签；点页签高亮对应菜单。下钻示例在壳下方。
+    <div class="ref-dims">
+      <span>顶栏 <b>60</b></span>
+      <span>系统页签 <b>28</b></span>
+      <span>侧栏 <b>180</b></span>
+      <span>主区 pad <b>16</b></span>
+      <span>卡圆角 / pad / 缝 <b>8 / 16 / 16</b></span>
+      <span>accent <b>#FF6700</b></span>
+    </div>
+  </div>
+
+  <div class="sto-shell">
+    <header class="sto-topbar">
+      <div class="sto-brand">
+        <span class="sto-brand-mark">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 67.81431579589844 26" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M67.81431009838867,13.01470857704115C67.81431009838867,5.844702077041149,61.80330509838868,0.02991657704114914,54.39019109838867,0.02991657704114914C46.97707989838867,0.02991657704114914,40.96555709838867,5.844702077041149,40.96555709838867,13.01470857704115C40.96555709838867,20.18521257704115,46.97707989838867,25.99999757704115,54.39019109838867,25.99999757704115C61.80330509838868,25.99999757704115,67.81431009838867,20.18521257704115,67.81431009838867,13.01470857704115ZM60.60099209838867,13.014707577041149C60.60099209838867,9.26217247704115,57.81946209838867,6.218658777041149,54.38997709838867,6.218658777041149C50.959976198388674,6.218658777041149,48.17844769838867,9.26217247704115,48.17844769838867,13.014707577041149C48.17844769838867,16.76774157704115,50.959976198388674,19.81125657704115,54.38997709838867,19.81125657704115C57.81946209838867,19.81125657704115,60.60099209838867,16.76774157704115,60.60099209838867,13.014707577041149Z"/>
+            <path fill-rule="evenodd" d="M18.433172,6.9545574511692525L18.433172,1.8667444511692524C14.517074,-0.013512320830747604,6.8060145,-1.0187092488307476,2.88837,1.7710115511692524C0.90068102,3.1860654511692523,-0.19419749,5.7005544511692525,0.028489674,7.941803951169252C0.33777744,11.056617451169252,2.175462,12.927402451169252,4.5245018,13.880244451169252C7.2266455,14.943777451169252,9.8844576,15.495241451169253,12.68712,16.576725451169253C14.02479,17.24186945116925,14.094895,19.315088451169252,12.462372,19.909432451169252C9.362277,21.038282451169252,1.3264673,18.555208451169253,0.22127904,18.000753451169253L0.22127904,23.800081451169252C1.1140896,24.37497745116925,20.002291,30.311422451169253,20.029095,17.490675451169253C19.99662,15.237459451169252,18.525957,12.462198451169252,15.039254,11.232627451169252C12.769597,10.405933451169252,10.294781,9.873916151169253,8.0596609,9.055697051169252C7.3266497,8.787445551169252,6.697248,7.991665451169252,6.8524075,7.101645951169252C7.0199385,6.135341251169252,7.7055268,5.578892751169253,8.6674118,5.516068051169253C11.678843,5.3191171511692525,16.228466,6.251019051169252,18.433172,6.9545574511692525L18.433172,6.9545574511692525Z"/>
+            <path fill-rule="evenodd" d="M26.659011875,0C23.365097775,0,20.669139425,2.4736023,20.443359375,5.6043715L27.321403475,5.6043715C27.320371675,12.33211,27.319341675,19.059349,27.318310775,25.78709L28.043074175,25.78709C31.275131375,25.472965,33.851498375,23.009834,34.225221375000004,19.897512C34.230891375,15.1333,34.236560374999996,10.368587,34.242231375,5.6043715L41.163061375,5.6043715L41.163061375,0L26.659011875,0Z"/>
+          </svg>
+        </span>
+        <span class="sto-brand-name">昆仑</span>
+      </div>
+      <nav class="sto-l1-nav">
+        <span class="sto-l1-item is-active">经营</span>
+        <span class="sto-l1-item">运单</span>
+        <span class="sto-l1-item">网点</span>
+        <span class="sto-l1-item">财务</span>
+      </nav>
+    </header>
+
+    <div class="sto-opentabs">
+      <div class="sto-opentabs-list">
+        <div class="sto-opentab is-home" data-open="home">
+          <span class="sto-opentab-bg" aria-hidden="true">
+            <svg viewBox="0 0 52 24" preserveAspectRatio="none"><path fill="currentColor" d="M4,0L44,0C46.209141,0,48,1.7908607,48,4L48,20C48,22.209139,49.790859,24,52,24L0,24L0,4.0000005C0,1.7908607,1.7908607,0,4,0"/></svg>
+          </span>
+          <span class="sto-opentab-label">首页</span>
+        </div>
+        <div class="sto-opentab is-active" data-open="query">
+          <span class="sto-opentab-bg" aria-hidden="true">
+            <svg viewBox="0 0 125 24" preserveAspectRatio="none"><path fill="currentColor" d="M4,0L116,0C118.20914,0,120,1.7908607,120,4L120,20C120,22.209139,121.79086,24,124,24L125,24L0,24L0,4.0000005C0,1.7908607,1.7908607,0,4,0"/></svg>
+          </span>
+          <span class="sto-opentab-label">运单查询</span>
+          <button class="sto-opentab-close" type="button" aria-label="关闭">
+            <svg viewBox="0 0 12 12"><path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sto-body">
+      <aside class="sto-sidebar">
+        <div class="sto-side-title">运单中心</div>
+        <div class="sto-side-l2 is-open" data-group="mgmt"><span>运单管理</span></div>
+        <div class="sto-side-kids" data-group="mgmt">
+          <div class="sto-side-l3 is-active" data-page="query">运单查询</div>
+          <div class="sto-side-l3" data-page="create">运单录入</div>
+        </div>
+        <div class="sto-side-l2" data-group="track"><span>轨迹跟踪</span></div>
+        <div class="sto-side-kids" data-group="track">
+          <div class="sto-side-l3" data-page="trace">全程轨迹</div>
+        </div>
+      </aside>
+      <main class="sto-main">
+        <div data-page-panel="home" hidden>
+          <section class="sto-card">
+            <div class="sto-slot">首页 · 无对应侧栏叶子，三级不高亮</div>
+          </section>
+        </div>
+        <div data-page-panel="query">
+          <section class="sto-card">
+            <div class="sto-slot">一级列表工作卡 · 壳已显示当前页 · 不要橙条页名、不要面包屑</div>
+          </section>
+          <div class="sto-tabs-pc1" role="tablist" aria-label="一级选项卡">
+            <button type="button" class="tab is-active" role="tab" aria-selected="true" data-tab="all">全部</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="doing">进行中</button>
+          </div>
+          <section class="sto-card is-embed" data-panel="all">
+            <div class="sto-tabs-pc2" role="tablist" aria-label="二级选项卡">
+              <button type="button" class="tab is-active" data-sub="day">按日</button>
+              <button type="button" class="tab" data-sub="week">按周</button>
+              <button type="button" class="tab" data-sub="month">按月</button>
+            </div>
+            <div class="sto-slot" data-sub-panel="day">全部 · 按日 · 贴顶卡内边距仍 16</div>
+            <div class="sto-slot" data-sub-panel="week" hidden>全部 · 按周</div>
+            <div class="sto-slot" data-sub-panel="month" hidden>全部 · 按月</div>
+          </section>
+          <section class="sto-card is-embed" data-panel="doing" hidden>
+            <div class="sto-slot">进行中 · 点击一级 Tab 切这块</div>
+          </section>
+          <div class="sto-grid-2">
+            <section class="sto-card">
+              <div class="sto-section-title"><span class="bar"></span>分栏左</div>
+              <div class="sto-slot">gutter 12</div>
+            </section>
+            <section class="sto-card">
+              <div class="sto-section-title"><span class="bar"></span>分栏右</div>
+              <div class="sto-slot">span 12 + 12</div>
+            </section>
+          </div>
+        </div>
+        <div data-page-panel="create" hidden>
+          <section class="sto-card">
+            <div class="sto-section-title">
+              <span class="bar"></span>
+              基本信息
+              <span class="sto-section-extra">录入是表单页 · 分区才要橙条</span>
+            </div>
+            <div class="sto-slot">运单录入 · 点侧栏或页签进来</div>
+          </section>
+        </div>
+        <div data-page-panel="trace" hidden>
+          <section class="sto-card">
+            <div class="sto-slot">全程轨迹 · 侧栏叶子与页签同名</div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="ref-block">
+    <h2>下钻 / 新建主区（才有面包屑 + 分区橙条标题）</h2>
+    <div class="sto-main" style="max-width:1260px;border:1px solid var(--border-soft);">
+      <nav class="sto-crumb" aria-label="面包屑">
+        <span>运单查询</span>
+        <svg class="sep is-before-current" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M5.6919417,2.05805826C5.44786406,1.813980579,5.05213594,1.813980579,4.80805826,2.05805826C4.571376871,2.29473966,4.564204708,2.67401981,4.78654177,2.9193435L4.80805826,2.9419417L9.8661251,8L4.80805826,13.058058C4.571376871,13.29474,4.564204708,13.67402,4.78654177,13.919344L4.80805826,13.941942C5.04473966,14.178623,5.42401981,14.185795,5.6693435,13.963458L5.6919417,13.941942L11.191941700000001,8.441941700000001C11.4286232,8.205260299999999,11.435795299999999,7.8259802,11.2134581,7.5806565L11.191941700000001,7.5580583L5.6919417,2.05805826Z"/></svg>
+        <span class="current">新建运单</span>
+      </nav>
+      <section class="sto-card">
+        <div class="sto-section-title">
+          <span class="bar"></span>
+          基本信息
+          <span class="sto-section-extra">分区标题 · 不要实心主按钮</span>
+        </div>
+        <div class="sto-slot">表单 / 详情分区才画橙条；不要写成「工作卡」</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="ref-block">
+    <h2>Token 色板</h2>
+    <div class="swatch-row">
+      <div class="swatch"><i style="background:#F0F2F5"></i><p><b>--bg</b>#F0F2F5 画布</p></div>
+      <div class="swatch"><i style="background:#FFFFFF;border-bottom:1px solid #E5E6EB"></i><p><b>--surface</b>#FFFFFF 白卡</p></div>
+      <div class="swatch"><i style="background:#FF6700"></i><p><b>--accent</b>#FF6700 动词橙</p></div>
+      <div class="swatch"><i style="background:#FFF3EB"></i><p><b>--accent-bg</b>#FFF3EB 品牌浅底</p></div>
+      <div class="swatch"><i style="background:#FFF9F5"></i><p><b>--surface-warm</b>#FFF9F5 选中底</p></div>
+      <div class="swatch"><i style="background:#1D2129"></i><p><b>--fg</b>#1D2129 主文</p></div>
+      <div class="swatch"><i style="background:#00B54B"></i><p><b>--success</b>#00B54B</p></div>
+      <div class="swatch"><i style="background:#FA3C3C"></i><p><b>--danger</b>#FA3C3C</p></div>
+    </div>
+  </div>
+  <script>
+    function activate(list, el, cls) {
+      list.forEach(function (n) { n.classList.toggle(cls, n === el); });
+    }
+
+    document.querySelectorAll(".sto-tabs-pc1 .tab").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        var tabs = document.querySelectorAll(".sto-tabs-pc1 .tab");
+        activate(tabs, tab, "is-active");
+        tabs.forEach(function (t) { t.setAttribute("aria-selected", t === tab ? "true" : "false"); });
+        var id = tab.getAttribute("data-tab");
+        document.querySelectorAll("[data-panel]").forEach(function (p) {
+          p.hidden = p.getAttribute("data-panel") !== id;
+        });
+      });
+    });
+
+    document.querySelectorAll(".sto-tabs-pc2 .tab").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        var tabs = document.querySelectorAll(".sto-tabs-pc2 .tab");
+        activate(tabs, tab, "is-active");
+        var id = tab.getAttribute("data-sub");
+        document.querySelectorAll("[data-sub-panel]").forEach(function (p) {
+          p.hidden = p.getAttribute("data-sub-panel") !== id;
+        });
+      });
+    });
+
+    var tabList = document.querySelector(".sto-opentabs-list");
+    var TAB_PATH = "M4,0L116,0C118.20914,0,120,1.7908607,120,4L120,20C120,22.209139,121.79086,24,124,24L125,24L0,24L0,4.0000005C0,1.7908607,1.7908607,0,4,0";
+
+    function ensureTab(id, label) {
+      var tab = tabList.querySelector('.sto-opentab[data-open="' + id + '"]');
+      if (tab) return tab;
+      tab = document.createElement("div");
+      tab.className = "sto-opentab";
+      tab.setAttribute("data-open", id);
+      tab.innerHTML =
+        '<span class="sto-opentab-bg" aria-hidden="true">' +
+          '<svg viewBox="0 0 125 24" preserveAspectRatio="none"><path fill="currentColor" d="' + TAB_PATH + '"/></svg>' +
+        "</span>" +
+        '<span class="sto-opentab-label"></span>' +
+        '<button class="sto-opentab-close" type="button" aria-label="关闭">' +
+          '<svg viewBox="0 0 12 12"><path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>' +
+        "</button>";
+      tab.querySelector(".sto-opentab-label").textContent = label;
+      tabList.appendChild(tab);
+      return tab;
+    }
+
+    function expandFor(pageId) {
+      var item = document.querySelector('.sto-side-l3[data-page="' + pageId + '"]');
+      document.querySelectorAll(".sto-side-l3").forEach(function (n) {
+        n.classList.toggle("is-active", n === item);
+      });
+      if (!item) return;
+      document.querySelectorAll(".sto-side-l2").forEach(function (n) {
+        n.classList.remove("is-open");
+      });
+      var kids = item.closest(".sto-side-kids");
+      if (!kids) return;
+      var l2 = document.querySelector('.sto-side-l2[data-group="' + kids.getAttribute("data-group") + '"]');
+      if (l2) l2.classList.add("is-open");
+    }
+
+    function showPanel(id) {
+      document.querySelectorAll("[data-page-panel]").forEach(function (p) {
+        p.hidden = p.getAttribute("data-page-panel") !== id;
+      });
+    }
+
+    function openPage(id) {
+      var side = document.querySelector('.sto-side-l3[data-page="' + id + '"]');
+      var label = id === "home" ? "首页" : (side ? side.textContent.trim() : id);
+      var tab = ensureTab(id, label);
+      activate(document.querySelectorAll(".sto-opentab"), tab, "is-active");
+      expandFor(id);
+      showPanel(id);
+    }
+
+    function closeTab(tab) {
+      if (!tab || tab.classList.contains("is-home")) return;
+      var wasActive = tab.classList.contains("is-active");
+      var next = tab.nextElementSibling && tab.nextElementSibling.classList.contains("sto-opentab")
+        ? tab.nextElementSibling
+        : tab.previousElementSibling;
+      tab.remove();
+      if (wasActive) openPage(next && next.getAttribute ? next.getAttribute("data-open") : "home");
+    }
+
+    tabList.addEventListener("click", function (e) {
+      var close = e.target.closest(".sto-opentab-close");
+      if (close) {
+        closeTab(close.closest(".sto-opentab"));
+        return;
+      }
+      var tab = e.target.closest(".sto-opentab");
+      if (tab) openPage(tab.getAttribute("data-open"));
+    });
+
+    document.querySelector(".sto-sidebar").addEventListener("click", function (e) {
+      var l3 = e.target.closest(".sto-side-l3");
+      if (l3) {
+        openPage(l3.getAttribute("data-page"));
+        return;
+      }
+      var l2 = e.target.closest(".sto-side-l2");
+      if (!l2) return;
+      var willOpen = !l2.classList.contains("is-open");
+      document.querySelectorAll(".sto-side-l2").forEach(function (n) {
+        n.classList.remove("is-open");
+      });
+      if (willOpen) l2.classList.add("is-open");
+    });
+  </script>
+</body>
+</html>

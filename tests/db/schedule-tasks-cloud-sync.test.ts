@@ -151,45 +151,83 @@ describe('schedule-tasks cloud sync', () => {
     expect(after?.remoteVersion).toBeNull();
   });
 
-  it('E2: empty cloud (including no tombstones) pushes done rows; existing cloud only pending', async () => {
+  it('E2: empty cloud (including no tombstones) pushes done rows when pending exists; no pending skips list', async () => {
     const a = await repo.create({ ...baseInput, name: 'A' });
     const b = await repo.create({ ...baseInput, name: 'B' });
     await repo.applyPushSuccess(a.id, 1, a.updatedAt);
     expect((await repo.getById(a.id))?.syncStatus).toBe('done');
 
+    const listEmpty = vi.fn(async () => [] as CloudScheduleTaskRow[]);
     const upsertEmpty = vi.fn(async (body: { id: string }) => ({ id: body.id, version: 4 }));
     await runScheduleTasksPushTick('1165828', {
       taskRepo: repo,
-      listCloud: async () => [],
+      listCloud: listEmpty,
       upsertCloud: upsertEmpty,
     });
+    expect(listEmpty).toHaveBeenCalledTimes(1);
     expect(upsertEmpty).toHaveBeenCalledTimes(2);
 
+    const listAgain = vi.fn(async () => [
+      cloudFromLocal({ id: a.id, version: 4 }),
+      cloudFromLocal({ id: b.id, version: 4 }),
+    ]);
     const upsertExisting = vi.fn(async (body: { id: string }) => ({ id: body.id, version: 5 }));
     await runScheduleTasksPushTick('1165828', {
       taskRepo: repo,
-      listCloud: async () => [
-        cloudFromLocal({ id: a.id, version: 4 }),
-        cloudFromLocal({ id: b.id, version: 4 }),
-      ],
+      listCloud: listAgain,
       upsertCloud: upsertExisting,
     });
+    expect(listAgain).not.toHaveBeenCalled();
     expect(upsertExisting).toHaveBeenCalledTimes(0);
   });
 
-  it('C5: missing id on non-empty cloud backfills remote_version only', async () => {
+  it('no pending skips all cloud APIs (does not list)', async () => {
+    const created = await repo.create(baseInput);
+    await repo.applyPushSuccess(created.id, 1, created.updatedAt);
+
+    const listCloud = vi.fn(async () => [cloudFromLocal({ id: created.id, version: 1 })]);
+    const upsertCloud = vi.fn(async () => ({ id: created.id, version: 2 }));
+    await runScheduleTasksPushTick('1165828', { taskRepo: repo, listCloud, upsertCloud });
+    expect(listCloud).not.toHaveBeenCalled();
+    expect(upsertCloud).not.toHaveBeenCalled();
+  });
+
+  it('C5 removed: done-only local never lists so missing cloud id is not backfilled', async () => {
     const local = await repo.create({ ...baseInput, name: 'Keep done' });
     await repo.applyPushSuccess(local.id, 1, local.updatedAt);
     expect((await repo.getById(local.id))?.syncStatus).toBe('done');
 
+    const listCloud = vi.fn(async () => [
+      cloudFromLocal({ id: 'other-cloud-id', version: 9, deleted_at: '2026-08-01T00:00:00.000Z' }),
+    ]);
+    const upsertCloud = vi.fn(async () => ({ id: local.id, version: 11 }));
     await runScheduleTasksPushTick('1165828', {
       taskRepo: repo,
-      listCloud: async () => [cloudFromLocal({ id: 'other-cloud-id', version: 9, deleted_at: '2026-08-01T00:00:00.000Z' })],
-      upsertCloud: async () => ({ id: local.id, version: 11 }),
+      listCloud,
+      upsertCloud,
     });
+    expect(listCloud).not.toHaveBeenCalled();
+    expect(upsertCloud).not.toHaveBeenCalled();
     const after = await repo.getById(local.id, { includeDeleted: true });
-    expect(after?.remoteVersion).toBe(11);
+    expect(after?.remoteVersion).toBe(1);
     expect(after?.syncStatus).toBe('done');
+  });
+
+  it('each pending tick lists then POSTs when cloud already has data', async () => {
+    const created = await repo.create(baseInput);
+    const listCloud = vi.fn(async () => [cloudFromLocal({ id: 'seed', version: 1 })]);
+    const upsertCloud = vi.fn(async (body: { id: string }) => ({ id: body.id, version: 2 }));
+
+    await runScheduleTasksPushTick('1165828', { taskRepo: repo, listCloud, upsertCloud });
+    expect(listCloud).toHaveBeenCalledTimes(1);
+    expect(upsertCloud).toHaveBeenCalledTimes(1);
+
+    await repo.update(created.id, { name: 'Again', actor: '1165828' });
+    listCloud.mockClear();
+    upsertCloud.mockClear();
+    await runScheduleTasksPushTick('1165828', { taskRepo: repo, listCloud, upsertCloud });
+    expect(listCloud).toHaveBeenCalledTimes(1);
+    expect(upsertCloud).toHaveBeenCalledTimes(1);
   });
 
   it('E3: soft-delete pending push carries deleted_at; pull tombstones local active', async () => {

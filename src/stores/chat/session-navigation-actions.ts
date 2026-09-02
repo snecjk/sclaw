@@ -23,6 +23,7 @@ export function createSessionNavigationActions(
     switchSession: (key) => {
       if (key === get().currentSessionKey) return;
       dependencies.markSessionRead(key);
+      const leavingKey = get().currentSessionKey;
       set((state) => {
         const leavingEmpty = isTemporaryAgentSessionKey(state.currentSessionKey)
           && getSessionDisplayMessages(state.currentSessionKey).length === 0
@@ -48,6 +49,7 @@ export function createSessionNavigationActions(
           loading: false,
         };
       });
+      useChatRuntimeV2Store.getState().trimSessionHistoryTail(leavingKey);
 
       const targetSession = get().sessions.find((session) => session.key === key);
       if (key !== DEFAULT_SESSION_KEY && !targetSession?.engineType) {

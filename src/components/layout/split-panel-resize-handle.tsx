@@ -33,6 +33,7 @@ export interface SplitPanelResizeHandleProps {
    * ArrowLeft → +1；ArrowRight → -1（与「向左拖 = 预览变宽」一致）。
    */
   onKeyboardAdjust: (deltaPercent: number) => void;
+  /** 覆盖默认「调整预览区宽度」文案（例如建站工作台会话分栏） */
   ariaLabel?: string;
   className?: string;
 }

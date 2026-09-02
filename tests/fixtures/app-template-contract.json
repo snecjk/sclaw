@@ -1,0 +1,73 @@
+{
+  "page": {
+    "request": {
+      "pageType": "site",
+      "status": "ACTIVE",
+      "pageNum": 1,
+      "pageSize": 20
+    },
+    "response": {
+      "items": [
+        {
+          "templateId": "site-minimal",
+          "pageType": "site",
+          "name": "标准 Site 模版",
+          "description": "SClaw 平台内置最简模板",
+          "status": "ACTIVE",
+          "isBuiltin": true,
+          "latestVersion": "1.0.0",
+          "createdAt": "2026-08-26T00:00:00",
+          "updatedAt": "2026-08-26T00:00:00"
+        }
+      ],
+      "total": 1,
+      "pageNum": 1,
+      "pageSize": 20
+    }
+  },
+  "publish": {
+    "metadata": {
+      "templateId": "01J00000000000000000000000",
+      "pageType": "site",
+      "name": "业务模板",
+      "description": "业务模板说明"
+    },
+    "response": {
+      "templateId": "01J00000000000000000000000",
+      "pageType": "site",
+      "version": "1.0.0",
+      "status": "ACTIVE",
+      "isBuiltin": false,
+      "packageOssKey": "app-templates/site/01J00000000000000000000000/1.0.0/template.zip",
+      "packageEtag": "etag-1",
+      "packageSize": 1024,
+      "created": true
+    }
+  },
+  "download": {
+    "templateId": "site-minimal",
+    "version": "1.0.0",
+    "packageOssKey": "app-templates/site/site-minimal/1.0.0/template.zip",
+    "packageEtag": "etag-1",
+    "packageSize": 1024,
+    "downloadUrl": "https://oss.example.test/signed/template.zip",
+    "expiresAt": "2026-08-26T00:10:00Z"
+  },
+  "errors": {
+    "business": {
+      "httpStatus": 422,
+      "errCode": "APP_TEMPLATE_INVALID",
+      "errMessage": "模板包不合法"
+    },
+    "downloadExpired": {
+      "httpStatus": 403,
+      "errCode": "SIGNED_URL_EXPIRED",
+      "errMessage": "下载链接已过期"
+    },
+    "publishConflict": {
+      "httpStatus": 409,
+      "errCode": "APP_TEMPLATE_PUBLISHING",
+      "errMessage": "模板正在发布，请稍后重试"
+    }
+  }
+}

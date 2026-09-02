@@ -70,8 +70,10 @@ function isIgnorableLayoutNode(node: Node): boolean {
 function takeImageGroup(nodes: ChildNode[], start: number): { images: Element[]; end: number } {
   const images: Element[] = [];
   let index = start;
-  while (index < nodes.length && isImageElement(nodes[index])) {
-    images.push(nodes[index]);
+  while (index < nodes.length) {
+    const image = nodes[index];
+    if (!isImageElement(image)) break;
+    images.push(image);
     index += 1;
     let cursor = index;
     while (cursor < nodes.length && isIgnorableLayoutNode(nodes[cursor])) cursor += 1;

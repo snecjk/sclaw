@@ -3,7 +3,8 @@
  */
 import { Folder, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import sidebarProjectNewChatIcon from '@/assets/icons/sidebar-project-new-chat.svg';
+import sidebarProjectNewChatIcon from '@/assets/icons/sidebar-project-new-chat.svg?raw';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +19,8 @@ import {
   sidebarRecentMenuDividerClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
+  sidebarTooltipArrowClass as SIDEBAR_TOOLTIP_ARROW_CLASS,
+  sidebarTooltipContentClass as SIDEBAR_TOOLTIP_CLASS,
 } from '@/lib/surfaces';
 
 export interface SidebarProjectRowTrailingProps {
@@ -30,13 +33,6 @@ export interface SidebarProjectRowTrailingProps {
 
 /** 容纳两个 28px 按钮及中间 2px 间距，与分区标题 actions 完全同宽。 */
 const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-[58px]';
-const SIDEBAR_TOOLTIP_CLASS = cn(
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
-  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
-  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
-);
-const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
-
 export function SidebarProjectRowTrailing({
   onNewChat,
   onRename,
@@ -66,7 +62,7 @@ export function SidebarProjectRowTrailing({
         className={cn(
           'absolute inset-0 flex items-center justify-end gap-0.5',
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
-          'rounded-md bg-[var(--sto-sidebar-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+          'rounded-md bg-transparent',
         )}
       >
         <Tooltip delayDuration={300}>
@@ -84,11 +80,9 @@ export function SidebarProjectRowTrailing({
                 'outline-none hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
               )}
             >
-              <img
-                src={sidebarProjectNewChatIcon}
-                alt=""
+              <ThemedMonochromeIcon
+                source={sidebarProjectNewChatIcon}
                 className="h-[18px] w-[18px]"
-                aria-hidden
               />
             </button>
           </TooltipTrigger>

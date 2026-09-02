@@ -9,8 +9,10 @@ import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mentio
 import { ScheduleTaskRunRepository } from '../../electron/db/repositories/schedule-task-run-repository';
 
 const getAuthState = vi.fn(async () => ({ user: null as { code: string } | null }));
+const getStoToken = vi.fn(async () => 'test-token' as string | null);
 vi.mock('../../electron/utils/auth-store', () => ({
   getAuthState: () => getAuthState(),
+  getStoToken: () => getStoToken(),
 }));
 
 const baseCreateInput = {
@@ -30,6 +32,8 @@ describe('ScheduledTaskService', () => {
     svc = new ScheduledTaskService();
     getAuthState.mockReset();
     getAuthState.mockResolvedValue({ user: null });
+    getStoToken.mockReset();
+    getStoToken.mockResolvedValue('test-token');
   });
 
   afterEach(() => env.teardown());

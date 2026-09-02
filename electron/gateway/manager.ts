@@ -58,6 +58,7 @@ import {
   type GatewayReloadPolicy,
 } from './reload-policy';
 import { classifyGatewayStderrMessage, recordGatewayStartupStderrLine } from './startup-stderr';
+import { classifyGatewayStdoutMessage } from './startup-stdout';
 import { runGatewayStartupSequence } from './startup-orchestrator';
 
 export interface GatewayStatus {
@@ -950,10 +951,13 @@ export class GatewayManager extends EventEmitter {
         logger.warn(`[Gateway stderr] ${classified.normalized}`);
       },
       onStdoutLine: (line) => {
-        const trimmed = line.trim();
-        if (trimmed) {
-          logger.debug(`[Gateway stdout] ${trimmed}`);
+        const classified = classifyGatewayStdoutMessage(line);
+        if (classified.level === 'drop') return;
+        if (classified.level === 'debug') {
+          logger.debug(`[Gateway stdout] ${classified.normalized}`);
+          return;
         }
+        logger.info(`[Gateway stdout] ${classified.normalized}`);
       },
       onSpawn: (pid) => {
         this.setStatus({ pid });
@@ -1071,7 +1075,7 @@ export class GatewayManager extends EventEmitter {
     if (msg.type === 'event' && typeof msg.event === 'string') {
       if (shouldTraceGatewayEvent(msg.event)) {
         const payloadSummary = summarizeRpcPayload(msg.payload);
-        logger.info(`[gateway-event] <- ${msg.event}${payloadSummary ? ` ${payloadSummary}` : ''}`);
+        logger.debug(`[gateway-event] <- ${msg.event}${payloadSummary ? ` ${payloadSummary}` : ''}`);
       }
       dispatchProtocolEvent(this, msg.event, msg.payload);
       return;

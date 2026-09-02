@@ -235,7 +235,12 @@ export const openClawAdapter: EngineAdapter = {
     let message = prependAgentMemoryBlock(params.message, memory.execution, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
     message = prependAgentMemoryBlock(message, memory.preference, AGENT_MEMORY_CONTEXT_MARKER);
     if (memory.preference || memory.execution) {
-      logger.info(`[agent-memory][openclaw] message after memory injection:\n${message}`);
+      logger.info('[agent-memory][openclaw] message after memory injection', {
+        sessionKey: params.sessionKey,
+        messageChars: message.length,
+        preferenceChars: memory.preference?.length ?? 0,
+        executionChars: memory.execution?.length ?? 0,
+      });
     }
     return { ...params, message };
   },
@@ -326,9 +331,7 @@ export const openClawAdapter: EngineAdapter = {
           sessionKey,
           appendChars: params.systemPromptAppend.trim().length,
           messageChars: message.length,
-          systemPromptAppend: params.systemPromptAppend,
-          userMessageBeforeMerge: params.message,
-          finalUserMessage: message,
+          userMessageChars: params.message.length,
         });
       }
       logUserSend({
@@ -367,9 +370,7 @@ export const openClawAdapter: EngineAdapter = {
           sessionKey,
           appendChars: params.systemPromptAppend.trim().length,
           messageChars: message.length,
-          systemPromptAppend: params.systemPromptAppend,
-          userMessageBeforeMerge: params.message,
-          finalUserMessage: message,
+          userMessageChars: params.message.length,
         });
       }
       const imageAttachments: Array<Record<string, unknown>> = [];

@@ -3,15 +3,18 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   type RefObject,
 } from 'react';
 import {
+  applyScrollAfterHistoryPrepend,
+  createOlderHistoryScrollController,
   measureChatScroll,
-  shouldArmOlderHistoryLoader,
-  shouldLoadOlderHistoryFromScroll,
+  shouldFillViewportWithOlderHistory,
 } from '@/components/chat/chat-static-items-scroll';
 import type { RawMessage } from '@/stores/chat';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import type { AttachedFileMeta } from '@/stores/chat';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
@@ -39,6 +42,7 @@ export interface ChatStaticItemsListProps {
   showThinking: boolean;
   scrollRef: RefObject<HTMLElement | null>;
   variant: ChatStaticItemsListVariant;
+  sessionKey?: string;
   /** 搜索打开时关闭虚拟化，保证 DOM 索引与滚动定位可用。 */
   forceFullRender?: boolean;
   onReachStart?: () => void;
@@ -54,7 +58,7 @@ export interface ChatStaticItemsListProps {
       attachments?: AttachedFileMeta[];
     },
   ) => void;
-  onOpenWorkflow?: () => void;
+  onOpenWorkflow?: (workflowId: string) => void;
 }
 
 function collectSearchKeysForDisplayItem(item: ChatDisplayItem): string[] {
@@ -95,6 +99,7 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
     showThinking,
     scrollRef,
     variant,
+    sessionKey,
     forceFullRender = false,
     matchedMessageKeys,
     activeSearchMessageKey = null,
@@ -131,36 +136,89 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
     const onReachStartRef = useRef(onReachStart);
     onReachStartRef.current = onReachStart;
     const tailKey = items[items.length - 1]?.key ?? '';
+    const firstKey = items[0]?.key ?? '';
     const enableOlderHistory = typeof onReachStart === 'function';
+    const historyFillToken = useChatRuntimeV2Store((state) => {
+      if (!sessionKey) return '0:0';
+      const session = state.sessionsByKey[sessionKey];
+      if (!session) return '0:0';
+      const hasOlder = session.historyTotalCount > session.transcript.length ? 1 : 0;
+      return `${hasOlder}:${session.transcript.length}`;
+    });
+    const hasOlderHistory = historyFillToken.startsWith('1:');
+    const prependAnchorRef = useRef({
+      firstKey,
+      count: items.length,
+      scrollHeight: 0,
+      clientHeight: 0,
+    });
+
+    useLayoutEffect(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const previous = prependAnchorRef.current;
+      const prepended = Boolean(
+        firstKey
+        && previous.firstKey
+        && firstKey !== previous.firstKey
+        && items.length > previous.count,
+      );
+      if (prepended) {
+        applyScrollAfterHistoryPrepend(el, previous);
+      }
+      prependAnchorRef.current = {
+        firstKey,
+        count: items.length,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      };
+    }, [firstKey, items.length, scrollRef]);
 
     useEffect(() => {
       if (!enableOlderHistory) return;
       const el = scrollRef.current;
       if (!el) return;
 
-      let armed = false;
-      const syncArm = () => {
-        const metrics = measureChatScroll(el);
-        if (!armed && shouldArmOlderHistoryLoader(metrics)) {
-          armed = true;
-        }
-      };
+      const controller = createOlderHistoryScrollController();
       const onScroll = () => {
-        syncArm();
-        if (shouldLoadOlderHistoryFromScroll(armed, measureChatScroll(el))) {
+        if (controller.onMetrics(measureChatScroll(el)) === 'load') {
           onReachStartRef.current?.();
         }
       };
 
       el.addEventListener('scroll', onScroll, { passive: true });
-      const resizeObserver = new ResizeObserver(syncArm);
+      const resizeObserver = new ResizeObserver(onScroll);
       resizeObserver.observe(el);
-      syncArm();
+      onScroll();
       return () => {
         el.removeEventListener('scroll', onScroll);
         resizeObserver.disconnect();
+        controller.reset();
       };
     }, [scrollRef, tailKey, enableOlderHistory]);
+
+    useEffect(() => {
+      if (!enableOlderHistory || !hasOlderHistory || items.length === 0) return;
+      const el = scrollRef.current;
+      if (!el) return;
+
+      let requested = false;
+      const tryFill = () => {
+        if (requested) return;
+        if (shouldFillViewportWithOlderHistory(measureChatScroll(el), true)) {
+          requested = true;
+          onReachStartRef.current?.();
+        }
+      };
+
+      const frame = window.requestAnimationFrame(tryFill);
+      const resizeObserver = new ResizeObserver(tryFill);
+      resizeObserver.observe(el);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        resizeObserver.disconnect();
+      };
+    }, [scrollRef, items.length, hasOlderHistory, historyFillToken, enableOlderHistory]);
 
     const renderItem = (item: ChatDisplayItem) => {
       if (item.type === 'workflow-run') {

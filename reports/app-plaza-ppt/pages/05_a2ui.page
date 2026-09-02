@@ -1,0 +1,204 @@
+pageType: content
+background:
+  type: solid
+  color: "$bg"
+elements:
+  - elementId: kicker
+    elementType: text
+    bounds: [60, 36, 560, 18]
+    content: {style: "$kicker", wrap: false, text: "03 · 核心能力 · 应用渲染（A2UI）"}
+  - elementId: title
+    elementType: text
+    bounds: [60, 58, 900, 40]
+    content: {style: "$pagetitle", wrap: false, text: "A2UI 怎么渲染应用：描述进、界面出，安全可预览"}
+  - elementId: rule
+    elementType: shape
+    bounds: [60, 110, 64, 4]
+    shapeName: rect
+    fill: {type: solid, color: "$accent"}
+  - elementId: hairline
+    elementType: shape
+    bounds: [60, 118, 840, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$hairline"}
+  - elementId: flow-label
+    elementType: text
+    bounds: [60, 138, 840, 18]
+    content:
+      fontSize: 13
+      bold: true
+      color: "$accent"
+      wrap: false
+      text: 渲染链路（不是 AI 写代码，是 AI 写描述 → 官方渲染器出界面）
+  - elementId: f1-box
+    elementType: shape
+    bounds: [60, 166, 140, 64]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f1-text
+    elementType: text
+    bounds: [60, 166, 140, 64]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>自然语言</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">用户描述需求</span></p>
+  - elementId: a1
+    elementType: line
+    bounds: [200, 196, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f2-box
+    elementType: shape
+    bounds: [230, 166, 150, 64]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2.5, color: "$accent"}
+  - elementId: f2-text
+    elementType: text
+    bounds: [230, 166, 150, 64]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>page.json</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">组件树 + 数据描述</span></p>
+  - elementId: a2
+    elementType: line
+    bounds: [380, 196, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f3-box
+    elementType: shape
+    bounds: [410, 166, 150, 64]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f3-text
+    elementType: text
+    bounds: [410, 166, 150, 64]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>内置组件</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">antd + stoDesign</span></p>
+  - elementId: a3
+    elementType: line
+    bounds: [560, 196, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f4-box
+    elementType: shape
+    bounds: [590, 166, 140, 64]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f4-text
+    elementType: text
+    bounds: [590, 166, 140, 64]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>A2UI 渲染器</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">平台壳锁定</span></p>
+  - elementId: a4
+    elementType: line
+    bounds: [730, 196, 30, 3]
+    viewBox: [30, 3]
+    points: "0,1.5 30,1.5"
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$accent"}
+  - elementId: f5-box
+    elementType: shape
+    bounds: [760, 166, 140, 64]
+    shapeName: rect
+    fill: {type: solid, color: "$pale"}
+    border: {style: solid, width: 2.5, color: "$accent"}
+  - elementId: f5-text
+    elementType: text
+    bounds: [760, 166, 140, 64]
+    content:
+      align: [center, middle]
+      lineHeight: 1.35
+      text: |
+        <p style="text-align:center"><span style="font-size:13px; color:$ink"><strong>实时预览</strong></span></p>
+        <p style="text-align:center"><span style="font-size:11px; color:$muted">秒级生效可回滚</span></p>
+  - elementId: left-head
+    elementType: text
+    bounds: [60, 252, 420, 24]
+    content: {fontSize: 15, bold: true, color: "$ink", wrap: false, text: "为什么用 A2UI 做应用渲染"}
+  - elementId: item1-num
+    elementType: text
+    bounds: [60, 286, 40, 24]
+    content: {fontSize: 18, bold: true, color: "$accent", wrap: false, text: "01"}
+  - elementId: item1-head
+    elementType: text
+    bounds: [110, 286, 380, 22]
+    content: {fontSize: 14, bold: true, color: "$ink", wrap: false, text: "安全：写不出危险代码"}
+  - elementId: item1-body
+    elementType: text
+    bounds: [110, 310, 380, 28]
+    content: {fontSize: 12, color: "$muted", text: "只能用内置 antd / stoDesign 组件拼页面，不能写任意脚本。"}
+  - elementId: item2-num
+    elementType: text
+    bounds: [60, 348, 40, 24]
+    content: {fontSize: 18, bold: true, color: "$accent", wrap: false, text: "02"}
+  - elementId: item2-head
+    elementType: text
+    bounds: [110, 348, 380, 22]
+    content: {fontSize: 14, bold: true, color: "$ink", wrap: false, text: "可预览：描述即界面"}
+  - elementId: item2-body
+    elementType: text
+    bounds: [110, 372, 380, 28]
+    content: {fontSize: 12, color: "$muted", text: "改 page.json 秒级刷新；改坏一键回滚。"}
+  - elementId: item3-num
+    elementType: text
+    bounds: [60, 410, 40, 24]
+    content: {fontSize: 18, bold: true, color: "$accent", wrap: false, text: "03"}
+  - elementId: item3-head
+    elementType: text
+    bounds: [110, 410, 380, 22]
+    content: {fontSize: 14, bold: true, color: "$ink", wrap: false, text: "可治理：壳锁定、能力可扩"}
+  - elementId: item3-body
+    elementType: text
+    bounds: [110, 434, 380, 28]
+    content: {fontSize: 12, color: "$muted", text: "渲染器 / 布局 / 请求封装不可改；业务组件由总部持续扩展。"}
+  - elementId: split-line
+    elementType: shape
+    bounds: [520, 252, 1, 200]
+    shapeName: rect
+    fill: {type: solid, color: "$hairline"}
+  - elementId: right-head
+    elementType: text
+    bounds: [560, 252, 360, 24]
+    content: {fontSize: 15, bold: true, color: "$ink", wrap: false, text: "在模板里怎么落地"}
+  - elementId: right-body
+    elementType: text
+    bounds: [560, 286, 360, 170]
+    content:
+      fontSize: 13
+      color: "$text"
+      lineHeight: 1.65
+      text: |
+        <p><strong>AI 主战场</strong>：只改 <strong>pages/*.page.json</strong></p>
+        <p style="margin-top:8px"><strong>平台壳锁定</strong>：渲染器、布局、请求封装用户与 AI 都不可改</p>
+        <p style="margin-top:8px"><strong>内置组件</strong>：antd + stoDesign（查询栏 / 表格 / 分页等）</p>
+        <p style="margin-top:8px"><strong>未来扩展</strong>：业务组件由总部持续扩展，模板即可用</p>
+  - elementId: footer
+    elementType: text
+    bounds: [60, 506, 400, 16]
+    content: {style: "$small", wrap: false, text: "应用广场 · 用户应用开发 · 周会同步"}
+  - elementId: pagenum
+    elementType: text
+    bounds: [860, 506, 40, 16]
+    content: {style: "$small", wrap: false, align: [right, top], text: "03"}

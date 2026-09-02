@@ -3,6 +3,9 @@ import {
   classifyTextOverlap,
   normalizeDisplayTextForOwnership,
 } from '@/pages/Chat/thinking/text-ownership';
+import { isClaudeRuntimeControlText } from '../../../../shared/claude-runtime-control-text';
+
+export { isClaudeRuntimeControlText };
 
 function groupHasTool(
   group: { type: string }[],
@@ -30,20 +33,36 @@ function turnHasThinkingContent(
 
 function mergeFinalReplyCandidate(current: string | null, next: string): string | null {
   const trimmed = next.trim();
-  if (!trimmed) return current;
+  if (!trimmed || isClaudeRuntimeControlText(trimmed)) return current;
   if (current === null) return trimmed;
+  if (trimmed === current) return current;
   if (trimmed.startsWith(current) || current.startsWith(trimmed)) {
     return trimmed.length >= current.length ? trimmed : current;
   }
+  if (current.includes(trimmed) && trimmed.length >= 24) return current;
+  if (trimmed.includes(current) && current.length >= 24) return trimmed;
+
+  const currentDeliverable = isLikelyDeliverableReply(current);
+  const nextClarification = isLikelyUserClarificationReply(trimmed);
+  if (nextClarification) return trimmed;
+  if (currentDeliverable) {
+    return `${current}\n\n${trimmed}`;
+  }
   return trimmed;
+}
+
+function hasDeliverableReplyStructure(trimmed: string): boolean {
+  if (/^\|[^\n]+\|/m.test(trimmed) || /\n\|[^\n]+\|/m.test(trimmed)) return true;
+  if (/^#{1,3}\s+\S+/m.test(trimmed)) return true;
+  if ((trimmed.match(/\n/g)?.length ?? 0) >= 3 && trimmed.length >= 160) return true;
+  return false;
 }
 
 /** Claude 流式常先吐正文 delta、后出 thinking；长/markdown 正文不是 phase 短 text */
 export function isLikelyDeliverableReply(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length >= 160) return true;
-  if (/^\|[^\n]+\|/m.test(trimmed) || /\n\|[^\n]+\|/m.test(trimmed)) return true;
-  if (/^#{1,3}\s+\S+/m.test(trimmed)) return true;
+  if (hasDeliverableReplyStructure(trimmed)) return true;
   if ((trimmed.match(/\n/g)?.length ?? 0) >= 3 && trimmed.length >= 100) return true;
   return false;
 }
@@ -91,6 +110,8 @@ export function isLikelyUserClarificationReply(text: string): boolean {
 export function isLikelyPlanningNarration(text: string): boolean {
   const trimmed = text.trim();
   if (isLikelyUserClarificationReply(text)) return false;
+  // 表格 / 标题 / 多段报告优先当交付正文，避免某行「基于」「使用工具」把整篇藏进思考区
+  if (hasDeliverableReplyStructure(trimmed)) return false;
   if (TOOL_PLANNING_PATTERN.test(trimmed)) return true;
   if (ENGLISH_PLANNING_LEAD.test(trimmed)) {
     if (trimmed.length < 220) return true;
@@ -120,9 +141,9 @@ export function findLastTextEventIndex(events: RawTurnEvent[]): number {
 
 /**
  * 是否将 text 晋升为回合最终正文（Phase 7：结构优先）
- * - 完成态：deliverable 形态可晋升
- * - 完成态：仅最后一条 text event 进正文（含短追问清单），避免误落成 phase-text 触发 figure-two 拆错
- * - 流式：仅最后一条 text event 可晋升，避免中间长文被误收成正文
+ * - 交付正文（表格/长 markdown）一律进气泡，即使后面还有工具，避免「内容提炼」只存在于折叠的思考区
+ * - 完成态短收尾（追问清单、一句结束语）仍只晋升最后一条
+ * - 规划旁白不晋升
  */
 export function hasToolEventsAfter(
   events: RawTurnEvent[],
@@ -141,20 +162,20 @@ export function shouldPromoteTextToFinalReply(
   lastTextEventIndex: number,
   hasFollowingToolEvents = false,
 ): boolean {
+  if (isClaudeRuntimeControlText(text)) return false;
   // 参数追问若是本轮最后一段 text，晋升正文而非 phase-text
   if (isLikelyUserClarificationReply(text)) {
     if (hasFollowingToolEvents) return false;
     return eventIndex === lastTextEventIndex;
   }
   if (isLikelyPlanningNarration(text)) return false;
+  if (isLikelyDeliverableReply(text)) return true;
   if (!isLiveStream) {
     if (eventIndex !== lastTextEventIndex) return false;
     if (hasFollowingToolEvents) return false;
     return true;
   }
-  if (!isLikelyDeliverableReply(text)) return false;
-  if (hasFollowingToolEvents) return false;
-  return eventIndex === lastTextEventIndex;
+  return false;
 }
 
 /** thinking 到达时，把误放在顶部的 deliverable phase-text 收回为正文 */

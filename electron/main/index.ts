@@ -9,7 +9,7 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
-import { app, BrowserWindow, dialog, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, session, shell } from 'electron';
 import type { Server } from 'node:http';
 import { basename, dirname, join, resolve } from 'path';
 import { existsSync } from 'node:fs';
@@ -65,6 +65,12 @@ import {
 } from '../utils/cleanup-old-app-bundles';
 import { CLIENT_APP_NAME, CLIENT_APP_USER_MODEL_ID } from '../../shared/app-branding';
 import { getClientAppIcon } from './app-icon';
+import {
+  observeNativeAppearanceUpdates,
+  resolveWindowBackgroundColor,
+  syncNativeAppearanceFromStore,
+} from './appearance';
+import { attachAppearanceReplay } from './appearance-replay';
 
 _ts('static imports loaded');
 
@@ -385,17 +391,18 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
       : undefined,
     frame: isMac || !useCustomTitleBar,
     show: false,  // We call show() manually below — before loading content
-    backgroundColor: '#0f1525',  // Match splash screen background
+    backgroundColor: resolveWindowBackgroundColor(nativeTheme.shouldUseDarkColors),
   });
+  attachAppearanceReplay(win);
 
   // Show the window IMMEDIATELY — before loading content.
   // On first run, ready-to-show can take 5-10s because the renderer process
   // must cold-start (V8 init, preload script, HTML parse, first paint).
-  // By showing now, the user sees a dark window instantly (matching the splash
-  // background), and the splash screen content appears as soon as the renderer
+  // By showing now, the user sees the active native appearance background
+  // immediately, and the splash screen content appears as soon as the renderer
   // finishes its first paint. This is much better UX than a blank desktop.
   win.show();
-  _ts('window shown (dark bg)');
+  _ts('window shown (native appearance background)');
 
   // Set window title with environment suffix for non-production builds
   const envCfg = getCurrentEnvConfig();
@@ -519,6 +526,9 @@ async function createMainWindow(): Promise<BrowserWindow> {
 async function initialize(): Promise<void> {
   _ts('initialize() start');
 
+  await syncNativeAppearanceFromStore();
+  observeNativeAppearanceUpdates();
+
   initializeSqliteDatabase();
   const sqliteInfo = getSqliteDatabaseInfo();
   console.info(
@@ -536,7 +546,7 @@ async function initialize(): Promise<void> {
   registerDialogHandlers();
 
   // Create the main window as early as possible.
-  // Window shows immediately with dark background (see createWindow).
+  // Window shows immediately with the active native appearance background (see createWindow).
   const window = await createMainWindow();
   _ts('mainWindow created');
 

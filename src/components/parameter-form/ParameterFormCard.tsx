@@ -453,7 +453,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                   onClick={handlePrev}
                   disabled={isFirst}
                   aria-label={config.prevLabel ?? '上一步'}
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-[var(--sto-content-hover-background)] disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   <ChevronLeft className="h-2.5 w-2.5 text-muted-foreground" />
                 </button>
@@ -465,7 +465,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                   onClick={handleNext}
                   disabled={isLast}
                   aria-label={config.nextLabel ?? '下一步'}
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-[var(--sto-content-hover-background)] disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   <ChevronRight className="h-2.5 w-2.5 text-foreground" />
                 </button>
@@ -552,25 +552,25 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
   }
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl border border-[#E5E6EB] bg-[#FAFBFC] shadow-[0_2px_8px_rgba(29,33,41,0.04)]">
+    <div className="w-full overflow-hidden rounded-2xl border border-[var(--sto-border-default)] bg-[var(--sto-form-panel-background)] shadow-[var(--sto-shadow-form-panel)]">
       {/* Header */}
-      <div className="border-b border-[#E5E6EB] bg-white px-5 py-3.5">
+      <div className="border-b border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] px-5 py-3.5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-[#1D2129]">
+            <h3 className="truncate text-[15px] font-semibold text-[var(--sto-text-primary)]">
               {step?.title ?? '参数确认'}
             </h3>
             {step?.description && (
-              <p className="mt-0.5 truncate text-[12.5px] text-[#86909C]">{step.description}</p>
+              <p className="mt-0.5 truncate text-[12.5px] text-[var(--sto-text-tertiary)]">{step.description}</p>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-lg border border-[#E5E6EB] bg-[#FAFBFC] px-1 py-0.5 text-[12px] text-[#4E5969]">
+            <div className="flex items-center gap-0.5 rounded-lg border border-[var(--sto-border-default)] bg-[var(--sto-form-inset-background)] px-1 py-0.5 text-[12px] text-[var(--sto-text-secondary)]">
               <button
                 type="button"
                 onClick={handlePrev}
                 disabled={isFirst}
-                className="rounded p-1 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded p-1 transition-colors hover:bg-[var(--sto-form-stepper-hover-background)] disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
@@ -581,7 +581,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                 type="button"
                 onClick={handleNext}
                 disabled={isLast}
-                className="rounded p-1 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded p-1 transition-colors hover:bg-[var(--sto-form-stepper-hover-background)] disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
@@ -589,7 +589,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
             <button
               type="button"
               onClick={() => setCollapsed((c) => !c)}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-[#86909C] transition-colors hover:bg-[#F5F6F7] hover:text-[#4E5969]"
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-[var(--sto-text-tertiary)] transition-colors hover:bg-[var(--sto-form-disabled-background)] hover:text-[var(--sto-text-secondary)]"
             >
               {collapsed ? '展开' : '收起'}
               <ChevronUp className={cn('h-3.5 w-3.5 transition-transform', collapsed && 'rotate-180')} />
@@ -603,7 +603,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
 
           {/* Fields */}
           <div className="space-y-5 px-5 py-4">
-            <div className="text-[14px] font-semibold text-[#1D2129]">
+            <div className="text-[14px] font-semibold text-[var(--sto-text-primary)]">
               {currentStep + 1}. {step?.title ?? '参数确认'}
             </div>
             {step?.fields.map((field) => (
@@ -619,8 +619,8 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
           </div>
 
           {/* Footer actions */}
-          <div className="flex items-center justify-between gap-3 border-t border-[#E5E6EB] bg-white px-5 py-3.5">
-            <div className="min-w-0 text-[12px] text-[#86909C]">
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--sto-border-default)] bg-[var(--sto-card-panel-bg)] px-5 py-3.5">
+            <div className="min-w-0 text-[12px] text-[var(--sto-text-tertiary)]">
               {stepFooterHint}
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -629,7 +629,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                   variant="ghost"
                   size="sm"
                   onClick={handlePrev}
-                  className="text-[#86909C] hover:text-[#4E5969]"
+                  className="text-[var(--sto-text-tertiary)] hover:text-[var(--sto-text-secondary)]"
                 >
                   {config.prevLabel ?? '上一步'}
                 </Button>
@@ -639,7 +639,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                   size="sm"
                   onClick={handleSubmit}
                   disabled={submitting}
-                  className="rounded-lg bg-[#1D2129] px-5 text-white hover:bg-[#4E5969]"
+                  className="rounded-lg bg-[var(--sto-content-inverted-background)] px-5 text-[var(--sto-content-inverted-foreground)] hover:bg-[var(--sto-content-inverted-hover-background)]"
                 >
                   {submitting ? (
                     <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -652,7 +652,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                 <Button
                   size="sm"
                   onClick={handleNext}
-                  className="rounded-lg bg-[#1D2129] px-5 text-white hover:bg-[#4E5969]"
+                  className="rounded-lg bg-[var(--sto-content-inverted-background)] px-5 text-[var(--sto-content-inverted-foreground)] hover:bg-[var(--sto-content-inverted-hover-background)]"
                 >
                   {config.nextLabel ?? '继续'}
                 </Button>

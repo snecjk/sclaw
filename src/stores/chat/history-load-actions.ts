@@ -7,10 +7,9 @@ import {
 import { logChatFlow } from './chat-flow-log';
 import {
   cancelHistoryLoadPerf,
-  estimateJsonBytes,
   finishHistoryLoadPerf,
-  formatPayloadSize,
   markHistoryLoadPerf,
+  payloadSizeDetail,
   startHistoryLoadPerf,
 } from './history-load-perf';
 import type { ChatGet, ChatSet, HistoryActions } from './store-api';
@@ -155,6 +154,7 @@ export function createHistoryLoadActions(
           rawMessages: RawMessage[],
           thinkingLevel: string | null,
           runtimeState?: { isRunning?: boolean; runtimeResult?: unknown },
+          historyHasMore?: boolean,
         ) => {
           applyLoadedHistorySnapshot({
             get,
@@ -164,6 +164,7 @@ export function createHistoryLoadActions(
             rawMessages,
             thinkingLevel,
             runtimeState,
+            historyHasMore,
           });
         };
 
@@ -228,12 +229,12 @@ export function createHistoryLoadActions(
             ? mergeHistoryTail(existingTranscript, pageMessages)
             : pageMessages;
           const totalCount = readHistoryTotalCount(data.totalCount, allMessages.length);
-          const payloadBytes = estimateJsonBytes(pageMessages);
+          const historyHasMore = data.hasMore === true || totalCount > allMessages.length;
+          const payloadDetail = payloadSizeDetail(pageMessages);
           markHistoryLoadPerf(targetSessionKey, 'load.rpc.done', {
             rpcMs,
             messageCount: allMessages.length,
-            payloadBytes,
-            payloadSize: formatPayloadSize(payloadBytes),
+            ...payloadDetail,
             engineType,
           });
           if (_historyGenerationBySession.get(targetSessionKey) !== generation) {
@@ -257,8 +258,7 @@ export function createHistoryLoadActions(
             thinkingLevel,
             isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : null,
             rpcMs,
-            payloadBytes,
-            payloadSize: formatPayloadSize(payloadBytes),
+            ...payloadDetail,
             engineType,
           });
 
@@ -284,15 +284,14 @@ export function createHistoryLoadActions(
           applyHistorySnapshot(allMessages, thinkingLevel, {
             isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : undefined,
             runtimeResult: data.runtimeResult,
-          });
+          }, historyHasMore);
           useChatRuntimeV2Store.getState().setHistoryFingerprint(targetSessionKey, nextFingerprint);
           useChatRuntimeV2Store.getState().setHistoryTotalCount(targetSessionKey, totalCount);
           finishHistoryLoadPerf(targetSessionKey, {
             messageCount: allMessages.length,
             pageCount: pageMessages.length,
             totalCount,
-            payloadBytes,
-            payloadSize: formatPayloadSize(payloadBytes),
+            ...payloadDetail,
           });
         } catch (err) {
           console.warn('Failed to load chat history:', err);
@@ -329,8 +328,13 @@ export function createHistoryLoadActions(
 
     loadOlderHistory: async (requestedSessionKey?: string, options?: { drain?: boolean }) => {
       const targetSessionKey = requestedSessionKey ?? get().currentSessionKey;
-      if (_olderHistoryLoadInFlight.has(targetSessionKey) || _historyLoadInFlight.has(targetSessionKey)) {
+      if (_olderHistoryLoadInFlight.has(targetSessionKey)) {
         return _olderHistoryLoadInFlight.get(targetSessionKey);
+      }
+      const blockingHistory = _historyLoadInFlight.get(targetSessionKey);
+      if (blockingHistory) {
+        await blockingHistory;
+        return get().loadOlderHistory(targetSessionKey, options);
       }
       const engineType = resolveEngineTypeForSession(
         get().sessions,
@@ -363,7 +367,15 @@ export function createHistoryLoadActions(
           : [];
         const latest = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey]?.transcript ?? [];
         const merged = prependHistoryPage(latest, olderMessages);
-        const totalCount = readHistoryTotalCount(data.totalCount, merged.length);
+        const addedCount = merged.length - latest.length;
+        const previousTotal = useChatRuntimeV2Store.getState()
+          .sessionsByKey[targetSessionKey]?.historyTotalCount ?? 0;
+        const reportedTotal = readHistoryTotalCount(data.totalCount, 0);
+        const totalCount = addedCount === 0
+          ? merged.length
+          : Math.max(previousTotal, reportedTotal, merged.length);
+        const historyHasMore = addedCount > 0
+          && (Boolean(data.hasMore) || totalCount > merged.length);
         if (get().currentSessionKey === targetSessionKey) {
           applyLoadedHistorySnapshot({
             get,
@@ -372,6 +384,7 @@ export function createHistoryLoadActions(
             targetSessionKey,
             rawMessages: merged,
             thinkingLevel: get().thinkingLevel,
+            historyHasMore,
           });
         } else {
           useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, merged);

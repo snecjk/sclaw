@@ -186,6 +186,7 @@
     "collapsedSummary": "{{thoughtCount}} 回思考、{{toolCount}} 個のツールを使用",
     "collapsedSummaryThoughtsOnly": "{{thoughtCount}} 回思考",
     "collapsedSummaryToolsOnly": "{{toolCount}} 個のツールを使用",
+    "omittedEarlierThinkingChars": "先頭の {{count}} 文字を省略しました",
     "invokeToolLabel": "ツール呼び出し – {{toolName}}",
     "toolNoParams": "パラメータなし",
     "paramsConfirmedLabel": "パラメータを確認しました",
@@ -300,6 +301,7 @@
   "preview": {
     "collapsePanel": "プレビューを閉じる",
     "resizeSeparator": "プレビュー幅を調整",
+    "resizeChatSeparator": "チャット幅を調整",
     "overflowMenu": "すべての成果物",
     "fullscreen": "全画面",
     "expandWorkspace": "プレビューを展開",
@@ -351,6 +353,7 @@
     "slides": {
       "prev": "前へ",
       "next": "次へ"
+
     }
   },
   "runtime": {

@@ -157,16 +157,43 @@ function allowLocalhostFallback(): boolean {
   }
 }
 
-export async function hostApiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export type HostApiFetchInit = RequestInit & {
+  /**
+   * Override Host API proxy timeout (ms).
+   * `0` / `Infinity` disables the timer. Omit to use path-based defaults (usually 15s).
+   */
+  timeoutMs?: number;
+  /** When true, cancel the default 15s timeout (`timeoutMs: 0`). */
+  disableTimeout?: boolean;
+};
+
+export function resolveHostApiFetchTimeoutMs(init?: Pick<HostApiFetchInit, 'timeoutMs' | 'disableTimeout'>): number | undefined {
+  if (init?.disableTimeout) return 0;
+  if (typeof init?.timeoutMs === 'number') return init.timeoutMs;
+  return undefined;
+}
+
+function toRequestInit(init?: HostApiFetchInit): RequestInit {
+  if (!init) return {};
+  const { timeoutMs, disableTimeout, ...requestInit } = init;
+  void timeoutMs;
+  void disableTimeout;
+  return requestInit;
+}
+
+export async function hostApiFetch<T>(path: string, init?: HostApiFetchInit): Promise<T> {
   const startedAt = Date.now();
   const method = init?.method || 'GET';
+  const timeoutMs = resolveHostApiFetchTimeoutMs(init);
+  const requestInit = toRequestInit(init);
   // In Electron renderer, always proxy through main process to avoid CORS.
   try {
     const response = await invokeIpc<HostApiProxyResponse>('hostapi:fetch', {
       path,
       method,
-      headers: headersToRecord(init?.headers),
-      body: init?.body ?? null,
+      headers: headersToRecord(requestInit.headers),
+      body: requestInit.body ?? null,
+      timeoutMs,
     });
 
     if (typeof response?.ok === 'boolean' && 'data' in response) {
@@ -203,10 +230,10 @@ export async function hostApiFetch<T>(path: string, init?: RequestInit): Promise
 
   // Browser-only fallback (non-Electron environments).
   const response = await fetch(`${HOST_API_BASE}${path}`, {
-    ...init,
+    ...requestInit,
     headers: {
       'Content-Type': 'application/json',
-      ...(init?.headers || {}),
+      ...(requestInit.headers || {}),
     },
   });
   trackUiEvent('hostapi.fetch', {

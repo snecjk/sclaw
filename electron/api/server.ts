@@ -36,6 +36,7 @@ import { handleUsageRoutes } from './routes/usage';
 import { handleSkillRoutes } from './routes/skills';
 import { handleSkillPlazaRoutes } from './routes/skill-plaza';
 import { handleAppPlazaRoutes } from './routes/app-plaza';
+import { handleFinanceBiRoutes } from './routes/finance-bi';
 import { handleConnectorRoutes } from './routes/connectors';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
@@ -57,7 +58,10 @@ import { handleBrowserAutomationRoutes } from './routes/browser-automation';
 import { handleDataCenterRoutes } from './routes/data-center';
 import { handleArtifactSaveRecordRoutes } from './routes/artifact-save-records';
 import { handleLocalAuthorizedFileRoutes } from './routes/local-authorized-files';
+import { handleAppDevRoutes } from './routes/app-dev';
 import { handleLearningCenterRoutes } from './routes/learning-center';
+import { handleAppExternalServiceRoutes } from './routes/app-external-services';
+import { handleAppTemplateRoutes } from './routes/app-templates';
 
 import { sendJson } from './route-utils';
 
@@ -88,6 +92,7 @@ const routeHandlers: RouteHandler[] = [
   handleSkillRoutes,
   handleSkillPlazaRoutes,
   handleAppPlazaRoutes,
+  handleFinanceBiRoutes,
   handleLearningCenterRoutes,
   handleConnectorRoutes,
   handleFileRoutes,
@@ -101,6 +106,9 @@ const routeHandlers: RouteHandler[] = [
   handleLocalAuthorizedFileRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
+  handleAppTemplateRoutes,
+  handleAppExternalServiceRoutes,
+  handleAppDevRoutes,
   handleBrowserAutomationRoutes,
   handleScheduledTaskRoutes,
   handleDingTalkRoutes,
@@ -113,7 +121,7 @@ export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_
   const server = createServer(async (req, res) => {
     try {
       const requestUrl = new URL(req.url || '/', `http://127.0.0.1:${port}`);
-      logger.info(`[HostApi] ${req.method} ${requestUrl.pathname} — routing...`);
+      logger.debug(`[HostApi] ${req.method} ${requestUrl.pathname} — routing...`);
       for (const handler of routeHandlers) {
         const handled = await handler(req, res, requestUrl, ctx);
         if (handled) {

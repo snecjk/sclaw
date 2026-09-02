@@ -6,6 +6,16 @@ vi.mock('@/lib/api-client', () => ({
   invokeIpc: (...args: unknown[]) => invokeIpcMock(...args),
 }));
 
+describe('resolveHostApiFetchTimeoutMs', () => {
+  it('maps disableTimeout to 0 and otherwise keeps timeoutMs', async () => {
+    const { resolveHostApiFetchTimeoutMs } = await import('@/lib/host-api');
+    expect(resolveHostApiFetchTimeoutMs({ disableTimeout: true })).toBe(0);
+    expect(resolveHostApiFetchTimeoutMs({ disableTimeout: true, timeoutMs: 120_000 })).toBe(0);
+    expect(resolveHostApiFetchTimeoutMs({ timeoutMs: 120_000 })).toBe(120_000);
+    expect(resolveHostApiFetchTimeoutMs({})).toBeUndefined();
+  });
+});
+
 describe('host-api', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -29,6 +39,50 @@ describe('host-api', () => {
     expect(invokeIpcMock).toHaveBeenCalledWith(
       'hostapi:fetch',
       expect.objectContaining({ path: '/api/settings', method: 'GET' }),
+    );
+  });
+
+  it('forwards disableTimeout as timeoutMs: 0 to the IPC proxy', async () => {
+    invokeIpcMock.mockResolvedValueOnce({
+      ok: true,
+      data: { status: 200, ok: true, json: { ok: 1 } },
+    });
+
+    const { hostApiFetch } = await import('@/lib/host-api');
+    await hostApiFetch('/api/app-dev/sto-app/deploy', {
+      method: 'POST',
+      body: '{}',
+      disableTimeout: true,
+    });
+
+    expect(invokeIpcMock).toHaveBeenCalledWith(
+      'hostapi:fetch',
+      expect.objectContaining({
+        path: '/api/app-dev/sto-app/deploy',
+        timeoutMs: 0,
+      }),
+    );
+  });
+
+  it('forwards explicit timeoutMs when disableTimeout is not set', async () => {
+    invokeIpcMock.mockResolvedValueOnce({
+      ok: true,
+      data: { status: 200, ok: true, json: { ok: 1 } },
+    });
+
+    const { hostApiFetch } = await import('@/lib/host-api');
+    await hostApiFetch('/api/app-dev/sto-app/push', {
+      method: 'POST',
+      body: '{}',
+      timeoutMs: 120_000,
+    });
+
+    expect(invokeIpcMock).toHaveBeenCalledWith(
+      'hostapi:fetch',
+      expect.objectContaining({
+        path: '/api/app-dev/sto-app/push',
+        timeoutMs: 120_000,
+      }),
     );
   });
 

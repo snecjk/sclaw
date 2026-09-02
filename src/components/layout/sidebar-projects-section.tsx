@@ -9,14 +9,15 @@ import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
-import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
-import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg';
+import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg?raw';
+import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg?raw';
+import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg?raw';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
-  sidebarSubitemTextIdleClass,
   sidebarTextIconClass,
+  sidebarTooltipArrowClass as SIDEBAR_TOOLTIP_ARROW_CLASS,
+  sidebarTooltipContentClass as SIDEBAR_TOOLTIP_CLASS,
 } from '@/lib/surfaces';
 import {
   areAllExpandableGroupsExpanded,
@@ -25,7 +26,9 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { DEFAULT_WORKSPACE_ID, useSessionCatalogStore } from '@/stores/session-catalog';
+import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useChatStore } from '@/stores/chat';
+import { isAppDevSessionKey } from '@/lib/app-dev-session';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import {
@@ -40,6 +43,7 @@ import {
 } from '@/lib/sidebar-project-session-navigation';
 import { resolveSidebarChannelSource } from '@/lib/session-channel-source';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
@@ -53,13 +57,6 @@ import {
 } from '@/components/ui/tooltip';
 import { invokeIpc } from '@/lib/api-client';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
-
-const SIDEBAR_TOOLTIP_CLASS = cn(
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
-  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
-  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
-);
-const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 interface SidebarProjectsSectionProps {
   collapsed: boolean;
@@ -89,6 +86,8 @@ export function SidebarProjectsSection({
   const isOnHome = location.pathname === '/';
 
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const appDevWorkspaceIds = useAppDevCatalogStore((s) => s.workspaceIds);
+  const refreshAppDevCatalog = useAppDevCatalogStore((s) => s.refresh);
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const selectProject = useSessionCatalogStore((s) => s.selectProject);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
@@ -116,16 +115,28 @@ export function SidebarProjectsSection({
   const [editingProjectValue, setEditingProjectValue] = useState('');
   const sidebarProjectFocusTokenRef = useRef<string | null>(null);
   const focusSessionKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    void refreshAppDevCatalog();
+  }, [refreshAppDevCatalog, workspaces.length]);
+
+  // 开发应用不进侧栏「项目」——入口只在应用广场。
+  const visibleWorkspaces = useMemo(
+    () => workspaces.filter((workspace) => !appDevWorkspaceIds.includes(workspace.id)),
+    [workspaces, appDevWorkspaceIds],
+  );
+
   const sortedWorkspaces = useMemo(
-    () => sortProjectsByCreatedAt(workspaces),
-    [workspaces],
+    () => sortProjectsByCreatedAt(visibleWorkspaces),
+    [visibleWorkspaces],
   );
 
   const sessionsByProjectId = useMemo(() => {
     const map = new Map<string, ChatSession[]>();
-    for (const workspace of workspaces) {
+    for (const workspace of visibleWorkspaces) {
       const scoped = sessions.filter((session) => {
         if (isSidebarHiddenChatSessionKey(session.key)) return false;
+        if (isAppDevSessionKey(session.key)) return false;
         const workspaceId = sessionWorkspaceByKey[session.key] ?? DEFAULT_WORKSPACE_ID;
         return workspaceId === workspace.id;
       });
@@ -135,7 +146,7 @@ export function SidebarProjectsSection({
       );
     }
     return map;
-  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey]);
+  }, [visibleWorkspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) =>
@@ -219,7 +230,8 @@ export function SidebarProjectsSection({
 
   const linkedSessionCount = useCallback((projectId: string) => {
     let count = 0;
-    for (const workspaceId of Object.values(sessionWorkspaceByKey)) {
+    for (const [sessionKey, workspaceId] of Object.entries(sessionWorkspaceByKey)) {
+      if (isAppDevSessionKey(sessionKey)) continue;
       if (workspaceId === projectId) count += 1;
     }
     const visible = (sessionsByProjectId.get(projectId) ?? []).length;
@@ -336,24 +348,20 @@ export function SidebarProjectsSection({
                     }
                     onClick={handleProjectBatchExpandOrCollapse}
                     className={cn(
-                      'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                      'sto-navigation-item flex h-7 w-7 items-center justify-center rounded-md transition-colors',
                       sidebarTextIconClass,
                     )}
                   >
                     {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
                     {projectGroupsAllExpanded ? (
-                      <img
-                        src={sidebarCollapseAllGroupsIcon}
-                        alt=""
+                      <ThemedMonochromeIcon
+                        source={sidebarCollapseAllGroupsIcon}
                         className="h-[18px] w-[18px]"
-                        aria-hidden
                       />
                     ) : (
-                      <img
-                        src={sidebarExpandAllGroupsIcon}
-                        alt=""
+                      <ThemedMonochromeIcon
+                        source={sidebarExpandAllGroupsIcon}
                         className="h-[18px] w-[18px]"
-                        aria-hidden
                       />
                     )}
                   </button>
@@ -373,15 +381,13 @@ export function SidebarProjectsSection({
                   aria-label={t('sidebar.newProject')}
                   onClick={() => setCreateOpen(true)}
                   className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                    'sto-navigation-item flex h-7 w-7 items-center justify-center rounded-md transition-colors',
                     sidebarTextIconClass,
                   )}
                 >
-                  <img
-                    src={sidebarNewProjectIcon}
-                    alt=""
+                  <ThemedMonochromeIcon
+                    source={sidebarNewProjectIcon}
                     className="h-[18px] w-[18px]"
-                    aria-hidden
                   />
                 </button>
               </TooltipTrigger>
@@ -403,7 +409,7 @@ export function SidebarProjectsSection({
                 className={cn(
                   'min-w-0 truncate',
                   sidebarListItemTextClass,
-                  'text-[#86909C]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
+                  'text-[var(--sto-text-tertiary)]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
                 )}
               >
                 {t('sidebar.projectsEmpty')}
@@ -418,7 +424,12 @@ export function SidebarProjectsSection({
 
             return (
               <div key={workspace.id} className="flex flex-col">
-                <div className="group relative flex w-full min-w-0 items-center">
+                <div
+                  className={cn(
+                    'group relative flex w-full min-w-0 items-center rounded-lg',
+                    !isEditingProject && 'sto-navigation-item',
+                  )}
+                >
                   {isEditingProject ? (
                     <input
                       type="text"
@@ -451,7 +462,7 @@ export function SidebarProjectsSection({
                         className={cn(
                           'flex h-8 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-1 pr-16 text-left transition-colors',
                           'outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
-                          sidebarSubitemTextIdleClass,
+                          sidebarListItemTextClass,
                         )}
                       >
                         <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

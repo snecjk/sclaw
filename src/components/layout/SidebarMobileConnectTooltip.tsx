@@ -114,23 +114,22 @@ export function SidebarMobileConnectTooltip({
         sideOffset={8}
         collisionPadding={16}
         className={cn(
-          'z-[60000] w-[260px] overflow-hidden rounded-[12px] border border-[#E5E6EB] !bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]',
-          'dark:border-border dark:!bg-popover',
+          'z-[60000] w-[260px] overflow-hidden rounded-[12px] p-0 shadow-[var(--sto-shadow-dropdown-strong)]',
         )}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {/* 整卡内容都在弹框内：灰底二维码区 + 开关 + 更多频道 */}
         <div className="flex flex-col gap-3 p-3">
-          <div className="flex flex-col items-center rounded-[10px] bg-[#F2F3F5] px-4 pb-3.5 pt-4 dark:bg-muted/50">
+          <div className="flex flex-col items-center rounded-[10px] bg-[var(--sto-surface-subtle)] px-4 pb-3.5 pt-4">
             <img
               src={mobileAppQr}
               alt=""
               className="h-[120px] w-[120px] rounded-[6px] bg-white object-contain p-1.5"
             />
-            <p className="mt-3 text-center text-[14px] font-semibold leading-tight text-[#1D2129] dark:text-foreground">
+            <p className="mt-3 text-center text-[14px] font-semibold leading-tight text-[var(--sto-text-primary)]">
               {t('hub.mobile.title')}
             </p>
-            <p className="mt-1 text-center text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
+            <p className="mt-1 text-center text-[12px] leading-relaxed text-[var(--sto-text-tertiary)]">
               {t('hub.mobile.footerQrHint', {
                 defaultValue: '一键下载，把工作台装进口袋',
               })}
@@ -139,7 +138,7 @@ export function SidebarMobileConnectTooltip({
 
           <div className="flex flex-col gap-3 px-0.5">
             <div className="flex items-center gap-2.5">
-              <span className="min-w-0 flex-1 text-[12px] leading-snug text-[#4E5969] dark:text-muted-foreground">
+              <span className="min-w-0 flex-1 text-[12px] leading-snug text-[var(--sto-text-secondary)]">
                 {t('hub.mobile.footerConnectHint', {
                   defaultValue: '连接 app，确保同账号登录手机',
                 })}
@@ -157,7 +156,7 @@ export function SidebarMobileConnectTooltip({
               />
             </div>
 
-            <div className="h-px w-full bg-[#F2F3F5] dark:bg-border" aria-hidden />
+            <div className="h-px w-full bg-[var(--sto-surface-subtle)]" aria-hidden />
 
             <button
               type="button"
@@ -167,13 +166,13 @@ export function SidebarMobileConnectTooltip({
                 navigate('/settings/channels');
               }}
             >
-              <span className="min-w-0 text-[12px] font-normal leading-snug text-[#86909C] transition-colors group-hover:text-[#FF6A00] dark:text-muted-foreground dark:group-hover:text-[#FF6A00]">
+              <span className="min-w-0 text-[12px] font-normal leading-snug text-[var(--sto-text-tertiary)] transition-colors group-hover:text-[var(--sto-link-hover-foreground)]">
                 {t('hub.mobile.footerMoreChannels', {
                   defaultValue: '点击绑定更多频道',
                 })}
               </span>
               <ChevronRight
-                className="h-3.5 w-3.5 shrink-0 text-[#86909C] transition-colors group-hover:text-[#FF6A00] dark:text-muted-foreground dark:group-hover:text-[#FF6A00]"
+                className="h-3.5 w-3.5 shrink-0 text-[var(--sto-icon-tertiary)] transition-colors group-hover:text-[var(--sto-link-hover-foreground)]"
                 strokeWidth={1.75}
                 aria-hidden
               />

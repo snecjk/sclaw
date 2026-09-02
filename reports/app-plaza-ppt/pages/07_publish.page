@@ -1,0 +1,88 @@
+pageType: content
+background:
+  type: solid
+  color: "$bg"
+elements:
+  - elementId: kicker
+    elementType: text
+    bounds: [60, 36, 500, 18]
+    content: {style: "$kicker", wrap: false, text: "05 · 低成本发布"}
+  - elementId: title
+    elementType: text
+    bounds: [60, 58, 900, 40]
+    content: {style: "$pagetitle", wrap: false, text: "低成本发布：推送 Git 即上线，静态托管零常驻成本"}
+  - elementId: rule
+    elementType: shape
+    bounds: [60, 110, 64, 4]
+    shapeName: rect
+    fill: {type: solid, color: "$accent"}
+  - elementId: hairline
+    elementType: shape
+    bounds: [60, 118, 840, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$hairline"}
+  - elementId: flow-head
+    elementType: text
+    bounds: [60, 146, 400, 24]
+    content: {fontSize: 15, bold: true, color: "$ink", wrap: false, text: "用户点「保存并发布」之后"}
+  - elementId: flow-chain
+    elementType: text
+    bounds: [60, 178, 840, 28]
+    content:
+      fontSize: 15
+      bold: true
+      color: "$accent"
+      wrap: false
+      text: "自动提交 → 推送代码仓库 → DevOps 构建 → 静态部署上线 → 分配域名可访问"
+  - elementId: flow-note
+    elementType: text
+    bounds: [60, 212, 840, 22]
+    content: {style: "$small", wrap: false, text: "构建产物与发布平台约定完全一致（npm run build → build/），前端应用零适配进流水线；静态托管无常驻服务，成本极低。"}
+  - elementId: status-rule
+    elementType: shape
+    bounds: [60, 250, 840, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$hairline"}
+  - elementId: left-head
+    elementType: text
+    bounds: [60, 270, 380, 24]
+    content: {fontSize: 15, bold: true, color: "$ink", wrap: false, text: "SClaw 侧：管好代码与发布体验"}
+  - elementId: left-body
+    elementType: text
+    bounds: [60, 300, 400, 170]
+    content:
+      fontSize: 13
+      color: "$text"
+      lineHeight: 1.6
+      text: |
+        <p><strong>状态可视化</strong>：创建迭代 → 同步代码 → 流水线构建 → 成功 / 失败，全程可见。</p>
+        <p style="margin-top:8px"><strong>失败自愈</strong>：失败信息自动回流 AI 诊断修复，用户只看到「发布中 / 发布成功」。</p>
+        <p style="margin-top:8px"><strong>冲突兜底</strong>：提交前自动拉取，冲突先由 AI 处理。</p>
+  - elementId: split-line
+    elementType: shape
+    bounds: [520, 270, 1, 200]
+    shapeName: rect
+    fill: {type: solid, color: "$hairline"}
+  - elementId: right-head
+    elementType: text
+    bounds: [560, 270, 380, 24]
+    content: {fontSize: 15, bold: true, color: "$ink", wrap: false, text: "为什么成本低"}
+  - elementId: right-body
+    elementType: text
+    bounds: [560, 300, 340, 170]
+    content:
+      fontSize: 13
+      color: "$text"
+      lineHeight: 1.6
+      text: |
+        <p><strong>静态托管</strong>：前端产物托管访问，无需常驻后端服务与服务器租金。</p>
+        <p style="margin-top:8px"><strong>推送即交付</strong>：SClaw 把代码推到 Git，部署与域名由平台完成。</p>
+        <p style="margin-top:8px"><strong>零适配</strong>：构建约定对齐发布平台，应用直接进流水线。</p>
+  - elementId: footer
+    elementType: text
+    bounds: [60, 506, 400, 16]
+    content: {style: "$small", wrap: false, text: "应用广场 · 用户应用开发 · 周会同步"}
+  - elementId: pagenum
+    elementType: text
+    bounds: [860, 506, 40, 16]
+    content: {style: "$small", wrap: false, align: [right, top], text: "05"}

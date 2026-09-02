@@ -186,6 +186,7 @@
     "collapsedSummary": "Thought {{thoughtCount}} times, used {{toolCount}} tools",
     "collapsedSummaryThoughtsOnly": "Thought {{thoughtCount}} times",
     "collapsedSummaryToolsOnly": "Used {{toolCount}} tools",
+    "omittedEarlierThinkingChars": "Omitted the first {{count}} characters",
     "invokeToolLabel": "Invoke tool – {{toolName}}",
     "toolNoParams": "No parameters",
     "paramsConfirmedLabel": "Parameters confirmed",
@@ -311,6 +312,7 @@
   "preview": {
     "collapsePanel": "Collapse preview",
     "resizeSeparator": "Resize preview panel",
+    "resizeChatSeparator": "Resize chat panel",
     "overflowMenu": "All artifacts",
     "fullscreen": "Fullscreen",
     "expandWorkspace": "Expand preview",
@@ -362,6 +364,7 @@
     "slides": {
       "prev": "Previous",
       "next": "Next"
+
     }
   },
   "runtime": {

@@ -134,12 +134,14 @@
         "sections": {
             "qaArtifact": "问答产物",
             "drive": "我的文件",
-            "dataSource": "数据源"
+            "dataSource": "数据源",
+            "financeReport": "我的报表"
         },
         "sectionDescriptions": {
             "qaArtifact": "管理个人对话产物与网点协作产物，供技能、工作流与 AI 分析引用",
             "drive": "统一管理本地授权文件与在线数据资产，供 AI 与工作流关联引用。",
-            "dataSource": "数据源管理能力待后端接口开放后接入"
+            "dataSource": "数据源管理能力待后端接口开放后接入",
+            "financeReport": "浏览和搜索已发布的数据模型，发现数据价值。"
         },
         "tabs": {
             "myArtifacts": "我的产物",
@@ -174,6 +176,20 @@
             "authorizedCount": "共授权 {{count}} 个文件",
             "localSummary": "共{{folders}}个本地文件夹，{{files}}个未分类文件",
             "usedPercent": "已使用 {{percent}}%"
+        },
+        "financeReport": {
+            "loading": "正在加载我的报表…",
+            "loadFailedTitle": "我的报表加载失败",
+            "loadFailedDescription": "报表列表获取失败，请确认已登录后重试。",
+            "totalCount": "共 {{count}} 条报表",
+            "listHint": "搜索模型名称、分类或描述",
+            "searchPlaceholder": "搜索模型名称、分类、描述",
+            "emptyDescription": "暂无已发布的数据模型",
+            "allReports": "全部报表",
+            "historyTitle": "报表数据",
+            "historyDescription": "选择模板与运行条件后查询，查看产物数据预览。",
+            "historyEmptyTitle": "请先查询产物",
+            "historyEmptyDescription": "选择模板与运行记录后点击「查询」，即可预览产物数据。"
         },
         "feedback": {
             "loadFailed": "加载失败",

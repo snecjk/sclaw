@@ -1,0 +1,35 @@
+{
+  "version": "v1",
+  "intents": [
+    {
+      "intent": "查询页",
+      "preferredComponents": ["AntdStack", "AntdText", "AntdFilterBar", "AntdTable", "AntdPagination", "AntdButton"],
+      "catalogId": "antd",
+      "notes": "含查询条件、表格、分页时必须用 antd Catalog，不要用 basic 拼凑。"
+    },
+    {
+      "intent": "列表页",
+      "preferredComponents": ["AntdFilterBar", "AntdTable", "AntdPagination"],
+      "catalogId": "antd"
+    },
+    {
+      "intent": "表格",
+      "preferredComponents": ["AntdTable"],
+      "catalogId": "antd"
+    },
+    {
+      "intent": "表单页",
+      "preferredComponents": ["Column", "Text", "AntdInput", "AntdButton"],
+      "catalogId": "antd"
+    },
+    {
+      "intent": "详情页",
+      "preferredComponents": ["Column", "Text", "Card", "AntdButton"]
+    },
+    {
+      "intent": "主要按钮",
+      "preferredComponents": ["AntdButton"],
+      "catalogId": "antd"
+    }
+  ]
+}

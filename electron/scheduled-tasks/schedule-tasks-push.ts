@@ -5,10 +5,16 @@
  * 云端读写走 `listScheduleTasksCloud` / `upsertScheduleTaskCloud`（主进程出站）。
  *
  * 出队规则：
- * - 云端 0 条（含墓碑）→ bootstrap，本地该用户全部行上云（忽略 sync_status）
- * - 云端 ≥1 条 → 只推 pending；云端缺 id 的 done 行单条 backfill（只写 remote_version）
+ * - 本地无 `sync_status=pending` → 不 list、不 POST（日常稳态零云端调用）
+ * - 有 pending → `GET list?includeDeleted=1`：
+ *   - 云端 0 条（含墓碑）→ bootstrap，本地该用户全部行上云（忽略 sync_status）
+ *   - 云端 ≥1 条 → 只推 pending
+ * - 不做「云端缺 id 的 done 行」轮询 backfill
  *
  * 单条串行 POST，成功后 CAS：发出前记下 updated_at，回写时一致才 sync_status=done。
+ *
+ * 代价：云端空库 + 本地全是 done、且无 pending 时不会自动灌库；需用户再编辑产生 pending，
+ * 或靠 MyTask sync-status / 手动 pull。bootstrap 中途失败的 done 行同理不会自动重推。
  */
 
 import { logger } from '../utils/logger';
@@ -33,7 +39,7 @@ export interface ScheduleTasksPushDeps {
 /**
  * 一轮出队。串行逐条 POST，不挡 UI。
  * @param userCode 当前登录工号；只推 `created_by` 属于该用户的行
- * @returns pushed=走 CAS 的成功数；backfilled=补齐成功数；skipped=失败或 in-flight 跳过
+ * @returns pushed=走 CAS 的成功数；backfilled 恒为 0（已取消轮询 backfill）；skipped=失败或 in-flight 跳过
  */
 export async function runScheduleTasksPushTick(
   userCode: string,
@@ -53,6 +59,10 @@ export async function runScheduleTasksPushTick(
   });
   if (localRows.length === 0) return { pushed: 0, backfilled: 0, skipped: 0 };
 
+  const pending = localRows.filter((row) => row.syncStatus === 'pending');
+  // 无 pending 不打云端：省 list/POST；代价见文件头注释
+  if (pending.length === 0) return { pushed: 0, backfilled: 0, skipped: 0 };
+
   let cloudRows: Awaited<ReturnType<typeof listCloud>>;
   try {
     cloudRows = await listCloud(true);
@@ -60,54 +70,38 @@ export async function runScheduleTasksPushTick(
     logger.warn('[scheduled-task] push tick list cloud failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { pushed: 0, backfilled: 0, skipped: localRows.length };
+    return { pushed: 0, backfilled: 0, skipped: pending.length };
   }
 
-  const cloudById = new Map(cloudRows.map((row) => [row.id, row]));
-  const pending = localRows.filter((row) => row.syncStatus === 'pending');
-  const missingDone = localRows.filter(
-    (row) => row.syncStatus !== 'pending' && !cloudById.has(row.id),
-  );
-
-  const casTargets: ScheduleTask[] = cloudRows.length === 0 ? localRows : pending;
-  const backfillTargets: ScheduleTask[] = cloudRows.length === 0 ? [] : missingDone;
+  const targets: ScheduleTask[] = cloudRows.length === 0 ? localRows : pending;
+  logger.info('[scheduled-task] push tick', {
+    cloudCount: cloudRows.length,
+    bootstrap: cloudRows.length === 0,
+    pendingCount: pending.length,
+    targetCount: targets.length,
+  });
 
   let pushed = 0;
-  let backfilled = 0;
   let skipped = 0;
 
-  for (const row of casTargets) {
-    const ok = await pushOne(row, {
-      taskRepo,
-      upsertCloud,
-      updateSyncStatus: true,
-    });
+  for (const row of targets) {
+    const ok = await pushOne(row, { taskRepo, upsertCloud });
     if (ok) pushed += 1;
     else skipped += 1;
   }
-  for (const row of backfillTargets) {
-    const ok = await pushOne(row, {
-      taskRepo,
-      upsertCloud,
-      updateSyncStatus: false,
-    });
-    if (ok) backfilled += 1;
-    else skipped += 1;
-  }
 
-  return { pushed, backfilled, skipped };
+  return { pushed, backfilled: 0, skipped };
 }
 
 /**
- * 推一条：POST 全量覆盖 → 回写 remote_version；updateSyncStatus 时才按 CAS 置 done。
- * backfill 只补云端缺失，不改 sync_status。失败保持 pending，下轮再试。
+ * 推一条：POST 全量覆盖 → 回写 remote_version；CAS 通过才 sync_status=done。
+ * 失败保持 pending，下轮再试。
  */
 async function pushOne(
   row: ScheduleTask,
   params: {
     taskRepo: ScheduleTaskRepository;
     upsertCloud: typeof upsertScheduleTaskCloud;
-    updateSyncStatus: boolean;
   },
 ): Promise<boolean> {
   if (inFlightIds.has(row.id)) return false;
@@ -122,7 +116,7 @@ async function pushOne(
   try {
     const result = await params.upsertCloud(toCloudUpsertBody(row));
     await params.taskRepo.applyPushSuccess(row.id, result.version, snapshotUpdatedAt, {
-      updateSyncStatus: params.updateSyncStatus,
+      updateSyncStatus: true,
     });
     logger.info('[scheduled-task] push row', { ...meta, cloudVersion: result.version });
     return true;

@@ -63,6 +63,11 @@ export function useCurrentChatDisplayMessages(): RawMessage[] {
   return getDisplayModel(session ?? EMPTY_SESSION);
 }
 
+export function useSessionDisplayMessages(sessionKey: string): RawMessage[] {
+  const session = useChatRuntimeV2Store((state) => state.sessionsByKey[sessionKey]);
+  return getDisplayModel(session ?? EMPTY_SESSION);
+}
+
 export function useCurrentChatDisplayMessageCount(): number {
   const sessionKey = useChatStore((state) => state.currentSessionKey);
   return useChatRuntimeV2Store((state) => (

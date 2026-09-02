@@ -10,7 +10,7 @@ import type { RefObject } from 'react';
 import { Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { inputComposerHomeToolbarIconBtn } from './input-composer-toolbar';
+import { inputComposerHomeToolbarIconBtn } from './input-composer-toolbar-styles';
 import type { AgentSummary } from '@/types/agent';
 
 function AgentPickerItem({
@@ -31,7 +31,7 @@ function AgentPickerItem({
       onClick={onSelect}
       className={cn(
         'flex w-full flex-col items-start rounded-xl px-3 py-2 text-left transition-colors',
-        selected ? 'bg-primary/10 text-foreground' : 'hover:bg-black/5 dark:hover:bg-white/5',
+        selected ? 'bg-primary/10 text-foreground' : 'hover:bg-[var(--sto-control-agent-hover-background)]',
       )}
     >
       <span className="text-[14px] font-medium text-foreground">{agent.name}</span>
@@ -90,10 +90,10 @@ export function InputComposerAgentPicker({
           isHome
             ? cn(
                 inputComposerHomeToolbarIconBtn,
-                (open || selected) && 'bg-[#F0F2F5] hover:bg-[#F0F2F5] dark:bg-muted dark:hover:bg-muted',
+                (open || selected) && 'bg-[var(--sto-control-picker-hover-background)] hover:bg-[var(--sto-control-picker-hover-background)]',
               )
             : cn(
-                'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-[var(--sto-control-icon-subtle-hover-background)] hover:text-foreground',
                 (open || selected) && 'bg-primary/10 text-primary hover:bg-primary/12',
               ),
         )}
@@ -104,7 +104,7 @@ export function InputComposerAgentPicker({
         <Bot className={cn(isHome ? 'h-4 w-4' : 'h-3.5 w-3.5')} aria-hidden />
       </Button>
       {open ? (
-        <div className="absolute left-0 bottom-full z-50 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
+        <div className="sto-overlay sto-overlay--glass sto-overlay--glass-border absolute left-0 bottom-full z-50 mb-2 w-72 overflow-hidden rounded-2xl border glass p-1.5">
           <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground/80">
             {panelTitle}
           </div>

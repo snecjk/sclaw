@@ -53,7 +53,7 @@ export function InputComposerSendButton({
         size="icon"
         className={cn(
           sizeClass,
-          'border border-primary/80 bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(255,111,0,0.22)] hover:bg-primary/90',
+          'sto-control--composer-send-action border',
         )}
         variant="ghost"
         title={sendTitle}
@@ -72,10 +72,10 @@ export function InputComposerSendButton({
         sizeClass,
         'border transition-all',
         sending
-          ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white/80 dark:bg-white/80 dark:text-slate-900 dark:hover:bg-white/90'
+          ? 'sto-control--composer-stop'
           : canSend
-            ? 'border-primary/80 bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(255,111,0,0.22)] hover:bg-primary/90'
-            : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]',
+            ? 'sto-control--composer-send-action'
+            : 'sto-control--composer-unavailable',
       )}
       variant="ghost"
       title={sending ? stopTitle : sendTitle}

@@ -44,6 +44,23 @@ describe('host-events', () => {
     expect(offMock).not.toHaveBeenCalled();
   });
 
+  it('maps the authoritative SClaw appearance state event through IPC', async () => {
+    const onMock = vi.mocked(window.electron.ipcRenderer.on);
+    const captured: Array<(payload: unknown) => void> = [];
+    onMock.mockImplementation((_, callback: (...args: unknown[]) => void) => {
+      captured.push(callback);
+      return vi.fn();
+    });
+
+    const { subscribeHostEvent } = await import('@/lib/host-events');
+    const handler = vi.fn();
+    subscribeHostEvent('sto:appearance-state', handler);
+
+    expect(onMock).toHaveBeenCalledWith('sto:appearance-state', expect.any(Function));
+    captured[0]({ preference: 'system', appearance: 'dark' });
+    expect(handler).toHaveBeenCalledWith({ preference: 'system', appearance: 'dark' });
+  });
+
   it('falls back to off when an older IPC bridge returns no cleanup function', async () => {
     const onMock = vi.mocked(window.electron.ipcRenderer.on);
     const offMock = vi.mocked(window.electron.ipcRenderer.off);
@@ -86,4 +103,3 @@ describe('host-events', () => {
     expect(removeEventListenerMock).toHaveBeenCalledWith('unknown:event', expect.any(Function));
   });
 });
-

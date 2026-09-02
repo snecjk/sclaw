@@ -6,7 +6,7 @@ import {
 } from '@/components/attachments/file-type-icon';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
-import { skillComposerTagClass } from '@/lib/surfaces';
+import { saiInterfaceComposerTagClass, skillComposerTagClass } from '@/lib/surfaces';
 
 export const MENTION_SPAN_CLASS = 'dingtalk-mention-token';
 export const MENTION_SPAN_SELECTOR = `span.${MENTION_SPAN_CLASS}`;
@@ -16,6 +16,9 @@ export const WORKFLOW_SPAN_SELECTOR = `span.${WORKFLOW_SPAN_CLASS}`;
 
 export const SKILL_SPAN_CLASS = 'skill-token';
 export const SKILL_SPAN_SELECTOR = `span.${SKILL_SPAN_CLASS}`;
+
+export const SAI_INTERFACE_SPAN_CLASS = 'sai-interface-token';
+export const SAI_INTERFACE_SPAN_SELECTOR = `span.${SAI_INTERFACE_SPAN_CLASS}`;
 
 export const ATTACHMENT_SPAN_CLASS = 'attachment-token';
 export const ATTACHMENT_SPAN_SELECTOR = `span.${ATTACHMENT_SPAN_CLASS}`;
@@ -99,6 +102,16 @@ function isSkillSpan(node: Node | null): boolean {
     && (node.classList.contains(SKILL_SPAN_CLASS) || Boolean(node.dataset.skillSlug));
 }
 
+function isSaiInterfaceSpan(node: Node | null): boolean {
+  return node instanceof HTMLSpanElement
+    && (node.classList.contains(SAI_INTERFACE_SPAN_CLASS) || Boolean(node.dataset.saiPath));
+}
+
+function formatSaiInterfacePlainText(name: string, path: string): string {
+  if (name && path) return `「${name}」(${path})`;
+  return name || path;
+}
+
 export function isAttachmentSpan(node: Node | null): boolean {
   return node instanceof HTMLSpanElement
     && (node.classList.contains(ATTACHMENT_SPAN_CLASS) || Boolean(node.dataset.attachmentId));
@@ -108,7 +121,8 @@ function isInlineTokenSpan(node: Node | null): boolean {
   return isMentionSpan(node)
     || isWorkflowSpan(node)
     || isSkillSpan(node)
-    || isAttachmentSpan(node);
+    || isAttachmentSpan(node)
+    || isSaiInterfaceSpan(node);
 }
 
 function appendTextSegment(segments: ComposerSegment[], text: string): void {
@@ -276,6 +290,14 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
         skillOffsets.push(plainText.length);
         segments.push({ type: 'skill', slug: parsed.slug, title: parsed.title });
       }
+      return;
+    }
+
+    if (isSaiInterfaceSpan(node)) {
+      const span = node as HTMLSpanElement;
+      const name = span.dataset.saiName ?? span.textContent?.trim() ?? '';
+      const path = span.dataset.saiPath ?? '';
+      plainText += formatSaiInterfacePlainText(name, path);
       return;
     }
 
@@ -619,7 +641,10 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       return null;
     }
 
-    if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node) || isSkillSpan(node) || isAttachmentSpan(node))) {
+    if (
+      node instanceof HTMLElement
+      && (isMentionSpan(node) || isWorkflowSpan(node) || isSkillSpan(node) || isAttachmentSpan(node) || isSaiInterfaceSpan(node))
+    ) {
       if (isSkillSpan(node) || isAttachmentSpan(node)) {
         return null;
       }
@@ -628,7 +653,12 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
       const text = isMentionSpan(node)
         ? `@${node.dataset.mentionName ?? ''}`
-        : (node.dataset.workflowName ?? node.textContent ?? '');
+        : isSaiInterfaceSpan(node)
+          ? formatSaiInterfacePlainText(
+            node.dataset.saiName ?? node.textContent?.trim() ?? '',
+            node.dataset.saiPath ?? '',
+          )
+          : (node.dataset.workflowName ?? node.textContent ?? '');
       const next = current + text.length;
       // span 不可拆分：严格落在 (current, next) 内部才视为非法返回 null。
       // targetOffset === next 表示"紧贴 span 之后"的合法边界，必须推进 current
@@ -678,20 +708,22 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
 }
 
 function boundaryAtEditorEnd(root: HTMLElement): PlainTextBoundary {
-  let lastText: Text | null = null;
-  const walk = (node: Node) => {
+  const findLastText = (node: Node): Text | null => {
     if (node.nodeType === Node.TEXT_NODE) {
-      if (stripComposerCaretAnchor(node.textContent ?? '').length > 0) {
-        lastText = node as Text;
-      }
-      return;
+      return stripComposerCaretAnchor(node.textContent ?? '').length > 0
+        ? node as Text
+        : null;
     }
-    if (node instanceof HTMLElement) {
-      if (isInlineTokenSpan(node)) return;
-      node.childNodes.forEach(walk);
+    if (!(node instanceof HTMLElement) || isInlineTokenSpan(node)) return null;
+    const children = Array.from(node.childNodes);
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const match = findLastText(children[index]);
+      if (match) return match;
     }
+    return null;
   };
-  root.childNodes.forEach(walk);
+
+  const lastText = findLastText(root);
   if (lastText) {
     return { node: lastText, offset: lastText.data.length };
   }
@@ -1052,6 +1084,61 @@ export function createSkillSpan(slug: string, title: string): HTMLSpanElement {
 
   span.append(icon, label);
   return span;
+}
+
+export function createSaiInterfaceSpan(path: string, name: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = saiInterfaceComposerTagClass;
+  span.contentEditable = 'false';
+  span.dataset.saiPath = path;
+  span.dataset.saiName = name;
+  span.title = path;
+  span.textContent = name;
+  return span;
+}
+
+/**
+ * Insert a sai-cli interface chip at the caret (supports multiple).
+ * `preferredRange` restores caret after picker clicks steal focus.
+ */
+export function insertSaiInterfaceSpan(
+  root: HTMLElement,
+  path: string,
+  name: string,
+  preferredRange?: Range | null,
+): void {
+  const selection = window.getSelection();
+  root.focus();
+
+  let range: Range | null = null;
+  if (preferredRange && root.contains(preferredRange.startContainer)) {
+    range = preferredRange.cloneRange();
+  } else if (
+    selection
+    && selection.rangeCount > 0
+    && selection.anchorNode
+    && root.contains(selection.anchorNode)
+  ) {
+    range = selection.getRangeAt(0).cloneRange();
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+
+  range.deleteContents();
+  const span = createSaiInterfaceSpan(path, name);
+  const space = document.createTextNode('\u00A0');
+  const fragment = document.createDocumentFragment();
+  fragment.append(span, space);
+  range.insertNode(fragment);
+
+  const caretRange = document.createRange();
+  caretRange.setStart(space, 1);
+  caretRange.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(caretRange);
+  root.focus();
 }
 
 export function removeWorkflowSpan(root: HTMLElement): void {

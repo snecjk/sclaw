@@ -69,3 +69,11 @@ export function prependHistoryPage<T extends { id?: string }>(
   const uniqueOlder = older.filter((message) => !message.id || !existingIds.has(message.id));
   return [...uniqueOlder, ...existing];
 }
+
+/** Keep the newest `limit` messages when leaving a session so renderer memory stays O(window). */
+export function trimHistoryTail<T>(messages: readonly T[], limit: number): T[] {
+  const size = Math.max(1, Math.floor(limit));
+  if (messages.length <= size) return [...messages];
+  return messages.slice(-size) as T[];
+}
+

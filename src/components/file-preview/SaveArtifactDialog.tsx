@@ -463,13 +463,13 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4">
-      <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-border dark:bg-background">
+      <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)]">
         <div className="flex h-11 items-center justify-between px-4">
-          <h2 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{t('dataCenterPage.saveArtifact.saveToDataCenterTitle')}</h2>
+          <h2 className="text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{t('dataCenterPage.saveArtifact.saveToDataCenterTitle')}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+            className="rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]"
             aria-label={t('actions.close')}
           >
             <X className="h-4 w-4" />
@@ -493,9 +493,9 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
             </div>
           ) : null}
 
-          <div className="mt-3 rounded-[14px] bg-[#F7F8FA] p-2 dark:bg-muted/40">
+          <div className="mt-3 rounded-[14px] bg-[#F7F8FA] p-2 dark:bg-[var(--sto-surface-primary)]">
             {isSite ? (
-              <div className="rounded-[10px] bg-white p-2.5 dark:bg-card">
+              <div className="rounded-[10px] bg-white p-2.5 dark:bg-[var(--sto-surface-secondary)]">
                 <TreeHeader
                   checked={selectedTarget.space === 'shared' && selectedTarget.parentEntryId === ROOT_ENTRY_ID}
                   open={sharedOpen}
@@ -508,7 +508,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 {sharedOpen ? (
                   <div className="mt-1.5 space-y-1 pl-[27px]">
                     {sharedRootLoading ? (
-                      <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">
+                      <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         {t('dataCenterPage.saveArtifact.loading')}
                       </div>
@@ -538,7 +538,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
               </div>
             ) : null}
 
-            <div className={cn('rounded-[10px] bg-white p-2.5 dark:bg-card', isSite && 'mt-2')}>
+            <div className={cn('rounded-[10px] bg-white p-2.5 dark:bg-[var(--sto-surface-secondary)]', isSite && 'mt-2')}>
               <TreeHeader
                 checked={selectedTarget.space === 'my' && selectedTarget.parentEntryId === ROOT_ENTRY_ID}
                 open={mineOpen}
@@ -551,7 +551,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
               {mineOpen ? (
                 <div className="mt-1.5 space-y-1 pl-[27px]">
                   {myRootLoading ? (
-                    <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">
+                    <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       {t('dataCenterPage.saveArtifact.loading')}
                     </div>
@@ -582,18 +582,18 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           </div>
         </div>
 
-        <div className="flex h-[48px] items-center justify-between gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
+        <div className="flex h-[48px] items-center justify-between gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-[var(--sto-border-default)]">
           <button
             type="button"
             onClick={() => setCreatingFolder(true)}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-2 text-[12px] font-normal text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-2 text-[12px] font-normal text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]"
           >
             <FolderPlus className="h-3.5 w-3.5" />
             {t('dataCenterPage.saveArtifact.createFolderPlaceholder')}
           </button>
           <div className="flex shrink-0 gap-2">
             <Button type="button" variant="outline" className="h-8 rounded-[8px] px-4 text-[12px] font-normal" onClick={onClose}>{t('actions.cancel')}</Button>
-            <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={save} disabled={!canSave || saving}>
+            <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]" onClick={save} disabled={!canSave || saving}>
               {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
               {t('actions.confirm')}
             </Button>
@@ -606,10 +606,10 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           onClick={closeCreateFolder}
         >
           <div
-            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-border dark:bg-background"
+            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{t('dataCenterPage.dialogs.createFolderTitle')}</h4>
+            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{t('dataCenterPage.dialogs.createFolderTitle')}</h4>
             <input
               autoFocus
               value={newFolderName}
@@ -619,7 +619,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 if (event.key === 'Escape') closeCreateFolder();
               }}
               placeholder={t('dataCenterPage.dialogs.folderName')}
-              className="mt-3 h-9 w-full rounded-[8px] border border-[#E5E6EB] bg-white px-3 text-[13px] outline-none focus:border-[#1D2129] dark:border-border dark:bg-background dark:focus:border-foreground"
+              className="mt-3 h-9 w-full rounded-[8px] border border-[#E5E6EB] bg-white px-3 text-[13px] outline-none focus:border-[#1D2129] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:focus:border-[var(--sto-border-heavy)]"
             />
             <div className="mt-4 flex justify-end gap-2">
               <Button
@@ -635,7 +635,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 type="button"
                 onClick={() => void handleCreateFolder()}
                 disabled={!newFolderName.trim() || createSubmitting}
-                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
               >
                 {createSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('dataCenterPage.saveArtifact.create')}
               </Button>
@@ -645,7 +645,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
       ) : null}
       {contextMenu ? (
         <div
-          className="fixed z-[95] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
+          className="fixed z-[95] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)] dark:text-[var(--sto-text-primary)]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}
@@ -654,7 +654,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           <button
             type="button"
             role="menuitem"
-            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 hover:bg-[#F2F3F5] dark:hover:bg-muted"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 hover:bg-[#F2F3F5] dark:hover:bg-[var(--sto-control-hover-bg)]"
             onClick={() => {
               setContextMenu(null);
               setRenamingFolder({ space: contextMenu.space, folder: contextMenu.folder });
@@ -666,7 +666,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           <button
             type="button"
             role="menuitem"
-            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[#F53F3F] hover:bg-[#F2F3F5] dark:hover:bg-muted"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[#F53F3F] hover:bg-[#F2F3F5] dark:text-destructive dark:hover:bg-[var(--sto-control-hover-bg)]"
             onClick={() => {
               setContextMenu(null);
               setDeletingFolder({ space: contextMenu.space, folder: contextMenu.folder });
@@ -686,10 +686,10 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           }}
         >
           <div
-            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-border dark:bg-background"
+            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{t('dataCenterPage.dialogs.renameTitle')}</h4>
+            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{t('dataCenterPage.dialogs.renameTitle')}</h4>
             <input
               autoFocus
               value={renameName}
@@ -702,7 +702,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 }
               }}
               placeholder={t('dataCenterPage.dialogs.folderName')}
-              className="mt-3 h-9 w-full rounded-[8px] border border-[#E5E6EB] bg-white px-3 text-[13px] outline-none focus:border-[#1D2129] dark:border-border dark:bg-background dark:focus:border-foreground"
+              className="mt-3 h-9 w-full rounded-[8px] border border-[#E5E6EB] bg-white px-3 text-[13px] outline-none focus:border-[#1D2129] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-primary)] dark:focus:border-[var(--sto-border-heavy)]"
             />
             <div className="mt-4 flex justify-end gap-2">
               <Button
@@ -721,7 +721,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 type="button"
                 onClick={() => void handleRenameFolder()}
                 disabled={!renameName.trim() || renameSubmitting}
-                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
               >
                 {renameSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('actions.confirm')}
               </Button>
@@ -737,11 +737,11 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           }}
         >
           <div
-            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-border dark:bg-background"
+            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{t('dataCenterPage.dialogs.deleteTitle')}</h4>
-            <p className="mt-3 text-[12px] leading-[18px] text-[#4E5969] dark:text-muted-foreground">
+            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{t('dataCenterPage.dialogs.deleteTitle')}</h4>
+            <p className="mt-3 text-[12px] leading-[18px] text-[#4E5969] dark:text-[var(--sto-text-secondary)]">
               {t('dataCenterPage.dialogs.deleteMessage', { name: deletingFolder.folder.name })}
             </p>
             <div className="mt-4 flex justify-end gap-2">
@@ -758,7 +758,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 type="button"
                 onClick={() => void handleDeleteFolder()}
                 disabled={deleteSubmitting}
-                className="h-8 rounded-[8px] bg-[#F53F3F] px-4 text-[12px] font-normal text-white hover:bg-[#E23B3B]"
+                className="h-8 rounded-[8px] bg-[#F53F3F] px-4 text-[12px] font-normal text-white hover:bg-[#E23B3B] dark:bg-destructive dark:hover:bg-destructive/90"
               >
                 {deleteSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('dataCenterPage.menu.delete')}
               </Button>
@@ -768,42 +768,42 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
       ) : null}
       {conflict ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4">
-          <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-border dark:bg-background">
+          <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)]">
             <div className="flex h-11 items-center justify-between px-4">
               <div className="flex min-w-0 items-center gap-2">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF4D4F] text-white">
                   <AlertCircle className="h-3.5 w-3.5" strokeWidth={2.8} />
                 </span>
-                <h3 className="truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">
+                <h3 className="truncate text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">
                   {t('dataCenterPage.saveArtifact.conflictTitle')}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setConflict(null)}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]"
                 aria-label={t('actions.close')}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="px-3 pb-3">
-              <p className="text-[12px] leading-[18px] text-[#4E5969] dark:text-muted-foreground">
+              <p className="text-[12px] leading-[18px] text-[#4E5969] dark:text-[var(--sto-text-secondary)]">
                 {t('dataCenterPage.saveArtifact.conflictDescription')}
               </p>
-              <div className="mt-3 flex min-h-[44px] items-center gap-3 rounded-[10px] bg-[#F7F8FA] px-3 dark:bg-muted/40">
+              <div className="mt-3 flex min-h-[44px] items-center gap-3 rounded-[10px] bg-[#F7F8FA] px-3 dark:bg-[var(--sto-surface-secondary)]">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#3BAFB8] text-white">
                   <FileText className="h-4 w-4" />
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">
                   {conflict.fileName}
                 </span>
               </div>
             </div>
-            <div className="flex h-[48px] items-center justify-between gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
+            <div className="flex h-[48px] items-center justify-between gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-[var(--sto-border-default)]">
               <button
                 type="button"
-                className="h-8 rounded-[8px] px-3 text-[12px] font-normal text-[#1D2129] hover:bg-[#F2F3F5] dark:text-foreground dark:hover:bg-muted"
+                className="h-8 rounded-[8px] px-3 text-[12px] font-normal text-[#1D2129] hover:bg-[#F2F3F5] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]"
                 onClick={() => {
                   setConflict(null);
                   onClose();
@@ -815,7 +815,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 <Button
                   type="button"
                   variant="secondary"
-                  className="h-8 rounded-[8px] bg-[#E5E6EB] px-4 text-[12px] font-normal text-[#1D2129] hover:bg-[#D7DBE2] dark:bg-muted dark:text-foreground dark:hover:bg-muted/80"
+                  className="h-8 rounded-[8px] bg-[#E5E6EB] px-4 text-[12px] font-normal text-[#1D2129] hover:bg-[#D7DBE2] dark:bg-[var(--sto-control-active-bg)] dark:text-[var(--sto-text-primary)] dark:hover:bg-[var(--sto-control-hover-bg)]"
                   disabled={saving}
                   onClick={() => { void saveWithConflictAction('replace', conflict); }}
                 >
@@ -824,7 +824,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 </Button>
                 <Button
                   type="button"
-                  className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+                  className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-[var(--sto-dialog-action-background)] dark:text-[var(--sto-dialog-action-foreground)] dark:hover:bg-[var(--sto-dialog-action-hover-background)]"
                   disabled={saving}
                   onClick={() => { void saveWithConflictAction('keep_both', conflict); }}
                 >
@@ -853,7 +853,7 @@ function TreeCheckbox({ checked, disabled = false, onClick }: { checked?: boolea
         'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-white transition-colors',
         checked
           ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary'
-          : 'border-[#D7DBE2] bg-white dark:border-border dark:bg-background',
+          : 'sto-checkbox-unchecked border-[#D7DBE2] bg-white dark:bg-transparent',
         disabled && 'cursor-not-allowed opacity-45',
       )}
       aria-pressed={Boolean(checked)}
@@ -887,7 +887,7 @@ function TreeHeader({
         <button
           type="button"
           onClick={onToggle}
-          className="flex h-4 w-4 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+          className="flex h-4 w-4 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]"
         >
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </button>
@@ -898,7 +898,7 @@ function TreeHeader({
         className="flex min-w-0 flex-1 items-center gap-[10px] rounded-[6px] text-left"
       >
         <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain dark:brightness-110" />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{label}</span>
       </button>
     </div>
   );
@@ -943,7 +943,7 @@ function TreeFolderRow({
   return (
     <div className="space-y-1">
       <div
-        className="flex h-7 w-full items-center gap-[10px] rounded-[6px] text-left hover:bg-[#F7F8FA] dark:hover:bg-muted/50"
+        className="flex h-7 w-full items-center gap-[10px] rounded-[6px] text-left hover:bg-[#F7F8FA] dark:hover:bg-[var(--sto-control-hover-bg)]"
         style={{ paddingLeft: depth * 27 }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -955,7 +955,7 @@ function TreeFolderRow({
           <button
             type="button"
             onClick={() => { void onToggleOpen(space, folder.entryId); }}
-            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-[var(--sto-text-secondary)] dark:hover:bg-[var(--sto-control-hover-bg)] dark:hover:text-[var(--sto-text-primary)]"
             aria-label={folder.name}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -967,7 +967,7 @@ function TreeFolderRow({
           className="flex min-w-0 flex-1 items-center gap-[10px] rounded-[6px] text-left"
         >
           <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain dark:brightness-110" />
-          <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#1D2129] dark:text-foreground">{folder.name}</span>
+          <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{folder.name}</span>
         </button>
       </div>
       {open && childrenFolders.length > 0 ? (

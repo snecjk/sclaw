@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>03 · Git 建仓管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1280px;
+            height: 720px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            display: flex;
+            flex-direction: column;
+            padding: 48px 60px;
+            position: relative;
+        }
+        .header {
+            margin-bottom: 32px;
+        }
+        .section-tag {
+            font-size: 13px;
+            color: #4a90d9;
+            font-weight: 600;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1a2332;
+            line-height: 1.3;
+        }
+        .title-line {
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, #4a90d9, #6ab0e8);
+            margin-top: 12px;
+            border-radius: 2px;
+        }
+        
+        .content {
+            display: flex;
+            gap: 40px;
+            flex: 1;
+        }
+        
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .panel-card {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            border: 2px solid #e8ecf1;
+            flex: 1;
+        }
+        
+        .panel-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a2332;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel-card h3 .icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #4a90d9, #6ab0e8);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .feature-list {
+            list-style: none;
+        }
+        
+        .feature-list li {
+            font-size: 14px;
+            color: #4a5568;
+            line-height: 1.8;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f2f5;
+            position: relative;
+            padding-left: 28px;
+        }
+        
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .feature-list li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: #4a90d9;
+            font-weight: 700;
+        }
+        
+        .code-block {
+            background: #1a2332;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 16px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .code-block .code-line {
+            font-size: 13px;
+            color: #a8b5c4;
+            line-height: 2;
+        }
+        
+        .code-block .code-line .cmd {
+            color: #6ab0e8;
+        }
+        
+        .code-block .code-line .arg {
+            color: #98d8a8;
+        }
+        
+        .code-block .code-line .comment {
+            color: #6b7c8e;
+        }
+        
+        .highlight-box {
+            margin-top: 20px;
+            padding: 16px 20px;
+            background: linear-gradient(90deg, rgba(52,199,89,0.1), rgba(52,199,89,0.03));
+            border-radius: 12px;
+            border-left: 4px solid #34c759;
+        }
+        
+        .highlight-box p {
+            font-size: 14px;
+            color: #2d3a4a;
+            line-height: 1.8;
+        }
+        
+        .highlight-box strong {
+            color: #1a2332;
+        }
+        
+        /* 流程图 */
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+        }
+        
+        .flow-item {
+            padding: 10px 20px;
+            background: white;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1a2332;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 2px solid #e8ecf1;
+        }
+        
+        .flow-item.highlight {
+            border-color: #4a90d9;
+            background: linear-gradient(135deg, #f0f7ff, #ffffff);
+        }
+        
+        .flow-arrow {
+            color: #4a90d9;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        /* 页脚 */
+        .footer {
+            position: absolute;
+            bottom: 24px;
+            left: 60px;
+            right: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .footer-left {
+            font-size: 12px;
+            color: #9aa5b3;
+        }
+        .footer-right {
+            font-size: 14px;
+            color: #9aa5b3;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="section-tag">03 · 第一步 创建应用</div>
+        <div class="title">Git 建仓管理代码：版本可控，协作无忧</div>
+        <div class="title-line"></div>
+    </div>
+    
+    <div class="content">
+        <div class="left-panel">
+            <div class="panel-card">
+                <h3><span class="icon">🚀</span> 自动化建仓流程</h3>
+                <ul class="feature-list">
+                    <li>sai-cli 一键初始化工程模板</li>
+                    <li>自动创建 Git 仓库并关联远程</li>
+                    <li>代码提交、推送全自动完成</li>
+                    <li>冲突检测与 AI 自动合并</li>
+                    <li>版本历史随时可查可回滚</li>
+                </ul>
+                
+                <div class="code-block">
+                    <div class="code-line"><span class="comment"># 用户只需执行</span></div>
+                    <div class="code-line"><span class="cmd">sai-cli</span> <span class="arg">app create</span> my-app</div>
+                    <div class="code-line"><span class="comment"># 自动完成：模板下载 → Git 初始化 → 远程关联 → 首次提交</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <div class="panel-card">
+                <h3><span class="icon">🛡️</span> 用户零感知技术细节</h3>
+                <ul class="feature-list">
+                    <li>无需安装 Node.js 或 npm</li>
+                    <li>无需理解 Git 命令（commit/push/merge）</li>
+                    <li>无需配置 SSH 密钥</li>
+                    <li>换机登录自动克隆恢复</li>
+                    <li>误删代码可从云端恢复</li>
+                </ul>
+                
+                <div class="flow-diagram">
+                    <div class="flow-item highlight">创建应用</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-item">自动建仓</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-item">代码同步</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-item">版本管理</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="highlight-box">
+        <p><strong>核心价值：</strong>Git 建仓让代码管理从「技术活」变成「无感知」。用户专注业务逻辑，系统自动处理版本控制、冲突解决、代码备份。团队协作时，代码变更历史清晰可追溯，回滚到任意版本只需一键。</p>
+    </div>
+    
+    <div class="footer">
+        <div class="footer-left">应用广场 · 用户应用开发 · 周会同步</div>
+        <div class="footer-right">03</div>
+    </div>
+</body>
+</html>

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const hostApiFetchMock = vi.fn();
 const subscribeHostEventMock = vi.fn();
 const loadHistoryMock = vi.fn();
+const dispatchBuiltinToolResultMock = vi.fn();
 const chatStateMock = {
   currentSessionKey: 'agent:main',
   loadHistory: (...args: unknown[]) => loadHistoryMock(...args),
@@ -16,10 +17,18 @@ vi.mock('@/lib/host-events', () => ({
   subscribeHostEvent: (...args: unknown[]) => subscribeHostEventMock(...args),
 }));
 
+vi.mock('@/lib/api-client', () => ({
+  invokeIpc: vi.fn(async () => []),
+}));
+
 vi.mock('@/stores/chat', () => ({
   useChatStore: {
     getState: () => chatStateMock,
   },
+}));
+
+vi.mock('@/lib/builtin-tool-dispatch', () => ({
+  dispatchBuiltinToolResult: (...args: unknown[]) => dispatchBuiltinToolResultMock(...args),
 }));
 
 describe('gateway store event wiring', () => {
@@ -27,6 +36,7 @@ describe('gateway store event wiring', () => {
     vi.resetModules();
     vi.clearAllMocks();
     loadHistoryMock.mockResolvedValue(undefined);
+    dispatchBuiltinToolResultMock.mockResolvedValue(true);
   });
 
   it('subscribes to host events through subscribeHostEvent on init', async () => {
@@ -104,5 +114,51 @@ describe('gateway store event wiring', () => {
     });
     await Promise.resolve();
     expect(handlers.has('chat-runtime:event')).toBe(true);
+  });
+
+  it('dispatches builtin tool results without reloading history', async () => {
+    hostApiFetchMock.mockResolvedValueOnce({ state: 'running', port: 18789 });
+    const handlers = new Map<string, (payload: unknown) => void>();
+    subscribeHostEventMock.mockImplementation((eventName: string, handler: (payload: unknown) => void) => {
+      handlers.set(eventName, handler);
+      return () => {};
+    });
+    const { useGatewayStore } = await import('@/stores/gateway');
+    await useGatewayStore.getState().init();
+    const emit = handlers.get('chat-runtime:event');
+    emit?.({
+      protocolVersion: 1,
+      eventId: 'start-1',
+      sessionKey: 'agent:main',
+      runId: 'run-1',
+      engineType: 'openclaw',
+      epoch: 1,
+      sequence: 1,
+      occurredAt: Date.now(),
+      type: 'run.started',
+      payload: {},
+    });
+    emit?.({
+      protocolVersion: 1,
+      eventId: 'tool-1',
+      sessionKey: 'agent:main',
+      runId: 'run-1',
+      engineType: 'openclaw',
+      epoch: 1,
+      sequence: 2,
+      occurredAt: Date.now(),
+      type: 'tool.updated',
+      payload: {
+        id: 'tool-result-1',
+        role: 'toolresult',
+        toolCallId: 'call-1',
+        toolName: 'sto_workflow',
+        content: { success: true, type: 'workflow_created' },
+      },
+    });
+    await vi.waitFor(() => {
+      expect(dispatchBuiltinToolResultMock).toHaveBeenCalledTimes(1);
+    });
+    expect(loadHistoryMock).not.toHaveBeenCalled();
   });
 });

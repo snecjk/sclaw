@@ -3,9 +3,7 @@ import { useSettingsStore } from '@/stores/settings';
 
 export type ResolvedAppearance = 'light' | 'dark';
 
-/**
- * 解析 settings.theme（含 system）为实际 light/dark，与 App.tsx 给 html 加 class 的逻辑一致。
- */
+/** Resolves the SClaw appearance setting to a concrete light or dark value. */
 export function useResolvedAppearance(): ResolvedAppearance {
   const theme = useSettingsStore((s) => s.theme);
   const [systemDark, setSystemDark] = useState(

@@ -86,6 +86,25 @@ export async function getSclawBrowserNetworkLog(
   return result.events ?? [];
 }
 
+export interface SclawEmbedSessionCookieSnapshot {
+  name: string;
+  valuePreview: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  expirationDate?: number;
+}
+
+export async function getSclawEmbedSessionCookies(url: string): Promise<SclawEmbedSessionCookieSnapshot[]> {
+  if (!window.electron) return [];
+  const result = await invokeIpc<{ ok: boolean; cookies?: SclawEmbedSessionCookieSnapshot[] }>(
+    'sclaw-browser:getEmbedSessionCookies',
+    { url },
+  );
+  return result.cookies ?? [];
+}
+
 export async function ensureSclawBrowserBridge(runtimeId: string): Promise<boolean> {
   if (!window.electron) return false;
   const result = await invokeIpc<{ ok: boolean; connected?: boolean }>(

@@ -11,7 +11,7 @@ import {
   resolveTurnChronologicalEntries,
   buildTurnStableKey,
 } from './chat-display';
-import { parseThinkingTurnLayout, trimTrailingThinkingOnlyToolGroupSegments } from './thinking-turn-segments';
+import { parseThinkingTurnLayoutCached, trimTrailingThinkingOnlyToolGroupSegments } from './thinking-turn-segments';
 import {
   readTurnStreamingToolsCache,
   readTurnToolResultsCache,
@@ -340,7 +340,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const thinkingLayout = useMemo(
     () =>
       showThinking
-        ? parseThinkingTurnLayout(streamSources, {
+        ? parseThinkingTurnLayoutCached(turnDisplayCacheKey, streamSources, {
             isLiveStream: isStreaming,
             streamingTools:
               bakedStreamingTools.length > 0 ? bakedStreamingTools : undefined,
@@ -353,6 +353,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         : { segments: [], finalReplyText: null },
     [
       showThinking,
+      turnDisplayCacheKey,
       streamSources,
       isStreaming,
       bakedStreamingTools,

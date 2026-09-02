@@ -4,7 +4,7 @@
  * 完整布局：展开 260px / 收起 72px 图标轨。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
+import { Link, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Wrench,
   Settings as SettingsIcon,
@@ -21,9 +21,10 @@ import {
   Database,
   BookOpen,
 } from 'lucide-react';
-import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
-import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
+import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg?raw';
+import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg?raw';
 import { SidebarTimerIcon } from '@/components/layout/sidebar-timer-icon';
+import { ThemedMonochromeIcon } from '@/components/icons/themed-monochrome-icon';
 
 import {
   DropdownMenu,
@@ -122,6 +123,7 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
+import { resolveSidebarPrimaryNavActiveOverride } from '@/lib/sidebar-primary-nav-active';
 import { pageLearningDomains } from '@/lib/learning-center-api';
 import {
   sidebarFooterMetaClass,
@@ -145,6 +147,8 @@ import {
   sidebarScrollListClass,
   sidebarScrollContainerClass,
   sidebarScrollOverlayHostClass,
+  sidebarTooltipArrowClass as SIDEBAR_TOOLTIP_ARROW_CLASS,
+  sidebarTooltipContentClass as SIDEBAR_TOOLTIP_CLASS,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
@@ -162,14 +166,6 @@ type SessionBucketKey =
 
 const INITIAL_NOW_MS = Date.now();
 
-/** Collapsed rail: offset from narrow bar + opaque popover so glass tooltips do not show main content through them. */
-const SIDEBAR_TOOLTIP_CLASS = cn(
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
-  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
-  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
-);
-const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
-
 /** Footer account dropdown — MasterGo: 160×186 卡片 + 34px 行高菜单项 */
 const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
   'w-[160px] min-w-[160px] max-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-0 py-2 shadow-lg dark:border-border dark:bg-card';
@@ -180,7 +176,7 @@ const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
 const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
   'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
-  'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
+  'sto-navigation-item--account-menu hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
 /** 收起态 / provincial 紧凑设置入口：圆形 #E5E6EB 底（展开态账号热区不再用齿轮） */
 const SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS = cn(
@@ -352,6 +348,7 @@ function SidebarTaskDateLinks({
                 if (!sk) return;
                 openSubitemSession(entryId, sk, label);
               }}
+              aria-current={active ? 'page' : undefined}
               className={cn(
                 'relative z-[1] inline-flex h-8 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
@@ -610,6 +607,7 @@ function SidebarScheduledTaskGroup({
                     navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                   }}
                   title={label}
+                  aria-current={active ? 'page' : undefined}
                   className={cn(
                     'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                     SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
@@ -633,7 +631,7 @@ function SidebarScheduledTaskGroup({
   );
 }
 
-function SidebarNavLink({
+export function SidebarNavLink({
   to,
   end,
   icon,
@@ -653,7 +651,7 @@ function SidebarNavLink({
   badge?: ReactNode;
 }) {
   const { pathname } = useLocation();
-  // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态不生效。
+  // 路由与业务 override 共同决定同一份 class/aria-current 状态，避免路由组件另行注入选中语义。
   const isActive = isActiveOverride !== undefined
     ? isActiveOverride
     : matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
@@ -662,11 +660,9 @@ function SidebarNavLink({
     'relative flex items-center transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
     collapsed
       ? cn(
-          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-sm font-normal leading-5',
+          'sto-navigation-item sto-navigation-item--collapsed mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-sm font-normal leading-5',
           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
-          isActive
-            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
-            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:text-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
+          '[&_svg]:stroke-current [&_svg]:text-current',
         )
       : cn(
           'shrink-0 gap-[10px] text-[13px] leading-5',
@@ -675,13 +671,19 @@ function SidebarNavLink({
   );
 
   const link = (
-    <NavLink to={to} end={end} className={linkClassName} onClick={onClick}>
+    <Link
+      to={to}
+      aria-label={collapsed ? label : undefined}
+      aria-current={isActive ? 'page' : undefined}
+      className={linkClassName}
+      onClick={onClick}
+    >
       <span className="flex shrink-0 items-center justify-center">{icon}</span>
       {!collapsed ? (
         <span className="min-w-0 flex-1 truncate">{label}</span>
       ) : null}
       {badge}
-    </NavLink>
+    </Link>
   );
 
   if (collapsed) {
@@ -1829,13 +1831,6 @@ export function Sidebar() {
         <div className="flex shrink-0 flex-col gap-0">
         <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
-  // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
-  const shouldDimHome = Boolean(
-    (currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY)
-    || pendingProjectId,
-  );
-  const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
-  
   // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
@@ -1859,11 +1854,12 @@ export function Sidebar() {
       }
     : undefined;
   
-  const myTasksActiveOverride =
-    item.to === '/my-tasks' && location.pathname.startsWith('/workflow')
-      ? true
-      : undefined;
-  const itemActiveOverride = myTasksActiveOverride ?? homeIsActiveOverride;
+  const itemActiveOverride = resolveSidebarPrimaryNavActiveOverride({
+    to: item.to,
+    pathname: location.pathname,
+    currentSessionKey,
+    pendingProjectId,
+  });
 
   return (
     <div key={item.to} className="min-w-0">
@@ -1963,18 +1959,14 @@ export function Sidebar() {
                     >
                       {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
                       {taskGroupsAllExpanded ? (
-                        <img
-                          src={sidebarCollapseAllGroupsIcon}
-                          alt=""
+                        <ThemedMonochromeIcon
+                          source={sidebarCollapseAllGroupsIcon}
                           className="h-[18px] w-[18px]"
-                          aria-hidden
                         />
                       ) : (
-                        <img
-                          src={sidebarExpandAllGroupsIcon}
-                          alt=""
+                        <ThemedMonochromeIcon
+                          source={sidebarExpandAllGroupsIcon}
                           className="h-[18px] w-[18px]"
-                          aria-hidden
                         />
                       )}
                     </button>
@@ -2352,7 +2344,7 @@ export function Sidebar() {
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
                   <span className="flex-1">{t('settings:appearance.language')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {SUPPORTED_LANGUAGES.map((lang) => (
@@ -2377,7 +2369,7 @@ export function Sidebar() {
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {(['light', 'dark', 'system'] as const).map((t_value) => (

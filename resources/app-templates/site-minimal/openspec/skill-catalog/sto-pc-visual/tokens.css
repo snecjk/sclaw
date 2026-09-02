@@ -1,0 +1,128 @@
+/* STO PC visual tokens. Accent is #ff6700. Do not invent a second palette. */
+
+:root {
+  /* ── A1 identity / surface ── */
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface-warm: #fff9f5;
+  --fg: #1d2129;
+  --fg-2: #4e5969;
+  --muted: #86909c;
+  --meta: #c9cdd4;
+  --border: #c9cdd4;
+  --border-soft: #e5e6eb;
+  --accent: #ff6700;
+  --accent-on: #ffffff;
+  --accent-hover: #ff852e;
+  --accent-active: #d24d00;
+  --success: #00b54b;
+  --warn: #faad14;
+  --danger: #fa3c3c;
+
+  --font-display: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 24px;
+  --text-2xl: 28px;
+  --text-3xl: 32px;
+  --text-4xl: 32px;
+
+  --leading-body: 1.5;
+  --leading-tight: 1.25;
+  --tracking-display: 0;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 24px;
+  --section-y-tablet: 20px;
+  --section-y-phone: 16px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border-soft);
+  --elev-raised: 0 4px 10px rgba(153, 153, 153, 0.1);
+
+  --focus-ring: 0 0 0 3px rgba(255, 103, 0, 0.28);
+
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --container-max: 1440px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+
+  /* ── C-extension: STO workbench ── */
+  --surface-side: #fafbfc;
+  --th: #f5f6f7;
+  --zebra: #fafbfc;
+  --fill: #f2f3f5;
+  --fill-light: #f5f6f7;
+  --fill-lighter: #fafbfc;
+
+  --brand: var(--accent);
+  --accent-bg: #fff3eb;
+  --accent-disabled: #ffd6ba;
+  --accent-disabled-bg: #fff1e8;
+
+  --fill-hover: #f7f8fa;
+  --fill-active: #eef0f3;
+  --control-hover-bg: var(--fill-hover);
+  --control-active-bg: var(--fill-active);
+  --overlay-close-hover-bg: var(--bg);
+  --accent-bg-hover: #ffe8d6;
+  --success-hover: #00c953;
+  --success-active: #009a3e;
+  --danger-hover: #ff5c5c;
+  --danger-active: #e02828;
+  --info-hover: #5a72ff;
+  --info-active: #334fd9;
+
+  --info: #4760fe;
+  --info-bg: #f0f4ff;
+  --chart-1: var(--accent);
+  --chart-2: #005be5;
+  --chart-3: #0d9b8a;
+  --chart-4: #c9892e;
+  --chart-5: #6b5ce7;
+  --chart-6: #ff4d4d;
+  --chart-7: #89be12;
+  --success-bg: #e6ffea;
+  --warn-bg: #fffbe6;
+  --danger-bg: #fff2f0;
+
+  --fg-disabled: var(--meta);
+
+  --control-h: 28px;
+  --control-h-lg: 32px;
+  --control-h-sm: 24px;
+
+  --shell-topbar: 60px;
+  --shell-tabs: 28px;
+  --shell-side: 180px;
+
+  --font-numeric: "D-DIN", "DIN Alternate", Bahnschrift, var(--font-mono);
+  --font-brand: "Alibaba PuHuiTi", "AlibabaPuHuiTi", var(--font-display);
+
+  --radius-xl: 12px;
+
+  --elev-overlay: 0 8px 20px rgba(153, 153, 153, 0.1);
+  --elev-sticky: 0 2px 8px 0 rgba(29, 33, 41, 0.06);
+}

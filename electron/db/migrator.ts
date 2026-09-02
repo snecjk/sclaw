@@ -177,20 +177,55 @@ export function normalizeLegacySessionCatalogMigrationVersions(db: SqliteDatabas
   }
 }
 
-function getAppliedMigrationVersions(db: SqliteDatabase): Set<number> {
+function getAppliedMigrationRows(db: SqliteDatabase): Array<{ version: number; name: string }> {
   const rows = db.prepare(
-    'SELECT version, name, applied_at FROM schema_migrations ORDER BY version ASC',
-  ).all() as Array<Record<string, unknown>>;
+    'SELECT version, name FROM schema_migrations ORDER BY version ASC',
+  ).all() as Array<{ version: number; name: string }>;
 
-  return new Set(
-    rows.map((row) => Number(row.version)).filter((version) => Number.isFinite(version)),
+  return rows.map((row) => ({
+    version: Number(row.version),
+    name: String(row.name),
+  })).filter((row) => Number.isFinite(row.version) && row.name.length > 0);
+}
+
+/**
+ * Older local databases recorded the same migration SQL under different version
+ * numbers (e.g. memory/catalog/types/channel as v6/v7/v8/v10). Treat those names
+ * as already applied and backfill the current canonical version without re-running SQL.
+ */
+function backfillCanonicalMigrationVersions(db: SqliteDatabase): void {
+  const rows = getAppliedMigrationRows(db);
+  const appliedVersions = new Set(rows.map((row) => row.version));
+  const appliedNames = new Set(rows.map((row) => row.name));
+  const missing = SQLITE_MIGRATIONS.filter(
+    (migration) => appliedNames.has(migration.name) && !appliedVersions.has(migration.version),
   );
+  if (missing.length === 0) return;
+
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    const insert = db.prepare(
+      'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
+    );
+    const appliedAt = new Date().toISOString();
+    for (const migration of missing) {
+      insert.run(migration.version, migration.name, appliedAt);
+      logger.info(
+        `[sqlite] backfilled migration v${migration.version} ${migration.name} (already applied under another version)`,
+      );
+    }
+    db.exec('COMMIT;');
+  } catch (error) {
+    db.exec('ROLLBACK;');
+    throw error;
+  }
 }
 
 export function runDatabaseMigrations(db: SqliteDatabase): void {
   ensureMigrationTable(db);
   normalizeLegacySessionCatalogMigrationVersions(db);
-  const appliedVersions = getAppliedMigrationVersions(db);
+  backfillCanonicalMigrationVersions(db);
+  const appliedVersions = new Set(getAppliedMigrationRows(db).map((row) => row.version));
 
   for (const migration of SQLITE_MIGRATIONS) {
     // Migrations are append-only: once a version is recorded, it is never rerun.
@@ -212,6 +247,7 @@ export function runDatabaseMigrations(db: SqliteDatabase): void {
         'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
       ).run(migration.version, migration.name, new Date().toISOString());
       db.exec('COMMIT;');
+      appliedVersions.add(migration.version);
     } catch (error) {
       db.exec('ROLLBACK;');
       throw error;

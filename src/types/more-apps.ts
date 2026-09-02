@@ -56,7 +56,7 @@ export interface AppItem {
   embedComposerActions?: import('../../shared/embed-composer-actions').EmbedComposerAction[];
 }
 
-export type MoreAppsTab = 'market' | 'installed';
+export type MoreAppsTab = 'market' | 'installed' | 'dev-apps';
 
 export type MoreAppsSortMode = 'default' | 'name';
 

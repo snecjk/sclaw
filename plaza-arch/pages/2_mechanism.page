@@ -1,0 +1,142 @@
+pageType: content
+background:
+  type: solid
+  color: "$white"
+elements:
+  # ===== Title =====
+  - elementId: title
+    elementType: text
+    bounds: [40, 22, 880, 38]
+    content:
+      style: "$title"
+      align: [left, middle]
+      text: Embed 会话核心设计：同一 Agent，应用级策略
+
+  - elementId: subtitle
+    elementType: text
+    bounds: [40, 62, 880, 20]
+    content:
+      style: "$subtitle"
+      align: [left, middle]
+      text: 六层隔离机制确保 AI 始终「聚焦当前应用」，三条路径实现业务与 AI 互通
+
+  - elementId: title-line
+    elementType: shape
+    bounds: [40, 88, 60, 3]
+    shapeName: rect
+    fill: {type: solid, color: "$accent"}
+
+  # ===== Comparison Table =====
+  - elementId: compare-table
+    elementType: table
+    bounds: [60, 105, 840, 215]
+    columnWidths: [0.22, 0.39, 0.39]
+    rowHeights: [0.16, 0.168, 0.168, 0.168, 0.168, 0.168]
+    style: "$default"
+    rows:
+      - - text: 维度
+        - text: 常规会话
+        - text: Embed 会话
+      - - text: Catalog 类型
+        - text: chat（通用）
+        - text: |
+            <p><strong>app</strong>（带 appId 隔离）</p>
+      - - text: 上下文来源
+        - text: 通用工作区
+        - text: |
+            <p>自动注入 <strong>pageUrl + 可见文字 + bridgeSessionId</strong></p>
+      - - text: Agent 工具
+        - text: browser / bridge_*（通用）
+        - text: |
+            <p>强制 <strong>bridge_* 专用</strong>，禁用 browser / openExternal</p>
+      - - text: System Prompt
+        - text: 标准 Prompt
+        - text: |
+            <p><strong>EMBED_BRIDGE_SYSTEM_PROMPT</strong> 强化应用语境</p>
+      - - text: 生命周期
+        - text: 用户主动管理
+        - text: |
+            <p><strong>跟 Tab 绑定</strong>，切 Tab 自动 pause / restore</p>
+
+  # ===== Three Paths Header =====
+  - elementId: paths-label
+    elementType: text
+    bounds: [60, 340, 840, 22]
+    content:
+      fontSize: 14
+      color: "$primary"
+      bold: true
+      align: [left, middle]
+      text: 三条互通路径
+
+  - elementId: paths-line
+    elementType: shape
+    bounds: [60, 365, 840, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$border"}
+
+  # ===== Path 1 =====
+  - elementId: p1-num
+    elementType: text
+    bounds: [60, 378, 24, 24]
+    content:
+      fontSize: 12
+      color: "$accent"
+      bold: true
+      align: [center, middle]
+      text: "1"
+
+  - elementId: p1-text
+    elementType: text
+    bounds: [88, 376, 790, 50]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><strong>用户右栏直接输入</strong> — AI 每次发送自动携带左页上下文（URL、标题、可见文字），通过 bridge_click / bridge_fill 等工具操作左侧业务页面</p>
+
+  # ===== Path 2 =====
+  - elementId: p2-num
+    elementType: text
+    bounds: [60, 432, 24, 24]
+    content:
+      fontSize: 12
+      color: "$accent"
+      bold: true
+      align: [center, middle]
+      text: "2"
+
+  - elementId: p2-text
+    elementType: text
+    bounds: [88, 430, 790, 50]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><strong>H5 通过 JSBridge 联动 AI</strong> — chat.sendMessage / fillComposer / togglePanel 打开右栏并回填/发送消息，触发 AI 自动响应</p>
+
+  # ===== Path 3 =====
+  - elementId: p3-num
+    elementType: text
+    bounds: [60, 486, 24, 24]
+    content:
+      fontSize: 12
+      color: "$accent"
+      bold: true
+      align: [center, middle]
+      text: "3"
+
+  - elementId: p3-text
+    elementType: text
+    bounds: [88, 484, 790, 42]
+    content:
+      fontSize: 12
+      color: "$text"
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p><strong>H5 独立调用宿主能力</strong> — getUserInfo / nav.openTab / storage 等走 JSBridge Main Handler，不经过 AI，纯业务通道</p>

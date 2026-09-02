@@ -203,6 +203,7 @@ export function SclawBrowserEmbedChat({
                 showThinking={showThinking}
                 scrollRef={scrollRef}
                 variant="embed"
+                sessionKey={sessionKey}
                 onReachStart={() => {
                   void useChatStore.getState().loadOlderHistory();
                 }}

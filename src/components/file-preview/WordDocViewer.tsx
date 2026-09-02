@@ -13,6 +13,8 @@ import { FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { uint8ArrayToArrayBuffer } from '@/lib/preview-binary-load';
+import { prepareInlinePreviewSrcDoc } from '@/lib/preview-srcdoc';
+import { postResolvedAppearance, useThemeAppearance } from '@/components/theme/appearance-context';
 import { PreviewLoading } from './PreviewLoading';
 
 interface WordDocViewerProps {
@@ -28,7 +30,7 @@ type WordRenderResult =
   | { buffer: Uint8Array; kind: 'error'; error: string };
 
 /** mammoth 兜底时的文档 HTML 外壳样式（沿用原 FilePreviewViewer 的排版） */
-const MAMMOTH_SHELL_STYLE = `
+const WORD_FALLBACK_SHELL_STYLE = `
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
 h1,h2,h3,h4,h5,h6{margin-top:1.5em;margin-bottom:0.5em}
 code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
@@ -48,6 +50,43 @@ async function importOptionalModule<T = Record<string, unknown>>(specifier: stri
   } catch {
     return null;
   }
+}
+
+function AdaptiveWordFallbackPreview({ html, fileName, className }: {
+  html: string;
+  fileName: string;
+  className?: string;
+}) {
+  const appearance = useThemeAppearance();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [srcDoc] = useState(() => prepareInlinePreviewSrcDoc(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>${WORD_FALLBACK_SHELL_STYLE}</style>
+</head>
+<body>${html}</body>
+</html>`, { appearance, mode: 'fidelity' }));
+
+  useEffect(() => {
+    const target = iframeRef.current?.contentWindow;
+    if (target) postResolvedAppearance(target, appearance);
+  }, [appearance]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      srcDoc={srcDoc}
+      title={fileName}
+      className={cn('h-full min-w-0 w-full border-0', className)}
+      sandbox="allow-scripts"
+      data-sto-theme-sync="true"
+      onLoad={() => {
+        const target = iframeRef.current?.contentWindow;
+        if (target) postResolvedAppearance(target, appearance);
+      }}
+    />
+  );
 }
 
 export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProps) {
@@ -147,27 +186,12 @@ export function WordDocViewer({ buffer, fileName, className }: WordDocViewerProp
 
   // mammoth 兜底：iframe srcDoc
   if (current?.kind === 'mammoth') {
-    const srcDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>${MAMMOTH_SHELL_STYLE}</style>
-</head>
-<body>${current.html}</body>
-</html>`;
-    return (
-      <iframe
-        srcDoc={srcDoc}
-        title={fileName}
-        className={cn('h-full min-w-0 w-full border-0', className)}
-        sandbox="allow-scripts"
-      />
-    );
+    return <AdaptiveWordFallbackPreview html={current.html} fileName={fileName} className={className} />;
   }
 
   // docx-preview 分支（渲染完成前容器为空 + 骨架遮罩）
   return (
-    <div ref={outerRef} className={cn('relative h-full overflow-auto bg-muted/30 dark:bg-[#0d1117]', className)}>
+    <div ref={outerRef} className={cn('relative h-full overflow-auto bg-muted/30 dark:bg-[var(--sto-surface-under)]', className)}>
       <div
         className="mx-auto py-4"
         style={scaledHeight !== null ? { height: scaledHeight } : undefined}

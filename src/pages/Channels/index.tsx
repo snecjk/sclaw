@@ -257,7 +257,8 @@ export function Channels() {
   /** 切换引擎后若当前 Agent 不兼容，先本地记下引擎，等用户显式选 Agent 再保存 */
   const [, setPendingDingTalkEngine] = useState<'claude' | 'openclaw' | 'pi' | null>(
     null,
-  );  const [showConfigModal, setShowConfigModal] = useState(false);
+  );
+  const [showConfigModal, setShowConfigModal] = useState(false);
   const [showDingTalkHubModal, setShowDingTalkHubModal] = useState(false);
   const [showMobileConfigModal, setShowMobileConfigModal] = useState(false);
   const [selectedChannelType, setSelectedChannelType] = useState<ChannelType | null>(null);
@@ -268,11 +269,8 @@ export function Channels() {
   const [initialConfigValuesForModal, setInitialConfigValuesForModal] = useState<Record<string, string> | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
-  const fetchPageData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [channelsRes, agentsRes, dingTalkStatusRes, mobileStatusRes, settingsRes] = await Promise.all([
+  const fetchPageData = useCallback(() => {
+    void Promise.all([
         hostApiFetch<{ success: boolean; channels?: ChannelGroupItem[]; error?: string }>('/api/channels/accounts'),
         hostApiFetch<{ success: boolean; agents?: AgentItem[]; error?: string }>('/api/agents'),
         hostApiFetch<{
@@ -300,7 +298,13 @@ export function Channels() {
           channelSessionIdleEnabled?: boolean;
           channelSessionIdleHours?: number;
         }>('/api/settings').catch(() => null),
-      ]);
+      ]).then(([
+        channelsRes,
+        agentsRes,
+        dingTalkStatusRes,
+        mobileStatusRes,
+        settingsRes,
+      ]) => {
 
       if (!channelsRes.success) {
         throw new Error(channelsRes.error || 'Failed to load channels');
@@ -310,6 +314,7 @@ export function Channels() {
         throw new Error(agentsRes.error || 'Failed to load agents');
       }
 
+      setError(null);
       setChannelGroups(channelsRes.channels || []);
       setAgents((agentsRes.agents || []).filter((agent) => !isProjectAgentId(agent.id)));
       if (settingsRes) {
@@ -350,7 +355,6 @@ export function Channels() {
           : null,
       );
       setPendingDingTalkEngine(null);
-
       const mobileLocal = mobileStatusRes?.success ? mobileStatusRes.local : null;
       const mobileBound = mobileLocal?.bindStatus === 'bound';
       const mobileEnabled = Boolean(
@@ -371,11 +375,11 @@ export function Channels() {
         wsConnected: Boolean(mobileStatusRes?.ws?.connected),
         canConnectWs: Boolean(mobileStatusRes?.canConnectWs),
       });
-    } catch (fetchError) {
+    }).catch((fetchError: unknown) => {
       setError(String(fetchError));
-    } finally {
+    }).finally(() => {
       setLoading(false);
-    }
+    });
   }, []);
 
   useEffect(() => {

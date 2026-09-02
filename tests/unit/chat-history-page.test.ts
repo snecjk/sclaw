@@ -3,6 +3,7 @@ import {
   mergeHistoryTail,
   prependHistoryPage,
   sliceHistoryPage,
+  trimHistoryTail,
 } from '../../shared/chat-history-page';
 
 const messages = [
@@ -35,6 +36,18 @@ describe('mergeHistoryTail', () => {
     const existing = messages;
     const incoming = [messages[2], messages[3], { id: 'e', timestamp: 5, content: '5' }];
     expect(mergeHistoryTail(existing, incoming).map((message) => message.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+});
+
+describe('trimHistoryTail', () => {
+  it('keeps the newest limit messages', () => {
+    expect(trimHistoryTail(messages, 2).map((message) => message.id)).toEqual(['c', 'd']);
+  });
+
+  it('returns a copy when already within the window', () => {
+    const trimmed = trimHistoryTail(messages, 10);
+    expect(trimmed).toEqual(messages);
+    expect(trimmed).not.toBe(messages);
   });
 });
 

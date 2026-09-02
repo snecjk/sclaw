@@ -129,11 +129,11 @@ export function WorkflowPreviewPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#F7F8FA]">
-      <div className="shrink-0 border-b border-[#E5E6EB] bg-white px-4 py-3">
-        <h3 className="text-[14px] font-semibold text-[#1D2129]">{detail.workflowName}</h3>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#F7F8FA] dark:bg-[var(--sto-surface-primary)]">
+      <div className="shrink-0 border-b border-[#E5E6EB] bg-white px-4 py-3 dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]">
+        <h3 className="text-[14px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{detail.workflowName}</h3>
         {detail.description && (
-          <p className="mt-0.5 text-[12px] text-[#86909C]">{detail.description}</p>
+          <p className="mt-0.5 text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{detail.description}</p>
         )}
       </div>
 
@@ -147,26 +147,26 @@ export function WorkflowPreviewPanel({
             return (
               <div key={card.id} className="relative flex gap-3">
                 {!isLast && (
-                  <div className="absolute left-[15px] top-8 h-[calc(100%-8px)] w-px bg-[#E5E6EB]" />
+                  <div className="absolute left-[15px] top-8 h-[calc(100%-8px)] w-px bg-[#E5E6EB] dark:bg-[var(--sto-border-default)]" />
                 )}
-                <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FFD7A3] bg-[#FFF5E6] text-[12px] font-semibold text-[var(--sto-brand-6)]">
+                <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FFD7A3] bg-[#FFF5E6] text-[12px] font-semibold text-[var(--sto-brand-6)] dark:border-[rgba(255,111,0,0.4)] dark:bg-[rgba(255,111,0,0.12)]">
                   {index + 1}
                 </div>
                 <div className="min-w-0 flex-1 pb-4">
-                  <div className="overflow-hidden rounded-xl border border-[#E5E6EB] bg-white shadow-[0_1px_4px_rgba(29,33,41,0.04)]">
-                    <div className="flex items-start gap-2 border-b border-[#F0F2F5] px-3.5 py-2.5">
+                  <div className="overflow-hidden rounded-xl border border-[#E5E6EB] bg-white shadow-[0_1px_4px_rgba(29,33,41,0.04)] dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-secondary)]">
+                    <div className="flex items-start gap-2 border-b border-[#F0F2F5] px-3.5 py-2.5 dark:border-[var(--sto-border-light)]">
                       <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--sto-brand-6)]" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[13px] font-semibold text-[#1D2129]">{card.title}</span>
+                          <span className="text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{card.title}</span>
                           {card.nodeType && (
-                            <span className="rounded-md bg-[#F5F6F7] px-1.5 py-0.5 text-[10px] text-[#86909C]">
+                            <span className="rounded-md bg-[#F5F6F7] px-1.5 py-0.5 text-[10px] text-[#86909C] dark:bg-[var(--sto-control-bg)] dark:text-[var(--sto-text-tertiary)]">
                               {typeLabel || card.nodeType}
                             </span>
                           )}
                         </div>
                         {card.nodeDescription && card.fields.length === 0 && (
-                          <p className="mt-1 text-[12px] leading-5 text-[#86909C]">{card.nodeDescription}</p>
+                          <p className="mt-1 text-[12px] leading-5 text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{card.nodeDescription}</p>
                         )}
                       </div>
                     </div>
@@ -176,14 +176,14 @@ export function WorkflowPreviewPanel({
                         {card.fields.map((field) => (
                           <div
                             key={field.key}
-                            className="rounded-lg border border-[#EEF0F3] bg-[#FAFBFC] px-3 py-2.5"
+                            className="rounded-lg border border-[#EEF0F3] bg-[#FAFBFC] px-3 py-2.5 dark:border-[var(--sto-border-light)] dark:bg-[var(--sto-surface-elevated)]"
                           >
-                            <div className="text-[12px] font-medium text-[#4E5969]">{field.label}</div>
+                            <div className="text-[12px] font-medium text-[#4E5969] dark:text-[var(--sto-text-secondary)]">{field.label}</div>
                             {field.display ? (
-                              <div className="mt-1 text-[13px] leading-5 text-[#1D2129]">{field.display}</div>
+                              <div className="mt-1 text-[13px] leading-5 text-[#1D2129] dark:text-[var(--sto-text-primary)]">{field.display}</div>
                             ) : null}
                             {field.description ? (
-                              <div className={field.display ? 'mt-1 text-[11px] leading-4 text-[#86909C]' : 'mt-1 text-[13px] leading-5 text-[#4E5969]'}>
+                              <div className={field.display ? 'mt-1 text-[11px] leading-4 text-[#86909C] dark:text-[var(--sto-text-tertiary)]' : 'mt-1 text-[13px] leading-5 text-[#4E5969] dark:text-[var(--sto-text-secondary)]'}>
                                 {field.description}
                               </div>
                             ) : null}

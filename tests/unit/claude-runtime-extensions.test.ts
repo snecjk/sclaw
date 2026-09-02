@@ -106,6 +106,14 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(runtime.systemPromptAppend).toContain(BRIDGE_SYSTEM_PROMPT);
   });
 
+  it('does not register browser automation for app-dev coding sessions', async () => {
+    const runtime = await buildClaudeRuntimeOptions('agent:proj-x:appdev:workspace-1');
+
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeUndefined();
+    expect(runtime.mcpServers?.['sto-workflow-tool']).toBeUndefined();
+    expect(runtime.systemPromptAppend ?? '').not.toContain('bridge_click');
+  });
+
   it('registers embed bridge prompt for app plaza embed sessions', async () => {
     const runtime = await buildClaudeRuntimeOptions('agent:main:session-embed-app-tb--x');
 

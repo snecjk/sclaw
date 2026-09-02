@@ -1,0 +1,48 @@
+import { join } from 'path';
+import { describe, expect, it } from 'vitest';
+
+import { listLocalBuiltinAppTemplates } from '../../electron/services/app-template-package-manager';
+
+describe('local built-in app template catalog', () => {
+  it('exposes the requested resources template as a distinct local source', async () => {
+    const items = await listLocalBuiltinAppTemplates(
+      join(process.cwd(), 'resources', 'app-templates'),
+      'assets',
+    );
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        templateId: 'assets-minimal',
+        pageType: 'assets',
+        name: '标准 Assets 模版',
+        latestVersion: 'local',
+        source: 'local-resource',
+      }),
+    ]);
+  });
+
+  it('exposes both resources templates when no page type filter is selected', async () => {
+    const items = await listLocalBuiltinAppTemplates(
+      join(process.cwd(), 'resources', 'app-templates'),
+    );
+
+    expect(items.map((item) => ({
+      templateId: item.templateId,
+      pageType: item.pageType,
+      source: item.source,
+    }))).toEqual([
+      { templateId: 'assets-minimal', pageType: 'assets', source: 'local-resource' },
+      { templateId: 'site-minimal', pageType: 'site', source: 'local-resource' },
+    ]);
+  });
+
+  it('lists both local templates for Site', async () => {
+    const items = await listLocalBuiltinAppTemplates(
+      join(process.cwd(), 'resources', 'app-templates'),
+      'site',
+    );
+    expect(items.map((item) => item.templateId)).toEqual([
+      'site-minimal',
+    ]);
+  });
+});

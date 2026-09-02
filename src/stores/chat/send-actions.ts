@@ -86,6 +86,7 @@ export function createSendActions(
       ) {
         return;
       }
+      const sendRequestedAt = Date.now();
 
       // DEFAULT_SESSION_KEY is a UI placeholder. Materialize it before target
       // resolution so a fresh home/project conversation always gets a unique
@@ -115,12 +116,15 @@ export function createSendActions(
         buildSessionSwitchPatch,
         resolveEngineTypeForSession,
       });
+      const targetResolvedAt = Date.now();
       logChatFlow('send.target.resolved', {
         sessionKey: currentSessionKey,
         engineType: currentSessionEngineType,
         targetAgentId: targetAgentId ?? null,
         attachmentCount: attachments?.length ?? 0,
         hasDingTalkMentions: Boolean(dingTalkMentions?.length),
+        requestedSessionKey: requestedSessionKey ?? null,
+        resolveTargetMs: targetResolvedAt - sendRequestedAt,
       });
 
       const { resolveEmbedQuoteSkillInjection } = await import('@/lib/resolve-embed-quote-skill');
@@ -140,13 +144,16 @@ export function createSendActions(
       }
 
       try {
+      let readinessResolvedAt = targetResolvedAt;
       try {
         await awaitSessionSendReadiness(currentSessionKey);
+        readinessResolvedAt = Date.now();
       } catch (error) {
         const normalized = normalizeAppError(error);
         logChatFlow('send.blocked.session-not-ready', {
           sessionKey: currentSessionKey,
           error: normalized.message,
+          waitedMs: Date.now() - targetResolvedAt,
         });
         return;
       }
@@ -192,6 +199,7 @@ export function createSendActions(
       const displayText = preBakedGatewayText || resolvedSkillMetas.length
         ? userDisplayText
         : preparedContext.displayText;
+      const contextPreparedAt = Date.now();
       logChatFlow('send.context.prepared', {
         sessionKey: currentSessionKey,
         engineType: currentSessionEngineType,
@@ -199,6 +207,9 @@ export function createSendActions(
         gatewayMessageLength: messageWithContext.length,
         hasSystemPromptAppend: false,
         hasWorkflowContext: Boolean(workflowContext),
+        readinessWaitMs: readinessResolvedAt - targetResolvedAt,
+        prepareContextMs: contextPreparedAt - readinessResolvedAt,
+        totalBeforeDispatchMs: contextPreparedAt - sendRequestedAt,
       });
 
       const userMsg = insertOptimisticUserTurn({
@@ -226,6 +237,7 @@ export function createSendActions(
       });
 
       try {
+        const dispatchStartedAt = Date.now();
         // Reuse the optimistic user message id as the idempotency key so the
         // Gateway can round-trip it back on the user message record (chat.history).
         // That lets isSameUserMessage pair the optimistic copy with its server echo
@@ -265,12 +277,16 @@ export function createSendActions(
             sessionKey: currentSessionKey,
             idempotencyKey,
             error: result.error ?? null,
+            dispatchMs: Date.now() - dispatchStartedAt,
+            totalMs: Date.now() - sendRequestedAt,
           });
         } else if (result.result?.runId) {
           logChatFlow('send.dispatch.accepted', {
             sessionKey: currentSessionKey,
             idempotencyKey,
             runId: result.result.runId,
+            dispatchMs: Date.now() - dispatchStartedAt,
+            totalMs: Date.now() - sendRequestedAt,
           });
         }
       } catch (err) {
@@ -279,6 +295,7 @@ export function createSendActions(
           sessionKey: currentSessionKey,
           error: normalized.message,
           code: normalized.code,
+          totalMs: Date.now() - sendRequestedAt,
         });
         // Main's supervisor owns uncertain/failed dispatch transitions and
         // broadcasts the canonical snapshot used by the Renderer.

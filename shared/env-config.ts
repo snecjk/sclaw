@@ -104,3 +104,24 @@ export function getStoPolicyReportApiHostForAppEnv(env: AppEnvironment): string 
 export function getStoPolicyReportApiHost(): string {
   return getStoPolicyReportApiHostForAppEnv(getAppEnv());
 }
+/**
+ * STO 代码应用（code-applications）策略域 Host。
+ * 测试环境契约：https://zc-hybrid-test.sto.cn/sto-policy/api/v1/code-applications
+ * 实际请求按 SSO 登录环境选择，不能只看编译时 VITE_APP_ENV（DEV 可切生产登录）。
+ */
+export function getStoPolicyHybridApiHostForAppEnv(env: AppEnvironment): string {
+  if (env === 'development' || env === 'test') return 'zc-hybrid-test.sto.cn';
+  if (env === 'staging') return 'pre-zc-hybrid.sto.cn';
+  return 'zc-hybrid.sto.cn';
+}
+
+export function getStoPolicyHybridApiHostForSsoEnv(ssoEnv: string): string {
+  if (ssoEnv === 'daily-external' || ssoEnv === 'local') return 'zc-hybrid-test.sto.cn';
+  if (ssoEnv === 'pre-release') return 'pre-zc-hybrid.sto.cn';
+  return 'zc-hybrid.sto.cn';
+}
+
+export function getStoPolicyHybridApiHost(): string {
+  return getStoPolicyHybridApiHostForAppEnv(getAppEnv());
+}
+

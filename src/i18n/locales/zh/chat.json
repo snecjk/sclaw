@@ -186,6 +186,7 @@
     "collapsedSummary": "思考 {{thoughtCount}} 次，使用 {{toolCount}} 个工具",
     "collapsedSummaryThoughtsOnly": "思考 {{thoughtCount}} 次",
     "collapsedSummaryToolsOnly": "使用 {{toolCount}} 个工具",
+    "omittedEarlierThinkingChars": "已省略前 {{count}} 字",
     "invokeToolLabel": "调用工具-{{toolName}}",
     "toolNoParams": "无参数",
     "paramsConfirmedLabel": "参数已确认",
@@ -311,6 +312,7 @@
   "preview": {
     "collapsePanel": "收起预览区",
     "resizeSeparator": "调整预览区宽度",
+    "resizeChatSeparator": "调整会话宽度",
     "overflowMenu": "全部产物",
     "fullscreen": "全屏放映",
     "expandWorkspace": "展开预览区",

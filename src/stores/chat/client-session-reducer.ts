@@ -11,9 +11,10 @@ import type {
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
 import type { ChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
 import type { AttachedFileMeta, RawMessage, ToolStatus } from './types';
+import { truncateToolPayload } from '../../../shared/chat-tool-payload';
 import { collectToolUpdates, isToolResultRole, upsertToolStatuses } from './helpers';
-import { appendStreamingAssistantSnapshot } from './streaming-state';
 import { isAgentPreparationProgressMessage } from '@/lib/agent-preparation-progress';
+import { appendStreamingAssistantSnapshot, appendStreamingToolResultSnapshot, STREAMING_OVERLAY_BUFFER_LIMIT } from './streaming-state';
 
 interface ChatDispatchPayload {
   idempotencyKey: string;
@@ -26,6 +27,8 @@ export interface ChatTurnOverlay {
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
+  /** Unique tool ids observed this run; not capped with the overlay window. */
+  toolEventCount: number;
   pendingAttachments: AttachedFileMeta[];
   awaitingTranscript: boolean;
 }
@@ -93,6 +96,7 @@ export function createClientSessionState(): ClientSessionState {
       streamingMessages: [],
       streamingToolResults: [],
       streamingTools: [],
+      toolEventCount: 0,
       pendingAttachments: [],
       awaitingTranscript: false,
     },
@@ -251,6 +255,27 @@ export function reduceSessionEvent(
   );
   const preserveCompletedOverlay = phase === 'completed' && hasLiveOverlay;
   const clearOverlay = phase === 'failed' || phase === 'aborted' || phase === 'interrupted';
+  const nextStreamingTools = startsNewRun || clearOverlay
+    ? []
+    : toolUpdates.length > 0
+      ? upsertToolStatuses(
+        state.overlay.streamingTools,
+        toolUpdates.map((update) => ({
+          ...update,
+          input: truncateToolPayload(update.input),
+        })),
+      ).slice(-STREAMING_OVERLAY_BUFFER_LIMIT)
+      : state.overlay.streamingTools;
+  const newToolKeys = nextStreamingTools.filter((tool) => {
+    const key = tool.toolCallId || tool.id || tool.name;
+    if (!key) return false;
+    return !state.overlay.streamingTools.some(
+      (existing) => (existing.toolCallId || existing.id || existing.name) === key,
+    );
+  }).length;
+  const nextToolEventCount = startsNewRun || clearOverlay
+    ? newToolKeys
+    : (state.overlay.toolEventCount ?? 0) + newToolKeys;
 
   return {
     accepted: true,
@@ -294,13 +319,10 @@ export function reduceSessionEvent(
         streamingToolResults: startsNewRun || clearOverlay
           ? []
           : isToolResult && message
-            ? [...state.overlay.streamingToolResults, message]
+            ? appendStreamingToolResultSnapshot(state.overlay.streamingToolResults, message)
             : state.overlay.streamingToolResults,
-        streamingTools: startsNewRun || clearOverlay
-          ? []
-          : toolUpdates.length > 0
-            ? upsertToolStatuses(state.overlay.streamingTools, toolUpdates)
-            : state.overlay.streamingTools,
+        streamingTools: nextStreamingTools,
+        toolEventCount: nextToolEventCount,
         // transcript.updated only announces that authoritative history changed.
         // Keep the final overlay mounted until setTranscript verifies that the
         // current user turn and assistant reply are both present; clearing here

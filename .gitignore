@@ -63,6 +63,7 @@ resources/bin
 
 build/
 sto-plugin/*/shared/
+.superpowers/
 electron/gateway/gateway-fetch-preload.cjs
 artifacts/
 docs/pr-session-notes-
@@ -71,6 +72,7 @@ docs/pr-session-notes-
 nul
 .claude/
 .kilo/
+.worktrees/
 /.codegraph/
 outputs/
 .tmp/

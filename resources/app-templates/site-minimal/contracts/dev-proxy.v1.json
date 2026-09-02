@@ -1,0 +1,10 @@
+{
+  "version": "v1",
+  "proxies": [
+    {
+      "key": "siteapp-menu",
+      "target": "https://baseinfo-aimemory-test.sto.cn",
+      "changeOrigin": true
+    }
+  ]
+}
