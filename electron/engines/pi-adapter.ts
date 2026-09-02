@@ -153,6 +153,7 @@ async function buildPiSessionConfig(
         query: params.message,
         rawMessage: params.message,
         attachmentNames: params.media?.map((item) => item.fileName),
+        explicitSlugs: params.normalizedTurn?.selectedSkillSlugs,
         onProgress: sessionMode === 'scheduled'
           ? undefined
           : (message) => emitSkillRoutingProgress(progressSink, sessionKey, runId, message),
@@ -219,9 +220,10 @@ async function sendPiMessage(
     try {
       const payload = {
         config,
-        message: params.message,
+        message: params.normalizedTurn?.modelText ?? params.message,
         runId,
         media: (params.media ?? []) satisfies PiPromptAttachment[],
+        referencesEmbedded: Boolean(params.normalizedTurn && !params.normalizedTurn.legacy),
       } satisfies PiPromptPayload;
       result = await getPiRuntimeService().request<PiPromptResult>('session.prompt', {
         sessionKey: params.sessionKey,

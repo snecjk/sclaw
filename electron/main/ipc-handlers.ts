@@ -12,6 +12,10 @@ import { getAdapterForSession, listEngineSessions } from '../engines/manager';
 import { omitUnchangedHistoryMessages, readClientHistoryFingerprint } from '../engines/history-rpc-result';
 import type { AgentEngineType } from '../engines/types';
 import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
+import { projectUserTurnCompositions } from '../services/user-turn-composition-history';
+import type { ModelMessageMediaInput } from '../services/model-message-normalizer';
+import { submitModelTurn } from '../services/submit-model-turn';
+import type { ModelMessageCompositionV1 } from '../../shared/model-message-composition';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
 import {
   type ProviderConfig,
@@ -19,7 +23,6 @@ import {
 import { getOpenClawStatus, getOpenClawDir, getOpenClawConfigDir, getSkillsStoreDir, ensureDir } from '../utils/paths';
 import { getOpenClawCliCommand } from '../utils/openclaw-cli';
 import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../utils/store';
-import { listAgentsSnapshot } from '../utils/agent-config';
 import {
   saveProviderKeyToOpenClaw,
   removeProviderFromOpenClaw,
@@ -54,7 +57,6 @@ import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
 import { syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
-import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getTurnTokenService } from '../services/turn-token-service';
 import { getProviderService } from '../services/providers/provider-service';
@@ -1029,9 +1031,14 @@ function registerGatewayHandlers(
           });
           return { success: false, error: result.error || 'chat.history failed' };
         }
+        const projectedResult = await projectUserTurnCompositions(
+          body.sessionKey ?? '',
+          result.result ?? { messages: [] },
+          adapter.type,
+        );
         const historyResult = omitUnchangedHistoryMessages({
           engineType: adapter.type,
-          result: result.result ?? { messages: [] },
+          result: projectedResult,
           clientFingerprint: readClientHistoryFingerprint(body.clientFingerprint),
           beforeId,
         });
@@ -1069,6 +1076,15 @@ function registerGatewayHandlers(
       }
 
       if (method === 'chat.send') {
+        const rawBody = (params && typeof params === 'object' ? params : {}) as {
+          dingTalkMentions?: Array<{
+            type: 'user' | 'group';
+            displayName: string;
+            userId?: string;
+            openConversationId?: string;
+            corpId?: string;
+          }>;
+        };
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           message?: string;
@@ -1077,19 +1093,21 @@ function registerGatewayHandlers(
           idempotencyKey?: string;
           systemPromptAppend?: string;
           engineType?: AgentEngineType;
+          composition?: ModelMessageCompositionV1;
+          media?: ModelMessageMediaInput[];
         };
-        const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
-        const { runMainChatSend } = await import('../services/chat-send-service');
-        const result = await runMainChatSend(gatewayManager, {
+        const result = await submitModelTurn(gatewayManager, {
           sessionKey: body.sessionKey ?? '',
           message: body.message ?? '',
           sourceText: body.sourceText,
           deliver: body.deliver,
           idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
           systemPromptAppend: body.systemPromptAppend,
-          engineType: adapter.type,
-        }, (params, memory) => adapter.prepareMemoryInjection(params, memory),
-        (prepared) => adapter.sendMessage({ gatewayManager }, prepared));
+          engineType: body.engineType,
+          composition: body.composition,
+          media: body.media,
+          dingTalkMentions: rawBody.dingTalkMentions,
+        });
         if (!result.success) {
           return { success: false, error: result.error || 'chat.send failed' };
         }
@@ -1216,37 +1234,14 @@ function registerGatewayHandlers(
     }
   });
 
-  // Chat send with media — reads staged files from disk and builds attachments.
-  // Raster images (png/jpg/gif/webp) are inlined as base64 vision attachments.
-  // All other files are referenced by path in the message text so the model
-  // can access them via tools (the same format channels use).
-  const VISION_MIME_TYPES = new Set([
-    // Static images
-    'image/png', 'image/jpeg', 'image/bmp', 'image/webp',
-    // Animated images
-    'image/gif',
-    // Modern image formats
-    'image/avif', 'image/heic', 'image/heif', 'image/tiff',
-  ]);
-  function getAgentIdFromSessionKey(sessionKey: string): string {
-    if (!sessionKey.startsWith('agent:')) return 'main';
-    const [, agentId] = sessionKey.split(':');
-    return (agentId || 'main').trim().toLowerCase();
-  }
-
-  async function shouldTransformAttachmentsByOSS(sessionKey: string): Promise<boolean> {
-    const snapshot = await listAgentsSnapshot();
-    const agentId = getAgentIdFromSessionKey(sessionKey);
-    const agent = snapshot.agents.find((item) => item.id.trim().toLowerCase() === agentId);
-    return agent?.fileTransformByOSS === true;
-  }
-
+  // Legacy channel kept for old renderer builds. Main owns normalization and
+  // dispatch, so this handler only adapts the old payload shape.
   ipcMain.handle('chat:sendWithMedia', async (_, params: {
     sessionKey: string;
     message: string;
     deliver?: boolean;
     idempotencyKey: string;
-    media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+    media?: ModelMessageMediaInput[];
     dingTalkMentions?: Array<{
       type: 'user' | 'group';
       displayName: string;
@@ -1263,95 +1258,15 @@ function registerGatewayHandlers(
     }>;
   }) => {
     try {
-      let message = params.message;
-      // The Gateway processes image attachments through TWO parallel paths:
-      // Path A: `attachments` param → parsed via `parseMessageWithAttachments` →
-      //   injected as inline vision content when the model supports images.
-      //   Format: { content: base64, mimeType: string, fileName?: string }
-      // Path B: `[media attached: ...]` in message text → Gateway's native image
-      //   detection (`detectAndLoadPromptImages`) reads the file from disk and
-      //   injects it as inline vision content. Also works for history messages.
-      // We use BOTH paths for maximum reliability.
-      const imageAttachments: Array<Record<string, unknown>> = [];
-      const fileReferences: string[] = [];
-      const transformByOSS = await shouldTransformAttachmentsByOSS(params.sessionKey);
-      logger.info(`[chat:uploadFile] Processing file transformByOSS: ${transformByOSS}`);
-
-      if (params.media && params.media.length > 0) {
-        const fsP = await import('fs/promises');
-        for (const m of params.media) {
-          const exists = await fsP.access(m.filePath).then(() => true, () => false);
-          logger.info(`[chat:sendWithMedia] Processing file: ${m.fileName} (${m.mimeType}), path: ${m.filePath}, exists: ${exists}, isVision: ${VISION_MIME_TYPES.has(m.mimeType)}, transformByOSS: ${transformByOSS}`);
-
-          if (transformByOSS) {
-            const ossTempUrl = await uploadFileToTempOSS(m.filePath, m.fileName, { bizTypeEnum: 'LLM' });
-            fileReferences.push(
-              `[media attached: ${ossTempUrl} (${m.mimeType}) | ${ossTempUrl}]`,
-            );
-            continue;
-          }
-
-          // Always add file path reference so the model can access it via tools
-          fileReferences.push(
-            `[media attached: ${m.filePath} (${m.mimeType}) | ${m.filePath}]`,
-          );
-
-          if (VISION_MIME_TYPES.has(m.mimeType)) {
-            // Send as base64 attachment in the format the Gateway expects:
-            // { content: base64String, mimeType: string, fileName?: string }
-            // The Gateway normalizer looks for `a.content` (NOT `a.source.data`).
-            const fileBuffer = await fsP.readFile(m.filePath);
-            const base64Data = fileBuffer.toString('base64');
-            logger.info(`[chat:sendWithMedia] Read ${fileBuffer.length} bytes, base64 length: ${base64Data.length}`);
-            imageAttachments.push({
-              content: base64Data,
-              mimeType: m.mimeType,
-              fileName: m.fileName,
-            });
-          }
-        }
-      }
-
-      // Append file references to message text so the model knows about them
-      if (fileReferences.length > 0) {
-        const refs = fileReferences.join('\n');
-        message = message ? `${message}\n\n${refs}` : refs;
-      }
-
-      let rpcParams: Record<string, unknown> = {
-        sessionKey: params.sessionKey,
-        message,
-        deliver: params.deliver ?? false,
-        idempotencyKey: params.idempotencyKey,
-      };
-
-      if (imageAttachments.length > 0) {
-        rpcParams.attachments = imageAttachments;
-      }
-      if (params.dingTalkMentions?.length) {
-        rpcParams.dingTalkMentions = params.dingTalkMentions;
-      }
-      if (params.dingTalkSendFileIntent) {
-        rpcParams.dingTalkSendFileIntent = params.dingTalkSendFileIntent;
-      }
-      if (params.dingTalkAttachedFiles?.length) {
-        rpcParams.dingTalkAttachedFiles = params.dingTalkAttachedFiles;
-      }
-
-      rpcParams = await preprocessChatSendParams(rpcParams) as Record<string, unknown>;
-      // Defensive: Gateway chat.send schema does not accept engineType
-      if ('engineType' in rpcParams) {
-        delete rpcParams.engineType;
-      }
-      const outboundMessage = typeof rpcParams.message === 'string' ? rpcParams.message : message;
-
-      logger.info(`[chat:sendWithMedia] Sending: message="${outboundMessage.substring(0, 100)}", attachments=${imageAttachments.length}, fileRefs=${fileReferences.length}`);
-
-      // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-      const timeoutMs = 120000;
-      const result = await gatewayManager.rpc('chat.send', rpcParams, timeoutMs);
-      logger.info(`[chat:sendWithMedia] RPC result: ${JSON.stringify(result)}`);
-      return { success: true, result };
+      const processed = await preprocessChatSendParams(params) as typeof params;
+      return await submitModelTurn(gatewayManager, {
+        sessionKey: processed.sessionKey,
+        message: processed.message,
+        deliver: processed.deliver,
+        idempotencyKey: processed.idempotencyKey,
+        media: processed.media,
+        dingTalkMentions: params.dingTalkMentions,
+      });
     } catch (error) {
       logger.error(`[chat:sendWithMedia] Error: ${String(error)}`);
       return { success: false, error: String(error) };
@@ -2867,6 +2782,9 @@ function registerSessionHandlers(): void {
         logger.warn(`[session:delete] Could not update sessions.json: ${String(e)}`);
         // Non-fatal — JSONL rename already done
       }
+
+      const { deleteEngineSessionRegistryEntry } = await import('../engines/session-registry');
+      await deleteEngineSessionRegistryEntry(sessionKey);
 
       return { success: true };
     } catch (err) {

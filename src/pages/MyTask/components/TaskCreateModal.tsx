@@ -37,7 +37,6 @@ import { IconCheckbox } from '@/components/icon-checkbox';
 import { TaskInstructionComposer, type TaskComposerSnapshot, type TaskInstructionComposerHandle } from './TaskInstructionComposer';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
-import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 import { extractDingTalkMentionsFromComposerSegments } from '../../../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 import {
   composerSegmentsHaveBogusSkills,
@@ -926,7 +925,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         segments: snapshot?.segments ?? [],
         plainText: snapshot?.plainText ?? instructions,
         attachments: readyAttachments,
-        resolveSkillPrompt,
       });
 
       const composerAttachments = readyAttachments.map((att) => ({

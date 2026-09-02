@@ -337,6 +337,15 @@ output on the MCP stdio channel. Its profile and configuration resolve under the
 SClaw-managed `~/.stoclaw/pi` directory through `PI_AGENT_HOME` and
 `PI_CODING_AGENT_DIR`. Project-local Pi settings remain untrusted and are ignored.
 
+Chat, queued sends, and scheduled tasks use a versioned, engine-neutral message
+composition for ordered text, files, images, Skills, workflows, and DingTalk
+mentions. Main validates attachment paths and content signatures before dispatch,
+then renders the same composition into each engine's native format. New turns do
+not expose UI placeholders, Skill default-prompt prefixes, or `SClaw-Skill` HTML
+markers to the model. Accepted compositions are persisted separately and projected
+back into history so original filenames and mixed ordering survive reloads; legacy
+transcripts keep their existing placeholder/marker recovery path.
+
 Pi chat and scheduled-task prompts support mixed text, image, and file attachments.
 The worker validates every attachment before accepting the turn, detects images
 from file contents, and uses Pi's native image conversion/resizing pipeline before

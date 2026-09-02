@@ -1,22 +1,14 @@
 import type { FileAttachment } from '@/components/attachments/types';
 import type { ComposerSegment, PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
-import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import type { SkillMeta } from '@/types/skill-meta';
-
-/** 标签名含 `]` 时保持占位符括号完整。 */
-function escapeGatewayPlaceholderLabel(value: string): string {
-  return value.replace(/]/g, '］');
-}
-
-function formatFilePlaceholder(fileName: string | undefined): string {
-  const name = escapeGatewayPlaceholderLabel((fileName ?? '').trim() || '未知文件');
-  return `[文件: ${name}]`;
-}
-
-function formatSkillPlaceholder(title: string | undefined, slug: string): string {
-  const label = escapeGatewayPlaceholderLabel((title || slug).trim() || '未知技能');
-  return `[技能: ${label}]`;
-}
+import type {
+  ModelMessageCompositionSegment,
+  ModelMessageCompositionV1,
+} from '../../shared/model-message-composition';
+import {
+  createModelMessageComposition,
+  renderModelWorkflowInstruction,
+} from '../../shared/model-message-composition';
 
 function gatewayBodyPartForSegment(seg: ComposerSegment): string {
   switch (seg.type) {
@@ -32,7 +24,7 @@ function gatewayBodyPartForSegment(seg: ComposerSegment): string {
       // Bake 句与 source 解耦：mine / 模版 / 学习中心 handoff 都写同一句，
       // 以便 stripComposerModelBakeForDisplay 能还原 displayText，完成乐观↔echo 配对。
       // source 仍由 dispatchChatSend 决定执行路径，不参与正文编码。
-      return `帮我执行 id 为：${seg.id} 的工作流 【${seg.name}】`;
+      return renderModelWorkflowInstruction(seg.id, seg.name);
     default:
       return '';
   }
@@ -57,16 +49,16 @@ export async function buildComposerGatewayPayload(input: {
   segments: ComposerSegment[];
   plainText: string;
   attachments: FileAttachment[];
-  resolveSkillPrompt: (slug: string) => Promise<{ defaultPrompt: string; title: string }>;
 }): Promise<{
   gatewayText: string;
+  composition: ModelMessageCompositionV1;
   displayText: string;
   attachments: FileAttachment[];
   skillMetas: SkillMeta[];
   workflows: Array<{ id: string; name: string; source?: string }>;
   persistedSegments: PersistedComposerSegment[];
 }> {
-  const { segments, plainText, attachments, resolveSkillPrompt } = input;
+  const { segments, plainText, attachments } = input;
   const readyById = new Map(
     attachments.filter((att) => att.status === 'ready').map((att) => [att.id, att]),
   );
@@ -74,37 +66,51 @@ export async function buildComposerGatewayPayload(input: {
   const orderedAttachments: FileAttachment[] = [];
   const skillMetas: SkillMeta[] = [];
   const workflows: Array<{ id: string; name: string; source?: string }> = [];
-  const skillPrompts: string[] = [];
   const bodyParts: string[] = [];
   const displayParts: string[] = [];
+  const modelSegments: ModelMessageCompositionSegment[] = [];
+  let mentionIndex = 0;
 
   for (const seg of segments) {
     switch (seg.type) {
       case 'file': {
         const att = readyById.get(seg.attachmentId);
         if (!att) break;
+        const mediaIndex = orderedAttachments.length;
         orderedAttachments.push(att);
-        bodyParts.push(formatFilePlaceholder(att.fileName));
+        modelSegments.push({
+          type: 'attachment',
+          mediaIndex,
+          displayName: att.fileName,
+        });
         break;
       }
       case 'skill': {
         skillMetas.push({ slug: seg.slug, title: seg.title });
-        bodyParts.push(formatSkillPlaceholder(seg.title, seg.slug));
-        const { defaultPrompt } = await resolveSkillPrompt(seg.slug);
-        const prompt = defaultPrompt.trim();
-        // 禁止把 slug 本身当 prompt 前置（编辑重发后会变成气泡里单独一行 `html`）。
-        if (prompt && prompt !== seg.slug) skillPrompts.push(prompt);
+        modelSegments.push({ type: 'skill', slug: seg.slug, title: seg.title });
         break;
       }
       case 'workflow': {
         workflows.push({ id: seg.id, name: seg.name, source: seg.source });
-        bodyParts.push(gatewayBodyPartForSegment(seg));
+        const instruction = gatewayBodyPartForSegment(seg);
+        bodyParts.push(instruction);
+        modelSegments.push({ type: 'workflow', id: seg.id, name: seg.name, source: seg.source });
         break;
       }
       case 'text':
+        bodyParts.push(gatewayBodyPartForSegment(seg));
+        displayParts.push(displayPartForSegment(seg));
+        modelSegments.push({ type: 'text', text: seg.text });
+        break;
       case 'mention':
         bodyParts.push(gatewayBodyPartForSegment(seg));
         displayParts.push(displayPartForSegment(seg));
+        modelSegments.push({
+          type: 'mention',
+          displayName: seg.mention.displayName,
+          mentionIndex,
+        });
+        mentionIndex += 1;
         break;
       default:
         break;
@@ -115,23 +121,10 @@ export async function buildComposerGatewayPayload(input: {
   if (segments.length === 0 && plainText.trim()) {
     bodyFromSegments = plainText;
     displayParts.push(plainText);
+    modelSegments.push({ type: 'text', text: plainText });
   }
 
-  const bodyTrimmed = bodyFromSegments.trim();
-  let gatewayBody = bodyTrimmed;
-  if (skillPrompts.length > 0) {
-    gatewayBody = skillPrompts.join('\n\n');
-    if (bodyTrimmed) gatewayBody += `\n\n${bodyTrimmed}`;
-  }
-
-  let gatewayText = gatewayBody;
-  for (let i = 0; i < skillMetas.length; i += 1) {
-    gatewayText = appendSkillTranscriptMarker(
-      gatewayText,
-      skillMetas[i],
-      i === 0 ? displayParts.join('').trim() : undefined,
-    );
-  }
+  const gatewayText = bodyFromSegments.trim();
 
   const displayText = displayParts.join('').trim();
 
@@ -157,6 +150,7 @@ export async function buildComposerGatewayPayload(input: {
 
   return {
     gatewayText,
+    composition: createModelMessageComposition(modelSegments),
     displayText,
     attachments: orderedAttachments,
     skillMetas,

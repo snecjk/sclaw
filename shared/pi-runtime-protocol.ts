@@ -51,6 +51,8 @@ export interface PiPromptPayload {
   message: string;
   runId: string;
   media: PiPromptAttachment[];
+  /** Structured Main prompt already contains canonical <file> references. */
+  referencesEmbedded?: boolean;
 }
 
 export interface PiWorkerRequest {

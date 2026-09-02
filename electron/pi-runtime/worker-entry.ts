@@ -449,6 +449,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
           cwd: config.cwd,
           modelSupportsImages: entry.session.model.input.includes('image'),
           imageApi: sdk,
+          referencesEmbedded: promptPayload.referencesEmbedded,
         });
       } catch (error) {
         logPiCore('session.prompt.attachments-failed', {

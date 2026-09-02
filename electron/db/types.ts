@@ -26,6 +26,7 @@ import type {
   BaStepRunTable,
 } from './models/tables/browser-automation-tables';
 import type { SessionSkillStatesTable } from './models/tables/session-skill-state-table';
+import type { ChatUserTurnCompositionsTable } from './models/tables/chat-user-turn-composition-table';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -86,4 +87,5 @@ export interface SqliteDbSchema {
   ba_run: BaRunTable;
   ba_step_run: BaStepRunTable;
   session_skill_states: SessionSkillStatesTable;
+  chat_user_turn_compositions: ChatUserTurnCompositionsTable;
 }

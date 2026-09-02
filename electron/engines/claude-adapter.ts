@@ -27,6 +27,7 @@ import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEn
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
+import type { NormalizedModelTurn } from '../services/model-message-normalizer';
 import {
   createClaudeQuery,
   deleteClaudeSdkSession,
@@ -41,7 +42,6 @@ import {
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
-import { logUserSend } from '../../shared/user-send-log';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
 import { isClaudeRuntimeControlText } from '../../shared/claude-runtime-control-text';
@@ -277,6 +277,48 @@ async function buildClaudeUserMessage(
     });
   }
 
+  return buildClaudeUserMessageFromContent(content);
+}
+
+function appendClaudeText(content: Array<ImageBlockParam | TextBlockParam>, text: string): void {
+  if (!text) return;
+  const previous = content[content.length - 1];
+  if (previous?.type === 'text') {
+    previous.text += text;
+  } else {
+    content.push({ type: 'text', text });
+  }
+}
+
+async function buildClaudeUserMessageFromTurn(turn: NormalizedModelTurn): Promise<SDKUserMessage> {
+  const content: Array<ImageBlockParam | TextBlockParam> = [];
+  for (const part of turn.modelContent) {
+    switch (part.type) {
+      case 'text':
+        appendClaudeText(content, part.text);
+        break;
+      case 'attachment': {
+        const attachment = turn.attachments[part.attachmentIndex];
+        if (!attachment) break;
+        appendClaudeText(content, part.reference);
+        if (CLAUDE_VISION_MIME_TYPES.has(attachment.mimeType)) {
+          const fileBuffer = await readFile(attachment.filePath);
+          content.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: attachment.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+              data: fileBuffer.toString('base64'),
+            },
+          });
+        }
+        break;
+      }
+    }
+  }
+  if (content.length === 0) {
+    content.push({ type: 'text', text: turn.modelText || '请处理本次请求。' });
+  }
   return buildClaudeUserMessageFromContent(content);
 }
 
@@ -1239,6 +1281,7 @@ async function startClaudeQuery(
     systemPromptAppend?: string;
     /** 定时任务执行时由 executor 透传；交互式 chat 不设（→ 保留默认 bypass）。 */
     permissionProfile?: EnginePermissionProfile;
+    explicitSkillSlugs?: string[];
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   const launchStartedAt = Date.now();
@@ -1292,6 +1335,7 @@ async function startClaudeQuery(
       mode: options?.permissionProfile === undefined ? 'interactive' : 'scheduled',
       query: options?.userPrompt ?? (typeof prompt === 'string' ? prompt : ''),
       rawMessage: typeof prompt === 'string' ? prompt : options?.userPrompt,
+      explicitSlugs: options?.explicitSkillSlugs,
       onProgress: options?.permissionProfile === undefined
         ? (message) => emitSkillRoutingProgress(options?.eventSink, sessionKey, runId, message)
         : undefined,
@@ -1305,25 +1349,11 @@ async function startClaudeQuery(
     const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
-    logger.info('[claude-adapter][prompt] final systemPromptAppend', {
-      sessionKey,
-      systemPromptAppendChars: systemPromptAppend.length,
-    });
-    logger.info('[claude-adapter][prompt] user message', {
-      sessionKey,
-      userPromptChars: typeof prompt === 'string' ? prompt.length : null,
-    });
+    logger.info('[claude-adapter][prompt] final systemPrompt', systemPromptAppend);
     const userMessageForLog = typeof prompt === 'string'
       ? prompt
       : (options?.userPrompt ?? '(stream/non-string prompt)');
-    logUserSend({
-      engine: 'claude',
-      sessionKey,
-      message: userMessageForLog,
-      messageLength: userMessageForLog.length,
-      systemPromptAppend: systemPromptAppend || null,
-      systemPromptAppendLength: systemPromptAppend.length,
-    });
+    logger.info('[claude-adapter][prompt] userPrompt', userMessageForLog);
     // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
     // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。
     const permissionProfile = options?.permissionProfile;
@@ -1762,6 +1792,7 @@ export const claudeAdapter: EngineAdapter = {
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
       permissionProfile: params.permissionProfile,
+      explicitSkillSlugs: params.normalizedTurn?.selectedSkillSlugs,
     });
   },
 
@@ -1772,7 +1803,9 @@ export const claudeAdapter: EngineAdapter = {
       return { success: false, error: `Claude session ${params.sessionKey} is missing workspace cwd` };
     }
     const additionalDirectories = getAdditionalDirectories(cwd, params.media ?? []);
-    const prompt = await buildClaudeUserMessage(params.message, params.media ?? []);
+    const prompt = params.normalizedTurn && !params.normalizedTurn.legacy
+      ? await buildClaudeUserMessageFromTurn(params.normalizedTurn)
+      : await buildClaudeUserMessage(params.message, params.media ?? []);
     return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), {
       additionalDirectories,
       eventSink: ctx.eventSink
@@ -1781,6 +1814,7 @@ export const claudeAdapter: EngineAdapter = {
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
       permissionProfile: params.permissionProfile,
+      explicitSkillSlugs: params.normalizedTurn?.selectedSkillSlugs,
     });
   },
 

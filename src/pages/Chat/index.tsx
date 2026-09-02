@@ -394,6 +394,7 @@ export function Chat() {
       workflows: extras?.workflows,
       composerSegments: extras?.composerSegments,
       gatewayText: extras?.gatewayText,
+      composition: extras?.composition,
     });
   }, [beginSendScroll]);
 

@@ -47,7 +47,7 @@ export const mergeOpenClawSystemPromptAppend = prependSystemPromptAppend;
 
 /** OpenClaw 没有原生 systemPromptAppend，adapter 负责按发送来源选择兼容封装。 */
 export function resolveOpenClawSendMessage(
-  params: Pick<EngineSendParams, 'message' | 'systemPromptAppend' | 'runtimePolicy'>,
+  params: Pick<EngineSendParams, 'message' | 'systemPromptAppend' | 'runtimePolicy' | 'normalizedTurn'>,
 ): string {
   return params.runtimePolicy?.origin === 'scheduled_task'
     ? wrapScheduledTaskSystemPromptAppend(params.message, params.systemPromptAppend)

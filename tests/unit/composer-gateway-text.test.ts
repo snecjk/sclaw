@@ -4,7 +4,7 @@ import type { FileAttachment } from '@/components/attachments/types';
 import type { ComposerSegment } from '@/lib/dingtalk-mention-composer';
 
 describe('buildComposerGatewayPayload', () => {
-  it('writes positional file/skill placeholders, prepends prompts, inlines mine workflow', async () => {
+  it('builds ordered composition without exposing file/skill transport markers', async () => {
     const attachments: FileAttachment[] = [
       {
         id: 'a1',
@@ -41,10 +41,6 @@ describe('buildComposerGatewayPayload', () => {
       segments,
       plainText: '帮我将这个文件  和  内容组合，使用这个技能  生成一个 html，然后在执行这个 ',
       attachments,
-      resolveSkillPrompt: async () => ({
-        defaultPrompt: '请按中转费率技能处理',
-        title: '中转费率查询',
-      }),
     });
 
     expect(payload.attachments.map((a) => a.id)).toEqual(['a1', 'a2']);
@@ -53,12 +49,22 @@ describe('buildComposerGatewayPayload', () => {
       { id: 'wf_123', name: '运费合并工作流', source: 'mine' },
     ]);
 
-    expect(payload.gatewayText.startsWith('请按中转费率技能处理')).toBe(true);
-    expect(payload.gatewayText).toContain(
-      '帮我将这个文件 [文件: 漳州.xlsx] 和 [文件: 华东.xlsx] 内容组合，使用这个技能 [技能: 中转费率查询] 生成一个 html，然后在执行这个 帮我执行 id 为：wf_123 的工作流 【运费合并工作流】',
+    expect(payload.gatewayText).toBe(
+      '帮我将这个文件  和  内容组合，使用这个技能  生成一个 html，然后在执行这个 帮我执行 id 为：wf_123 的工作流 【运费合并工作流】',
     );
-    expect(payload.gatewayText).toContain('<!-- SClaw-Skill');
+    expect(payload.gatewayText).not.toContain('SClaw-Skill');
+    expect(payload.gatewayText).not.toContain('[技能:');
+    expect(payload.gatewayText).not.toContain('[文件:');
     expect(payload.gatewayText).not.toContain('/tmp/a1.xlsx');
+    expect(payload.composition.segments.map((segment) => segment.type)).toEqual([
+      'text', 'attachment', 'text', 'attachment', 'text', 'skill', 'text', 'workflow',
+    ]);
+    expect(payload.composition.segments[1]).toEqual({
+      type: 'attachment', mediaIndex: 0, displayName: '漳州.xlsx',
+    });
+    expect(payload.composition.segments[5]).toEqual({
+      type: 'skill', slug: 'transit-rate', title: '中转费率查询',
+    });
 
     expect(payload.displayText).toBe(
       '帮我将这个文件  和  内容组合，使用这个技能  生成一个 html，然后在执行这个',
@@ -69,7 +75,7 @@ describe('buildComposerGatewayPayload', () => {
     expect(payload.persistedSegments.some((s) => s.type === 'file' && s.fileName === '漳州.xlsx')).toBe(true);
   });
 
-  it('escapes ] in fileName and skill title inside placeholders', async () => {
+  it('keeps original labels in structured attachment and skill segments', async () => {
     const attachments: FileAttachment[] = [
       {
         id: 'a1',
@@ -92,11 +98,15 @@ describe('buildComposerGatewayPayload', () => {
       segments,
       plainText: ' 用 ',
       attachments,
-      resolveSkillPrompt: async () => ({ defaultPrompt: 'style-prompt', title: '样式]设计' }),
     });
 
-    expect(payload.gatewayText).toContain('[文件: report］.csv]');
-    expect(payload.gatewayText).toContain('[技能: 样式］设计]');
+    expect(payload.gatewayText).toBe('用');
+    expect(payload.composition.segments[0]).toEqual({
+      type: 'attachment', mediaIndex: 0, displayName: 'report].csv',
+    });
+    expect(payload.composition.segments[2]).toEqual({
+      type: 'skill', slug: 'html-styler', title: '样式]设计',
+    });
     expect(payload.displayText).toBe('用');
   });
 
@@ -123,12 +133,12 @@ describe('buildComposerGatewayPayload', () => {
       segments,
       plainText: '看这个  文件',
       attachments,
-      resolveSkillPrompt: async () => ({ defaultPrompt: '', title: '' }),
     });
 
     expect(payload.attachments).toHaveLength(0);
     expect(payload.gatewayText).toBe('看这个  文件');
     expect(payload.gatewayText).not.toContain('[文件:');
+    expect(payload.composition.segments.map((segment) => segment.type)).toEqual(['text', 'text']);
   });
 
   it('keeps mention displayName in gateway body', async () => {
@@ -144,11 +154,13 @@ describe('buildComposerGatewayPayload', () => {
       segments,
       plainText: '@张三 你好',
       attachments: [],
-      resolveSkillPrompt: async () => ({ defaultPrompt: '', title: '' }),
     });
 
     expect(payload.gatewayText).toContain('@张三');
     expect(payload.displayText).toContain('@张三');
+    expect(payload.composition.segments[0]).toEqual({
+      type: 'mention', displayName: '张三', mentionIndex: 0,
+    });
   });
 
   it('bakes exec sentence for workflow chips without source (learning-center / template handoff)', async () => {
@@ -162,7 +174,6 @@ describe('buildComposerGatewayPayload', () => {
       segments,
       plainText: `客户成本分析${suffix}`,
       attachments: [],
-      resolveSkillPrompt: async () => ({ defaultPrompt: '', title: '' }),
     });
 
     expect(payload.gatewayText).toBe(

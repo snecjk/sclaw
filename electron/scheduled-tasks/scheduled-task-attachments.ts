@@ -12,8 +12,9 @@ import { homedir } from 'node:os';
 import { getStoClawHomeDir } from '../utils/paths';
 import { logger } from '../utils/logger';
 import { MEDIA_ATTACHED_REGEX } from '../../shared/media-path-enrich';
+import type { ModelMessageAttachmentProvenance } from '../../shared/model-message-composition';
 
-export type TaskAttachmentProvenance = { kind: string; [key: string]: unknown };
+export type TaskAttachmentProvenance = ModelMessageAttachmentProvenance;
 
 export type TaskComposerAttachmentRecord = {
   id?: string;
@@ -27,8 +28,22 @@ export type TaskComposerAttachmentRecord = {
 };
 
 export function normalizeAttachmentProvenance(value: unknown): TaskAttachmentProvenance {
-  if (value && typeof value === 'object' && typeof (value as { kind?: unknown }).kind === 'string') {
-    return value as TaskAttachmentProvenance;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (record.kind === 'data_center'
+      && (record.spaceType === 'drive'
+        || record.spaceType === 'qa_artifact'
+        || record.spaceType === 'site_shared_artifact')
+      && typeof record.entryId === 'string') {
+      return {
+        kind: 'data_center',
+        spaceType: record.spaceType,
+        spaceId: typeof record.spaceId === 'string' || record.spaceId === null
+          ? record.spaceId
+          : undefined,
+        entryId: record.entryId,
+      };
+    }
   }
   return { kind: 'local' };
 }
@@ -498,10 +513,10 @@ export function rewriteComposerSegmentFilePaths(
 
 export function buildMediaFromComposerAttachments(
   extra: Record<string, unknown> | null | undefined,
-): Array<{ filePath: string; mimeType: string; fileName: string }> {
+): Array<{ filePath: string; mimeType: string; fileName: string; provenance?: TaskAttachmentProvenance }> {
   const raw = extra?.composerAttachments;
   if (!Array.isArray(raw)) return [];
-  const media: Array<{ filePath: string; mimeType: string; fileName: string }> = [];
+  const media: Array<{ filePath: string; mimeType: string; fileName: string; provenance?: TaskAttachmentProvenance }> = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const record = item as TaskComposerAttachmentRecord;
@@ -511,6 +526,7 @@ export function buildMediaFromComposerAttachments(
       filePath,
       mimeType: record.mimeType || 'application/octet-stream',
       fileName: record.fileName || basename(filePath),
+      provenance: record.provenance,
     });
   }
   return media;

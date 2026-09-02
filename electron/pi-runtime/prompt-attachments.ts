@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { PiPromptAttachment } from '../../shared/pi-runtime-protocol';
+import { escapeModelFileAttribute } from '../../shared/model-message-composition';
 
 export interface PiPreparedImage {
   type: 'image';
@@ -57,13 +58,7 @@ class PiAttachmentError extends Error {
   }
 }
 
-export function escapePiFileAttribute(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
-}
+export const escapePiFileAttribute = escapeModelFileAttribute;
 
 export function buildPiMixedPrompt(message: string, fileAnchors: string[]): string {
   let anchorIndex = 0;
@@ -76,6 +71,16 @@ export function buildPiMixedPrompt(message: string, fileAnchors: string[]): stri
   const remaining = fileAnchors.slice(anchorIndex);
   if (remaining.length === 0) return replaced;
   return [replaced, ...remaining].filter(Boolean).join('\n');
+}
+
+function enrichEmbeddedPiFileReferences(message: string, fileAnchors: string[]): string {
+  let anchorIndex = 0;
+  return message.replace(/<file\b[^>]*><\/file>/g, (reference) => {
+    const anchor = fileAnchors[anchorIndex];
+    if (!anchor) return reference;
+    anchorIndex += 1;
+    return anchor;
+  });
 }
 
 function fileAnchor(filePath: string, displayName: string, body?: string): string {
@@ -107,6 +112,7 @@ export async function preparePiPromptAttachments(options: {
   cwd?: string;
   modelSupportsImages: boolean;
   imageApi: PiImageProcessingApi;
+  referencesEmbedded?: boolean;
 }): Promise<PreparedPiPrompt> {
   const images: PiPreparedImage[] = [];
   const anchors: string[] = [];
@@ -191,7 +197,9 @@ export async function preparePiPromptAttachments(options: {
   }
 
   return {
-    message: buildPiMixedPrompt(options.message, anchors),
+    message: options.referencesEmbedded
+      ? enrichEmbeddedPiFileReferences(options.message, anchors)
+      : buildPiMixedPrompt(options.message, anchors),
     images,
     attachments: diagnostics,
     imageCount: images.length,

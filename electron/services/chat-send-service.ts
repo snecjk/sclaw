@@ -6,6 +6,8 @@ import { agentMemoryContextService } from './agent-memory-context-service';
 import { getMemoryTurnCoordinator } from './memory-turn-coordinator';
 import { getChatRuntimeSupervisor } from './chat-runtime-supervisor';
 import { emitAgentPreparationProgress } from './agent-preparation-progress';
+import { getChatUserTurnCompositionRepository } from '../db/repositories/chat-user-turn-composition-repository';
+import { logger } from '../utils/logger';
 
 type ChatSendResult = { success: boolean; result?: { runId?: string }; error?: string };
 
@@ -66,9 +68,45 @@ export function runMainChatSend(
         '正在检索相关记忆…',
       );
     }
-    const memory = skipRead
-      ? { injectedExecutionMemories: [] }
-      : await agentMemoryContextService.prepare(input.sourceText?.trim() || input.message);
+    const turnRepository = getChatUserTurnCompositionRepository();
+    const persistComposition = Boolean(input.normalizedTurn && !input.normalizedTurn.legacy);
+    if (input.normalizedTurn && persistComposition) {
+      try {
+        await turnRepository.upsertPending({
+          sessionKey: input.sessionKey,
+          idempotencyKey: input.idempotencyKey,
+          engineType: input.engineType,
+          turn: input.normalizedTurn,
+        });
+      } catch (error) {
+        await runtimeSupervisor.rejected({
+          sessionKey: input.sessionKey,
+          idempotencyKey: input.idempotencyKey,
+          error: String(error),
+        });
+        throw error;
+      }
+    }
+    let memory: AgentMemoryContextBlocks;
+    try {
+      memory = skipRead
+        ? { injectedExecutionMemories: [] }
+        : await agentMemoryContextService.prepare(input.sourceText?.trim() || input.message);
+    } catch (error) {
+      if (persistComposition) {
+        await turnRepository.markRejected(input.sessionKey, input.idempotencyKey, String(error))
+          .catch((sidecarError) => logger.warn('[model-message] failed to mark sidecar rejected', {
+            sessionKey: input.sessionKey,
+            error: String(sidecarError),
+          }));
+      }
+      await runtimeSupervisor.rejected({
+        sessionKey: input.sessionKey,
+        idempotencyKey: input.idempotencyKey,
+        error: String(error),
+      });
+      throw error;
+    }
     if (showPreparationProgress && !skipRead) {
       const hasMemory = Boolean(memory.preference || memory.execution);
       emitAgentPreparationProgress(
@@ -99,6 +137,16 @@ export function runMainChatSend(
     try {
       const result = await dispatch(prepared);
       if (!result.success) {
+        if (persistComposition) {
+          await turnRepository.markRejected(
+            input.sessionKey,
+            input.idempotencyKey,
+            result.error || 'Failed to send message',
+          ).catch((error) => logger.warn('[model-message] failed to mark sidecar rejected', {
+            sessionKey: input.sessionKey,
+            error: String(error),
+          }));
+        }
         if (!skipWrite) coordinator.reject(input.sessionKey, input.idempotencyKey);
         await runtimeSupervisor.rejected({
           sessionKey: input.sessionKey,
@@ -114,6 +162,16 @@ export function runMainChatSend(
           runId: result.result?.runId,
         });
       }
+      if (persistComposition) {
+        await turnRepository.markAccepted(
+          input.sessionKey,
+          input.idempotencyKey,
+          result.result?.runId,
+        ).catch((error) => logger.warn('[model-message] failed to mark sidecar accepted', {
+          sessionKey: input.sessionKey,
+          error: String(error),
+        }));
+      }
       await runtimeSupervisor.accepted({
         sessionKey: input.sessionKey,
         idempotencyKey: input.idempotencyKey,
@@ -123,6 +181,13 @@ export function runMainChatSend(
       });
       return result;
     } catch (error) {
+      if (persistComposition) {
+        await turnRepository.markRejected(input.sessionKey, input.idempotencyKey, String(error))
+          .catch((sidecarError) => logger.warn('[model-message] failed to mark sidecar rejected', {
+            sessionKey: input.sessionKey,
+            error: String(sidecarError),
+          }));
+      }
       if (!skipWrite) coordinator.reject(input.sessionKey, input.idempotencyKey);
       await runtimeSupervisor.rejected({
         sessionKey: input.sessionKey,

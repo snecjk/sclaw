@@ -15,6 +15,7 @@ import browserAutomationMigration from './0023-browser-automation';
 import chatRuntimeBridgeOriginMigration from './0024-chat-runtime-bridge-origin';
 import chatRuntimePiEngineMigration from './0034-chat-runtime-pi-engine';
 import sessionSkillStatesMigration from './0035-session-skill-states';
+import chatUserTurnCompositionsMigration from './0036-chat-user-turn-compositions';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -36,4 +37,5 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   chatRuntimeBridgeOriginMigration,
   chatRuntimePiEngineMigration,
   sessionSkillStatesMigration,
+  chatUserTurnCompositionsMigration,
 ].sort((left, right) => left.version - right.version);

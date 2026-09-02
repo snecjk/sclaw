@@ -4,6 +4,7 @@ import type { ChatHistoryFingerprint } from '../../shared/chat-history-fingerpri
 import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 import type { ExecutionSnapshot } from './execution-snapshot';
 import type { AgentEngineType } from '../../shared/agent-engine';
+import type { ModelMessageMediaInput, NormalizedModelTurn } from '../services/model-message-normalizer';
 
 export type { AgentEngineType } from '../../shared/agent-engine';
 
@@ -53,10 +54,12 @@ export interface EngineSendParams {
   runtimePolicy?: ChatRuntimePolicy;
   /** 定时任务执行时由 executor 透传；交互式 chat 不设（undefined）以保留引擎默认。 */
   permissionProfile?: EnginePermissionProfile;
+  /** Main 已校验的结构化用户轮次；adapter 只负责引擎原生渲染。 */
+  normalizedTurn?: NormalizedModelTurn;
 }
 
 export interface EngineSendWithMediaParams extends EngineSendParams {
-  media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+  media?: ModelMessageMediaInput[];
 }
 
 export interface EngineAbortParams {

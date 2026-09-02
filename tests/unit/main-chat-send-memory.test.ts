@@ -9,6 +9,9 @@ const {
   runtimeBeginMock,
   runtimeAcceptedMock,
   runtimeRejectedMock,
+  upsertPendingMock,
+  markAcceptedMock,
+  markRejectedMock,
 } = vi.hoisted(() => ({
   prepareMock: vi.fn(),
   beginMock: vi.fn(),
@@ -17,6 +20,9 @@ const {
   runtimeBeginMock: vi.fn(),
   runtimeAcceptedMock: vi.fn(),
   runtimeRejectedMock: vi.fn(),
+  upsertPendingMock: vi.fn(),
+  markAcceptedMock: vi.fn(),
+  markRejectedMock: vi.fn(),
 }));
 
 vi.mock('../../electron/services/agent-memory-context-service', () => ({
@@ -32,6 +38,14 @@ vi.mock('../../electron/services/chat-runtime-supervisor', () => ({
     begin: runtimeBeginMock,
     accepted: runtimeAcceptedMock,
     rejected: runtimeRejectedMock,
+  }),
+}));
+
+vi.mock('../../electron/db/repositories/chat-user-turn-composition-repository', () => ({
+  getChatUserTurnCompositionRepository: () => ({
+    upsertPending: upsertPendingMock,
+    markAccepted: markAcceptedMock,
+    markRejected: markRejectedMock,
   }),
 }));
 
@@ -51,6 +65,9 @@ describe('runMainChatSend memory boundary', () => {
       ],
     });
     bindMock.mockResolvedValue(undefined);
+    upsertPendingMock.mockResolvedValue(undefined);
+    markAcceptedMock.mockResolvedValue(undefined);
+    markRejectedMock.mockResolvedValue(undefined);
     runtimeBeginMock.mockImplementation(async (
       input: { sessionKey: string; idempotencyKey: string; engineType: 'openclaw' | 'claude' },
     ) => ({
@@ -188,5 +205,46 @@ describe('runMainChatSend memory boundary', () => {
     expect(beginMock).not.toHaveBeenCalled();
     expect(bindMock).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists a structured turn only after preflight and tracks dispatch status', async () => {
+    const normalizedTurn = {
+      composition: { version: 1 as const, segments: [{ type: 'text' as const, text: '查询' }] },
+      modelSegments: [{ type: 'text' as const, text: '查询' }],
+      displayText: '查询',
+      sourceText: '查询',
+      modelText: '查询',
+      attachments: [],
+      selectedSkillSlugs: [],
+      workflows: [],
+      legacy: false,
+    };
+    const acceptedDispatch = vi.fn().mockResolvedValue({ success: true, result: { runId: 'run-sidecar' } });
+    await runMainChatSend({} as never, {
+      sessionKey: 'pi:main:sidecar',
+      message: '查询',
+      idempotencyKey: 'sidecar-accepted',
+      engineType: 'pi',
+      normalizedTurn,
+    }, (params) => params, acceptedDispatch);
+
+    expect(upsertPendingMock).toHaveBeenCalledWith(expect.objectContaining({
+      sessionKey: 'pi:main:sidecar', idempotencyKey: 'sidecar-accepted', turn: normalizedTurn,
+    }));
+    expect(markAcceptedMock).toHaveBeenCalledWith(
+      'pi:main:sidecar', 'sidecar-accepted', 'run-sidecar',
+    );
+
+    const rejectedDispatch = vi.fn().mockResolvedValue({ success: false, error: 'provider rejected' });
+    await runMainChatSend({} as never, {
+      sessionKey: 'pi:main:rejected',
+      message: '查询',
+      idempotencyKey: 'sidecar-rejected',
+      engineType: 'pi',
+      normalizedTurn,
+    }, (params) => params, rejectedDispatch);
+    expect(markRejectedMock).toHaveBeenCalledWith(
+      'pi:main:rejected', 'sidecar-rejected', 'provider rejected',
+    );
   });
 });

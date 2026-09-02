@@ -10,6 +10,7 @@ import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import type { ModelMessageCompositionV1 } from '../../shared/model-message-composition';
 import { isSingleTemplateWorkflowSend } from '@/lib/workflow-template-send';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
@@ -33,6 +34,7 @@ export interface DispatchChatSendOptions {
   workflows?: Array<{ id: string; name: string; source?: string }>;
   composerSegments?: PersistedComposerSegment[];
   gatewayText?: string;
+  composition?: ModelMessageCompositionV1;
 }
 
 async function materializeDefaultSessionForWorkflowShortcut(): Promise<{
@@ -70,6 +72,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     workflows,
     composerSegments,
     gatewayText,
+    composition,
   } = options;
 
   const sendMessage = useChatStore.getState().sendMessage;
@@ -95,6 +98,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     await sendMessage({
       text: textToSend,
       gatewayText,
+      composition,
       attachments,
       targetAgentId,
       dingTalkMentions,
@@ -151,6 +155,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     await sendMessage({
       text,
       gatewayText,
+      composition,
       attachments,
       targetAgentId,
       dingTalkMentions,

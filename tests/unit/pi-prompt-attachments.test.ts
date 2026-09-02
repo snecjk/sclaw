@@ -53,6 +53,39 @@ function imageApi(detectedByName: Record<string, string | null> = {}): PiImagePr
 }
 
 describe('Pi prompt attachments', () => {
+  it('keeps Main canonical file references in place without appending duplicates', async () => {
+    const fixture = await createFixture({ 'canonical.xlsx': 'sheet' });
+    const filePath = resolve(fixture.root, 'canonical.xlsx');
+    const message = `前<file name="${filePath}" display_name="canonical.xlsx"></file>后`;
+    const prepared = await preparePiPromptAttachments({
+      message,
+      media: [fixture.attachment('canonical.xlsx')],
+      modelSupportsImages: true,
+      imageApi: imageApi(),
+      referencesEmbedded: true,
+    });
+
+    expect(prepared.message).toBe(message);
+    expect(prepared.message.match(/<file\b/g)).toHaveLength(1);
+  });
+
+  it('retains Pi image dimension enrichment inside a canonical file reference', async () => {
+    const fixture = await createFixture({ 'canonical.png': 'image' });
+    const filePath = resolve(fixture.root, 'canonical.png');
+    const prepared = await preparePiPromptAttachments({
+      message: `看<file name="${filePath}" display_name="canonical.png"></file>这里`,
+      media: [fixture.attachment('canonical.png', 'image/png')],
+      modelSupportsImages: true,
+      imageApi: imageApi({ 'canonical.png': 'image/png' }),
+      referencesEmbedded: true,
+    });
+
+    expect(prepared.message).toBe(
+      `看<file name="${filePath}" display_name="canonical.png">[Image dimensions: 1600x960.]</file>这里`,
+    );
+    expect(prepared.images).toHaveLength(1);
+  });
+
   it('keeps mixed file anchors in placeholder order and sends only real images', async () => {
     const fixture = await createFixture({
       '数据 表.xlsx': 'sheet',
