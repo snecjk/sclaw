@@ -7,6 +7,7 @@ import type { ChatSession } from '@/stores/chat/types';
 import { isAppDevSessionKey } from '@/lib/app-dev-session';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 import { isBridgeAiChatSessionKey } from '../../shared/bridge-ai-session';
+import { isWorkflowPiSessionKey } from '../../shared/workflow-pi-session';
 
 export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
   return !isAnyCronSessionKey(sessionKey)
@@ -14,7 +15,8 @@ export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
     && !parseClaudeScheduledTaskSessionKey(sessionKey)
     && !isAppDevSessionKey(sessionKey)
     && !isSclawBrowserEmbedChatSessionKey(sessionKey)
-    && !isBridgeAiChatSessionKey(sessionKey);
+    && !isBridgeAiChatSessionKey(sessionKey)
+    && !isWorkflowPiSessionKey(sessionKey);
 }
 
 export function getSessionActivityForSort(

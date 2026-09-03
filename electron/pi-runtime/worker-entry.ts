@@ -186,14 +186,22 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   }, {
     projectTrusted: config.projectTrusted === true,
   });
-  const unifiedExtensions = await buildPiAgentExtensions({
-    sessionKey: config.sessionKey,
-    cwd: config.cwd,
-    agentId: config.sessionKey.startsWith('agent:') ? config.sessionKey.split(':')[1] : 'main',
-    model: config.model.model,
-    accountId: config.model.accountId,
-    mode: config.sessionMode ?? 'interactive',
-  });
+  const unifiedExtensions = config.disableAgentExtensions
+    ? {
+        extensions: [],
+        initiallyActiveToolNames: [],
+        diagnostics: [],
+        setTurnContext: () => undefined,
+        clearSessionState: () => undefined,
+      }
+    : await buildPiAgentExtensions({
+        sessionKey: config.sessionKey,
+        cwd: config.cwd,
+        agentId: config.agentId ?? (config.sessionKey.startsWith('agent:') ? config.sessionKey.split(':')[1] : 'main'),
+        model: config.model.model,
+        accountId: config.model.accountId,
+        mode: config.sessionMode ?? 'interactive',
+      });
   for (const diagnostic of unifiedExtensions.diagnostics) {
     logPiCore('extension.diagnostic', diagnostic as unknown as Record<string, unknown>);
   }

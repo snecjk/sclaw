@@ -5,7 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
-import { useAgentEnginePolicyStore } from '@/stores/agent-engine-policy';
+import {
+  getAgentEnginePolicyOptionLabel,
+  useAgentEnginePolicyStore,
+} from '@/stores/agent-engine-policy';
 import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
@@ -443,7 +446,7 @@ function useChatEngineSelection(allowSessionSwitch = false) {
   const engineOptions: SelectorMenuOption<AgentEngineType>[] = policyEngines.map((engine) => ({
     key: engine.code,
     value: engine.code,
-    label: engine.code === 'pi' ? 'SAgent' : engine.name,
+    label: getAgentEnginePolicyOptionLabel(engine),
   }));
 
   return {

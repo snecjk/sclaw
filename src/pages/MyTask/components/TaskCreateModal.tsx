@@ -900,9 +900,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       || (snapshot?.mentions?.length ?? 0) > 0,
     );
     if (!hasComposerContent) newErrors.instructions = t('myTask.createModal.instructionsRequired');
-    if (engineType === 'pi' && (snapshot?.workflows?.length ?? 0) > 0) {
-      newErrors.instructions = 'Pi 定时任务暂不支持工作流。';
-    }
     if (!scheduleLocked) {
       const timesError = validateScheduleTimes(schedule.times);
       if (timesError === 'empty') newErrors.schedule = t('myTask.schedule.timesRequired');
@@ -1222,7 +1219,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                 : engineType === 'claude'
                   ? t('myTask.createModal.engineClaudeHint')
                   : engineType === 'pi'
-                    ? 'Pi 定时任务仅可访问工作空间与已配置的产物目录，暂不支持工作流。'
+                    ? 'SAgent 定时任务可访问工作空间、已配置的产物目录与工作流。'
                     : t('myTask.createModal.engineOpenclawHint')}
             </p>
           </div>

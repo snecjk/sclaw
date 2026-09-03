@@ -14,6 +14,7 @@ import {
   type WorkflowDraftSnapshot,
 } from '@/lib/workflow-iframe-bridge';
 import { dispatchReadyWorkflowIframeIntent } from '@/pages/Workflow/components/workflow-iframe-session';
+import { useAgentEnginePolicyStore } from '@/stores/agent-engine-policy';
 
 let handoffListener: ((request: { runId: string; complete: () => void }) => boolean) | undefined;
 
@@ -56,6 +57,16 @@ vi.mock('@/stores/workflow-memory', () => ({
 describe('useDesignerTryRun snapshot status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAgentEnginePolicyStore.setState({
+      engines: [
+        { code: 'pi', name: 'PI', order: 10 },
+        { code: 'openclaw', name: 'OpenClaw', order: 20 },
+        { code: 'claude', name: 'Claude', order: 30 },
+      ],
+      defaultEngine: 'pi',
+      loaded: true,
+      ownerCode: '',
+    });
   });
 
   it('starts with configured workflow inputs without opening startup confirmation', async () => {
@@ -106,7 +117,7 @@ describe('useDesignerTryRun snapshot status', () => {
     await waitFor(() => expect(startWorkflowLocal).toHaveBeenCalledWith(expect.objectContaining({
       workflowId: 'wf-1',
       inputs: { city: '兰州', days: 7 },
-      engineType: 'claude',
+      engineType: 'pi',
       runMode: 'trial',
     })));
     expect(result.current.isStartupDialogOpen).toBe(false);

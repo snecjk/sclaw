@@ -29,13 +29,13 @@ import { buildPiSystemPromptOverride } from '../../electron/pi-runtime/system-pr
 import { buildPiHistoryPage, projectPiHistoryMessages } from '../../electron/pi-runtime/history-page';
 
 describe('Pi engine descriptor', () => {
-  it('registers chat and scheduled tasks but rejects workflow capability', () => {
+  it('registers chat, scheduled tasks, and workflow capability', () => {
     expect(parseAgentEngineType('pi')).toBe('pi');
     expect(parseAgentEngineType('unknown')).toBeUndefined();
     expect(getAgentEngineDescriptor('pi').capabilities).toMatchObject({
       chat: true,
       scheduledTask: true,
-      workflow: false,
+      workflow: true,
     });
   });
 

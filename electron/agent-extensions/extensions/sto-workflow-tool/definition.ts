@@ -36,7 +36,7 @@ const SCHEMA_FETCHED_STATE_KEY = 'schema-fetched-in-turn';
 export const stoWorkflowToolDefinition: SclawAgentExtensionDefinition = {
   id: 'sto-workflow-tool',
   version: '1.0.0',
-  engines: ['claude'],
+  engines: ['claude', 'pi'],
   requiredCapabilities: [STO_WORKFLOW_CAPABILITY],
   activations: [{
     id: STO_WORKFLOW_MANAGEMENT_ACTIVATION,
@@ -46,7 +46,7 @@ export const stoWorkflowToolDefinition: SclawAgentExtensionDefinition = {
   tools: stoWorkflowTools,
   policies: [{
     id: 'workflow-management-guard',
-    engines: ['claude'],
+    engines: ['claude', 'pi'],
     beforeTool(event, context) {
       if (event.toolName === 'get_workflow_schema') {
         context.state.turn.set(SCHEMA_FETCHED_STATE_KEY, true);
@@ -83,8 +83,8 @@ export const stoWorkflowToolDefinition: SclawAgentExtensionDefinition = {
   }],
   prompts: [{
     id: 'workflow-management-guidance',
-    engines: ['claude'],
-    modes: ['interactive'],
+    engines: ['claude', 'pi'],
+    modes: ['interactive', 'scheduled'],
     activation: STO_WORKFLOW_MANAGEMENT_ACTIVATION,
     text: STO_WORKFLOW_SYSTEM_PROMPT,
   }],

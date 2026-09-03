@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildWorkflowStartChatCard,
+  resolveWorkflowStartEngine,
   resolveWorkflowStartModel,
 } from '../../electron/api/routes/workflows';
 import { createEngine } from '../../electron/services/workflow-runtime/engine';
@@ -82,6 +83,19 @@ describe('workflow chat-card start metadata', () => {
     await expect(resolveWorkflowStartModel('claude', 'session-1'))
       .resolves.toBe('dashscope/qwen3.5-plus');
     expect(workflowRouteMocks.getEngineSessionRegistryEntry).toHaveBeenCalledWith('session-1');
+  });
+
+  it('accepts PI and resolves its fixed model from the originating chat session', async () => {
+    expect(resolveWorkflowStartEngine('pi')).toEqual({ engineType: 'pi', source: 'request' });
+    workflowRouteMocks.getEngineSessionRegistryEntry.mockResolvedValue({
+      sessionKey: 'session-pi',
+      engineType: 'pi',
+      agentId: 'main',
+      model: '  qwen3-coder-plus  ',
+    });
+
+    await expect(resolveWorkflowStartModel('pi', 'session-pi'))
+      .resolves.toBe('qwen3-coder-plus');
   });
 
   it('rejects a Claude workflow start when the chat session has no execution model', async () => {

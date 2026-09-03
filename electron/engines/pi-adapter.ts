@@ -46,6 +46,7 @@ import type {
   PiSessionConfig,
 } from '../../shared/pi-runtime-protocol';
 import { CHAT_HISTORY_LIMIT } from '../../shared/chat-config';
+import { isWorkflowPiSessionKey } from '../../shared/workflow-pi-session';
 
 const BUILTIN_PI_PROVIDERS = new Set(['anthropic', 'openai', 'google', 'openrouter']);
 const attachedEventSinks = new WeakSet<object>();
@@ -127,7 +128,7 @@ async function resolvePiModel(
   };
 }
 
-async function buildPiSessionConfig(
+export async function buildPiSessionConfig(
   sessionKey: string,
   runId?: string,
   params?: EngineSendWithMediaParams,
@@ -180,6 +181,7 @@ async function buildPiSessionConfig(
   };
   const config: PiSessionConfig = {
     sessionKey,
+    agentId,
     cwd,
     agentDir: getPiConfigDir(),
     projectTrusted: false,
@@ -275,7 +277,7 @@ export const piAdapter: EngineAdapter = {
   scheduledTaskCapabilities: {
     enforcedPermissionProfile: 'workspace-write',
     requiresWorkspacePath: true,
-    supportsWorkflow: false,
+    supportsWorkflow: true,
   },
   chatCapabilities: {
     hasReliableRuntimeStatus: true,
@@ -312,14 +314,16 @@ export const piAdapter: EngineAdapter = {
     return {
       success: true,
       result: {
-        sessions: entries.map((entry) => ({
-          key: entry.sessionKey,
-          label: entry.title,
-          displayName: entry.title,
-          updatedAt: entry.updatedAt,
-          model: entry.model,
-          engineType: 'pi' as const,
-        })),
+        sessions: entries
+          .filter((entry) => !isWorkflowPiSessionKey(entry.sessionKey))
+          .map((entry) => ({
+            key: entry.sessionKey,
+            label: entry.title,
+            displayName: entry.title,
+            updatedAt: entry.updatedAt,
+            model: entry.model,
+            engineType: 'pi' as const,
+          })),
       },
     };
   },

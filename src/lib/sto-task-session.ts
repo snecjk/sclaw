@@ -5,6 +5,7 @@ import { STO_TASK_IDS, type StoTaskId } from '@/lib/sto-tasks';
 import { parseClaudeScheduledTaskSessionKey, parseCronSessionKey } from '@/stores/chat/cron-session-utils';
 import { stoTaskSubitemKey } from '@/stores/sto-task-subitems';
 import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
+import { isWorkflowPiSessionKey } from '../../shared/workflow-pi-session';
 
 const ENTRY_YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -50,7 +51,8 @@ export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
     isBridgeAiChatSessionKey(sessionKey) ||
     isClaudeScheduledTaskSummarySessionKey(sessionKey) ||
     isCronRunSessionKey(sessionKey) ||
-    isWorkflowOpenClawSessionKey(sessionKey)
+    isWorkflowOpenClawSessionKey(sessionKey) ||
+    isWorkflowPiSessionKey(sessionKey)
   );
 }
 

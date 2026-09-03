@@ -55,7 +55,7 @@ export const AGENT_ENGINE_DESCRIPTORS: Record<AgentEngineType, AgentEngineDescri
     capabilities: {
       chat: true,
       scheduledTask: true,
-      workflow: false,
+      workflow: true,
       media: true,
       structuredReasoning: true,
       structuredTools: true,

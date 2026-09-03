@@ -52,8 +52,8 @@ async function resolveTemplate(
 function tool<T extends TObject>(definition: SclawToolDefinition<T>): SclawToolDefinition<T> {
   return {
     ...definition,
-    engines: ['claude'],
-    modes: ['interactive'],
+    engines: ['claude', 'pi'],
+    modes: ['interactive', 'scheduled'],
     activation: STO_WORKFLOW_MANAGEMENT_ACTIVATION,
   };
 }

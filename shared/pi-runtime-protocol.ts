@@ -22,6 +22,7 @@ export interface PiModelConfig {
 
 export interface PiSessionConfig {
   sessionKey: string;
+  agentId?: string;
   cwd: string;
   agentDir: string;
   /** Whether project-local Pi configuration may be honored. Defaults closed. */
@@ -32,6 +33,8 @@ export interface PiSessionConfig {
   model: PiModelConfig;
   /** Keeps scheduled-only extension semantics without changing filesystem access. */
   sessionMode?: 'interactive' | 'scheduled';
+  /** Workflow runners reuse Pi skills and tools without loading chat business extensions. */
+  disableAgentExtensions?: boolean;
   /** SClaw-managed Skill roots selected for Pi's native Skill loader. */
   skillRoots?: string[];
   /** Exact per-turn selection used for diagnostics and usage attribution. */

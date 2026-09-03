@@ -82,15 +82,17 @@ describe('ScheduledTaskService', () => {
       ).rejects.toThrow(/Invalid permissionProfile/);
     });
 
-    it('fixes Pi permissions and rejects missing workspace or workflows', async () => {
+    it('fixes Pi permissions, requires a workspace, and accepts workflows', async () => {
       await expect(svc.createTask({ ...baseCreateInput, engineType: 'pi' }))
         .rejects.toThrow(/workspacePath/);
-      await expect(svc.createTask({
+      const workflowTask = await svc.createTask({
         ...baseCreateInput,
         engineType: 'pi',
         workspacePath: '/workspace',
         workflowCode: 'wf-1',
-      })).rejects.toThrow(/does not support workflows/);
+      });
+      expect(JSON.stringify(workflowTask.extra)).toContain('wf-1');
+      expect(workflowTask.permissionProfile).toBe('workspace-write');
       const task = await svc.createTask({
         ...baseCreateInput,
         engineType: 'pi',

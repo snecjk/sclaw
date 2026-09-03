@@ -34,7 +34,6 @@ export const STO_SCHEDULED_TASK_SYSTEM_PROMPT = [
   '- promptTemplate 只包含到点执行的干净业务指令，不写 cron 时间、任务管理步骤或媒体元数据行。',
   '- recipients、attachments、skills/skillCode、workflowCode/workflowName 必须使用结构化字段传入，不得只写进 promptTemplate。',
   '- 当前更新工具暂不支持修改 recipients、attachments 或 skills；遇到这类修改应说明限制，不得改写 promptTemplate 伪造。',
-  '- PI 当前不支持工作流；在 PI 会话中不要创建包含 workflowCode 的任务。',
   '',
   '【工具边界与结果处理】',
   '- 禁止使用旧版 CronCreate、CronUpdate、CronDelete、CronList、Cron 等工具管理定时任务。',

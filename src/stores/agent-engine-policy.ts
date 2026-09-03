@@ -13,6 +13,11 @@ export interface AgentEnginePolicyOption {
   order: number;
 }
 
+/** User-facing policy label shared by every engine selector. */
+export function getAgentEnginePolicyOptionLabel(option: AgentEnginePolicyOption): string {
+  return option.code === 'pi' ? 'SAgent' : option.name;
+}
+
 interface AgentEnginePolicyPayload {
   engines?: Array<{ code?: unknown; name?: unknown; order?: unknown }>;
   defaultEngine?: unknown;

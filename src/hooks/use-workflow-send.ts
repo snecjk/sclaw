@@ -27,6 +27,8 @@ import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } 
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import type { WorkflowSchemaField } from '@/types/workflow';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import { parseAgentEngineType, type AgentEngineType } from '../../shared/agent-engine';
+import { useAgentEnginePolicyStore } from '@/stores/agent-engine-policy';
 
 export interface WorkflowSendContext {
   sessionKey: string;
@@ -34,11 +36,16 @@ export interface WorkflowSendContext {
 }
 
 /** The list-card selector persists its choice on the workflow chat session. */
-function chooseImmediateWorkflowEngine(): 'claude' | 'openclaw' {
+function chooseImmediateWorkflowEngine(): AgentEngineType {
   const { currentSessionKey, sessions } = useChatStore.getState();
-  return sessions.find((session) => session.key === currentSessionKey)?.engineType === 'openclaw'
-    ? 'openclaw'
-    : 'claude';
+  const sessionEngine = parseAgentEngineType(
+    sessions.find((session) => session.key === currentSessionKey)?.engineType,
+  );
+  const policy = useAgentEnginePolicyStore.getState();
+  if (sessionEngine && policy.engines.some((option) => option.code === sessionEngine)) {
+    return sessionEngine;
+  }
+  return policy.defaultEngine;
 }
 
 /**

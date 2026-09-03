@@ -34,6 +34,8 @@ import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtal
 import { createHostApiDingTalkSendGuardPort } from '../../extensions/sto-dingtalk-send-guard/host-api-capability';
 import { STO_SKILL_RUNTIME_CAPABILITY } from '../../extensions/sto-skill-runtime/capability';
 import { createHostApiSkillRuntimePort } from '../../extensions/sto-skill-runtime/host-api-capability';
+import { STO_WORKFLOW_CAPABILITY } from '../../extensions/sto-workflow-tool/capability';
+import { createHostApiWorkflowPort } from '../../extensions/sto-workflow-tool/host-api-capability';
 import {
   beginRuntimeSkillAccessTurn,
   clearRuntimeSkillAccess,
@@ -42,7 +44,8 @@ import {
 const defaultCapabilities = new SclawCapabilityRegistry()
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
   .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())
-  .provide(STO_SKILL_RUNTIME_CAPABILITY, createHostApiSkillRuntimePort());
+  .provide(STO_SKILL_RUNTIME_CAPABILITY, createHostApiSkillRuntimePort())
+  .provide(STO_WORKFLOW_CAPABILITY, createHostApiWorkflowPort());
 const defaultStateManager = new SclawExtensionStateManager();
 const defaultLogger: SclawExtensionLogger = {
   debug: (message, details) => console.debug(message, details ?? ''),

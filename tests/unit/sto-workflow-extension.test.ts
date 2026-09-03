@@ -96,7 +96,7 @@ describe('sto-workflow-tool common extension', () => {
     expect(result.options.systemPromptAppend).toBeUndefined();
   });
 
-  it('preserves the current PI workflow boundary', async () => {
+  it('registers and lazily activates workflow management tools for PI', async () => {
     const deps = dependencies();
     const result = await buildPiAgentExtensions({
       sessionKey: 'agent:main:pi-workflow',
@@ -104,8 +104,59 @@ describe('sto-workflow-tool common extension', () => {
       entries: [{ common: stoWorkflowToolDefinition }],
       ...deps,
     });
-    expect(result.extensions).toEqual([]);
-    expect(deps.port.isAvailable).not.toHaveBeenCalled();
+    expect(result.initiallyActiveToolNames).toEqual([]);
+    const registered: string[] = [];
+    const handlers = new Map<string, (...args: never[]) => unknown>();
+    let activeTools = ['read', 'powershell'];
+    const extension = result.extensions.find(
+      (item) => typeof item !== 'function' && item.name === 'sto-workflow-tool',
+    );
+    if (!extension || typeof extension === 'function') throw new Error('missing PI workflow extension');
+    await extension.factory({
+      registerTool(tool) { registered.push(tool.name); },
+      on(event, handler) { handlers.set(event, handler as never); },
+      getActiveTools() { return activeTools; },
+      setActiveTools(names) { activeTools = names; },
+    } as never);
+    expect(registered).toEqual(expectedTools);
+    const prompt = await handlers.get('before_agent_start')?.({
+      prompt: '帮我执行工作流', systemPrompt: 'base', systemPromptOptions: {},
+    } as never) as { systemPrompt?: string } | undefined;
+    expect(activeTools).toEqual(['read', 'powershell', ...expectedTools]);
+    expect(prompt?.systemPrompt).toContain(STO_WORKFLOW_SYSTEM_PROMPT);
+    expect(deps.port.isAvailable).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers and activates workflow tools for scheduled PI sessions', async () => {
+    const deps = dependencies();
+    const result = await buildPiAgentExtensions({
+      sessionKey: 'pi-task:task-1:2026-09-03',
+      mode: 'scheduled',
+      entries: [{ common: stoWorkflowToolDefinition }],
+      ...deps,
+    });
+    const registered: string[] = [];
+    const handlers = new Map<string, (...args: never[]) => unknown>();
+    let activeTools = ['read', 'powershell'];
+    const extension = result.extensions.find(
+      (item) => typeof item !== 'function' && item.name === 'sto-workflow-tool',
+    );
+    if (!extension || typeof extension === 'function') throw new Error('missing scheduled PI workflow extension');
+    await extension.factory({
+      registerTool(tool) { registered.push(tool.name); },
+      on(event, handler) { handlers.set(event, handler as never); },
+      getActiveTools() { return activeTools; },
+      setActiveTools(names) { activeTools = names; },
+    } as never);
+
+    expect(registered).toEqual(expectedTools);
+    const prompt = await handlers.get('before_agent_start')?.({
+      prompt: '帮我执行 id 为：wf_1 的工作流',
+      systemPrompt: 'scheduled base',
+      systemPromptOptions: {},
+    } as never) as { systemPrompt?: string } | undefined;
+    expect(activeTools).toEqual(['read', 'powershell', ...expectedTools]);
+    expect(prompt?.systemPrompt).toContain(STO_WORKFLOW_SYSTEM_PROMPT);
   });
 
   it('returns the common envelope and routes execution metadata through the Port', async () => {

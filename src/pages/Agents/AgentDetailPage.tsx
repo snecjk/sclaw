@@ -394,7 +394,7 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
             </Button>
           </div>
           <p className="text-[12px] text-muted-foreground">
-            Pi 普通对话继承当前用户权限；定时任务使用受限目录策略。Pi 暂不支持工作流。
+            SAgent 普通对话继承当前用户权限；定时任务使用受限目录策略；工作流使用托管执行模式。
           </p>
         </div>
       </div>
