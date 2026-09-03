@@ -48,6 +48,8 @@ import { unescapeLiteralNewlines } from '../../../../shared/text-escape';
 
 type TaskEngineType = 'openclaw' | 'claude' | 'pi';
 
+export const DEFAULT_TASK_ENGINE_TYPE: TaskEngineType = 'pi';
+
 export type TaskCreateInputWithRun = CronJobCreateInput & {
   engineType: TaskEngineType;
   claudeWorkspacePath?: string;
@@ -98,7 +100,7 @@ function seedWorkflowSegment(
   }];
 }
 
-function computeInitialValues(
+export function computeInitialValues(
   job: ManagedLocalTask | null | undefined,
   initialValues: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string } | undefined,
   workflowLabelResolver?: (code: string) => string | undefined,
@@ -249,7 +251,7 @@ function computeInitialValues(
       originalCronExpr: scheduleLocked ? initialValues.schedule ?? null : null,
       recipients: [] as DingTalkMention[],
       composerSegments: seededWorkflow,
-      engineType: 'claude' as TaskEngineType,
+      engineType: DEFAULT_TASK_ENGINE_TYPE,
       createdViaNl: false,
       saveToMyArtifact: false,
       saveToSharedArtifact: false,
@@ -266,7 +268,7 @@ function computeInitialValues(
     originalCronExpr: null as string | null,
     recipients: [] as DingTalkMention[],
     composerSegments: null as PersistedComposerSegment[] | null,
-    engineType: 'claude' as TaskEngineType,
+    engineType: DEFAULT_TASK_ENGINE_TYPE,
     createdViaNl: false,
     saveToMyArtifact: false,
     saveToSharedArtifact: false,
