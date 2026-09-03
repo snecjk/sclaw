@@ -110,12 +110,15 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   appName,
   composerSeed,
   onBeforeSend,
+  onEditMessage,
 }: {
   sessionKey: string;
   workspaceId: string;
   appName: string;
   composerSeed?: { text: string; version: number } | null;
   onBeforeSend?: (text: string) => boolean;
+  /** T05：用户消息「编辑重发」——点击后由外层把文本回填 composer */
+  onEditMessage?: (text: string) => void;
 }) {
   const messages = useSessionDisplayMessages(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
@@ -290,6 +293,8 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
                 variant="home"
                 sessionKey={sessionKey}
                 renderTurnFooter={renderTurnFooter}
+                onEditMessage={onEditMessage}
+                enableEditMessage
                 onReachStart={() => {
                   void useChatStore.getState().loadOlderHistory(sessionKey);
                 }}
@@ -505,6 +510,15 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   }, []);
 
   const handleFillComposerFromDiagnostics = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
+    setChatOpen(true);
+  }, []);
+
+  // T05：用户消息「编辑重发」——点击编辑后回填 composer（复用 composerSeed），
+  // 用户改完手动发送，即作为新一轮对话发出（不截断历史，与主会话 handleEditMessage 语义一致）
+  const handleEditMessage = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
@@ -860,6 +874,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 appName={appName}
                 composerSeed={composerSeed}
                 onBeforeSend={interceptRestartIntent}
+                onEditMessage={handleEditMessage}
               />
             )
             : null
