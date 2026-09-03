@@ -35,6 +35,13 @@ export interface SclawBrowserFrameHandle {
   canGoBack: () => boolean;
   getURL: () => string;
   loadURL: (nextUrl: string) => void;
+  /**
+   * Execute JS in the guest page (Electron webview only).
+   * Rejects in the iframe dev fallback or when the guest is not ready.
+   */
+  executeJS: (code: string) => Promise<unknown>;
+  /** Guest WebContents id (Electron webview only); null in the iframe fallback. */
+  getWebContentsId: () => number | null;
 }
 
 interface SclawBrowserFrameProps {
@@ -415,6 +422,18 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         }
         const iframe = iframeRef.current;
         if (iframe) iframe.src = trimmed;
+      },
+      executeJS: (code: string) => {
+        const el = webviewRef.current;
+        if (!el || typeof el.executeJavaScript !== 'function') {
+          return Promise.reject(new Error('executeJS 仅在 Electron 预览环境可用'));
+        }
+        return el.executeJavaScript(code);
+      },
+      getWebContentsId: () => {
+        const el = webviewRef.current;
+        if (!el) return null;
+        return safeGetWebContentsId(el);
       },
     }));
 

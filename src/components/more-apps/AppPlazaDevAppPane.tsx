@@ -11,6 +11,8 @@ import {
   Code2,
   History,
   MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,6 +46,7 @@ import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
 import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
+import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import {
   createAppCheckpoint,
   continueStoAppMerge,
@@ -198,6 +201,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
+  const stageCollapsed = useAppDevWorkbenchStore((s) => s.stageCollapsed);
+  const toggleStageCollapsed = useAppDevWorkbenchStore((s) => s.toggleStageCollapsed);
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -629,6 +634,26 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             size="sm"
             className={cn(
               'h-7 gap-1 px-2 text-xs',
+              stageCollapsed && 'bg-muted text-foreground',
+            )}
+            aria-pressed={stageCollapsed}
+            title={stageCollapsed ? '展开工作区' : '收起工作区'}
+            onClick={toggleStageCollapsed}
+          >
+            {stageCollapsed ? (
+              <PanelLeftOpen className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <PanelLeftClose className="h-3.5 w-3.5" aria-hidden />
+            )}
+            {stageCollapsed ? '展开工作区' : '收起工作区'}
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'h-7 gap-1 px-2 text-xs',
               chatOpen && 'bg-muted text-foreground',
             )}
             aria-pressed={chatOpen}
@@ -643,6 +668,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
 
       <AppDevSplitBody
         chatOpen={chatOpen}
+        stageCollapsed={stageCollapsed}
         chat={
           ideOwnership.open
             ? (

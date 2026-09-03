@@ -1,15 +1,17 @@
 /**
- * Right-stage for app-dev workbench: 预览 / 代码 / Git / 外部服务 / 社区.
+ * Right-stage for app-dev workbench: 预览 / 代码 / 版本 + 溢出菜单（Git / 外部服务 / 社区）.
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
+  ChevronDown,
   ExternalLink,
   Eye,
   FileCode2,
   FolderTree,
   GitBranch,
+  History,
   Loader2,
   PlugZap,
   RotateCw,
@@ -31,6 +33,12 @@ import {
   type SclawBrowserFrameHandle,
 } from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { AppDevSetupProgress, AppDevCommandLog } from '@/components/app-dev/AppDevSetupProgress';
 import { buildAppDevFileTree } from '@/lib/app-dev-file-tree';
 import {
@@ -52,13 +60,31 @@ import {
 } from '@/lib/app-dev-preview-console';
 import { openExternalUrl } from '@/lib/preview-url';
 import { cn } from '@/lib/utils';
+import {
+  useAppDevWorkbenchStore,
+  type AppDevStageMode,
+} from '@/stores/app-dev-workbench';
 import '@/components/more-apps/app-plaza-shell.css';
 import '@/components/sclaw-browser/sclaw-browser-overlay.css';
 
-export type AppDevStageMode = 'preview' | 'code' | 'git' | 'external-services' | 'community';
+// 兼容旧引用：类型已迁移到 stores/app-dev-workbench。
+export type { AppDevStageMode } from '@/stores/app-dev-workbench';
 type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
+
+// 页签收敛：主区 3 个 + 溢出菜单（Git / 外部服务 / 社区）。
+const PRIMARY_TABS = [
+  { id: 'preview', label: '预览', icon: Eye },
+  { id: 'code', label: '代码', icon: FileCode2 },
+  { id: 'versions', label: '版本', icon: History },
+] as const;
+
+const OVERFLOW_TABS = [
+  { id: 'more-git', label: 'Git 代码管理', icon: GitBranch },
+  { id: 'more-external', label: '外部服务', icon: PlugZap },
+  { id: 'more-community', label: '社区', icon: Users },
+] as const;
 
 interface OpenTab {
   path: string;
@@ -112,7 +138,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onFillComposerFromDiagnostics,
   sourceRevision = 0,
   previewRevision = 0,
-  initialMode = 'preview',
+  initialMode,
   canDeploy = false,
   cloudPush = false,
   recordsRevision = 0,
@@ -120,7 +146,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   deployHistory = [],
   onOpenDeploy,
 }: AppDevWorkbenchStageProps) {
-  const [mode, setMode] = useState<AppDevStageMode>(initialMode);
+  // mode 提升到全局 store：对话侧可通过 setMode 驱动工作台切换（T04/T09 依赖）。
+  const mode = useAppDevWorkbenchStore((s) => s.mode);
+  const setMode = useAppDevWorkbenchStore((s) => s.setMode);
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
   const [files, setFiles] = useState<AppSourceFileEntry[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -141,7 +169,6 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   const tree = useMemo(() => buildAppDevFileTree(files.map((f) => f.path)), [files]);
   const openPathsRef = useRef<Set<string>>(new Set());
   const tabsRef = useRef(tabs);
-  const modeRef = useRef(mode);
   const previewFrameRef = useRef<SclawBrowserFrameHandle>(null);
   const sourceRevisionSeenRef = useRef(sourceRevision);
   const handleSaveRef = useRef<() => void | Promise<void>>(() => undefined);
@@ -172,9 +199,11 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     tabsRef.current = tabs;
   }, [tabs]);
 
+  // 显式传入 initialMode 时（如独立 IDE 窗口默认「代码」）以其为准；
+  // 未传入时沿用 store 中的持久化 mode。
   useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
+    if (initialMode) setMode(initialMode);
+  }, [initialMode, workspaceId, setMode]);
 
   const loadFileList = async () => {
     setFilesLoading(true);
@@ -346,8 +375,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const currentMode = useAppDevWorkbenchStore.getState().mode;
       const isSave = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
-      if (isSave && modeRef.current === 'code') {
+      if (isSave && currentMode === 'code') {
         event.preventDefault();
         event.stopPropagation();
         void handleSaveRef.current();
@@ -363,7 +393,6 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       event.preventDefault();
       event.stopPropagation();
 
-      const currentMode = modeRef.current;
       if (currentMode === 'preview') {
         refreshPreviewRef.current();
         return;
@@ -420,15 +449,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   return (
     <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5">
-        {(
-          [
-            { id: 'preview', label: '预览', icon: Eye },
-            { id: 'code', label: '代码', icon: FileCode2 },
-            { id: 'git', label: 'Git 代码管理', icon: GitBranch },
-            { id: 'external-services', label: '外部服务', icon: PlugZap },
-            { id: 'community', label: '社区', icon: Users },
-          ] as const
-        ).map((tab) => {
+        {PRIMARY_TABS.map((tab) => {
           const Icon = tab.icon;
           const active = mode === tab.id;
           return (
@@ -449,6 +470,44 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
             </button>
           );
         })}
+
+        {(() => {
+          const activeOverflow = OVERFLOW_TABS.find((tab) => tab.id === mode) ?? null;
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-colors',
+                    activeOverflow
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                  )}
+                  aria-pressed={Boolean(activeOverflow)}
+                >
+                  {activeOverflow ? activeOverflow.label : '更多'}
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[9rem]">
+                {OVERFLOW_TABS.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={tab.id}
+                      className="gap-1.5 text-xs"
+                      onSelect={() => setMode(tab.id)}
+                    >
+                      <Icon className="h-3.5 w-3.5" aria-hidden />
+                      {tab.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
 
         <div className="ml-auto flex items-center gap-2">
           {mode === 'code' ? (
@@ -641,7 +700,18 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
         )
       ) : null}
 
-      {mode === 'git' ? (
+      {mode === 'versions' ? (
+        // T04 将在此挂载行级 diff 容器（T10 填版本时间线）。
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+          <History className="h-9 w-9 text-muted-foreground" aria-hidden />
+          <p className="text-sm font-medium text-foreground">版本对比</p>
+          <p className="max-w-[280px] text-xs leading-relaxed text-muted-foreground">
+            每轮对话的修改内容对比（行级 diff）将在后续版本展示在这里。
+          </p>
+        </div>
+      ) : null}
+
+      {mode === 'more-git' ? (
         <AppDevGitPanel
           workspaceId={workspaceId}
           canDeploy={canDeploy}
@@ -653,9 +723,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
         />
       ) : null}
 
-      {mode === 'external-services' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
+      {mode === 'more-external' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
 
-      {mode === 'community' ? <AppDevCommunityPanel workspaceId={workspaceId} /> : null}
+      {mode === 'more-community' ? <AppDevCommunityPanel workspaceId={workspaceId} /> : null}
 
       {mode === 'code' ? (
         <div className="flex min-h-0 flex-1 overflow-hidden">

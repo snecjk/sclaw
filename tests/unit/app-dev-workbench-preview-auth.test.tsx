@@ -23,6 +23,9 @@ vi.mock('@/components/sclaw-browser/SclawBrowserFrame', () => ({
       },
       getURL: () => mocks.currentUrl,
       goBack: vi.fn(),
+      canGoBack: vi.fn(() => false),
+      executeJS: vi.fn(async () => null),
+      getWebContentsId: vi.fn(() => null),
     }));
     return <div data-testid="preview-frame" data-url={url} />;
   }),
