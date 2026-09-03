@@ -1,30 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePiBrowserNodeRuntime } from '../../electron/agent-extensions/extensions/pi-browser-use/pi';
+import { configurePiBrowserUseRuntime } from '../../electron/agent-extensions/extensions/pi-browser-use/pi';
 
-describe('Pi browser-use Node runtime selection', () => {
-  it('prefers the packaged Windows Node runtime', () => {
-    expect(resolvePiBrowserNodeRuntime({
-      platform: 'win32',
-      arch: 'x64',
-      cwd: 'D:\\workspace',
-      resourcesPath: 'C:\\Program Files\\SClaw\\resources',
-      path: 'D:\\Program Files\\nodejs',
-      exists: (path) => path === 'C:\\Program Files\\SClaw\\resources\\bin\\node.exe',
-    })).toBe('C:\\Program Files\\SClaw\\resources\\bin\\node.exe');
+describe('Pi browser-use runtime configuration', () => {
+  it('uses Electron in Node mode by default', () => {
+    const env: NodeJS.ProcessEnv = {};
+    const inheritedEnvVars = ['PATH'];
+
+    configurePiBrowserUseRuntime(
+      env,
+      'C:\\Program Files\\S Claw\\SClaw\\SClaw.exe',
+      inheritedEnvVars,
+    );
+
+    expect(env.PI_BROWSER_USE_NODE).toBe('C:\\Program Files\\S Claw\\SClaw\\SClaw.exe');
+    expect(env.ELECTRON_RUN_AS_NODE).toBe('1');
+    expect(inheritedEnvVars).toContain('ELECTRON_RUN_AS_NODE');
   });
 
-  it('uses a Node runtime from PATH during development', () => {
-    expect(resolvePiBrowserNodeRuntime({
-      platform: 'win32',
-      arch: 'x64',
-      cwd: 'D:\\workspace',
-      resourcesPath: 'D:\\workspace\\node_modules\\electron\\dist\\resources',
-      path: 'C:\\Windows;D:\\Program Files\\nodejs',
-      exists: (path) => path === 'D:\\Program Files\\nodejs\\node.exe',
-    })).toBe('D:\\Program Files\\nodejs\\node.exe');
+  it('preserves an explicitly configured Node runtime', () => {
+    const env: NodeJS.ProcessEnv = {
+      PI_BROWSER_USE_NODE: 'D:\\Program Files\\nodejs\\node.exe',
+    };
+
+    configurePiBrowserUseRuntime(
+      env,
+      'C:\\Program Files\\S Claw\\SClaw\\SClaw.exe',
+    );
+
+    expect(env.PI_BROWSER_USE_NODE).toBe('D:\\Program Files\\nodejs\\node.exe');
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
   });
 
-  it('leaves non-Windows platforms on the Electron fallback', () => {
-    expect(resolvePiBrowserNodeRuntime({ platform: 'darwin' })).toBeUndefined();
+  it('does not duplicate the MCP inherited environment entry', () => {
+    const env: NodeJS.ProcessEnv = {};
+    const inheritedEnvVars = ['PATH', 'ELECTRON_RUN_AS_NODE'];
+
+    configurePiBrowserUseRuntime(env, 'C:\\SClaw.exe', inheritedEnvVars);
+
+    expect(inheritedEnvVars.filter((name) => name === 'ELECTRON_RUN_AS_NODE')).toHaveLength(1);
   });
 });
