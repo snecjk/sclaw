@@ -1214,7 +1214,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             >
               <option value="openclaw">OpenClaw</option>
               <option value="claude">Claude Agent</option>
-              <option value="pi">Pi Agent</option>
+              <option value="pi">SAgent</option>
             </select>
             <p className="text-[11.5px] text-muted-foreground">
               {isEditing

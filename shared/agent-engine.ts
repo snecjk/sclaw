@@ -50,7 +50,7 @@ export const AGENT_ENGINE_DESCRIPTORS: Record<AgentEngineType, AgentEngineDescri
   },
   pi: {
     type: 'pi',
-    label: 'Pi Agent',
+    label: 'SAgent',
     sessionPrefixes: ['pi:', 'pi-task:'],
     capabilities: {
       chat: true,

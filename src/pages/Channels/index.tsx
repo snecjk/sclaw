@@ -1039,7 +1039,7 @@ export function Channels() {
                                       options={[
                                         { value: 'claude', label: 'Claude' },
                                         { value: 'openclaw', label: 'OpenClaw' },
-                                        { value: 'pi', label: 'Pi Agent' },
+                                        { value: 'pi', label: 'SAgent' },
                                       ]}
                                       onChange={(nextValue) => {
                                         const nextEngine =

@@ -341,8 +341,8 @@ function useChatEngineSelection(allowSessionSwitch = false) {
     currentSessionKey,
     { messageCount: messages.length },
   );
-  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : agentDefaultEngineType === 'pi' ? 'Pi Agent' : 'OpenClaw';
-  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : currentEngineType === 'pi' ? 'Pi Agent' : 'OpenClaw';
+  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : agentDefaultEngineType === 'pi' ? 'SAgent' : 'OpenClaw';
+  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : currentEngineType === 'pi' ? 'SAgent' : 'OpenClaw';
   const displayEngineLabel = canSwitchEngine
     ? agentDefaultEngineLabel
     : currentSessionEngineLabel;
@@ -380,7 +380,7 @@ function useChatEngineSelection(allowSessionSwitch = false) {
         }));
       }
       if (notify) {
-        toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'Pi Agent' : 'OpenClaw'} 引擎`);
+        toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'SAgent' : 'OpenClaw'} 引擎`);
       }
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
@@ -443,7 +443,7 @@ function useChatEngineSelection(allowSessionSwitch = false) {
   const engineOptions: SelectorMenuOption<AgentEngineType>[] = policyEngines.map((engine) => ({
     key: engine.code,
     value: engine.code,
-    label: engine.name,
+    label: engine.code === 'pi' ? 'SAgent' : engine.name,
   }));
 
   return {
@@ -1145,7 +1145,7 @@ export function ChatEngineModelCascade({
           </div>
           <div className="flex min-w-0 flex-1 flex-col p-1">
             <p className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-              模型 · {activeEngine === 'claude' ? 'Claude Agent' : activeEngine === 'pi' ? 'Pi Agent' : 'OpenClaw'}
+              模型 · {activeEngine === 'claude' ? 'Claude Agent' : activeEngine === 'pi' ? 'SAgent' : 'OpenClaw'}
             </p>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {selectorModelOptions.length === 0 ? (

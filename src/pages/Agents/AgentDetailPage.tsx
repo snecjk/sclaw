@@ -300,7 +300,7 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
         body: JSON.stringify({ engineType }),
       });
       await fetchAgents();
-      toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'Pi Agent' : 'OpenClaw'} 引擎`);
+      toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'SAgent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
     } finally {
@@ -390,7 +390,7 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
               onClick={() => void handleSetEngine('pi')}
               className="h-9 rounded-md px-4 text-[13px]"
             >
-              Pi Agent
+              SAgent
             </Button>
           </div>
           <p className="text-[12px] text-muted-foreground">
