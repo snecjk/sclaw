@@ -1723,9 +1723,9 @@ export const sidebarSingleActionRowPaddingClass = 'pr-7';
 export const sidebarSingleActionTrailingSlotClass =
   'absolute right-0 top-1/2 w-7 -translate-y-1/2';
 
-/** 最近会话/分组下拉 — MCP 140px 菜单容器 */
+/** 最近会话/分组下拉 — MCP 140px 菜单容器；无品牌色 focus 描边 */
 export const sidebarRecentMenuContentClass =
-  'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)]';
+  'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)] outline-none';
 
 /** 最近会话/分组下拉项 — MCP 132×34；hover 走 muted，light/dark 自适应 */
 export const sidebarRecentMenuItemClass = cn(

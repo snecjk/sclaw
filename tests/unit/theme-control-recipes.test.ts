@@ -59,6 +59,9 @@ describe('semantic control and overlay recipes', () => {
       '--sto-card-focus-shadow: 0 0 0 2px hsl(var(--ring) / 0.4);',
     );
     expect(recipes).not.toContain('.sto-overlay:has(:focus-visible)');
+    expect(recipes).toMatch(
+      /\.sto-overlay(?::where\([^)]*\))?\s*,[\s\S]*?outline:\s*none/,
+    );
   });
 
   it('uses shared disabled semantics and keeps variant compositing explicit', () => {
