@@ -81,6 +81,7 @@ import {
   parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
   parseCronSessionKey,
+  parsePiScheduledTaskSessionKey,
   isAnyCronSessionKey,
   isVirtualTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
@@ -576,7 +577,8 @@ function SidebarScheduledTaskGroup({
             // 按天聚合：标签用 dated key 的 YYYY-MM-DD（历史多行已在数据源滤掉）。
             const dated =
               parseCronSessionKey(s.key)?.date
-              ?? parseClaudeScheduledTaskSessionKey(s.key)?.date;
+              ?? parseClaudeScheduledTaskSessionKey(s.key)?.date
+              ?? parsePiScheduledTaskSessionKey(s.key)?.date;
             let label: string;
             if (dated) {
               const [ys, ms, ds] = dated.split('-');
@@ -1148,7 +1150,7 @@ export function Sidebar() {
     [sessions],
   );
 
-  // 「任务」：catalog dated cron/claude_task（历史 run/base 已在 store 侧滤掉）。
+  // 「任务」：catalog dated cron/claude_task/PI scheduled_task（历史 run/base 已在 store 侧滤掉）。
   // 行标题在渲染层回落：catalog 标题 → 引擎 label/displayName → 任务定义名；
   // 三者都无人读标题的才是真正的空壳行，在此过滤（存量无标题真实会话不受影响）。
   const taskListScheduledSessions = useMemo(() => {
@@ -1231,7 +1233,7 @@ export function Sidebar() {
   const scheduledTaskGroups = useMemo(() => {
     type GroupDraft = {
       key: string;
-      kind: 'st' | 'cron' | 'claude';
+      kind: 'st' | 'cron' | 'claude' | 'pi';
       taskId: number | string;
       sessions: typeof taskListScheduledSessions;
     };
@@ -1251,10 +1253,10 @@ export function Sidebar() {
           taskId: catalogRow.taskId,
           sessions: [],
         };
-      } else if (catalogRow?.sessionType === 'scheduled_task' && catalogRow.taskId && session.key.startsWith('pi-task:')) {
+      } else if (catalogRow?.sessionType === 'scheduled_task' && catalogRow.taskId && parsePiScheduledTaskSessionKey(session.key)) {
         draft = {
           key: `pi-task:${catalogRow.taskId}`,
-          kind: 'cron',
+          kind: 'pi',
           taskId: catalogRow.taskId,
           sessions: [],
         };
@@ -1279,10 +1281,10 @@ export function Sidebar() {
             taskId: claudeTaskRunParsed.taskId,
             sessions: [],
           };
-        } else if (session.key.startsWith('pi-task:')) {
-          const taskId = session.key.split(':')[1];
+        } else {
+          const taskId = parsePiScheduledTaskSessionKey(session.key)?.taskId;
           if (taskId) {
-            draft = { key: `pi-task:${taskId}`, kind: 'cron', taskId, sessions: [] };
+            draft = { key: `pi-task:${taskId}`, kind: 'pi', taskId, sessions: [] };
           }
         }
       }

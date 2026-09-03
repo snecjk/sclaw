@@ -133,7 +133,8 @@ export function createSessionLifecycleActions(
             const engineType: ChatSession['engineType'] | undefined =
               rawEngineType === 'claude' ? 'claude'
                 : rawEngineType === 'openclaw' ? 'openclaw'
-                  : undefined;
+                  : rawEngineType === 'pi' ? 'pi'
+                    : undefined;
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -397,10 +398,12 @@ export function createSessionLifecycleActions(
               >('/api/scheduled-tasks');
               const openclawNames = new Map<string, string>();
               const claudeNames = new Map<string, string>();
+              const piNames = new Map<string, string>();
               for (const task of tasks) {
                 if (!task.id || !task.name?.trim()) continue;
                 const name = task.name.trim();
                 if (task.engineType === 'claude') claudeNames.set(task.id, name);
+                else if (task.engineType === 'pi') piNames.set(task.id, name);
                 else openclawNames.set(task.id, name);
               }
               for (const session of labeledSessions) {
@@ -416,7 +419,7 @@ export function createSessionLifecycleActions(
                   ?? (session.key.startsWith('pi-task:') ? session.key.split(':')[1] : undefined);
                 if (!taskId) continue;
                 const name = session.key.startsWith('pi-task:')
-                  ? openclawNames.get(taskId)
+                  ? piNames.get(taskId)
                   : claudeNames.get(taskId);
                 if (name) session.displayName = name;
               }

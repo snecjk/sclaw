@@ -41,7 +41,7 @@ describe('scheduled-task-group-name', () => {
         label: '日报生成',
         displayName: 'SClaw',
       }],
-      { cron: new Map(), sto: new Map(), claude: new Map() },
+      { cron: new Map(), sto: new Map(), claude: new Map(), pi: new Map() },
     );
     expect(name).toBe('日报生成');
   });
@@ -55,7 +55,7 @@ describe('scheduled-task-group-name', () => {
         displayName: 'SClaw',
         label: 'SClaw',
       }],
-      { cron: new Map(), sto: new Map(), claude: new Map() },
+      { cron: new Map(), sto: new Map(), claude: new Map(), pi: new Map() },
     );
     expect(name).toBe('定时任务 job-uuid');
   });
@@ -87,9 +87,25 @@ describe('scheduled-task-group-name', () => {
         cron: new Map([['job-uuid', '日报生成']]),
         sto: new Map(),
         claude: new Map(),
+        pi: new Map(),
       },
     );
     expect(name).toBe('日报生成');
+  });
+
+  it('buildScheduledTaskGroupDisplayName uses the PI task definition map', () => {
+    const name = buildScheduledTaskGroupDisplayName(
+      'pi',
+      'task-pi',
+      [{ key: 'pi-task:task-pi:2026-09-03', label: 'pi-task:task-pi:2026-09-03' }],
+      {
+        cron: new Map(),
+        sto: new Map(),
+        claude: new Map(),
+        pi: new Map([['task-pi', 'GitHub 热门项目']]),
+      },
+    );
+    expect(name).toBe('GitHub 热门项目');
   });
 
   it('prefers refreshed nameMaps over stale catalog/session title after rename', () => {
@@ -102,11 +118,13 @@ describe('scheduled-task-group-name', () => {
       cron: new Map([['job-uuid', '旧任务名']]),
       sto: new Map<number, string>(),
       claude: new Map<string, string>(),
+      pi: new Map<string, string>(),
     };
     const refreshedMaps = {
       cron: new Map([['job-uuid', '新任务名']]),
       sto: new Map<number, string>(),
       claude: new Map<string, string>(),
+      pi: new Map<string, string>(),
     };
     expect(buildScheduledTaskGroupDisplayName('cron', 'job-uuid', sessions, staleMaps)).toBe('旧任务名');
     expect(buildScheduledTaskGroupDisplayName('cron', 'job-uuid', sessions, refreshedMaps)).toBe('新任务名');
@@ -121,6 +139,7 @@ describe('scheduled-task-group-name', () => {
         cron: new Map([['job-uuid', '定时任务测试']]),
         sto: new Map(),
         claude: new Map(),
+        pi: new Map(),
       },
     );
     expect(name).toBe('定时任务测试');
