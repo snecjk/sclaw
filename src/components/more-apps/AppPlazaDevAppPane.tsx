@@ -3,7 +3,7 @@
  * Left: preview / Monaco code / file search; Right: project agent chat.
  * Portaled over the entire app shell (including sidebar) while active.
  */
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertCircle,
@@ -17,16 +17,31 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
+import type { ToolStatus } from '@/stores/chat';
 import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatSessionRuntimeView, useChatSessionSending } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { ChatStaticItemsList } from '@/components/chat/ChatStaticItemsList';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
+import type { ChatDisplayItem } from '@/pages/Chat/chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
+import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { AppDevComposer } from '@/components/app-dev/AppDevComposer';
 import { AppDevSplitBody } from '@/components/app-dev/AppDevSplitBody';
+import { AppDevToolRollupLine } from '@/components/app-dev/AppDevToolRollupLine';
+import { AppDevTodoCapsule } from '@/components/app-dev/AppDevTodoCapsule';
+import { AppDevTurnSummaryCard } from '@/components/app-dev/AppDevTurnSummaryCard';
+import {
+  appDevCompletedToolsSignature,
+  isAppDevToolRollupEmpty,
+  normalizeAppDevTimestamp,
+  resolveAppDevTurnDurationMs,
+  resolveAppDevTurnTools,
+  rollupAppDevTools,
+} from '@/lib/app-dev-tool-rollup';
+import { deriveAppDevTurnPlan } from '@/lib/app-dev-turn-plan';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';
@@ -75,6 +90,16 @@ import {
   sclawBrowserEmbedChatShortcutLabel,
 } from '../../../shared/sclaw-embed-browser-shortcut';
 
+const CAPTURED_TURN_SUMMARY_LIMIT = 30;
+
+type AssistantTurnDisplayItem = Extract<ChatDisplayItem, { type: 'assistant-turn' }>;
+
+interface CapturedTurnSummary {
+  tools: ToolStatus[];
+  durationMs: number | null;
+  interrupted: boolean;
+}
+
 const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
   appName,
@@ -89,6 +114,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   const messages = useSessionDisplayMessages(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
   const clearError = useChatStore((s) => s.clearError);
+  const engineType = useChatSessionEngineType();
   const {
     sending,
     pendingFinal,
@@ -99,6 +125,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    phase,
     error,
   } = useChatSessionRuntimeView(sessionKey);
 
@@ -124,6 +151,98 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingTools,
   });
 
+  // ── T02 生成过程可视化 ──
+
+  // 工具聚合：streamingTools 高频更新，按 completed 子集签名 memo，避免每 token 全量重算
+  const rollupSig = appDevCompletedToolsSignature(streamingTools);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const toolRollup = useMemo(() => rollupAppDevTools(streamingTools), [rollupSig]);
+
+  // 待办胶囊：流式阶段叙述 + 工具进度派生
+  const turnPlanTexts = useMemo(() => {
+    const texts = streamingMessages
+      .map((message) => extractText(message))
+      .filter((text) => text.trim().length > 0);
+    if (streamText.trim()) texts.push(streamText);
+    return texts;
+  }, [streamingMessages, streamText]);
+  const turnPlan = useMemo(
+    () => deriveAppDevTurnPlan({ texts: turnPlanTexts, tools: streamingTools, sending }),
+    [turnPlanTexts, streamingTools, sending],
+  );
+
+  // 轮结束快照：汇总卡的中断标记 / 耗时 / 工具清单在轮结束瞬间捕获，
+  // 静态列表 remount（transcript 接管）后仍可对齐到同一 turnKey
+  const capturedSummariesRef = useRef<Map<string, CapturedTurnSummary>>(new Map());
+  const prevSendingRef = useRef(sending);
+  const abortingSeenRef = useRef(false);
+  const liveTurnSnapshotRef = useRef<{
+    turnKey: string | null;
+    tools: ToolStatus[];
+    anchorAt: number | null;
+  }>({ turnKey: null, tools: [], anchorAt: null });
+  const activeTurnStableKey = activeTurn?.turnStableKey ?? null;
+
+  // 生成中持续记录最新快照（ref 写入放在 effect，避免渲染期副作用）
+  useEffect(() => {
+    if (!sending) return;
+    if (phase === 'aborting') abortingSeenRef.current = true;
+    liveTurnSnapshotRef.current = {
+      turnKey: activeTurnStableKey ?? liveTurnSnapshotRef.current.turnKey,
+      tools: streamingTools,
+      anchorAt: turnAnchorAt,
+    };
+  }, [sending, phase, activeTurnStableKey, streamingTools, turnAnchorAt]);
+
+  useEffect(() => {
+    if (prevSendingRef.current && !sending) {
+      const snapshot = liveTurnSnapshotRef.current;
+      if (snapshot.turnKey && snapshot.tools.length > 0) {
+        capturedSummariesRef.current.set(snapshot.turnKey, {
+          tools: snapshot.tools,
+          durationMs: resolveAppDevTurnDurationMs({
+            anchorAt: snapshot.anchorAt,
+            tools: snapshot.tools,
+          }),
+          interrupted: abortingSeenRef.current,
+        });
+        if (capturedSummariesRef.current.size > CAPTURED_TURN_SUMMARY_LIMIT) {
+          const oldest = capturedSummariesRef.current.keys().next().value;
+          if (oldest) capturedSummariesRef.current.delete(oldest);
+        }
+      }
+      abortingSeenRef.current = false;
+    }
+    prevSendingRef.current = sending;
+  }, [sending]);
+
+  // 轮次汇总卡注入（ChatStaticItemsList renderTurnFooter；T04 操作按钮亦经此挂载）
+  const renderTurnFooter = useCallback((item: AssistantTurnDisplayItem) => {
+    const captured = capturedSummariesRef.current.get(item.key);
+    const tools = captured?.tools ?? resolveAppDevTurnTools({
+      sessionKey,
+      turnKey: item.key,
+      turnMessages: item.messages,
+      toolResults: item.toolResults,
+      precedingUserMessage: item.precedingUserMessage,
+      engineType,
+    });
+    if (tools.length === 0 && !captured?.interrupted) return null;
+    const durationMs = captured?.durationMs ?? resolveAppDevTurnDurationMs({
+      tools,
+      anchorAt: normalizeAppDevTimestamp(item.precedingUserMessage?.timestamp),
+      endedAt: normalizeAppDevTimestamp(item.messages[item.messages.length - 1]?.timestamp),
+    });
+    return (
+      <AppDevTurnSummaryCard
+        tools={tools}
+        durationMs={durationMs}
+        interrupted={captured?.interrupted ?? false}
+        className="mt-2"
+      />
+    );
+  }, [sessionKey, engineType]);
+
   return (
     <div className="flex h-full min-w-0 flex-col">
       <div ref={scrollRef} className={cn(stoChatScrollPaneClass, 'flex-1')}>
@@ -144,20 +263,26 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
                 scrollRef={scrollRef}
                 variant="home"
                 sessionKey={sessionKey}
+                renderTurnFooter={renderTurnFooter}
                 onReachStart={() => {
                   void useChatStore.getState().loadOlderHistory(sessionKey);
                 }}
               />
               {activeTurn ? (
-                <AssistantTurnMessage
-                  key="active-turn"
-                  sessionMessages={messages}
-                  turnMessages={activeTurn.turnMessages}
-                  turnToolResults={activeTurn.turnToolResults}
-                  precedingUserMessage={activeTurn.precedingUserMessage}
-                  showThinking={showThinking}
-                  activeStream={activeTurn.activeStream}
-                />
+                <>
+                  <AssistantTurnMessage
+                    key="active-turn"
+                    sessionMessages={messages}
+                    turnMessages={activeTurn.turnMessages}
+                    turnToolResults={activeTurn.turnToolResults}
+                    precedingUserMessage={activeTurn.precedingUserMessage}
+                    showThinking={showThinking}
+                    activeStream={activeTurn.activeStream}
+                  />
+                  {!isAppDevToolRollupEmpty(toolRollup) ? (
+                    <AppDevToolRollupLine rollup={toolRollup} className="mt-2" />
+                  ) : null}
+                </>
               ) : null}
             </>
           )}
@@ -176,7 +301,12 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
         </div>
       ) : null}
 
-      <div className="border-t border-border px-3 py-3">
+      <div className="relative border-t border-border px-3 py-3">
+        <AppDevTodoCapsule
+          plan={turnPlan}
+          sending={sending}
+          className="absolute inset-x-0 top-0 z-10 -translate-y-[calc(100%+12px)]"
+        />
         <AppDevComposer
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}

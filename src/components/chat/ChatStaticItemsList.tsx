@@ -5,6 +5,7 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import {
@@ -59,6 +60,13 @@ export interface ChatStaticItemsListProps {
     },
   ) => void;
   onOpenWorkflow?: (workflowId: string) => void;
+  /**
+   * 轮次 footer 注入点（P1 交互改造 T02）：渲染于 assistant-turn 消息之后，
+   * 缺省不渲染，主会话零影响；T04 版本操作按钮也经此挂载。
+   */
+  renderTurnFooter?: (
+    item: Extract<ChatDisplayItem, { type: 'assistant-turn' }>,
+  ) => ReactNode;
 }
 
 function collectSearchKeysForDisplayItem(item: ChatDisplayItem): string[] {
@@ -108,6 +116,7 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
     onCreateScheduledTask,
     onEditMessage,
     onOpenWorkflow,
+    renderTurnFooter,
   }, ref) {
     const virtualize = !forceFullRender && items.length > CHAT_VIRTUAL_LIST_THRESHOLD;
 
@@ -237,19 +246,22 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
 
       if (item.type === 'assistant-turn') {
         return (
-          <AssistantTurnMessage
-            sessionMessages={messages}
-            turnMessages={item.messages}
-            turnToolResults={item.toolResults}
-            precedingUserMessage={item.precedingUserMessage}
-            turnStableKey={item.key}
-            showThinking={showThinking}
-            matchedMessageKeys={variant === 'embed' ? undefined : matchedMessageKeys}
-            activeMessageKey={variant === 'embed' ? null : activeSearchMessageKey}
-            onPreviewFile={onPreviewFile}
-            onCreateScheduledTask={onCreateScheduledTask}
-            onEditMessage={variant === 'page' ? onEditMessage : undefined}
-          />
+          <>
+            <AssistantTurnMessage
+              sessionMessages={messages}
+              turnMessages={item.messages}
+              turnToolResults={item.toolResults}
+              precedingUserMessage={item.precedingUserMessage}
+              turnStableKey={item.key}
+              showThinking={showThinking}
+              matchedMessageKeys={variant === 'embed' ? undefined : matchedMessageKeys}
+              activeMessageKey={variant === 'embed' ? null : activeSearchMessageKey}
+              onPreviewFile={onPreviewFile}
+              onCreateScheduledTask={onCreateScheduledTask}
+              onEditMessage={variant === 'page' ? onEditMessage : undefined}
+            />
+            {renderTurnFooter ? renderTurnFooter(item) : null}
+          </>
         );
       }
 
