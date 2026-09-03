@@ -4,9 +4,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
-  ArrowLeft,
   ChevronDown,
-  ExternalLink,
   Eye,
   FileCode2,
   FolderTree,
@@ -28,6 +26,7 @@ import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
 import { AppExternalServicesPanel } from '@/components/app-dev/AppExternalServicesPanel';
 import { AppDevMonacoEditor, formatAppDevDiagnosticsPrompt } from '@/components/app-dev/AppDevMonacoEditor';
+import { AppDevPreviewToolbar } from '@/components/app-dev/AppDevPreviewToolbar';
 import {
   SclawBrowserFrame,
   type SclawBrowserFrameHandle,
@@ -47,10 +46,12 @@ import {
   searchAppSourceFiles,
   writeAppSourceFile,
   type AppDevStatus,
+  type AppRouteEntry,
   type AppSourceFileEntry,
   type AppSourceSearchHit,
   type StoAppDeployHistoryRecord,
 } from '@/lib/app-dev-api';
+import { resolveAppDevRouteUrl } from '@/lib/app-dev-preview-routes';
 import {
   stripLegacyAppDevPreviewAuth,
 } from '@/lib/app-dev-preview-url';
@@ -149,6 +150,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   // mode 提升到全局 store：对话侧可通过 setMode 驱动工作台切换（T04/T09 依赖）。
   const mode = useAppDevWorkbenchStore((s) => s.mode);
   const setMode = useAppDevWorkbenchStore((s) => s.setMode);
+  // 预览设备（T03）：desktop / mobile，设备框纯 CSS 过渡，不 remount webview。
+  const device = useAppDevWorkbenchStore((s) => s.device);
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
   const [files, setFiles] = useState<AppSourceFileEntry[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -170,6 +173,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   const openPathsRef = useRef<Set<string>>(new Set());
   const tabsRef = useRef(tabs);
   const previewFrameRef = useRef<SclawBrowserFrameHandle>(null);
+  /** 预览列根容器：全屏（requestFullscreen / CSS 降级）的目标元素。 */
+  const previewRootRef = useRef<HTMLDivElement>(null);
   const sourceRevisionSeenRef = useRef(sourceRevision);
   const handleSaveRef = useRef<() => void | Promise<void>>(() => undefined);
   const refreshPreviewRef = useRef<() => void>(() => undefined);
@@ -323,6 +328,46 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     }
     const clean = stripLegacyAppDevPreviewAuth(current) || current;
     openExternalUrl(clean);
+  };
+
+  /** 当前预览真实地址（frame 优先），去敏后的展示形式。 */
+  const resolveCurrentPreviewUrl = () => {
+    const current =
+      previewFrameRef.current?.getURL()
+      || previewMountUrl
+      || status?.previewUrl
+      || '';
+    return stripLegacyAppDevPreviewAuth(current) || current;
+  };
+
+  const handleAddressBlur = () => {
+    const display = resolveCurrentPreviewUrl();
+    if (previewAddress.trim() && previewAddress.trim() !== display) {
+      commitPreviewAddress();
+    } else {
+      setPreviewAddress(display);
+    }
+  };
+
+  const handleAddressEscape = (input: HTMLInputElement) => {
+    setPreviewAddress(resolveCurrentPreviewUrl());
+    input.blur();
+  };
+
+  /** 路由下拉跳转（T03）：只改地址，不触碰 frame 的 key/nonce。 */
+  const navigatePreviewRoute = (route: AppRouteEntry) => {
+    const base =
+      previewFrameRef.current?.getURL()
+      || previewMountUrl
+      || status?.previewUrl
+      || '';
+    const next = resolveAppDevRouteUrl(base, route.path);
+    if (!next) {
+      toast.message('无法跳转到该页面');
+      return;
+    }
+    previewFrameRef.current?.loadURL(next);
+    setPreviewAddress(stripLegacyAppDevPreviewAuth(next) || next);
   };
 
   const refreshOpenCodeFromDisk = async (opts?: { force?: boolean }) => {
@@ -555,103 +600,53 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
 
       {mode === 'preview' ? (
         isRunning && status?.previewUrl ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <header className="app-plaza-browser-toolbar">
-              <div className="app-plaza-browser-toolbar__nav">
-                <button
-                  type="button"
-                  className="app-plaza-browser-toolbar__nav-btn"
-                  disabled={!previewCanGoBack}
-                  onClick={() => previewFrameRef.current?.goBack()}
-                  title="返回上一页"
-                  aria-label="返回上一页"
-                >
-                  <ArrowLeft className="h-4 w-4" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="app-plaza-browser-toolbar__nav-btn"
-                  onClick={refreshPreview}
-                  title="刷新"
-                  aria-label="刷新"
-                >
-                  <RotateCw className="h-4 w-4" aria-hidden />
-                </button>
-              </div>
-              <form
-                className="app-plaza-browser-address"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  commitPreviewAddress();
-                }}
-              >
-                <input
-                  className="app-plaza-browser-toolbar__url"
-                  value={previewAddress}
-                  onChange={(event) => setPreviewAddress(event.target.value)}
-                  onBlur={() => {
-                    const current =
+          <div className="flex min-h-0 flex-1 flex-col" ref={previewRootRef}>
+            <AppDevPreviewToolbar
+              workspaceId={workspaceId}
+              canGoBack={previewCanGoBack}
+              address={previewAddress}
+              previewRevision={previewRevision}
+              fullscreenTargetRef={previewRootRef}
+              onBack={() => previewFrameRef.current?.goBack()}
+              onReload={refreshPreview}
+              onAddressChange={setPreviewAddress}
+              onAddressSubmit={commitPreviewAddress}
+              onAddressBlur={handleAddressBlur}
+              onAddressEscape={handleAddressEscape}
+              onOpenExternal={openPreviewInSystemBrowser}
+              onNavigateRoute={navigatePreviewRoute}
+            />
+            {/*
+              设备切换只改变外层视口宽度与设备框样式（200ms CSS 过渡），
+              SclawBrowserFrame 的 key 不含 device —— webview 不 remount，
+              页面状态（表单输入、HMR 会话）保留。
+            */}
+            <div className="app-dev-preview-viewport" data-device={device}>
+              <div className="app-dev-preview-device">
+                <SclawBrowserFrame
+                  key={`${previewMountUrl || stripLegacyAppDevPreviewAuth(status.previewUrl)}:${previewRevision}:${previewReloadNonce}`}
+                  ref={previewFrameRef}
+                  url={previewMountUrl || stripLegacyAppDevPreviewAuth(status.previewUrl)}
+                  title={appName}
+                  embedRuntimeId={null}
+                  captureGuestNetworkFailures
+                  onNavStateChange={({ canGoBack }) => setPreviewCanGoBack(canGoBack)}
+                  onPageUrl={(pageUrl) =>
+                    setPreviewAddress(stripLegacyAppDevPreviewAuth(pageUrl) || pageUrl)
+                  }
+                  onConsoleMessage={({ message }) => {
+                    if (!onPreviewRuntimeError) return;
+                    if (!isHiddenPreviewFailureMessage(message)) return;
+                    const pageUrl =
                       previewFrameRef.current?.getURL()
-                      || previewMountUrl
+                      || previewAddress
                       || status.previewUrl
                       || '';
-                    const display = stripLegacyAppDevPreviewAuth(current) || current;
-                    if (previewAddress.trim() && previewAddress.trim() !== display) {
-                      commitPreviewAddress();
-                    } else {
-                      setPreviewAddress(display);
-                    }
+                    const cleanPageUrl = stripLegacyAppDevPreviewAuth(pageUrl) || pageUrl;
+                    onPreviewRuntimeError(formatHiddenPreviewFailureForAgent(message, cleanPageUrl));
                   }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      const current =
-                        previewFrameRef.current?.getURL()
-                        || previewMountUrl
-                        || status.previewUrl
-                        || '';
-                      setPreviewAddress(stripLegacyAppDevPreviewAuth(current) || current);
-                      (event.target as HTMLInputElement).blur();
-                    }
-                  }}
-                  spellCheck={false}
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  aria-label="预览地址"
                 />
-              </form>
-              <button
-                type="button"
-                className="app-plaza-browser-toolbar__btn"
-                onClick={openPreviewInSystemBrowser}
-              >
-                在系统浏览器打开
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            </header>
-            <div className="relative min-h-0 flex-1">
-              <SclawBrowserFrame
-                key={`${previewMountUrl || stripLegacyAppDevPreviewAuth(status.previewUrl)}:${previewRevision}:${previewReloadNonce}`}
-                ref={previewFrameRef}
-                url={previewMountUrl || stripLegacyAppDevPreviewAuth(status.previewUrl)}
-                title={appName}
-                embedRuntimeId={null}
-                captureGuestNetworkFailures
-                onNavStateChange={({ canGoBack }) => setPreviewCanGoBack(canGoBack)}
-                onPageUrl={(pageUrl) =>
-                  setPreviewAddress(stripLegacyAppDevPreviewAuth(pageUrl) || pageUrl)
-                }
-                onConsoleMessage={({ message }) => {
-                  if (!onPreviewRuntimeError) return;
-                  if (!isHiddenPreviewFailureMessage(message)) return;
-                  const pageUrl =
-                    previewFrameRef.current?.getURL()
-                    || previewAddress
-                    || status.previewUrl
-                    || '';
-                  const cleanPageUrl = stripLegacyAppDevPreviewAuth(pageUrl) || pageUrl;
-                  onPreviewRuntimeError(formatHiddenPreviewFailureForAgent(message, cleanPageUrl));
-                }}
-              />
+              </div>
             </div>
           </div>
         ) : (

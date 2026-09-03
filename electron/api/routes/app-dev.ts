@@ -17,6 +17,7 @@ import {
   ensureAppDevContext,
   getAppDevStatus,
   isGitAvailable,
+  listAppRoutes,
   listAppSourceFiles,
   listCheckpoints,
   listDevAppWorkspaceIds,
@@ -361,6 +362,14 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(body.workspaceId);
       const hits = await searchAppSourceFiles(appPath, body.query ?? '');
       sendJson(res, 200, { success: true, hits });
+      return true;
+    }
+
+    // 预览路由下拉（T03）：扫描应用路由声明 / A2UI 页面资产。
+    if (url.pathname === '/api/app-dev/routes' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, routes: await listAppRoutes(appPath) });
       return true;
     }
 

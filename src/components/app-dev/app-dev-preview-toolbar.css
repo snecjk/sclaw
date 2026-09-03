@@ -1,0 +1,75 @@
+/**
+ * 预览工具条升级（T03）：设备框 / CSS 全屏降级。
+ * 只使用 --sto-* 语义 token，明暗双主题自动成立。
+ */
+
+/* 预览视口：桌面态铺满；手机态画布背景 + 居中设备框。 */
+.app-dev-preview-viewport {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  justify-content: center;
+  background: var(--sto-surface-canvas);
+}
+
+.app-dev-preview-device {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  transition: width 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.app-dev-preview-viewport[data-device='mobile'] .app-dev-preview-device {
+  width: 390px;
+  max-width: 100%;
+  height: min(844px, 100%);
+  align-self: center;
+  overflow: hidden;
+  border: 1px solid var(--sto-border-default);
+  border-radius: 18px;
+  background: hsl(var(--background));
+  box-shadow: var(--sto-shadow-dialog);
+}
+
+/*
+ * 全屏降级：requestFullscreen 不可用 / 被拒绝（或 macOS webview 全屏黑帧）时，
+ * 用 fixed 覆盖整个工作台 overlay（zIndex 240）实现沉浸预览。
+ */
+.app-dev-preview-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 260;
+  background: var(--sto-surface-canvas);
+}
+
+/* 路由下拉触发器：沿用工具条 __btn 体系，仅补充当前页名截断。 */
+.app-dev-preview-route-trigger {
+  max-width: 180px;
+}
+
+.app-dev-preview-route-trigger__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 设备分段控件：复用 sto-segment 配方，压缩到工具条 32px 节奏。 */
+.app-dev-preview-device-tabs .sto-segment-track {
+  height: 32px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.app-dev-preview-device-tabs .sto-segment-item {
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}

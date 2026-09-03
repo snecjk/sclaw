@@ -493,6 +493,20 @@ export async function searchAppSourceFiles(
   return res.hits ?? [];
 }
 
+/** 预览路由下拉条目（T03）：`#/home` / `/home` / `#home` 路径片段 + 展示名。 */
+export interface AppRouteEntry {
+  path: string;
+  label: string;
+  source: 'router' | 'a2ui';
+}
+
+export async function listAppRoutes(workspaceId: string): Promise<AppRouteEntry[]> {
+  const res = await hostApiFetch<{ routes: AppRouteEntry[] }>(
+    `/api/app-dev/routes?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.routes ?? [];
+}
+
 export async function installAppNpmPackage(
   workspaceId: string,
   packageName: string,

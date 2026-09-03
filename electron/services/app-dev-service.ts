@@ -2100,6 +2100,110 @@ export async function searchAppSourceFiles(
   return hits;
 }
 
+// ── Preview route discovery (T03 路由下拉) ──────────────────────────────────
+
+export interface AppRouteEntry {
+  /** 拼接预览地址的路径片段（`#/home`、`/home` 或 `#home`）。 */
+  path: string;
+  /** 展示名（路由路径或页面 id 原文）。 */
+  label: string;
+  /** 发现来源：router = `<Route path>` 扫描；a2ui = page.json 页面资产。 */
+  source: 'router' | 'a2ui';
+}
+
+const APP_ROUTE_MAX = 30;
+const APP_ROUTE_SCAN_MAX_FILES = 60;
+const ROUTE_PATH_RE = /<Route\s[^>]*?\bpath\s*=\s*["']([^"'>]+)["']/g;
+
+function normalizeRoutePath(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '*') return null;
+  // 带参数（/detail/:id）或通配的路由无法直接跳转，跳过。
+  if (trimmed.includes(':') || trimmed.includes('*')) return null;
+  const withoutLead = trimmed.replace(/^\/+/, '').replace(/\/+$/, '');
+  return `/${withoutLead}`;
+}
+
+function sortAppRoutes<T extends { label: string }>(routes: T[]): T[] {
+  return [...routes].sort((a, b) => {
+    const score = (label: string) => {
+      const clean = label.replace(/^\/+/, '').toLowerCase();
+      if (clean === '' || clean === 'home' || clean === 'index') return 0;
+      return 1;
+    };
+    const diff = score(a.label) - score(b.label);
+    return diff !== 0 ? diff : a.label.localeCompare(b.label);
+  });
+}
+
+/** 通用 React 应用：扫描 src 下 tsx/jsx 中的 `<Route path="...">`，并按入口判定 Hash/Browser Router。 */
+async function scanRouterRoutes(appPath: string): Promise<AppRouteEntry[]> {
+  const files = await listAppSourceFiles(appPath);
+  // 兼容模板应用（src/ 根部）与导入工程（frontend/src/ 等嵌套布局）。
+  const candidates = files
+    .filter((f) => /(?:^|\/)src\/[^/].*\.(tsx|jsx)$/.test(f.path))
+    .slice(0, APP_ROUTE_SCAN_MAX_FILES);
+  const found = new Map<string, AppRouteEntry>();
+  let hashRouter = false;
+  for (const file of candidates) {
+    let content = '';
+    try {
+      content = (await readAppSourceFile(appPath, file.path)).content;
+    } catch {
+      continue;
+    }
+    if (content.includes('HashRouter')) hashRouter = true;
+    ROUTE_PATH_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = ROUTE_PATH_RE.exec(content)) !== null) {
+      const normalized = normalizeRoutePath(match[1] ?? '');
+      if (!normalized || found.has(normalized)) continue;
+      found.set(normalized, {
+        path: normalized,
+        label: normalized,
+        source: 'router',
+      });
+      if (found.size >= APP_ROUTE_MAX) break;
+    }
+    if (found.size >= APP_ROUTE_MAX) break;
+  }
+  // 扫描后期才确认 HashRouter：统一重写 path 片段。
+  const routes = [...found.values()].map((route) => ({
+    ...route,
+    path: hashRouter ? `#${route.label}` : route.label,
+  }));
+  return sortAppRoutes(routes);
+}
+
+/** A2UI 应用：`src/pages/*.page.json` 文件名即页面 id，经 `#<id>` hash 切换。 */
+async function scanA2uiRoutes(appPath: string): Promise<AppRouteEntry[]> {
+  const pagesDir = ['src', 'frontend/src']
+    .map((dir) => join(appPath, dir, 'pages'))
+    .find((dir) => existsSync(dir) && statSync(dir).isDirectory());
+  if (!pagesDir) return [];
+  const entries = await readdir(pagesDir);
+  const routes: AppRouteEntry[] = [];
+  for (const name of entries.sort()) {
+    if (!name.endsWith('.page.json')) continue;
+    const id = name.slice(0, -'.page.json'.length).trim();
+    if (!id) continue;
+    routes.push({ path: `#${id}`, label: id, source: 'a2ui' });
+    if (routes.length >= APP_ROUTE_MAX) break;
+  }
+  return sortAppRoutes(routes);
+}
+
+/**
+ * 预览路由发现：优先通用 React 路由声明，其次 A2UI 页面资产；
+ * 都未发现时返回空数组，由渲染侧兜底为「当前地址」单条。
+ */
+export async function listAppRoutes(appPath: string): Promise<AppRouteEntry[]> {
+  if (!existsSync(appPath) || !statSync(appPath).isDirectory()) return [];
+  const routerRoutes = await scanRouterRoutes(appPath).catch(() => [] as AppRouteEntry[]);
+  if (routerRoutes.length > 0) return routerRoutes;
+  return scanA2uiRoutes(appPath).catch(() => [] as AppRouteEntry[]);
+}
+
 // ── Community skill package install ─────────────────────────────────────────
 
 const NPM_PACKAGE_RE =
