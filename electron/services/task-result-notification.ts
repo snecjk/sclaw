@@ -52,7 +52,9 @@ export function notifyTaskResult(
   const notification = new Notification({
     title: options.title,
     body: options.body,
-    icon: getClientAppIcon(),
+    // Windows renders this field as a large content image. Omitting it lets the
+    // registered SClaw identity own the compact icon in the top attribution row.
+    ...(process.platform === 'win32' ? {} : { icon: getClientAppIcon() }),
   });
   const release = () => activeNotifications.delete(notification);
   activeNotifications.add(notification);
