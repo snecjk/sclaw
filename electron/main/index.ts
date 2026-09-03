@@ -63,8 +63,9 @@ import {
   stageExistingMacAppTarget,
   unregisterMacAppBundle,
 } from '../utils/cleanup-old-app-bundles';
-import { CLIENT_APP_NAME, CLIENT_APP_USER_MODEL_ID } from '../../shared/app-branding';
+import { CLIENT_APP_NAME } from '../../shared/app-branding';
 import { getClientAppIcon } from './app-icon';
+import { configureWindowsNotificationIdentity } from './windows-notification-identity';
 import {
   observeNativeAppearanceUpdates,
   resolveWindowBackgroundColor,
@@ -259,6 +260,7 @@ _ts('app flags set');
 // Dock / menu bar display name (Launchpad permanent name still comes from
 // electron-builder productName → CFBundleName after rebuild+reinstall).
 app.setName(CLIENT_APP_NAME);
+configureWindowsNotificationIdentity();
 
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
 // On Wayland this maps the running window to stoclaw.desktop (icon + app grouping);
@@ -1021,10 +1023,6 @@ if (gotTheLock) {
   app.on('will-quit', () => {
     releaseProcessInstanceFileLock();
   });
-
-  if (process.platform === 'win32') {
-    app.setAppUserModelId(CLIENT_APP_USER_MODEL_ID);
-  }
 
   // Note: gatewayManager, clawHubService, hostEventBus are constructed lazily
   // inside initialize() after dynamic imports resolve. Lifecycle handlers below
