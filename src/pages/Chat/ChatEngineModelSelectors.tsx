@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, Bot, Check, ChevronDown, ChevronRight, Cpu } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
+import { useAgentEnginePolicyStore } from '@/stores/agent-engine-policy';
+import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useCurrentChatDisplayMessageCount, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
@@ -37,6 +39,7 @@ import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-sess
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 
 /** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
 const remappedDelistedSessionKeys = new Set<string>();
@@ -303,6 +306,19 @@ function useChatEngineSelection(allowSessionSwitch = false) {
   const sessions = useChatStore((s) => s.sessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+  const authUserKey = useAuthStore((s) => s.user?.code || s.user?.empCode || s.user?.id || '');
+  const policyEngines = useAgentEnginePolicyStore((s) => s.engines);
+  const policyDefaultEngine = useAgentEnginePolicyStore((s) => s.defaultEngine);
+  const policyLoading = useAgentEnginePolicyStore((s) => s.loading);
+  const policyLoaded = useAgentEnginePolicyStore((s) => s.loaded);
+  const policyOwnerCode = useAgentEnginePolicyStore((s) => s.ownerCode);
+  const policyConfigVersion = useAgentEnginePolicyStore((s) => s.configVersion);
+  const fetchEnginePolicy = useAgentEnginePolicyStore((s) => s.fetchPolicy);
+
+  useEffect(() => {
+    if (!authUserKey) return;
+    void fetchEnginePolicy(authUserKey);
+  }, [authUserKey, fetchEnginePolicy]);
 
   const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
@@ -336,7 +352,7 @@ function useChatEngineSelection(allowSessionSwitch = false) {
 
   const [engineSaving, setEngineSaving] = useState(false);
 
-  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude' | 'pi') => {
+  const handleEngineSwitch = useCallback(async (engineType: AgentEngineType, notify = true) => {
     if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
@@ -363,15 +379,60 @@ function useChatEngineSelection(allowSessionSwitch = false) {
           )),
         }));
       }
-      toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'Pi Agent' : 'OpenClaw'} 引擎`);
+      if (notify) {
+        toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'Pi Agent' : 'OpenClaw'} 引擎`);
+      }
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
     } finally {
       setEngineSaving(false);
     }
-  };
+  }, [agentDefaultEngineType, allowSessionSwitch, canSwitchEngine, currentAgentId, currentSessionKey, fetchAgents]);
 
-  const engineSelectDisabled = sending || !currentAgentId;
+  const effectivePolicyLoaded = policyLoaded && policyOwnerCode === (authUserKey.trim() || 'current-user');
+  const allowedEngineTypes = useMemo(
+    () => new Set(policyEngines.map((item) => item.code)),
+    [policyEngines],
+  );
+  const autoEngineReconcileKeyRef = useRef('');
+
+  useEffect(() => {
+    if (
+      !effectivePolicyLoaded
+      || policyLoading
+      || engineSaving
+      || !canSwitchEngine
+      || !currentAgentId
+      || allowedEngineTypes.has(agentDefaultEngineType)
+    ) return;
+    const reconcileKey = [
+      policyOwnerCode,
+      policyConfigVersion,
+      currentAgentId,
+      agentDefaultEngineType,
+      policyDefaultEngine,
+    ].join(':');
+    if (autoEngineReconcileKeyRef.current === reconcileKey) return;
+    autoEngineReconcileKeyRef.current = reconcileKey;
+    const timer = window.setTimeout(() => {
+      void handleEngineSwitch(policyDefaultEngine, false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    agentDefaultEngineType,
+    allowedEngineTypes,
+    canSwitchEngine,
+    currentAgentId,
+    effectivePolicyLoaded,
+    engineSaving,
+    handleEngineSwitch,
+    policyConfigVersion,
+    policyDefaultEngine,
+    policyLoading,
+    policyOwnerCode,
+  ]);
+
+  const engineSelectDisabled = sending || !currentAgentId || policyLoading || !effectivePolicyLoaded;
   const engineTriggerTitle = allowSessionSwitch
     ? '切换当前建站会话执行引擎'
     : canSwitchEngine
@@ -379,11 +440,11 @@ function useChatEngineSelection(allowSessionSwitch = false) {
     : isSclawBrowserEmbedChatSessionKey(currentSessionKey) && messages.length > 0
       ? '历史会话不可切换引擎（可切换模型）'
       : '当前会话不可切换引擎';
-  const engineOptions: SelectorMenuOption<'openclaw' | 'claude' | 'pi'>[] = [
-    { key: 'openclaw', value: 'openclaw', label: 'OpenClaw' },
-    { key: 'claude', value: 'claude', label: 'Claude Agent' },
-    { key: 'pi', value: 'pi', label: 'Pi Agent' },
-  ];
+  const engineOptions: SelectorMenuOption<AgentEngineType>[] = policyEngines.map((engine) => ({
+    key: engine.code,
+    value: engine.code,
+    label: engine.name,
+  }));
 
   return {
     agentDefaultEngineType,

@@ -132,8 +132,11 @@ export async function handleAgentRoutes(
 
   if (url.pathname === '/api/agents' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ name: string; inheritWorkspace?: boolean }>(req);
-      const snapshot = await createAgent(body.name, { inheritWorkspace: body.inheritWorkspace });
+      const body = await parseJsonBody<{ name: string; inheritWorkspace?: boolean; defaultEngine?: unknown }>(req);
+      const snapshot = await createAgent(body.name, {
+        inheritWorkspace: body.inheritWorkspace,
+        defaultEngine: body.defaultEngine,
+      });
       // Sync provider API keys to the new agent's auth-profiles.json so the
       // embedded runner can authenticate with LLM providers when messages
       // arrive via channel bots (e.g. DingTalk). Without this, the copied

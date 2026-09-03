@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import type { ChannelType } from '@/types/channel';
 import type { AgentSummary, AgentsSnapshot } from '@/types/agent';
+import { useAgentEnginePolicyStore } from '@/stores/agent-engine-policy';
+import { useAuthStore } from '@/stores/auth';
 import {
   getBaseAgentIdFromProjectAgentId,
   getProjectIdFromProjectAgentId,
@@ -126,9 +128,26 @@ export const useAgentsStore = create<AgentsState>((set) => ({
   createAgent: async (name: string, options?: { inheritWorkspace?: boolean }) => {
     set({ error: null });
     try {
+      const user = useAuthStore.getState().user;
+      const ownerCode = String(user?.code || user?.empCode || user?.id || '').trim();
+      let defaultEngine: string | undefined;
+
+      if (ownerCode) {
+        const currentPolicy = useAgentEnginePolicyStore.getState();
+        await currentPolicy.fetchPolicy(ownerCode);
+        const resolvedPolicy = useAgentEnginePolicyStore.getState();
+        if (resolvedPolicy.ownerCode === ownerCode && !resolvedPolicy.error) {
+          defaultEngine = resolvedPolicy.defaultEngine;
+        }
+      }
+
       const snapshot = await hostApiFetch<AgentsSnapshot & { success?: boolean }>('/api/agents', {
         method: 'POST',
-        body: JSON.stringify({ name, inheritWorkspace: options?.inheritWorkspace }),
+        body: JSON.stringify({
+          name,
+          inheritWorkspace: options?.inheritWorkspace,
+          defaultEngine,
+        }),
       });
       set(applySnapshot(snapshot));
     } catch (error) {

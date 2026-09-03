@@ -165,6 +165,10 @@ function getDefaultAgentEngineType(): AgentEngineType {
   return 'claude';
 }
 
+function resolveNewAgentDefaultEngineType(defaultEngine: unknown): AgentEngineType {
+  return parseAgentEngineType(defaultEngine) ?? getDefaultAgentEngineType();
+}
+
 function normalizeAgentEngineType(value: unknown, fallback: AgentEngineType = getDefaultAgentEngineType()): AgentEngineType {
   return parseAgentEngineType(value) ?? fallback;
 }
@@ -746,8 +750,9 @@ export async function listConfiguredAgentIds(): Promise<string[]> {
 
 export async function createAgent(
   name: string,
-  options?: { inheritWorkspace?: boolean },
+  options?: { inheritWorkspace?: boolean; defaultEngine?: unknown },
 ): Promise<AgentsSnapshot> {
+  const defaultEngineType = resolveNewAgentDefaultEngineType(options?.defaultEngine);
   return withConfigLock(async () => {
     const config = await readOpenClawConfig() as AgentConfigDocument;
     const { agentsConfig, entries, syntheticMain } = normalizeAgentsConfig(config);
@@ -784,7 +789,7 @@ export async function createAgent(
     await writeOpenClawConfig(config);
     const features = await readAgentFeatures();
     features.engineType = features.engineType || {};
-    features.engineType[nextId] = getDefaultAgentEngineType();
+    features.engineType[nextId] = defaultEngineType;
     await writeAgentFeatures(features);
     logger.info('Created agent config entry', { agentId: nextId, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);
@@ -803,7 +808,12 @@ export async function createAgent(
 export async function createAgentWithId(
   id: string,
   name: string,
-  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean; workspace?: string },
+  options?: {
+    inheritWorkspace?: boolean;
+    fileTransformByOSS?: boolean;
+    workspace?: string;
+    defaultEngine?: unknown;
+  },
 ): Promise<AgentsSnapshot> {
   if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
   if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
@@ -839,6 +849,8 @@ export async function createAgentWithId(
       logger.warn('createAgentWithId: healing disk orphan into config', { agentId: id });
     }
 
+    const defaultEngineType = resolveNewAgentDefaultEngineType(options?.defaultEngine);
+
     const normalizedName = normalizeAgentName(name);
     const nextEntries = syntheticMain ? [createImplicitMainEntry(config), ...entries.filter((_, index) => index > 0)] : [...entries];
     const newAgent: AgentListEntry = {
@@ -865,7 +877,7 @@ export async function createAgentWithId(
 
     const features = await readAgentFeatures();
     features.engineType = features.engineType || {};
-    features.engineType[id] = getDefaultAgentEngineType();
+    features.engineType[id] = defaultEngineType;
 
     if (options?.fileTransformByOSS === true) {
       features.fileTransformByOSS = features.fileTransformByOSS || {};
