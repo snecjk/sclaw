@@ -157,6 +157,39 @@ export function buildSnpmInstallArgs(registry?: string, packages: string[] = [])
   return args;
 }
 
+const INSTALL_LOG_ANSI_RE = /(?:\u001B|\u009B)[\[\]()#;?]*(?:\d{1,4}(?:;\d{0,4})*)?[0-9A-ORZcf-nq-uy=><~]/g;
+
+/** Strip progress-bar control codes so snpm output is readable in the workbench. */
+export function stripInstallLogAnsi(text: string): string {
+  return text
+    .replace(INSTALL_LOG_ANSI_RE, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+}
+
+export function pushInstallLogTail(
+  previous: string,
+  chunk: string,
+  maxLines = 48,
+  maxChars = 8_000,
+): string {
+  const cleaned = stripInstallLogAnsi(`${previous}${chunk}`);
+  const lines = cleaned
+    .split('\n')
+    .map((line) => line.replace(/\s+$/g, ''))
+    .filter((line) => line.length > 0);
+  let next = lines.slice(-maxLines).join('\n');
+  if (next.length > maxChars) {
+    next = next.slice(next.length - maxChars).replace(/^[^\n]*\n/, '');
+  }
+  return next;
+}
+
+export function lastInstallLogLine(log: string): string | undefined {
+  const lines = log.split('\n').map((line) => line.trim()).filter(Boolean);
+  return lines.length > 0 ? lines[lines.length - 1] : undefined;
+}
+
 export function isTransientNpmInstallFailure(message: string): boolean {
   return /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ECONNREFUSED|socket disconnected|TLS connection|network request to /i.test(
     message,

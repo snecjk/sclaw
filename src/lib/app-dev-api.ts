@@ -44,6 +44,8 @@ export interface AppDevStatus {
   error?: string;
   /** Extra line for the active setup step (e.g. snpm found vs installing). */
   detail?: string;
+  /** Recent snpm / setup command output shown in the workbench log panel. */
+  log?: string;
 }
 
 export interface AppDevEnvironment {

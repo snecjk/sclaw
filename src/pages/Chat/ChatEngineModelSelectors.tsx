@@ -321,8 +321,8 @@ function useChatEngineSelection(allowSessionSwitch = false) {
 
   const [engineSaving, setEngineSaving] = useState(false);
 
-  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude') => {
-    if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
+  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude'): Promise<boolean> => {
+    if (!canSwitchEngine || engineType === agentDefaultEngineType) return false;
     setEngineSaving(true);
     try {
       const baseAgentId = resolveBaseAgentId(currentAgentId);
@@ -349,8 +349,10 @@ function useChatEngineSelection(allowSessionSwitch = false) {
         }));
       }
       toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
+      return true;
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
+      return false;
     } finally {
       setEngineSaving(false);
     }
@@ -936,19 +938,19 @@ export function ChatEngineModelCascade({
   } = useChatModelSelection();
 
   const [open, setOpen] = useState(false);
-  const [previewEngine, setPreviewEngine] = useState<'openclaw' | 'claude' | null>(null);
+  const [pickedEngine, setPickedEngine] = useState<'openclaw' | 'claude' | null>(null);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({ visibility: 'hidden' });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const activeEngine = previewEngine
-    ?? (canSwitchEngine ? agentDefaultEngineType : currentEngineType);
+  const committedEngine = canSwitchEngine ? agentDefaultEngineType : currentEngineType;
+  const activeEngine = pickedEngine ?? committedEngine;
   const busy = engineSaving || modelSaving;
   const triggerDisabled = engineSelectDisabled && modelSelectDisabled;
 
   useEffect(() => {
     if (!open) {
-      setPreviewEngine(null);
+      setPickedEngine(null);
       return;
     }
 
@@ -998,8 +1000,12 @@ export function ChatEngineModelCascade({
 
   const pickEngine = (engineType: 'openclaw' | 'claude') => {
     if (!canSwitchEngine || engineSelectDisabled || busy) return;
-    setPreviewEngine(engineType);
-    void handleEngineSwitch(engineType);
+    const previous = committedEngine;
+    setPickedEngine(engineType);
+    if (engineType === committedEngine) return;
+    void handleEngineSwitch(engineType).then((ok) => {
+      if (!ok) setPickedEngine(previous);
+    });
   };
 
   const pickModel = (modelId: string) => {
@@ -1043,7 +1049,11 @@ export function ChatEngineModelCascade({
             'border border-glass-border bg-popover text-popover-foreground shadow-lg',
           )}
         >
-          <div className="flex w-[168px] shrink-0 flex-col border-r border-border/70 p-1">
+          <div
+            className="flex w-[168px] shrink-0 flex-col border-r border-border/70 p-1"
+            role="listbox"
+            aria-label="引擎"
+          >
             <p className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">引擎</p>
             {engineOptions.map((option) => {
               const selected = option.value === activeEngine;
@@ -1052,20 +1062,25 @@ export function ChatEngineModelCascade({
                 <button
                   key={option.key}
                   type="button"
+                  role="option"
+                  aria-selected={selected}
                   disabled={engineSelectDisabled || busy || lockedOut}
                   className={cn(
-                    'relative flex h-9 w-full select-none items-center gap-1 rounded-md px-2 text-left text-[13px] outline-none',
-                    'transition-colors hover:bg-accent hover:text-accent-foreground',
-                    selected && 'bg-primary/8 font-medium',
+                    'relative flex h-9 w-full select-none items-center gap-1.5 rounded-md px-2 text-left text-[13px] outline-none',
+                    'transition-colors focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
+                    selected
+                      ? 'bg-primary/12 font-medium text-primary'
+                      : 'text-foreground hover:bg-[var(--sto-content-hover-background)]',
                     lockedOut && 'opacity-40',
                   )}
-                  onMouseEnter={() => {
-                    if (!lockedOut) setPreviewEngine(option.value);
-                  }}
                   onClick={() => pickEngine(option.value)}
                 >
                   <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  {selected ? (
+                    <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  )}
                 </button>
               );
             })}
@@ -1078,7 +1093,7 @@ export function ChatEngineModelCascade({
               {selectorModelOptions.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">暂无可用模型</p>
               ) : selectorModelOptions.map((option) => {
-                const selected = option.value === selectedModelId && activeEngine === (canSwitchEngine ? agentDefaultEngineType : currentEngineType);
+                const selected = option.value === selectedModelId && activeEngine === committedEngine;
                 return (
                   <button
                     key={option.key}
@@ -1088,8 +1103,10 @@ export function ChatEngineModelCascade({
                     disabled={modelSelectDisabled || busy}
                     className={cn(
                       'relative flex h-9 w-full select-none items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none',
-                      'transition-colors hover:bg-accent hover:text-accent-foreground',
-                      selected && 'bg-primary/8 font-medium',
+                      'transition-colors focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
+                      selected
+                        ? 'bg-primary/12 font-medium text-primary'
+                        : 'hover:bg-[var(--sto-content-hover-background)]',
                     )}
                     onClick={() => pickModel(option.value)}
                   >

@@ -168,6 +168,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}
           onBeforeSend={onBeforeSend}
+          composerDraftSessionKey={sessionKey}
         />
       </div>
     </div>
@@ -531,6 +532,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
           onDismissErrors={dismissErrors}
           onPreviewRuntimeError={handlePreviewRuntimeError}
           onRetryStart={handleRetryStart}
+          onCancelSetup={() => void stopRun()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}

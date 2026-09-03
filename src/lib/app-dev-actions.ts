@@ -11,7 +11,7 @@ export function isImportedDevApp(app?: Pick<DevAppSummary, 'source' | 'appCode'>
   return !app.appCode;
 }
 
-/** sai-cli push / pull / deploy — cloud-bound apps, or apps created via 新建站. */
+/** Push / pull / deploy — cloud-bound apps, or apps created via 新建站. */
 export function shouldShowStoCloudActions(
   app: Pick<DevAppSummary, 'source' | 'appCode'> | null | undefined,
   stoStatus?: StoAppStatus | null,

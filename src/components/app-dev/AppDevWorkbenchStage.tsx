@@ -31,7 +31,7 @@ import {
   type SclawBrowserFrameHandle,
 } from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
-import { AppDevSetupProgress } from '@/components/app-dev/AppDevSetupProgress';
+import { AppDevSetupProgress, AppDevCommandLog } from '@/components/app-dev/AppDevSetupProgress';
 import { buildAppDevFileTree } from '@/lib/app-dev-file-tree';
 import {
   listAppSourceFiles,
@@ -76,6 +76,7 @@ interface AppDevWorkbenchStageProps {
   /** Preview guest console / network errors worth fixing. */
   onPreviewRuntimeError?: (formattedLine: string) => void;
   onRetryStart: () => void;
+  onCancelSetup?: () => void;
   /** Monaco diagnostics → fill chat composer (no auto-send). */
   onFillComposerFromDiagnostics?: (text: string) => void;
   /**
@@ -107,6 +108,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onDismissErrors,
   onPreviewRuntimeError,
   onRetryStart,
+  onCancelSetup,
   onFillComposerFromDiagnostics,
   sourceRevision = 0,
   previewRevision = 0,
@@ -596,12 +598,19 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
         ) : (
           <div className="flex flex-1 items-center justify-center p-8">
             {phase === 'error' ? (
-              <div className="w-full max-w-sm text-center">
+              <div className="w-full max-w-[480px] text-center">
                   <AlertCircle className="mx-auto mb-4 h-10 w-10 text-[var(--sto-functional-error)]" aria-hidden />
-                  <p className="mb-2 text-sm font-medium text-foreground">应用启动遇到了问题</p>
-                  <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
-                    可以重试一次；如果仍然失败，可在左侧告诉 AI「应用启动失败了，帮我看看」。
+                  <p className="mb-2 text-sm font-medium text-foreground">
+                    {/snpm install/i.test(status?.error ?? '') ? '依赖安装遇到了问题' : '应用启动遇到了问题'}
                   </p>
+                  <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+                    可以重试一次；如果仍然失败，把下方日志发给 AI「帮我看看」。
+                  </p>
+                  {status?.error ? (
+                    <AppDevCommandLog log={status.error} className="mb-3" />
+                  ) : (
+                    <AppDevCommandLog log={status?.log} className="mb-3" />
+                  )}
                   <Button type="button" size="sm" className="gap-1" onClick={onRetryStart}>
                     <RotateCw className="h-3.5 w-3.5" aria-hidden />
                     重试
@@ -624,6 +633,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                 phase={phase || 'created'}
                 progress={status?.progress ?? 0}
                 detail={status?.detail}
+                log={status?.log}
+                onCancel={onCancelSetup}
               />
             )}
           </div>

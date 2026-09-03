@@ -37,23 +37,24 @@ export function AppDevRunStatusMenu({
   className,
 }: AppDevRunStatusMenuProps) {
   const running = phase === 'ready';
-  const working = pending
-    || phase === 'created'
+  const preparing = phase === 'created'
     || phase === 'preparing-env'
     || phase === 'checking-snpm'
     || phase === 'installing'
     || phase === 'starting';
+  const working = pending || preparing;
   const canStart = phase === 'stopped' || phase === 'error';
+  const canCancel = !pending && preparing;
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={working}>
+      <DropdownMenuTrigger asChild disabled={pending}>
         <button
           type="button"
           className={cn(
             'no-drag inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 text-xs text-muted-foreground',
-            !working && 'transition-colors hover:bg-muted hover:text-foreground',
-            working && 'cursor-default',
+            (!working || canCancel) && 'transition-colors hover:bg-muted hover:text-foreground',
+            working && !canCancel && 'cursor-default',
             className,
           )}
           aria-label={`应用状态：${APP_DEV_PHASE_LABELS[phase]}`}
@@ -69,7 +70,7 @@ export function AppDevRunStatusMenu({
             aria-hidden
           />
           {APP_DEV_PHASE_LABELS[phase]}
-          {!working ? <ChevronDown className="h-3 w-3" aria-hidden /> : null}
+          {!working || canCancel ? <ChevronDown className="h-3 w-3" aria-hidden /> : null}
         </button>
       </DropdownMenuTrigger>
       {/* App plaza renders the workbench in a portal at z-index 240. */}
@@ -88,6 +89,15 @@ export function AppDevRunStatusMenu({
               停止
             </DropdownMenuItem>
           </>
+        ) : null}
+        {canCancel ? (
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={onStop}
+          >
+            <Square className="mr-2 h-3.5 w-3.5" aria-hidden />
+            取消
+          </DropdownMenuItem>
         ) : null}
         {canStart ? (
           <DropdownMenuItem onSelect={onStart}>

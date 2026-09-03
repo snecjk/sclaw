@@ -81,3 +81,6 @@ plans/
 openspec/
 .roo/
 docs/superpowers/
+reports/
+.kimiapp-analysis/
+.webbridge-analysis/

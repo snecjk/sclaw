@@ -1,6 +1,6 @@
 /**
- * User-app collaboration facade — delegates to sai-cli siteapp via code-collab-service.
- * List / archive use memory-center HTTP in site-app-api.ts.
+ * User-app collaboration facade — Site App HTTP source sync via code-collab-service.
+ * List / archive / create / commit / snapshot use memory-center HTTP in site-app-api.ts.
  */
 import { resolve } from 'path';
 import {
@@ -30,7 +30,7 @@ function toCommandResult(result: CodeCollabCommandResult): StoAppCommandResult {
 }
 
 export function resolveStoAppExecutable(): string | null {
-  return 'sai-cli';
+  return 'site-apps';
 }
 
 export async function getStoAppStatus(appPath: string): Promise<StoAppStatusSummary> {

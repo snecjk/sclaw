@@ -58,6 +58,7 @@ import {
   InputComposerToolbarIconTooltip,
   CHAT_EDIT_DRAFT_EVENT,
 } from '@/components/input-composer';
+import { useComposerSessionDraft } from '@/components/input-composer/use-composer-session-draft';
 import type {
   ChatDraftWorkflowMeta,
   ChatEditDraftEventDetail,
@@ -152,6 +153,11 @@ interface ChatInputProps {
   composerScenarioActions?: EmbedComposerAction[];
   /** 工具栏布局：应用广场窄栏用 dropdown 收起附件/技能等 */
   toolbarToolsLayout?: 'inline' | 'dropdown';
+  /**
+   * 广场 / 建站等独立输入框锁定草稿会话。传入后不再跟随全局 currentSessionKey，
+   * 避免切走时用空编辑器覆盖主会话草稿。
+   */
+  composerDraftSessionKey?: string | null;
 }
 
 export function ChatInput({
@@ -175,6 +181,7 @@ export function ChatInput({
   showInterfaceCatalog = false,
   composerScenarioActions,
   toolbarToolsLayout = 'inline',
+  composerDraftSessionKey,
 }: ChatInputProps) {
   void _isEmpty;
   const { t } = useTranslation('chat');
@@ -189,7 +196,7 @@ export function ChatInput({
 
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey) || DEFAULT_SESSION_KEY;
   const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
@@ -284,6 +291,18 @@ export function ChatInput({
     handleDragLeave,
     handleDrop,
   } = core;
+
+  const isolatedDraft = composerDraftSessionKey !== undefined;
+  const { clearParkedDraft } = useComposerSessionDraft({
+    sessionKey: isolatedDraft ? (composerDraftSessionKey ?? '') : currentSessionKey,
+    isolateToSessionKey: isolatedDraft,
+    seedText,
+    mentionEditorRef,
+    snapshot: composerSnapshot,
+    onBeforeRestore: () => {
+      clearAttachments();
+    },
+  });
 
   // Mirror composer text for learning-center / connector handoff; clear on leave
   // so an unmounted editor reads as empty (same as the user sees on return).
@@ -491,6 +510,7 @@ export function ChatInput({
       clearAttachments();
       setMentionTrigger(null);
       setComposerSnapshot(EMPTY_MENTION_COMPOSER_SNAPSHOT);
+      clearParkedDraft();
 
       const voiceLoop = useVoiceLoopStore.getState();
       if (voiceLoop.active) {
@@ -553,6 +573,7 @@ export function ChatInput({
     setComposerSnapshot,
     setMentionTrigger,
     effectiveTargetAgentId,
+    clearParkedDraft,
   ]);
 
   useEffect(() => {

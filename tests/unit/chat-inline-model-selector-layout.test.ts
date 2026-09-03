@@ -28,8 +28,8 @@ describe('chat inline model selector layout', () => {
   });
 
   it('does not force the inline model selector to share width with the engine selector', () => {
-    expect(homeComposerSource).toContain('<ChatModelSelector variant="inline" className="min-w-max shrink-0" />');
-    expect(chatPageSource).toContain('<ChatModelSelector variant="inline" className="min-w-max shrink-0" />');
+    expect(homeComposerSource).toContain('<ChatEngineModelCascade className="min-w-0 max-w-full" />');
+    expect(chatPageSource).toContain('<ChatEngineModelCascade className="min-w-0 max-w-full" />');
   });
 
   it('uses a styled portal menu without Radix composed callback refs', () => {
@@ -38,5 +38,13 @@ describe('chat inline model selector layout', () => {
     expect(selectorSource).toContain('ref={triggerRef}');
     expect(selectorSource).not.toContain('<select');
     expect(selectorSource).not.toContain('<DropdownMenuTrigger');
+  });
+
+  it('selects cascade engines by click instead of hover', () => {
+    expect(selectorSource).toContain('setPickedEngine(engineType)');
+    expect(selectorSource).toContain('aria-selected={selected}');
+    expect(selectorSource).toContain('bg-primary/12 font-medium text-primary');
+    expect(selectorSource).not.toContain('onMouseEnter={() => {');
+    expect(selectorSource).not.toContain('setPreviewEngine');
   });
 });

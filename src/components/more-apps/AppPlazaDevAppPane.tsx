@@ -178,6 +178,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}
           onBeforeSend={onBeforeSend}
+          composerDraftSessionKey={sessionKey}
         />
       </div>
     </div>
@@ -673,6 +674,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           onDismissErrors={dismissErrors}
           onPreviewRuntimeError={handlePreviewRuntimeError}
           onRetryStart={handleRetryStart}
+          onCancelSetup={() => void stopRun()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}

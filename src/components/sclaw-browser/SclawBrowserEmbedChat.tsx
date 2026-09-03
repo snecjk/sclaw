@@ -245,6 +245,7 @@ export function SclawBrowserEmbedChat({
           seedText={composerSeed}
           composerScenarioActions={composerScenarioActions}
           toolbarToolsLayout={toolbarToolsLayout}
+          composerDraftSessionKey={sessionKey}
         />
       </div>
         </>

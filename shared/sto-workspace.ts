@@ -173,6 +173,7 @@ export function siteAppToWorkspaceFields(cloud?: SiteAppRecord): StoWorkspaceFie
     status: cloud.status,
     baseRevisionId: cloud.headRevisionId,
     baseCommitSha: cloud.headCommitSha,
+    baseSourceSha256: cloud.headSourceSha256,
   };
 }
 

@@ -51,8 +51,9 @@ import { readStoAppPushHistory } from '../../services/sto-app-push-history-store
 import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
 import { assertExternalServicesReadyForDeploy } from '../../services/app-dev-deploy-preflight';
-import { ensureSiteAppActiveForDeploy, probeSiteAppDeployCreateDownstream, probeSiteAppDeployRefreshDownstream } from '../../services/site-app-api';
-import { siteappCliErrorMessage } from '../../../shared/siteapp-cli-payload';
+import { ensureSiteAppActiveForDeploy, createSiteAppDeploy, refreshSiteAppDeploy, syncSiteAppMenus } from '../../services/site-app-api';
+import { resolveSiteappDeployCreateParams } from '../../utils/siteapp-cli';
+import { StoMemoryApiError } from '../../services/sto-memory-api-fetch';
 import {
   extractDeploymentIdFromText,
   formatCodeDeployImmediateFailureMessage,
@@ -96,24 +97,6 @@ function summarizeDeployCloud(cloud: {
   };
 }
 
-async function resolveSiteappDownstreamFailureMessage(
-  result: { ok: boolean; error?: unknown; data?: unknown; exitCode: number },
-  fallback: string,
-  probe: () => Promise<string | null>,
-): Promise<string> {
-  const cliMessage = siteappCliErrorMessage({
-    ok: result.ok,
-    exitCode: result.exitCode,
-    error: result.error,
-    data: result.data,
-  });
-  if (!result.ok && /downstream request failed/i.test(cliMessage)) {
-    const downstream = await probe();
-    if (downstream) return downstream;
-  }
-  return cliMessage || fallback;
-}
-
 function isDeploymentBusyMessage(message: string): boolean {
   return /DEPLOYMENT_BUSY|已有发布正在执行/.test(message);
 }
@@ -132,16 +115,19 @@ function buildBusyDeployReuseData(
   };
 }
 
-async function resolveDeployCreateResult(
-  result: { ok: boolean; error?: unknown; data?: unknown; exitCode: number },
+function siteAppHttpErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof StoMemoryApiError && error.message.trim()) return error.message.trim();
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  return fallback;
+}
+
+function resolveDeployCreatePayload(
+  json: unknown,
   deployParams: Record<string, string>,
-): Promise<{ data: unknown } | { error: string }> {
-  if (!result.ok) {
-    const message = await resolveSiteappDownstreamFailureMessage(
-      result,
-      '发布失败',
-      () => probeSiteAppDeployCreateDownstream(deployParams),
-    );
+  error?: unknown,
+): { data: unknown } | { error: string } {
+  if (error) {
+    const message = siteAppHttpErrorMessage(error, '发布失败');
     const busyDeploymentId = extractDeploymentIdFromText(message);
     if (busyDeploymentId && isDeploymentBusyMessage(message)) {
       logger.info(
@@ -152,7 +138,7 @@ async function resolveDeployCreateResult(
     return { error: message };
   }
 
-  const fields = pickCodeDeployFields(result.data);
+  const fields = pickCodeDeployFields(json);
   if (isSpuriousPendingDeployFailure(fields)) {
     logger.warn(
       `[app-dev] deploy:create-pending-misreport ${serializeForAppDevLog({
@@ -162,12 +148,12 @@ async function resolveDeployCreateResult(
         deploymentId: fields.deploymentId,
       })}`,
     );
-    return { data: result.data };
+    return { data: json };
   }
   if (isCodeDeployFailed(fields.status)) {
     return { error: formatCodeDeployImmediateFailureMessage(fields) };
   }
-  return { data: result.data };
+  return { data: json };
 }
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
@@ -571,7 +557,6 @@ export async function handleAppDevRoutes(
         `[app-dev] deploy:site-app-active appCode=${appCode} status=${activated.status ?? '-'}`,
       );
 
-      const { resolveSiteappDeployCreateParams, siteappDeployCreate } = await import('../../utils/siteapp-cli');
       const deployParams = resolveSiteappDeployCreateParams({
         env,
         appCode,
@@ -579,21 +564,22 @@ export async function handleAppDevRoutes(
         deploymentVersion: body.deploymentVersion,
       });
       logger.info(`[app-dev] deploy:create-start params=${serializeForAppDevLog(deployParams)}`);
-      const result = await siteappDeployCreate({
-        appCode,
-        env,
-        requestId: deployParams.request_id,
-        deploymentVersion: deployParams.deployment_version,
-      });
-      if (!result.ok) {
+      let deployJson: unknown;
+      let deployError: unknown;
+      try {
+        deployJson = await createSiteAppDeploy({
+          appCode,
+          env,
+          requestId: deployParams.request_id,
+          deploymentVersion: deployParams.deployment_version,
+        });
+      } catch (error) {
+        deployError = error;
         logger.error(`[app-dev] deploy:create-failed ${serializeForAppDevLog({
-          ok: result.ok,
-          exitCode: result.exitCode,
-          error: result.error,
-          data: result.data,
+          error: siteAppHttpErrorMessage(error, '发布失败'),
         })}`);
       }
-      const outcome = await resolveDeployCreateResult(result, deployParams);
+      const outcome = resolveDeployCreatePayload(deployJson, deployParams, deployError);
       if ('error' in outcome) {
         logger.error(`[app-dev] deploy:create-error-detail ${outcome.error}`);
         throw new Error(outcome.error);
@@ -612,9 +598,7 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/sto-app/deploy/refresh' && req.method === 'POST') {
       const body = await parseJsonBody<{ deploymentId?: string; appCode?: string; workspaceId?: string }>(req);
       const deploymentId = (body.deploymentId ?? '').trim();
-      logger.info(
-        `[app-dev] deploy:refresh-start body=${serializeForAppDevLog(body)}`,
-      );
+      logger.info(`[app-dev] deploy:refresh-start body=${serializeForAppDevLog(body)}`);
       if (!deploymentId) throw new Error('缺少 deploymentId');
 
       let appCode = (body.appCode ?? '').trim();
@@ -625,29 +609,24 @@ export async function handleAppDevRoutes(
       }
       if (!appCode) throw new Error('缺少 appCode');
 
-      const { siteappDeployRefresh } = await import('../../utils/siteapp-cli');
-      const result = await siteappDeployRefresh({ appCode, deploymentId });
-      if (!result.ok) {
-        logger.error(`[app-dev] deploy:refresh-failed deploymentId=${deploymentId} appCode=${appCode} ` +
-          `${serializeForAppDevLog({ ok: result.ok, exitCode: result.exitCode, error: result.error, data: result.data })}`);
-        const refreshParams = { app_code: appCode, deployment_id: deploymentId };
-        const message = await resolveSiteappDownstreamFailureMessage(
-          result,
-          '刷新部署状态失败',
-          () => probeSiteAppDeployRefreshDownstream(refreshParams),
+      try {
+        const data = await refreshSiteAppDeploy({ appCode, deploymentId });
+        logger.info(
+          `[app-dev] deploy:refresh-ok deploymentId=${deploymentId} appCode=${appCode} ` +
+          `data=${serializeForAppDevLog(data)}`,
         );
-        logger.error(`[app-dev] deploy:refresh-error-detail ${message}`);
+        sendJson(res, 200, {
+          success: true,
+          deploymentId,
+          data: data ?? null,
+        });
+      } catch (error) {
+        const message = siteAppHttpErrorMessage(error, '刷新部署状态失败');
+        logger.error(
+          `[app-dev] deploy:refresh-failed deploymentId=${deploymentId} appCode=${appCode} ${message}`,
+        );
         throw new Error(message);
       }
-      logger.info(
-        `[app-dev] deploy:refresh-ok deploymentId=${deploymentId} appCode=${appCode} ` +
-        `data=${serializeForAppDevLog(result.data)}`,
-      );
-      sendJson(res, 200, {
-        success: true,
-        deploymentId,
-        data: result.data ?? null,
-      });
       return true;
     }
 
@@ -718,12 +697,8 @@ export async function handleAppDevRoutes(
         appCode,
         menus: menus as import('../../../shared/siteapp-menu-sync').SiteappMenuItemInput[],
       });
-      const { siteappMenuSync } = await import('../../utils/siteapp-cli');
-      const result = await siteappMenuSync(params);
-      if (!result.ok) {
-        throw new Error(siteappCliErrorMessage(result));
-      }
-      sendJson(res, 200, { success: true, appCode, data: result.data ?? null });
+      const data = await syncSiteAppMenus(params);
+      sendJson(res, 200, { success: true, appCode, data: data ?? null });
       return true;
     }
 

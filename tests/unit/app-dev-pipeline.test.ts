@@ -14,6 +14,11 @@ describe('appDevSetupSteps', () => {
     expect(appDevSetupSteps('installing').map((s) => s.state)).toEqual(['done', 'active', 'pending']);
   });
 
+  it('shows the latest snpm line while installing', () => {
+    const steps = appDevSetupSteps('installing', 'http fetch GET lodash');
+    expect(steps[1].hint).toBe('http fetch GET lodash');
+  });
+
   it('marks start active while starting', () => {
     expect(appDevSetupSteps('starting').map((s) => s.state)).toEqual(['done', 'done', 'active']);
   });

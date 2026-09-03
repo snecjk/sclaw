@@ -78,6 +78,8 @@ export interface HomeComposerProps {
   toolbarToolsLayout?: 'inline' | 'dropdown';
   /** 可选覆盖默认内联引擎/模型工具栏 */
   toolbarSelectors?: ReactNode;
+  /** 广场 / 建站：锁定草稿到该会话，不跟随全局 currentSessionKey */
+  composerDraftSessionKey?: string | null;
 }
 
 export function HomeComposer({
@@ -98,6 +100,7 @@ export function HomeComposer({
   composerScenarioActions,
   toolbarToolsLayout,
   toolbarSelectors,
+  composerDraftSessionKey,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
   const agents = useAgentsStore((s) => s.agents);
@@ -179,6 +182,7 @@ export function HomeComposer({
           showInterfaceCatalog={showInterfaceCatalog}
           composerScenarioActions={composerScenarioActions}
           toolbarToolsLayout={toolbarToolsLayout}
+          composerDraftSessionKey={composerDraftSessionKey}
         />
       </section>
       {showDisclaimer ? (
