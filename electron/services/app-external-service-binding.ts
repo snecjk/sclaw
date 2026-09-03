@@ -21,12 +21,14 @@ type ProxyEntry = {
   changeOrigin?: boolean;
   managedBy?: string;
   serviceId?: string;
+  serviceUid?: string;
 };
 
 type DevProxyManifest = { version: string; proxies: ProxyEntry[] };
 
 type BindingDependencies = {
   getVersion?: (serviceUid: string, version: string) => Promise<ExternalServiceVersionConfig>;
+  resolveLegacyVersion?: (serviceId: string, version: string) => Promise<ExternalServiceVersionConfig>;
   installNpmPackage?: (appPath: string, packageName: string) => Promise<{ packageName: string; output: string }>;
 };
 
@@ -123,6 +125,61 @@ async function loadManifest(appPath: string): Promise<ExternalServicesManifest> 
   return { schemaVersion: 'external-services/v1', services: [...value.services] };
 }
 
+/**
+ * 将 company scope 重构前只保存 serviceId 的旧快照提升为当前不可变快照。
+ * 仅在读取到旧格式时访问服务中心并写回；新格式不会产生额外网络请求或文件改动。
+ */
+async function migrateLegacyManifest(
+  appPath: string,
+  resolveLegacyVersion: (serviceId: string, version: string) => Promise<ExternalServiceVersionConfig>,
+): Promise<ExternalServicesManifest> {
+  const raw = await readOptional(join(appPath, MANIFEST_PATH));
+  if (raw === null) return { schemaVersion: 'external-services/v1', services: [] };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('external-services.v1.json 不是有效 JSON');
+  }
+  const value = parsed as Partial<ExternalServicesManifest>;
+  if (value.schemaVersion !== 'external-services/v1' || !Array.isArray(value.services)) {
+    throw new Error('external-services.v1.json 结构不合法');
+  }
+  if (value.services.every((service) => Boolean(service.serviceUid))) {
+    return loadManifest(appPath);
+  }
+
+  const services: ExternalServiceBindingSnapshot[] = [];
+  for (const rawService of value.services) {
+    const service = rawService as Partial<ExternalServiceBindingSnapshot>;
+    assertAlias(service.alias ?? '');
+    if (service.serviceUid) {
+      assertSafeSnapshot(service as ExternalServiceVersionConfig);
+      services.push(service as ExternalServiceBindingSnapshot);
+      continue;
+    }
+    if (service.schemaVersion !== 'external-service/v1' || !service.serviceId || !service.version) {
+      throw new Error('旧外部服务绑定缺少 serviceId 或 version，无法自动升级');
+    }
+    const resolved = await resolveLegacyVersion(service.serviceId, service.version);
+    assertSafeSnapshot(resolved);
+    if (resolved.serviceId !== service.serviceId || resolved.version !== service.version) {
+      throw new Error('旧外部服务绑定解析结果与原 serviceId 或 version 不一致');
+    }
+    services.push({ ...resolved, alias: service.alias! });
+  }
+
+  const aliases = services.map((item) => item.alias);
+  const serviceUids = services.map((item) => item.serviceUid);
+  if (new Set(aliases).size !== aliases.length || new Set(serviceUids).size !== serviceUids.length) {
+    throw new Error('升级后的外部服务绑定存在重复 alias 或 serviceUid');
+  }
+  const manifest: ExternalServicesManifest = { schemaVersion: 'external-services/v1', services };
+  await writeFiles(appPath, renderFiles(manifest, await loadProxy(appPath)));
+  return manifest;
+}
+
 async function loadProxy(appPath: string): Promise<DevProxyManifest> {
   const raw = await readOptional(join(appPath, PROXY_PATH));
   if (raw === null) return { version: 'v1', proxies: [] };
@@ -212,12 +269,16 @@ async function writeFiles(appPath: string, files: ReturnType<typeof renderFiles>
 export function createBindingService(deps: BindingDependencies = {}) {
   const getVersion = deps.getVersion
     ?? ((serviceUid: string, version: string) => externalServiceApiClient.getVersion(serviceUid, version));
+  const resolveLegacyVersion = deps.resolveLegacyVersion
+    ?? ((serviceId: string, version: string) => externalServiceApiClient.resolveLegacyVersion(serviceId, version));
   const installNpmPackage = deps.installNpmPackage ?? defaultInstallNpmPackage;
+
+  const ensureCurrentManifest = (appPath: string) => migrateLegacyManifest(appPath, resolveLegacyVersion);
 
   async function bind(input: BindInput) {
     assertAlias(input.alias);
     const [manifest, proxy, config] = await Promise.all([
-      loadManifest(input.appPath),
+      ensureCurrentManifest(input.appPath),
       loadProxy(input.appPath),
       input.resolvedConfig ?? getVersion(input.serviceUid, input.version),
     ]);
@@ -245,7 +306,7 @@ export function createBindingService(deps: BindingDependencies = {}) {
 
   async function upgrade(input: UpgradeInput) {
     assertAlias(input.alias);
-    const [manifest, proxy] = await Promise.all([loadManifest(input.appPath), loadProxy(input.appPath)]);
+    const [manifest, proxy] = await Promise.all([ensureCurrentManifest(input.appPath), loadProxy(input.appPath)]);
     const existing = manifest.services.find((item) => item.alias === input.alias);
     if (!existing) throw new Error('外部服务绑定不存在');
     const config = input.resolvedConfig ?? await getVersion(existing.serviceUid, input.version);
@@ -268,7 +329,7 @@ export function createBindingService(deps: BindingDependencies = {}) {
 
   async function remove(input: RemoveInput) {
     assertAlias(input.alias);
-    const [manifest, proxy] = await Promise.all([loadManifest(input.appPath), loadProxy(input.appPath)]);
+    const [manifest, proxy] = await Promise.all([ensureCurrentManifest(input.appPath), loadProxy(input.appPath)]);
     if (!manifest.services.some((item) => item.alias === input.alias)) {
       throw new Error('外部服务绑定不存在');
     }
@@ -278,7 +339,7 @@ export function createBindingService(deps: BindingDependencies = {}) {
   }
 
   async function list(appPath: string) {
-    return (await loadManifest(appPath)).services;
+    return (await ensureCurrentManifest(appPath)).services;
   }
 
   async function validate(appPath: string): Promise<ExternalServiceWorkspaceValidation> {
@@ -294,7 +355,7 @@ export function createBindingService(deps: BindingDependencies = {}) {
           ? { valid: false, errors: ['外部服务代理存在，但绑定配置缺失'], serviceCount: 0 }
           : { valid: true, errors: [], serviceCount: 0 };
       }
-      const manifest = await loadManifest(appPath);
+      const manifest = await ensureCurrentManifest(appPath);
       const expected = renderFiles(manifest, proxy);
       const actual = await Promise.all(CHANGED_FILES.map((path) => readOptional(join(appPath, path))));
       const expectedValues = [expected.manifest, expected.proxy, expected.generated];

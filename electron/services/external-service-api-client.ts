@@ -115,6 +115,22 @@ export class ExternalServiceApiClient {
     );
   }
 
+  /**
+   * 仅用于升级重构前保存在应用工作区中的绑定快照。旧快照没有 serviceUid，
+   * 因此必须先在当前调用者可见的服务范围内找到唯一的 serviceId。
+   */
+  async resolveLegacyVersion(serviceId: string, version: string): Promise<ExternalServiceVersionConfig> {
+    const page = await this.page({ keyword: serviceId, pageNum: 1, pageSize: 100 });
+    const matches = page.items.filter((item) => item.serviceId === serviceId);
+    if (matches.length === 0) {
+      throw new Error(`旧外部服务绑定「${serviceId}@${version}」已不可见，请移除后重新安装`);
+    }
+    if (matches.length > 1) {
+      throw new Error(`旧外部服务绑定「${serviceId}@${version}」存在多个可见服务，无法安全升级，请移除后重新安装`);
+    }
+    return this.getVersion(matches[0].serviceUid, version);
+  }
+
   resolveInstall(
     serviceUid: string,
     version: string,

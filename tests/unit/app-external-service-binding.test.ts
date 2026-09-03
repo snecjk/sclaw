@@ -58,6 +58,39 @@ describe('app external service binding', () => {
     });
   });
 
+  it('打开旧 serviceId 绑定时解析 serviceUid 并原子升级关联文件', async () => {
+    const appPath = await createTempApp();
+    await writeFile(join(appPath, 'contracts/external-services.v1.json'), `${JSON.stringify({
+      schemaVersion: 'external-services/v1',
+      services: [{
+        schemaVersion: 'external-service/v1',
+        serviceId: POLICY_VERSION.serviceId,
+        version: POLICY_VERSION.version,
+        alias: 'policy',
+        name: '旧服务',
+        environments: POLICY_VERSION.environments,
+        auth: POLICY_VERSION.auth,
+      }],
+    }, null, 2)}\n`);
+    const resolveLegacyVersion = vi.fn().mockResolvedValue(POLICY_VERSION);
+    const service = createBindingService({ resolveLegacyVersion });
+
+    await expect(service.list(appPath)).resolves.toMatchObject([{
+      alias: 'policy',
+      serviceUid: POLICY_VERSION.serviceUid,
+      companyCode: '__PLATFORM__',
+    }]);
+    expect(resolveLegacyVersion).toHaveBeenCalledWith(POLICY_VERSION.serviceId, POLICY_VERSION.version);
+
+    const manifest = JSON.parse(await readFile(join(appPath, 'contracts/external-services.v1.json'), 'utf8'));
+    const proxy = JSON.parse(await readFile(join(appPath, 'contracts/dev-proxy.v1.json'), 'utf8'));
+    expect(manifest.services[0]).toMatchObject({ serviceUid: POLICY_VERSION.serviceUid, visibility: 'PUBLIC' });
+    expect(proxy.proxies).toContainEqual(expect.objectContaining({
+      key: 'policy', serviceUid: POLICY_VERSION.serviceUid, managedBy: 'external-services',
+    }));
+    expect(await service.validate(appPath)).toMatchObject({ valid: true, serviceCount: 1 });
+  });
+
   it('写入固定版本快照并生成 daily 代理和调用入口', async () => {
     const appPath = await createTempApp();
     const install = vi.fn().mockResolvedValue({
