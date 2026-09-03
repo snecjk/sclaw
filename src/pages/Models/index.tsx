@@ -16,6 +16,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
 import { formatMillionToken } from '@/lib/token-display';
+import { calculateTokenBalanceUsage } from '@/lib/token-balance-usage';
 import { ProvidersSettings } from '@/components/settings/ProvidersSettings';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { MillionTokenText } from '@/components/common/MillionTokenText';
@@ -59,6 +60,7 @@ export function Models() {
     maxBudget: 0,
   });
   const [balanceApplyLoading, setBalanceApplyLoading] = useState(false);
+  const balanceUsage = calculateTokenBalanceUsage(tokenBalance.spend, tokenBalance.maxBudget);
 
   type FetchState = {
     status: 'idle' | 'loading' | 'done';
@@ -321,8 +323,8 @@ export function Models() {
                 <div className="rounded-md border border-border bg-white/60 p-4 backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.25)]">
                   <p className="text-[13px] text-muted-foreground">{t('dashboard:tokenBalance.available', '可用额度')}</p>
                   <p className="mt-1 text-2xl font-bold text-foreground">
-                    {tokenBalance.maxBudget > 0
-                      ? Math.max(0, tokenBalance.maxBudget - tokenBalance.spend).toFixed(2)
+                    {balanceUsage
+                      ? balanceUsage.available.toFixed(2)
                       : '--'}
                     <span className="ml-1 text-sm font-normal text-muted-foreground">元</span>
                   </p>
@@ -335,25 +337,22 @@ export function Models() {
                   </p>
                 </div>
               </div>
-              {tokenBalance.maxBudget > 0 && (
+              {balanceUsage && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-[13px]">
                     <span className="text-muted-foreground">{t('dashboard:tokenBalance.usage', '额度使用')}</span>
                     <span className="text-muted-foreground">
-                      {(() => {
-                        const pct = tokenBalance.maxBudget > 0
-                          ? Math.round((tokenBalance.spend / tokenBalance.maxBudget) * 100)
-                          : 0;
-                        const remaining = Math.max(0, 100 - pct);
-                        return t('dashboard:tokenBalance.usagePercent', '已用 {{pct}}% · 剩余 {{remaining}}%', { pct, remaining });
-                      })()}
+                      {t('dashboard:tokenBalance.usagePercent', '已用 {{pct}}% · 剩余 {{remaining}}%', {
+                        pct: balanceUsage.usedPercent,
+                        remaining: balanceUsage.remainingPercent,
+                      })}
                     </span>
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-primary/[0.08]">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-500"
                       style={{
-                        width: `${Math.min(100, tokenBalance.maxBudget > 0 ? (tokenBalance.spend / tokenBalance.maxBudget) * 100 : 0)}%`,
+                        width: `${balanceUsage.usedPercent}%`,
                       }}
                     />
                   </div>

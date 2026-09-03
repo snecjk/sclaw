@@ -126,6 +126,8 @@ import {
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
 import { resolveSidebarPrimaryNavActiveOverride } from '@/lib/sidebar-primary-nav-active';
 import { pageLearningDomains } from '@/lib/learning-center-api';
+import { hostApiFetch } from '@/lib/host-api';
+import { calculateTokenBalanceUsage } from '@/lib/token-balance-usage';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -163,6 +165,10 @@ type SessionBucketKey =
   | 'withinMonth'
   | 'older'
   | 'cronTasks';
+
+type SidebarTokenBalanceState =
+  | { status: 'idle' | 'loading' | 'error' }
+  | { status: 'done'; spend: number; maxBudget: number };
 
 
 const INITIAL_NOW_MS = Date.now();
@@ -1056,6 +1062,31 @@ export function Sidebar() {
   const [editingValue, setEditingValue] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [sidebarTokenBalance, setSidebarTokenBalance] = useState<SidebarTokenBalanceState>({ status: 'idle' });
+  const tokenBalanceFetchGenerationRef = useRef(0);
+
+  const loadSidebarTokenBalance = async () => {
+    const generation = tokenBalanceFetchGenerationRef.current + 1;
+    tokenBalanceFetchGenerationRef.current = generation;
+    setSidebarTokenBalance({ status: 'loading' });
+    try {
+      const result = await hostApiFetch<{ spend?: number; maxBudget?: number }>('/api/token-balance');
+      if (tokenBalanceFetchGenerationRef.current !== generation) return;
+      setSidebarTokenBalance({
+        status: 'done',
+        spend: result.spend ?? 0,
+        maxBudget: result.maxBudget ?? 0,
+      });
+    } catch {
+      if (tokenBalanceFetchGenerationRef.current === generation) {
+        setSidebarTokenBalance({ status: 'error' });
+      }
+    }
+  };
+
+  const sidebarBalanceUsage = sidebarTokenBalance.status === 'done'
+    ? calculateTokenBalanceUsage(sidebarTokenBalance.spend, sidebarTokenBalance.maxBudget)
+    : null;
   const [supportQrOpen, setSupportQrOpen] = useState(false);
   const [mobileConnectOpen, setMobileConnectOpen] = useState(false);
 
@@ -2187,9 +2218,13 @@ export function Sidebar() {
             open={accountMenuOpen}
             onOpenChange={(open) => {
               setAccountMenuOpen(open);
+              if (!open) {
+                tokenBalanceFetchGenerationRef.current += 1;
+              }
               if (open) {
                 setSupportQrOpen(false);
                 setMobileConnectOpen(false);
+                void loadSidebarTokenBalance();
               }
             }}
           >
@@ -2393,9 +2428,26 @@ export function Sidebar() {
 
               <DropdownMenuItem
                 onClick={() => navigate('/settings/models')}
-                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
               >
-                {t('common:sidebar.tokenBalance')}
+                <span className="min-w-0 flex-1 truncate">{t('common:sidebar.tokenBalance')}</span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded px-1.5 py-0.5 tabular-nums text-[11px] leading-4',
+                    sidebarBalanceUsage
+                      ? 'bg-primary/[0.08] font-medium text-primary'
+                      : 'bg-muted/60 text-muted-foreground',
+                  )}
+                  aria-label={sidebarBalanceUsage
+                    ? t('common:sidebar.tokenBalanceRemainingPercent', { percent: sidebarBalanceUsage.remainingPercent })
+                    : undefined}
+                >
+                  {sidebarTokenBalance.status === 'loading'
+                    ? t('common:sidebar.tokenBalanceLoadingShort')
+                    : sidebarBalanceUsage
+                      ? t('common:sidebar.tokenBalanceRemainingPercent', { percent: sidebarBalanceUsage.remainingPercent })
+                      : t('common:sidebar.tokenBalanceUnavailableShort')}
+                </span>
               </DropdownMenuItem>
 
               <AccountSwitchMenuItems
