@@ -37,6 +37,9 @@ vi.mock('@/components/app-dev/AppDevMonacoEditor', () => ({
   AppDevMonacoEditor: () => null,
   formatAppDevDiagnosticsPrompt: vi.fn(),
 }));
+vi.mock('@/components/app-dev/AppDevDiffViewer', () => ({
+  AppDevDiffViewer: () => null,
+}));
 
 describe('AppDevWorkbenchStage preview authentication boundary', () => {
   beforeEach(() => {

@@ -10,9 +10,10 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { getNodeRuntimeStatus, setupManagedNode } from '../../utils/node-runtime';
 import {
   DEFAULT_APPS_PARENT_DIR,
-  createCheckpoint,
+  createCheckpointDetailed,
   createUserApp,
   cloneDevApp,
+  diffCheckpoint,
   importUserApp,
   ensureAppDevContext,
   getAppDevStatus,
@@ -319,8 +320,30 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/checkpoints' && req.method === 'POST') {
       const body = await parseJsonBody<{ workspaceId: string; message?: string }>(req);
       const appPath = await resolveAppPath(body.workspaceId);
-      const created = await createCheckpoint(appPath, body.message ?? '应用更新');
-      sendJson(res, 200, { success: true, created });
+      const subject = body.message ?? '应用更新';
+      // T04：响应只增字段（status/hash/subject），旧调用方按 created 判定不受影响。
+      const result = await createCheckpointDetailed(appPath, subject);
+      sendJson(res, 200, {
+        success: true,
+        created: result.status === 'created',
+        status: result.status,
+        hash: result.hash,
+        subject,
+      });
+      return true;
+    }
+
+    // T04：消息级「查看修改」——某 checkpoint 相对父版本的逐文件差异（含全文对）。
+    if (url.pathname === '/api/app-dev/checkpoints/diff' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const hash = url.searchParams.get('hash') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      const diff = await diffCheckpoint(appPath, hash);
+      if (!diff) {
+        sendJson(res, 200, { success: false, error: '无法读取该版本的差异' });
+        return true;
+      }
+      sendJson(res, 200, { success: true, diff });
       return true;
     }
 

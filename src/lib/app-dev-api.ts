@@ -419,13 +419,68 @@ export async function listAppCheckpoints(workspaceId: string): Promise<AppCheckp
   return res.checkpoints ?? [];
 }
 
-export async function createAppCheckpoint(workspaceId: string, message: string): Promise<boolean> {
-  const res = await hostApiFetch<{ created: boolean }>('/api/app-dev/checkpoints', {
+/** T04：checkpoint 创建结果（向后兼容——旧调用方只看 `created`）。 */
+export interface AppCheckpointCreateResult {
+  created: boolean;
+  status?: 'created' | 'clean-head' | 'failed';
+  /** 新 commit hash（created 时必带；clean-head 为当前 HEAD）。 */
+  hash?: string;
+  subject?: string;
+}
+
+export async function createAppCheckpoint(
+  workspaceId: string,
+  message: string,
+): Promise<AppCheckpointCreateResult> {
+  const res = await hostApiFetch<{
+    created: boolean;
+    status?: AppCheckpointCreateResult['status'];
+    hash?: string;
+    subject?: string;
+  }>('/api/app-dev/checkpoints', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, message }),
   });
-  return res.created === true;
+  return {
+    created: res.created === true,
+    status: res.status,
+    hash: res.hash,
+    subject: res.subject,
+  };
+}
+
+/** T04：消息级「查看修改」——单文件差异（文本文件带前后全文，供 Monaco DiffEditor）。 */
+export interface AppCheckpointDiffFile {
+  path: string;
+  status: 'M' | 'A' | 'D';
+  added: number | null;
+  removed: number | null;
+  binary?: boolean;
+  truncated?: boolean;
+  original?: string;
+  modified?: string;
+}
+
+export interface AppCheckpointDiff {
+  hash: string;
+  parentHash: string | null;
+  subject: string;
+  files: AppCheckpointDiffFile[];
+}
+
+export async function diffAppCheckpoint(
+  workspaceId: string,
+  hash: string,
+): Promise<AppCheckpointDiff | null> {
+  try {
+    const res = await hostApiFetch<{ success?: boolean; diff?: AppCheckpointDiff }>(
+      `/api/app-dev/checkpoints/diff?workspaceId=${encodeURIComponent(workspaceId)}&hash=${encodeURIComponent(hash)}`,
+    );
+    return res.diff ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function restoreAppCheckpoint(

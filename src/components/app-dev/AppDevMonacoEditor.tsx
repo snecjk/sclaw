@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import type { editor as MonacoEditorNs, IDisposable, MarkerSeverity as MarkerSeverityType } from 'monaco-editor';
 import { ensureMonacoConfigured, languageFromPath } from '@/lib/monaco-setup';
-import { useSettingsStore } from '@/stores/settings';
+import { useMonacoColorTheme } from '@/components/app-dev/use-monaco-theme';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Wand2 } from 'lucide-react';
@@ -79,7 +79,7 @@ export function AppDevMonacoEditor({
   onFixWithAgent,
   className,
 }: AppDevMonacoEditorProps) {
-  const theme = useSettingsStore((s) => s.theme);
+  const theme = useMonacoColorTheme();
   const [ready, setReady] = useState(false);
   const [diagnostics, setDiagnostics] = useState<AppDevEditorDiagnostic[]>([]);
   const editorRef = useRef<MonacoEditorNs.IStandaloneCodeEditor | null>(null);
@@ -292,12 +292,7 @@ export function AppDevMonacoEditor({
           path={filePath}
           language={languageFromPath(filePath)}
           value={value}
-          theme={
-            theme === 'dark'
-            || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-              ? 'vs-dark'
-              : 'light'
-          }
+          theme={theme}
           onMount={handleMount}
           onChange={(next) => onChange(next ?? '')}
           options={{

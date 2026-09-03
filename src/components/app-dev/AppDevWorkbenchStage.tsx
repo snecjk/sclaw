@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
+import { AppDevDiffViewer } from '@/components/app-dev/AppDevDiffViewer';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
 import { AppExternalServicesPanel } from '@/components/app-dev/AppExternalServicesPanel';
@@ -696,14 +697,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       ) : null}
 
       {mode === 'versions' ? (
-        // T04 将在此挂载行级 diff 容器（T10 填版本时间线）。
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-          <History className="h-9 w-9 text-muted-foreground" aria-hidden />
-          <p className="text-sm font-medium text-foreground">版本对比</p>
-          <p className="max-w-[280px] text-xs leading-relaxed text-muted-foreground">
-            每轮对话的修改内容对比（行级 diff）将在后续版本展示在这里。
-          </p>
-        </div>
+        // T04：消息级「查看修改」行级 diff（T10 将在此页签补版本时间线）。
+        <AppDevDiffViewer workspaceId={workspaceId} />
       ) : null}
 
       {mode === 'more-git' ? (

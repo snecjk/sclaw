@@ -33,6 +33,7 @@ import { AppDevSplitBody } from '@/components/app-dev/AppDevSplitBody';
 import { AppDevToolRollupLine } from '@/components/app-dev/AppDevToolRollupLine';
 import { AppDevTodoCapsule } from '@/components/app-dev/AppDevTodoCapsule';
 import { AppDevTurnSummaryCard } from '@/components/app-dev/AppDevTurnSummaryCard';
+import { AppDevTurnVersionActions } from '@/components/app-dev/AppDevTurnVersionActions';
 import {
   appDevCompletedToolsSignature,
   isAppDevToolRollupEmpty,
@@ -42,6 +43,8 @@ import {
   rollupAppDevTools,
 } from '@/lib/app-dev-tool-rollup';
 import { deriveAppDevTurnPlan } from '@/lib/app-dev-turn-plan';
+import { buildTurnCheckpointSubject, excerptUserText } from '@/lib/app-dev-turn-versions';
+import { useAppDevVersionRestore } from '@/hooks/use-app-dev-version-restore';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';
@@ -61,6 +64,7 @@ import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
 import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
+import { useAppDevVersionsStore } from '@/stores/app-dev-versions';
 import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import {
   createAppCheckpoint,
@@ -102,11 +106,13 @@ interface CapturedTurnSummary {
 
 const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
+  workspaceId,
   appName,
   composerSeed,
   onBeforeSend,
 }: {
   sessionKey: string;
+  workspaceId: string;
   appName: string;
   composerSeed?: { text: string; version: number } | null;
   onBeforeSend?: (text: string) => boolean;
@@ -180,8 +186,10 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     turnKey: string | null;
     tools: ToolStatus[];
     anchorAt: number | null;
-  }>({ turnKey: null, tools: [], anchorAt: null });
+    precedingUserMessage: AssistantTurnDisplayItem['precedingUserMessage'] | null;
+  }>({ turnKey: null, tools: [], anchorAt: null, precedingUserMessage: null });
   const activeTurnStableKey = activeTurn?.turnStableKey ?? null;
+  const activeTurnPrecedingUserMessage = activeTurn?.precedingUserMessage ?? null;
 
   // 生成中持续记录最新快照（ref 写入放在 effect，避免渲染期副作用）
   useEffect(() => {
@@ -191,8 +199,10 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
       turnKey: activeTurnStableKey ?? liveTurnSnapshotRef.current.turnKey,
       tools: streamingTools,
       anchorAt: turnAnchorAt,
+      precedingUserMessage: activeTurnPrecedingUserMessage
+        ?? liveTurnSnapshotRef.current.precedingUserMessage,
     };
-  }, [sending, phase, activeTurnStableKey, streamingTools, turnAnchorAt]);
+  }, [sending, phase, activeTurnStableKey, streamingTools, turnAnchorAt, activeTurnPrecedingUserMessage]);
 
   useEffect(() => {
     if (prevSendingRef.current && !sending) {
@@ -211,10 +221,19 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
           if (oldest) capturedSummariesRef.current.delete(oldest);
         }
       }
+      // T04：登记 pending 轮次（turnKey + 用户消息摘要），outer pane 建完
+      // checkpoint 后按 FIFO 补 hash 落 turn↔commit 映射；中断轮同样登记。
+      useAppDevVersionsStore.getState().recordPendingTurn(workspaceId, {
+        turnKey: snapshot.turnKey,
+        userTextExcerpt: excerptUserText(
+          snapshot.precedingUserMessage ? extractText(snapshot.precedingUserMessage) : '',
+        ),
+        endedAt: Date.now(),
+      });
       abortingSeenRef.current = false;
     }
     prevSendingRef.current = sending;
-  }, [sending]);
+  }, [sending, workspaceId]);
 
   // 轮次汇总卡注入（ChatStaticItemsList renderTurnFooter；T04 操作按钮亦经此挂载）
   const renderTurnFooter = useCallback((item: AssistantTurnDisplayItem) => {
@@ -239,9 +258,16 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
         durationMs={durationMs}
         interrupted={captured?.interrupted ?? false}
         className="mt-2"
+        actions={(
+          <AppDevTurnVersionActions
+            workspaceId={workspaceId}
+            turnKey={item.key}
+            turnEndedAt={normalizeAppDevTimestamp(item.messages[item.messages.length - 1]?.timestamp)}
+          />
+        )}
       />
     );
-  }, [sessionKey, engineType]);
+  }, [sessionKey, workspaceId, engineType]);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -437,7 +463,18 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   useEffect(() => {
     if (prevSendingRef.current && !sending && workspaceId) {
       void (async () => {
-        await createAppCheckpoint(workspaceId, '对话修改').catch(() => undefined);
+        // T04：checkpoint subject 带用户消息摘要；hash 回传后补全 turn↔commit 映射。
+        // pending 队列由 WorkbenchChatPane 轮结束 effect 登记（子组件 effect 先于本 effect），
+        // created 与 clean-head/failed 两条路径都精确消费队首一个，保证多轮 FIFO 不错位。
+        const versionsStore = useAppDevVersionsStore.getState();
+        const pending = versionsStore.peekPendingTurn(workspaceId);
+        const subject = buildTurnCheckpointSubject(pending?.userTextExcerpt);
+        const result = await createAppCheckpoint(workspaceId, subject).catch(() => null);
+        if (result?.created && result.hash) {
+          versionsStore.completePendingTurn(workspaceId, { hash: result.hash, subject });
+        } else {
+          versionsStore.discardPendingTurn(workspaceId);
+        }
         const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
         if (errors.length > 0) setPendingErrors(errors);
         setSourceRevision((n) => n + 1);
@@ -484,6 +521,12 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     }
   };
 
+  // T04：消息级「恢复版本」——汇总卡按钮 → store 请求 → 二次确认 → 回滚 + 刷新。
+  const versionRestore = useAppDevVersionRestore({
+    workspaceId,
+    onRestored: () => setSourceRevision((n) => n + 1),
+  });
+
   const handleBack = () => {
     closeDevAppTab(tab.id);
   };
@@ -507,7 +550,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
 
   const handleGitSubmit = async (message: string) => {
     try {
-      const created = await createAppCheckpoint(workspaceId, message);
+      const { created } = await createAppCheckpoint(workspaceId, message);
       if (created) {
         toast.success('代码已提交到本地 Git');
         setCommitOpen(false);
@@ -813,6 +856,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             ? (
               <WorkbenchChatPane
                 sessionKey={appDevSessionKey}
+                workspaceId={workspaceId}
                 appName={appName}
                 composerSeed={composerSeed}
                 onBeforeSend={interceptRestartIntent}
@@ -855,6 +899,16 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           setConfirmRestore(false);
         }}
         onCancel={() => setConfirmRestore(false)}
+      />
+      <ConfirmDialog
+        open={versionRestore.target != null}
+        title="恢复版本"
+        message={`将把应用恢复到该轮对话结束时的版本（${versionRestore.target?.label ?? ''}）。当前未提交的改动会自动备份，可以放心恢复。`}
+        confirmLabel="恢复"
+        confirmingLabel="恢复中…"
+        variant="destructive"
+        onConfirm={versionRestore.confirm}
+        onCancel={versionRestore.cancel}
       />
       <TemplatePublishConfirmDialog
         open={templatePublishConfirm}

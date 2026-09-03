@@ -314,7 +314,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
 
   const handleGitSubmit = async (message: string) => {
     try {
-      const created = await createAppCheckpoint(workspaceId, message);
+      const { created } = await createAppCheckpoint(workspaceId, message);
       if (created) {
         toast.success('代码已提交到本地 Git');
         setCommitOpen(false);

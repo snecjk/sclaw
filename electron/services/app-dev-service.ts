@@ -692,6 +692,26 @@ function runGit(cwd: string, args: string[]): Promise<{ ok: boolean; output: str
   });
 }
 
+/**
+ * 只取 stdout 且不 trim：用于 `git show <rev>:<path>` 读文件原文，
+ * 避免 stderr 警告或首尾空白裁剪污染 diff 内容。
+ */
+function runGitStdout(cwd: string, args: string[]): Promise<{ ok: boolean; output: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      'git',
+      ['-c', 'user.name=SClaw', '-c', 'user.email=sclaw@local', ...args],
+      { cwd, windowsHide: true },
+    );
+    const chunks: Buffer[] = [];
+    child.stdout?.on('data', (d) => chunks.push(d as Buffer));
+    child.on('close', (code) => {
+      resolve({ ok: code === 0, output: Buffer.concat(chunks).toString('utf8') });
+    });
+    child.on('error', (err) => resolve({ ok: false, output: String(err) }));
+  });
+}
+
 let gitAvailable: boolean | null = null;
 export async function isGitAvailable(): Promise<boolean> {
   if (gitAvailable !== null) return gitAvailable;
@@ -1867,21 +1887,40 @@ export interface AppCheckpoint {
 
 export type AppCheckpointCreationStatus = 'created' | 'clean-head' | 'failed';
 
+export interface AppCheckpointCreateResult {
+  status: AppCheckpointCreationStatus;
+  /** 新 commit 的 hash（clean-head 时为当前 HEAD）。 */
+  hash?: string;
+}
+
+/**
+ * 创建 checkpoint 并返回 commit hash（P1 交互改造 T04）：
+ * hash 随轮次结束回传给渲染侧，建立 turn ↔ commit 映射。
+ */
+export async function createCheckpointDetailed(
+  appPath: string,
+  message: string,
+): Promise<AppCheckpointCreateResult> {
+  if (!(await isGitAvailable())) return { status: 'failed' };
+  const status = await runGit(appPath, ['status', '--porcelain']);
+  if (!status.ok) return { status: 'failed' };
+  if (!status.output) {
+    const head = await runGit(appPath, ['rev-parse', '--verify', 'HEAD']);
+    return head.ok ? { status: 'clean-head', hash: head.output } : { status: 'failed' };
+  }
+  const add = await runGit(appPath, ['add', '-A']);
+  if (!add.ok) return { status: 'failed' };
+  const commit = await runGit(appPath, ['commit', '-m', message || '应用更新']);
+  if (!commit.ok) return { status: 'failed' };
+  const head = await runGit(appPath, ['rev-parse', 'HEAD']);
+  return { status: 'created', hash: head.ok ? head.output : undefined };
+}
+
 export async function createCheckpointWithStatus(
   appPath: string,
   message: string,
 ): Promise<AppCheckpointCreationStatus> {
-  if (!(await isGitAvailable())) return 'failed';
-  const status = await runGit(appPath, ['status', '--porcelain']);
-  if (!status.ok) return 'failed';
-  if (!status.output) {
-    const head = await runGit(appPath, ['rev-parse', '--verify', 'HEAD']);
-    return head.ok ? 'clean-head' : 'failed';
-  }
-  const add = await runGit(appPath, ['add', '-A']);
-  if (!add.ok) return 'failed';
-  const commit = await runGit(appPath, ['commit', '-m', message || '应用更新']);
-  return commit.ok ? 'created' : 'failed';
+  return (await createCheckpointDetailed(appPath, message)).status;
 }
 
 export async function createCheckpoint(appPath: string, message: string): Promise<boolean> {
@@ -1918,6 +1957,138 @@ export async function restoreCheckpoint(appPath: string, hash?: string): Promise
     return { restored: false, backupRef };
   }
   return { restored: true, backupRef };
+}
+
+// ── Checkpoint diff（P1 交互改造 T04：消息级「查看修改」行级 diff） ──────────
+
+/** git 空树对象 hash：首个 commit（无父）时作为 diff 基底，父内容即空。 */
+const GIT_EMPTY_TREE_HASH = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+/** 单文件内容超过该阈值只回统计（Monaco DiffEditor 需要全量文本，防爆内存）。 */
+const DIFF_MAX_FILE_BYTES = 1_000_000;
+/** 单次最多回传全量内容的文件数，超出部分只回统计。 */
+const DIFF_MAX_CONTENT_FILES = 50;
+
+export type AppCheckpointDiffFileStatus = 'M' | 'A' | 'D';
+
+export interface AppCheckpointDiffFile {
+  path: string;
+  status: AppCheckpointDiffFileStatus;
+  /** numstat 增/删行数；二进制文件为 null。 */
+  added: number | null;
+  removed: number | null;
+  binary?: boolean;
+  /** 内容超阈值或超出带内容文件数上限：只回统计，不回 original/modified。 */
+  truncated?: boolean;
+  /** 父版本全文（新增文件/首个 commit 为空串）。 */
+  original?: string;
+  /** 本版本全文（删除文件为空串）。 */
+  modified?: string;
+}
+
+export interface AppCheckpointDiff {
+  hash: string;
+  /** 父 commit hash；首个 commit 为 null。 */
+  parentHash: string | null;
+  subject: string;
+  files: AppCheckpointDiffFile[];
+}
+
+/**
+ * 取某个 checkpoint 相对其父版本的逐文件差异：
+ * `git diff --no-renames`（重命名展开为 D+A，前端无需处理路径对），
+ * 文本文件回前后全量内容供 Monaco DiffEditor 直接渲染；
+ * 二进制 / 超大 / 超数量文件只回 numstat。
+ */
+export async function diffCheckpoint(
+  appPath: string,
+  hash: string,
+): Promise<AppCheckpointDiff | null> {
+  if (!(await isGitAvailable())) return null;
+  const target = hash.trim();
+  // hash 会拼进 git 参数（`<hash>^`），先白名单校验。
+  if (!/^[0-9a-f]{4,40}$/i.test(target)) return null;
+  const verify = await runGit(appPath, ['rev-parse', '--verify', `${target}^{commit}`]);
+  if (!verify.ok) return null;
+  const fullHash = verify.output;
+
+  const parent = await runGit(appPath, ['rev-parse', '--verify', `${fullHash}^`]);
+  const parentHash = parent.ok ? parent.output : null;
+  const base = parentHash ?? GIT_EMPTY_TREE_HASH;
+
+  const [nameStatus, numstat, subjectResult] = await Promise.all([
+    runGit(appPath, ['diff', '--no-renames', '--name-status', base, fullHash]),
+    runGit(appPath, ['diff', '--no-renames', '--numstat', base, fullHash]),
+    runGit(appPath, ['show', '-s', '--format=%s', fullHash]),
+  ]);
+  if (!nameStatus.ok) return null;
+
+  // numstat 行：`added\tremoved\tpath`（二进制为 `-\t-\tpath`）
+  const stats = new Map<string, { added: number | null; removed: number | null }>();
+  if (numstat.ok && numstat.output) {
+    for (const line of numstat.output.split('\n')) {
+      const [a, r, ...rest] = line.split('\t');
+      const path = rest.join('\t');
+      if (!path) continue;
+      stats.set(path, {
+        added: a === '-' ? null : Number(a) || 0,
+        removed: r === '-' ? null : Number(r) || 0,
+      });
+    }
+  }
+
+  const files: AppCheckpointDiffFile[] = [];
+  for (const line of nameStatus.output ? nameStatus.output.split('\n') : []) {
+    const [statusRaw, ...rest] = line.split('\t');
+    const path = rest.join('\t');
+    if (!path) continue;
+    const status = statusRaw?.[0] as AppCheckpointDiffFileStatus | undefined;
+    if (status !== 'M' && status !== 'A' && status !== 'D') continue;
+    const stat = stats.get(path);
+    files.push({
+      path,
+      status,
+      // stat 缺失（理论上不该发生）退化 0；二进制保留 null 语义。
+      added: stat ? stat.added : 0,
+      removed: stat ? stat.removed : 0,
+      binary: stat?.added === null ? true : undefined,
+    });
+  }
+
+  let contentFiles = 0;
+  for (const file of files) {
+    if (file.binary) continue;
+    if (contentFiles >= DIFF_MAX_CONTENT_FILES) {
+      file.truncated = true;
+      continue;
+    }
+    contentFiles += 1;
+    const [original, modified] = await Promise.all([
+      file.status === 'A' || !parentHash
+        ? Promise.resolve({ ok: true, output: '' })
+        : runGitStdout(appPath, ['show', `${parentHash}:${file.path}`]),
+      file.status === 'D'
+        ? Promise.resolve({ ok: true, output: '' })
+        : runGitStdout(appPath, ['show', `${fullHash}:${file.path}`]),
+    ]);
+    const originalText = original.ok ? original.output : '';
+    const modifiedText = modified.ok ? modified.output : '';
+    if (
+      Buffer.byteLength(originalText, 'utf8') > DIFF_MAX_FILE_BYTES
+      || Buffer.byteLength(modifiedText, 'utf8') > DIFF_MAX_FILE_BYTES
+    ) {
+      file.truncated = true;
+      continue;
+    }
+    file.original = originalText;
+    file.modified = modifiedText;
+  }
+
+  return {
+    hash: fullHash,
+    parentHash,
+    subject: subjectResult.ok ? subjectResult.output : '',
+    files,
+  };
 }
 
 // ── Source file browsing / edit (workbench Monaco) ──────────────────────────

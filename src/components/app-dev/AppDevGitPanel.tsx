@@ -110,7 +110,7 @@ export function AppDevGitPanel({
         setMessage('上传代码');
         await refresh();
       } else {
-        const created = await createAppCheckpoint(workspaceId, note);
+        const { created } = await createAppCheckpoint(workspaceId, note);
         if (created) {
           toast.success('代码已提交到本地 Git');
           setMessage('上传代码');

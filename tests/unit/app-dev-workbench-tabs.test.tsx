@@ -25,6 +25,9 @@ vi.mock('@/components/app-dev/AppDevMonacoEditor', () => ({
   AppDevMonacoEditor: () => null,
   formatAppDevDiagnosticsPrompt: vi.fn(),
 }));
+vi.mock('@/components/app-dev/AppDevDiffViewer', () => ({
+  AppDevDiffViewer: () => <div data-testid="diff-viewer" />,
+}));
 vi.mock('@/components/app-dev/AppDevGitPanel', () => ({
   AppDevGitPanel: () => <div data-testid="git-panel" />,
 }));
@@ -89,10 +92,10 @@ describe('AppDevWorkbenchStage 页签收敛（预览 / 代码 / 版本 + 溢出�
     await renderStage();
     expect(screen.getByTestId('preview-frame')).toBeInTheDocument();
 
-    // 版本页签占位（T04 将挂载 diff 容器）
+    // 版本页签：T04 已挂载 diff 容器（本测试 mock 掉 Monaco）
     useAppDevWorkbenchStore.getState().setMode('versions');
     await waitFor(() => {
-      expect(screen.getByText('版本对比')).toBeInTheDocument();
+      expect(screen.getByTestId('diff-viewer')).toBeInTheDocument();
     });
 
     // 溢出菜单面板同样由 store mode 驱动
