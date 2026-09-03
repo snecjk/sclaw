@@ -311,7 +311,7 @@ describe('chat target routing', () => {
     const materializedKey = useChatStore.getState().currentSessionKey;
     expect(materializedKey).toMatch(/^agent:proj-project-a--main:session-/);
     expect(useChatStore.getState().pendingProjectId).toBeNull();
-    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a');
+    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a', 'openclaw');
     expect(bindingCompleted).toBe(true);
 
     const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
@@ -320,6 +320,30 @@ describe('chat target routing', () => {
       sessionKey: materializedKey,
       message: 'Project first message',
     });
+  });
+
+  it('does not provision an OpenClaw project agent for a Pi project draft', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    agentsState.agents[0] = { ...agentsState.agents[0], engineType: 'pi' };
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      pendingProjectId: null,
+      sessions: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      loading: false,
+    });
+
+    useChatStore.getState().newSession({ projectId: 'project-a' });
+    await useChatStore.getState().sendMessage({ text: 'Pi project first message' });
+
+    const materializedKey = useChatStore.getState().currentSessionKey;
+    expect(materializedKey).toMatch(/^pi:proj-project-a--main:/);
+    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a', 'pi');
+    expect(invokeIpcMock.mock.calls.some(([, request]) => (
+      (request as { action?: string } | undefined)?.action === 'ensureProjectAgent'
+    ))).toBe(false);
   });
 
   it('uses the selected agent main session for attachment sends', async () => {

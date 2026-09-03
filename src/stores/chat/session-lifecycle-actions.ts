@@ -618,6 +618,7 @@ export function createSessionLifecycleActions(
       // This avoids empty catalog rows while still carrying project/agent/model context.
       if (projectId && projectId !== 'default' && !shouldMaterialize) {
         const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
+        const draftEngineType = getAgentEngineType(draftAgentId) ?? 'openclaw';
         set((s) => ({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: draftAgentId,
@@ -637,15 +638,17 @@ export function createSessionLifecycleActions(
           }));
         touchSessionReadAt(DEFAULT_SESSION_KEY);
         clearSessionSendReadiness(DEFAULT_SESSION_KEY);
-        const projectAgentReadiness = import('@/lib/session-catalog-api').then(async ({
-          ensureProjectAgentForWorkspace,
-        }) => {
-          await ensureProjectAgentForWorkspace({
-            workspaceId: projectId,
-            baseAgentId,
-          });
-          await useAgentsStore.getState().fetchAgents().catch(() => undefined);
-        });
+        const projectAgentReadiness = draftEngineType === 'openclaw'
+          ? import('@/lib/session-catalog-api').then(async ({
+            ensureProjectAgentForWorkspace,
+          }) => {
+            await ensureProjectAgentForWorkspace({
+              workspaceId: projectId,
+              baseAgentId,
+            });
+            await useAgentsStore.getState().fetchAgents().catch(() => undefined);
+          })
+          : Promise.resolve();
         registerSessionSendReadiness(DEFAULT_SESSION_KEY, projectAgentReadiness);
         if (leavingEmpty) clearSessionSendReadiness(currentSessionKey);
         return;
@@ -659,7 +662,7 @@ export function createSessionLifecycleActions(
             ?? getCanonicalPrefixFromSessions(sessions)
             ?? DEFAULT_CANONICAL_PREFIX
         }:session-${Date.now()}`);
-      const newEngineType = getAgentEngineType(newAgentId);
+      const newEngineType = getAgentEngineType(newAgentId) ?? 'openclaw';
       const newKey = createTemporaryAgentSessionKey(newAgentId, Date.now(), newEngineType);
       // Carry over model from home/default session or Claude agent toolbar selection
       let currentSessionModel = get().pendingNewSessionModel
@@ -722,7 +725,7 @@ export function createSessionLifecycleActions(
         : applyWorkspaceDefaultToNewSession(newKey, newAgentId);
       const setupPromise = projectId && projectId !== 'default'
         ? Promise.resolve().then(async () => {
-          await useSessionCatalogStore.getState().bindSession(newKey, projectId);
+          await useSessionCatalogStore.getState().bindSession(newKey, projectId, newEngineType);
           await syncModel();
         })
         : syncModel();

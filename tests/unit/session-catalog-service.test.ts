@@ -14,8 +14,10 @@ const softDeleteWorkspaceMock = vi.fn();
 const getDefaultWorkspaceMock = vi.fn();
 const countActiveMock = vi.fn();
 const getBySessionKeyMock = vi.fn();
+const findCatalogSessionByKeyMock = vi.fn();
 const softDeleteBindingMock = vi.fn();
 const ensureWorkspaceArtifactOutputDirMock = vi.fn();
+const getAgentWorkspacePathMock = vi.fn();
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -48,7 +50,7 @@ vi.mock('../../electron/db/repositories/catalog-session-repository', () => ({
     moveToWorkspace: moveToWorkspaceMock,
     list: listCatalogSessionsMock,
     softDelete: softDeleteCatalogSessionMock,
-    findBySessionKey: vi.fn(),
+    findBySessionKey: findCatalogSessionByKeyMock,
     findLatestByChannel: findLatestByChannelMock,
     upsert: vi.fn(),
   })),
@@ -88,7 +90,7 @@ vi.mock('../../electron/engines/session-binding-map', () => ({
 }));
 
 vi.mock('../../electron/utils/agent-config', () => ({
-  getAgentWorkspacePath: vi.fn(),
+  getAgentWorkspacePath: getAgentWorkspacePathMock,
 }));
 
 vi.mock('../../electron/services/project-agent-service', () => ({
@@ -107,6 +109,8 @@ describe('session catalog gateway reload', () => {
     getDefaultWorkspaceMock.mockResolvedValue({ id: 'default' });
     countActiveMock.mockResolvedValue(1);
     getBySessionKeyMock.mockResolvedValue(null);
+    findCatalogSessionByKeyMock.mockResolvedValue(null);
+    getAgentWorkspacePathMock.mockResolvedValue('/tmp/agent-workspace');
     softDeleteBindingMock.mockResolvedValue({});
     softDeleteWorkspaceMock.mockResolvedValue({});
     deleteAllProjectAgentsForProjectMock.mockResolvedValue([]);
@@ -235,6 +239,59 @@ describe('session catalog gateway reload', () => {
     expect(gatewayManager.reload).toHaveBeenCalledWith({ force: true });
     expect(reloadCompleted).toBe(true);
   });
+
+  it.each(['pi', 'claude'] as const)(
+    'does not create an OpenClaw project agent or reload gateway when binding a %s session',
+    async (engineType) => {
+      const gatewayManager = { reload: vi.fn() };
+      const { bindSessionToWorkspace } = await import('../../electron/services/session-catalog-service');
+
+      await bindSessionToWorkspace(
+        engineType === 'pi' ? 'pi:proj-project-a--main:session-1' : 'agent:proj-project-a--main:session-1',
+        'project-a',
+        gatewayManager as never,
+        engineType,
+      );
+
+      expect(ensureProjectAgentMock).not.toHaveBeenCalled();
+      expect(gatewayManager.reload).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['pi', 'claude'] as const)(
+    'does not create an OpenClaw project agent or reload gateway when moving a %s session',
+    async (engineType) => {
+      moveToWorkspaceMock.mockResolvedValue({ sessionKey: `${engineType}:session-1`, workspaceId: 'project-a' });
+      const gatewayManager = { debouncedReload: vi.fn() };
+      const { moveSessionToWorkspace } = await import('../../electron/services/session-catalog-service');
+
+      await moveSessionToWorkspace(
+        `${engineType}:session-1`,
+        'project-a',
+        gatewayManager as never,
+        engineType,
+      );
+
+      expect(ensureProjectAgentMock).not.toHaveBeenCalled();
+      expect(gatewayManager.debouncedReload).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['pi', 'claude'] as const)(
+    'uses the project root as the %s tool cwd',
+    async (engineType) => {
+      findCatalogSessionByKeyMock.mockResolvedValue({
+        workspaceId: 'project-a',
+        sessionKey: `${engineType}:session-1`,
+      });
+      const { resolveSessionToolCwd } = await import('../../electron/services/session-catalog-service');
+
+      await expect(resolveSessionToolCwd(`${engineType}:session-1`, 'main', engineType))
+        .resolves.toBe('/tmp/project-a');
+      expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-a');
+      expect(getAgentWorkspacePathMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('reloads when project agent is created during move', async () => {
     ensureProjectAgentMock.mockResolvedValue({

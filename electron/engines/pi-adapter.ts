@@ -135,7 +135,7 @@ async function buildPiSessionConfig(
 ): Promise<{ config: PiSessionConfig; entry: EngineSessionRegistryEntry }> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
   const agentId = existing?.agentId || await resolveAgentIdForSessionKey(sessionKey);
-  const cwd = existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId);
+  const cwd = existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId, 'pi');
   if (!cwd) throw new Error(`PI_WORKSPACE_UNAVAILABLE: session ${sessionKey} has no cwd`);
   await getSkillManager().reconcile(
     { agentId },

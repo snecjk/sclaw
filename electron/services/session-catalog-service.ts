@@ -285,7 +285,7 @@ export async function syncSessionEngineBindingCwd(sessionKey: string): Promise<v
   if (!binding) return;
 
   const agentId = binding.agentId || getAgentIdFromSessionKey(sessionKey);
-  const resolvedCwd = await resolveSessionToolCwd(sessionKey, agentId);
+  const resolvedCwd = await resolveSessionToolCwd(sessionKey, agentId, binding.engineType);
   if (!resolvedCwd || resolvedCwd === binding.cwd) return;
 
   const extra = binding.extra ?? {};
@@ -391,11 +391,13 @@ export async function bindSessionToWorkspace(
   sessionKey: string,
   workspaceId: string,
   gatewayManager?: GatewayManager | null,
+  engineType?: AgentEngineType,
 ): Promise<void> {
   await ensureSessionCatalogBootstrapped();
   await getCatalogSessionRepository().moveToWorkspace(sessionKey, workspaceId);
   await syncSessionEngineBindingCwd(sessionKey);
-  if (workspaceId !== DEFAULT_WORKSPACE_ID) {
+  const resolvedEngineType = await resolveCatalogMutationEngineType(sessionKey, engineType);
+  if (workspaceId !== DEFAULT_WORKSPACE_ID && resolvedEngineType === 'openclaw') {
     const workspace = await getWorkspaceRepository().getById(workspaceId).catch(() => null);
     if (workspace) {
       const rawAgentId = getAgentIdFromSessionKey(sessionKey);
@@ -425,6 +427,7 @@ export async function moveSessionToWorkspace(
   sessionKey: string,
   workspaceId: string,
   gatewayManager?: GatewayManager | null,
+  engineType?: AgentEngineType,
 ): Promise<CatalogSession> {
   await ensureSessionCatalogBootstrapped();
   if (workspaceId === DEFAULT_WORKSPACE_ID) {
@@ -432,7 +435,8 @@ export async function moveSessionToWorkspace(
   }
   const session = await getCatalogSessionRepository().moveToWorkspace(sessionKey, workspaceId);
   await syncSessionEngineBindingCwd(sessionKey);
-  if (workspaceId !== DEFAULT_WORKSPACE_ID) {
+  const resolvedEngineType = await resolveCatalogMutationEngineType(sessionKey, engineType);
+  if (workspaceId !== DEFAULT_WORKSPACE_ID && resolvedEngineType === 'openclaw') {
     const workspace = await getWorkspaceRepository().getById(workspaceId).catch(() => null);
     if (workspace) {
       const rawAgentId = getAgentIdFromSessionKey(sessionKey);
@@ -456,6 +460,16 @@ export async function moveSessionToWorkspace(
   return session;
 }
 
+async function resolveCatalogMutationEngineType(
+  sessionKey: string,
+  engineType?: AgentEngineType,
+): Promise<AgentEngineType> {
+  return engineType
+    ?? (sessionKey.startsWith('pi:') ? 'pi' : undefined)
+    ?? (await getSessionEngineBindingRepository().getBySessionKey(sessionKey))?.engineType
+    ?? 'openclaw';
+}
+
 export async function listAllSessionWorkspaceBindings(): Promise<Record<string, string>> {
   await ensureSessionCatalogBootstrapped();
   const rows = await getCatalogSessionRepository().listAllBindings();
@@ -466,12 +480,20 @@ export async function listAllSessionWorkspaceBindings(): Promise<Record<string, 
   return map;
 }
 
-export async function resolveSessionToolCwd(sessionKey: string, agentId?: string): Promise<string | null> {
+export async function resolveSessionToolCwd(
+  sessionKey: string,
+  agentId?: string,
+  engineType: AgentEngineType = 'openclaw',
+): Promise<string | null> {
   await ensureSessionCatalogBootstrapped();
   const row = await getCatalogSessionRepository().findBySessionKey(sessionKey);
   if (row && row.workspaceId !== DEFAULT_WORKSPACE_ID) {
     const root = await getWorkspaceRootPath(row.workspaceId);
     if (root) {
+      if (engineType !== 'openclaw') {
+        ensureWorkspaceArtifactOutputDir(root);
+        return root;
+      }
       const agentWorkspace = resolveProjectAgentWorkspacePath(root);
       ensureWorkspaceArtifactOutputDir(agentWorkspace);
       return agentWorkspace;

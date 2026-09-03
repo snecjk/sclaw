@@ -20,6 +20,7 @@ function AgentPreparationStatusRow({
   const text = extractText(message).trim();
   const isComplete = getAgentPreparationStatus(message) === 'completed';
   const memories = stage === 'memory' ? getAgentPreparationMemories(message) : [];
+  const isMemoryStage = stage === 'memory';
   const Icon = stage === 'skill' ? Sparkles : Brain;
 
   return (
@@ -32,9 +33,10 @@ function AgentPreparationStatusRow({
         title={t(stage === 'skill' ? 'streaming.skillMatchingLabel' : 'streaming.memoryRetrievalLabel')}
         icon={Icon}
         isRunning={!isComplete}
-        collapsible={isComplete}
+        collapsible={isMemoryStage || isComplete}
         isComplete={isComplete}
-        autoExpand={!isComplete}
+        autoExpand={!isMemoryStage && !isComplete}
+        defaultExpanded={!isMemoryStage && !isComplete}
         isActive={!isComplete}
       >
         <div className="space-y-1.5">

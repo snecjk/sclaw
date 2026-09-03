@@ -17,6 +17,7 @@ import {
   type WorkspaceDto,
 } from '@/lib/session-catalog-api';
 import { filterTaskSidebarCatalogRows } from '@/stores/chat/session-list-merge';
+import type { AgentEngineType } from '../../shared/agent-engine';
 
 export const DEFAULT_WORKSPACE_ID = 'default';
 
@@ -53,7 +54,7 @@ interface SessionCatalogState {
   refreshAllBindings: () => Promise<void>;
   refreshAllCatalogMeta: () => Promise<void>;
   selectProject: (workspaceId: string | null) => Promise<void>;
-  bindSession: (sessionKey: string, workspaceId?: string) => Promise<void>;
+  bindSession: (sessionKey: string, workspaceId?: string, engineType?: AgentEngineType) => Promise<void>;
   moveSessionToProject: (sessionKey: string, projectId: string) => Promise<void>;
   createProject: (name: string, rootPath: string) => Promise<WorkspaceDto | null>;
   updateProject: (id: string, name: string, rootPath: string) => Promise<void>;
@@ -189,20 +190,23 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
     });
   },
 
-  bindSession: async (sessionKey: string, workspaceId?: string) => {
+  bindSession: async (sessionKey: string, workspaceId?: string, engineType?: AgentEngineType) => {
     const targetWorkspaceId = workspaceId ?? get().activeWorkspaceId();
     // Optimistic bind so sidebar can expand/show the row before catalog RPC returns.
     set((state) => ({
       sessionWorkspaceByKey: { ...state.sessionWorkspaceByKey, [sessionKey]: targetWorkspaceId },
     }));
-    await bindSessionToCatalog(sessionKey, targetWorkspaceId);
+    await bindSessionToCatalog(sessionKey, targetWorkspaceId, engineType);
     await get().refreshAllCatalogMeta();
   },
 
   moveSessionToProject: async (sessionKey, projectId) => {
-    await moveSessionInCatalog(sessionKey, projectId);
     const { useChatStore } = await import('@/stores/chat');
-    const title = useChatStore.getState().sessionLabels[sessionKey]?.trim();
+    const chatState = useChatStore.getState();
+    const engineType = chatState.sessions.find((session) => session.key === sessionKey)?.engineType
+      ?? (sessionKey.startsWith('pi:') ? 'pi' : undefined);
+    await moveSessionInCatalog(sessionKey, projectId, engineType);
+    const title = chatState.sessionLabels[sessionKey]?.trim();
     if (title) {
       const { patchCatalogSession } = await import('@/lib/session-catalog-api');
       await patchCatalogSession({ workspaceId: projectId, sessionKey, title }).catch(() => undefined);

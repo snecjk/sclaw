@@ -80,7 +80,7 @@ const ssoUserContextExtension: ClaudeRuntimeExtension = {
       const { resolveSessionToolCwd } = await import('../services/session-catalog-service');
       const { extractAgentIdFromSessionKey } = await import('../../shared/session-agent-id');
       const agentId = extractAgentIdFromSessionKey(sessionKey) ?? undefined;
-      workspaceAbsolutePath = await resolveSessionToolCwd(sessionKey, agentId);
+      workspaceAbsolutePath = await resolveSessionToolCwd(sessionKey, agentId, 'claude');
     } catch (err) {
       logger.warn(`[claude-sso-context] failed to resolve workspace cwd (${String(err)})`);
     }

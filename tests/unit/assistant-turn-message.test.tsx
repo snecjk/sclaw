@@ -151,4 +151,51 @@ describe('AssistantTurnMessage retained final overlay', () => {
     expect(screen.getByText('我可以帮你生成表格。')).toBeInTheDocument();
   });
 
+  it('keeps running memory retrieval collapsed by default while allowing manual expansion', () => {
+    const userMessage = {
+      id: 'user-memory-running',
+      role: 'user' as const,
+      content: '查询政策数据',
+      timestamp: 5_000,
+    };
+
+    render(
+      <AssistantTurnMessage
+        turnMessages={[]}
+        sessionMessages={[userMessage]}
+        precedingUserMessage={userMessage}
+        turnStableKey="turn-user-memory-running"
+        showThinking={true}
+        activeStream={{
+          streamMessage: {
+            id: 'agent-preparation-memory-running',
+            role: 'assistant',
+            content: [{ type: 'text', text: '已检索到相关记忆' }],
+            metadata: {
+              kind: 'agent-preparation-progress',
+              stage: 'memory',
+              status: 'running',
+              memories: [
+                { kind: 'execution', memory: '较长的历史执行经验' },
+              ],
+            },
+          },
+          streamText: '已检索到相关记忆',
+          streamingTools: [],
+          streamingMessages: [],
+          streamingToolResults: [],
+          isRunActive: true,
+          isConnecting: false,
+          isProcessing: true,
+        }}
+      />,
+    );
+
+    const memoryToggle = screen.getByRole('button', { name: 'Memory retrieval' });
+    expect(memoryToggle).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(memoryToggle);
+    expect(memoryToggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
 });

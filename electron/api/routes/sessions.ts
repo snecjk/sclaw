@@ -138,7 +138,7 @@ export async function handleSessionRoutes(
         const existing = await getEngineSessionRegistryEntry(sessionKey);
         const agentId = body.agentId?.trim() || existing?.agentId || getAgentIdFromSessionKey(sessionKey);
         const preferredModel = await getAgentPreferredModel(agentId);
-        const cwd = existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId);
+        const cwd = existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId, 'claude');
         if (!cwd) {
           sendJson(res, 404, { success: false, error: `Agent '${agentId}' workspace not found` });
           return true;
@@ -179,7 +179,7 @@ export async function handleSessionRoutes(
           sessionKey,
           engineType: 'pi',
           agentId,
-          cwd: existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId) || undefined,
+          cwd: existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId, 'pi') || undefined,
           model: rawModel,
           accountId,
           updatedAt: Date.now(),

@@ -1247,7 +1247,7 @@ async function ensureClaudeRegistryEntry(
 ): Promise<EngineSessionRegistryEntry | null> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
   const agentId = extractAgentId(sessionKey);
-  const cwd = await resolveSessionToolCwd(sessionKey, agentId);
+  const cwd = await resolveSessionToolCwd(sessionKey, agentId, 'claude');
   if (!cwd) return existing;
   if (existing?.cwd === cwd) return existing;
 
