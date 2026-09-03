@@ -8,16 +8,19 @@ function getIconsDir(): string {
   return join(__dirname, '../../resources/icons');
 }
 
+export function getClientAppIconPath(): string {
+  return join(
+    getIconsDir(),
+    process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+  );
+}
+
 /** Resolve the canonical client icon for windows and native notifications. */
 export function getClientAppIcon(): NativeImage | undefined {
   if (process.platform === 'darwin' && app.isPackaged) {
     return undefined;
   }
 
-  const iconPath = join(
-    getIconsDir(),
-    process.platform === 'win32' ? 'icon.ico' : 'icon.png',
-  );
-  const icon = nativeImage.createFromPath(iconPath);
+  const icon = nativeImage.createFromPath(getClientAppIconPath());
   return icon.isEmpty() ? undefined : icon;
 }
