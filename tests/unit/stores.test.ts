@@ -20,6 +20,7 @@ describe('Settings Store', () => {
       autoDownloadUpdate: true,
       startMinimized: false,
       launchAtStartup: false,
+      personalizedMemoryEnabled: true,
       updateChannel: 'stable',
     });
   });
@@ -131,6 +132,30 @@ describe('Settings Store', () => {
       'hostapi:fetch',
       expect.objectContaining({
         path: '/api/settings/launchAtStartup',
+        method: 'PUT',
+      }),
+    );
+  });
+
+  it('should persist personalized-memory setting through host api', () => {
+    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        status: 200,
+        ok: true,
+        json: { success: true },
+      },
+    });
+
+    const { setPersonalizedMemoryEnabled } = useSettingsStore.getState();
+    setPersonalizedMemoryEnabled(false);
+
+    expect(useSettingsStore.getState().personalizedMemoryEnabled).toBe(false);
+    expect(invoke).toHaveBeenCalledWith(
+      'hostapi:fetch',
+      expect.objectContaining({
+        path: '/api/settings/personalizedMemoryEnabled',
         method: 'PUT',
       }),
     );

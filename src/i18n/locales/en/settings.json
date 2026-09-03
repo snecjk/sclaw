@@ -11,6 +11,8 @@
     "language": "Language",
     "launchAtStartup": "Launch at system startup",
     "launchAtStartupDesc": "Automatically launch SClaw when you log in",
+    "personalizedMemory": "Personalized memory",
+    "personalizedMemoryDesc": "Retrieve remote memory during answer preparation to provide personalized context",
     "preventSystemSleep": "Prevent system sleep",
     "preventSystemSleepDesc": "While enabled, SClaw prevents the computer from sleeping automatically while it is running.",
     "preventSystemSleepTips": "Recommended for scheduled tasks. Keep the lid open and connect to power; sleep or shutdown may prevent normal operation.",

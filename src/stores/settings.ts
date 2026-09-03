@@ -18,6 +18,7 @@ interface SettingsState {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
+  personalizedMemoryEnabled: boolean;
   preventSystemSleep: boolean;
   telemetryEnabled: boolean;
 
@@ -53,6 +54,7 @@ interface SettingsState {
   setLanguage: (language: string) => void;
   setStartMinimized: (value: boolean) => void;
   setLaunchAtStartup: (value: boolean) => void;
+  setPersonalizedMemoryEnabled: (value: boolean) => void;
   setPreventSystemSleep: (value: boolean) => void;
   setTelemetryEnabled: (value: boolean) => void;
   setGatewayAutoStart: (value: boolean) => void;
@@ -79,6 +81,7 @@ const defaultSettings = {
   language: resolveSupportedLanguage(typeof navigator !== 'undefined' ? navigator.language : undefined),
   startMinimized: false,
   launchAtStartup: false,
+  personalizedMemoryEnabled: true,
   preventSystemSleep: false,
   // Telemetry disabled by default for faster cold starts
   // Users can enable it in Settings > Advanced
@@ -152,6 +155,13 @@ export const useSettingsStore = create<SettingsState>()(
         void hostApiFetch('/api/settings/launchAtStartup', {
           method: 'PUT',
           body: JSON.stringify({ value: launchAtStartup }),
+        }).catch(() => { });
+      },
+      setPersonalizedMemoryEnabled: (personalizedMemoryEnabled) => {
+        set({ personalizedMemoryEnabled });
+        void hostApiFetch('/api/settings/personalizedMemoryEnabled', {
+          method: 'PUT',
+          body: JSON.stringify({ value: personalizedMemoryEnabled }),
         }).catch(() => { });
       },
       setPreventSystemSleep: (preventSystemSleep) => {

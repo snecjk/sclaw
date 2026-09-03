@@ -8,6 +8,7 @@ import { getChatRuntimeSupervisor } from './chat-runtime-supervisor';
 import { emitAgentPreparationProgress } from './agent-preparation-progress';
 import { getChatUserTurnCompositionRepository } from '../db/repositories/chat-user-turn-composition-repository';
 import { logger } from '../utils/logger';
+import { getSetting } from '../utils/store';
 
 type ChatSendResult = { success: boolean; result?: { runId?: string }; error?: string };
 
@@ -55,7 +56,13 @@ export function runMainChatSend(
         error: runtime.error ?? `IDEMPOTENT_REPLAY_${runtime.phase.toUpperCase()}`,
       };
     }
-    const skipRead = input.memoryPolicy?.skipRead === true;
+    const personalizedMemoryEnabled = await getSetting('personalizedMemoryEnabled').catch((error) => {
+      logger.warn('[memory] failed to read personalized memory preference; keeping retrieval enabled', {
+        error: String(error),
+      });
+      return true;
+    });
+    const skipRead = input.memoryPolicy?.skipRead === true || !personalizedMemoryEnabled;
     const skipWrite = input.memoryPolicy?.skipWrite === true;
     const showPreparationProgress = runtime.runtimePolicy.origin === 'interactive';
     if (showPreparationProgress && !skipRead) {

@@ -12,6 +12,7 @@ const {
   upsertPendingMock,
   markAcceptedMock,
   markRejectedMock,
+  getSettingMock,
 } = vi.hoisted(() => ({
   prepareMock: vi.fn(),
   beginMock: vi.fn(),
@@ -23,6 +24,11 @@ const {
   upsertPendingMock: vi.fn(),
   markAcceptedMock: vi.fn(),
   markRejectedMock: vi.fn(),
+  getSettingMock: vi.fn(),
+}));
+
+vi.mock('../../electron/utils/store', () => ({
+  getSetting: (...args: unknown[]) => getSettingMock(...args),
 }));
 
 vi.mock('../../electron/services/agent-memory-context-service', () => ({
@@ -88,6 +94,7 @@ describe('runMainChatSend memory boundary', () => {
         updatedAt: 1,
       },
     }));
+    getSettingMock.mockResolvedValue(true);
   });
 
   it('injects OpenClaw memory into the gateway message and binds the returned run', async () => {
@@ -204,6 +211,31 @@ describe('runMainChatSend memory boundary', () => {
     expect(prepareMock).not.toHaveBeenCalled();
     expect(beginMock).not.toHaveBeenCalled();
     expect(bindMock).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips remote memory retrieval when personalized memory is disabled', async () => {
+    getSettingMock.mockResolvedValue(false);
+    const emit = vi.fn();
+    const dispatch = vi.fn().mockResolvedValue({ success: true, result: { runId: 'run-no-memory' } });
+    const prepareInjection = vi.fn((params) => params);
+
+    await runMainChatSend({ emit } as never, {
+      sessionKey: 'agent:main:no-memory',
+      message: '查询数据',
+      sourceText: '查询数据',
+      idempotencyKey: 'no-memory-id',
+      engineType: 'openclaw',
+    }, prepareInjection, dispatch);
+
+    expect(getSettingMock).toHaveBeenCalledWith('personalizedMemoryEnabled');
+    expect(prepareMock).not.toHaveBeenCalled();
+    expect(prepareInjection).toHaveBeenCalledWith(
+      expect.anything(),
+      { injectedExecutionMemories: [] },
+    );
+    expect(beginMock).toHaveBeenCalledWith(expect.objectContaining({ memories: [] }));
+    expect(emit).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 

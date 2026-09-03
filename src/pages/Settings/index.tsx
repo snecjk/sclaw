@@ -79,6 +79,8 @@ export function Settings() {
     setLanguage,
     launchAtStartup,
     setLaunchAtStartup,
+    personalizedMemoryEnabled,
+    setPersonalizedMemoryEnabled,
     gatewayAutoStart,
     setGatewayAutoStart,
     proxyEnabled,
@@ -556,6 +558,18 @@ export function Settings() {
                 <Switch
                   checked={launchAtStartup}
                   onCheckedChange={setLaunchAtStartup}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-[15px] font-medium text-foreground/80">{t('appearance.personalizedMemory')}</Label>
+                  <p className="text-[13px] text-muted-foreground mt-1">
+                    {t('appearance.personalizedMemoryDesc')}
+                  </p>
+                </div>
+                <Switch
+                  checked={personalizedMemoryEnabled}
+                  onCheckedChange={setPersonalizedMemoryEnabled}
                 />
               </div>
             </div>
