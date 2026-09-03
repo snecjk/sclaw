@@ -10,7 +10,11 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { hostApiFetch } from '@/lib/host-api';
-import { sidebarFooterSettingsIconClass } from '@/lib/surfaces';
+import {
+  sidebarFooterPopoverBodyClass,
+  sidebarFooterPopoverContentClass,
+  sidebarFooterSettingsIconClass,
+} from '@/lib/surfaces';
 import mobileAppQr from '@/assets/channels/sclaw-mobile-app-qr.png';
 import { toast } from 'sonner';
 
@@ -113,13 +117,11 @@ export function SidebarMobileConnectTooltip({
         align="end"
         sideOffset={8}
         collisionPadding={16}
-        className={cn(
-          'z-[60000] w-[260px] overflow-hidden rounded-[12px] p-0 shadow-[var(--sto-shadow-dropdown-strong)]',
-        )}
+        className={sidebarFooterPopoverContentClass}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {/* 整卡内容都在弹框内：灰底二维码区 + 开关 + 更多频道 */}
-        <div className="flex flex-col gap-3 p-3">
+        <div className={sidebarFooterPopoverBodyClass}>
           <div className="flex flex-col items-center rounded-[10px] bg-[var(--sto-surface-subtle)] px-4 pb-3.5 pt-4">
             <img
               src={mobileAppQr}

@@ -1706,6 +1706,13 @@ export const sidebarAccountHelpTriggerClass =
 /** 侧栏底部设置图标 — Grey-9（收起态紧凑入口仍用） */
 export const sidebarFooterSettingsIconClass = cn('h-5 w-5 shrink-0', sidebarTextIconClass);
 
+/** 侧栏底部“移动端 / 帮助群”浮层，共用相同宽度、圆角与阴影。 */
+export const sidebarFooterPopoverContentClass =
+  'z-[60000] w-[260px] overflow-hidden rounded-[12px] p-0 shadow-[var(--sto-shadow-dropdown-strong)]';
+
+/** 侧栏底部浮层统一 12px 内容边距。 */
+export const sidebarFooterPopoverBodyClass = 'flex flex-col gap-3 p-3';
+
 /** 最近会话运行中 spinner — MasterGo #5F9274 */
 export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinner)]';
 

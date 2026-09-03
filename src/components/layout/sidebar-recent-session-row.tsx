@@ -19,6 +19,7 @@ import { useChatStore } from '@/stores/chat';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 import { handleSidebarSessionDoubleClick } from '@/lib/sidebar-project-session-navigation';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
+import { SidebarSessionTitle } from '@/components/layout/sidebar-session-title';
 
 export interface SidebarRecentSessionRowProps {
   session: ChatSession;
@@ -108,19 +109,15 @@ export function SidebarRecentSessionRow({
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
           className={cn(
-            'flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 text-left',
+            'sto-sidebar-session-title-trigger flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 text-left',
             sidebarSingleActionRowPaddingClass,
             channelSource && isPinned ? 'pr-[62px]' : 'pr-8',
           )}
         >
-          <span
-            className={cn(
-              'min-w-0 flex-1 truncate',
-              isActive ? sidebarBodyTextClass : sidebarListItemTextClass,
-            )}
-          >
-            {label}
-          </span>
+          <SidebarSessionTitle
+            label={label}
+            className={isActive ? sidebarBodyTextClass : sidebarListItemTextClass}
+          />
         </button>
         <SidebarRecentSessionRowTrailing
           sessionKey={session.key}

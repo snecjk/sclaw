@@ -58,6 +58,7 @@ import { AccountSwitchMenuItems } from '@/components/layout/AccountSwitchMenuIte
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
+import { SidebarSessionTitle } from '@/components/layout/sidebar-session-title';
 import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
 import {
   isSessionInActiveWorkspace,
@@ -461,12 +462,16 @@ function SidebarTaskGroup({
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={onToggle}
-        className={cn('group/sto-task-row', SIDEBAR_TASK_GROUP_ROW_CLASS)}
+        title={label}
+        className={cn(
+          'group/sto-task-row sto-sidebar-session-title-trigger',
+          SIDEBAR_TASK_GROUP_ROW_CLASS,
+        )}
       >
-        {/* 去掉 flex-1：短标题不占满整行，长标题靠 min-w-0 + shrink 截断 */}
+        {/* 短标题不占满整行，长标题在图标与状态区之间滚动展示。 */}
         <span className="flex min-w-0 items-center gap-2">
           <ClipboardList className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)} aria-hidden />
-          <span className={cn('min-w-0 truncate', sidebarListItemTextClass)}>{label}</span>
+          <SidebarSessionTitle label={label} className={sidebarListItemTextClass} />
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           {hasUnreadSubitem ? (
@@ -551,31 +556,37 @@ function SidebarScheduledTaskGroup({
         type="button"
         onClick={onToggle}
         aria-expanded={isOpen}
-        className={cn('group/sto-task-row', SIDEBAR_TASK_GROUP_ROW_CLASS)}
+        title={displayName}
+        className={cn(
+          'group/sto-task-row sto-sidebar-session-title-trigger',
+          SIDEBAR_TASK_GROUP_ROW_CLASS,
+        )}
       >
-        {/* 与普通任务组一致：标题区不 flex-1，Chevron 紧跟标题/未读点 */}
+        {/* 与普通任务组一致：短标题收紧，长标题滚动到末尾后停止。 */}
         <span className="flex min-w-0 items-center gap-2">
           <ClipboardList className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)} aria-hidden />
-          <span className={cn('min-w-0 truncate', sidebarListItemTextClass)}>{displayName}</span>
+          <SidebarSessionTitle label={displayName} className={sidebarListItemTextClass} />
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
           {hasCollapsedGroupUnread ? (
             <span className={sidebarUnreadDotClass} aria-hidden />
           ) : null}
+          {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
+            isOpen ? (
+              <ChevronDown
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            ) : (
+              <ChevronRight
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            )
+          ) : null}
         </span>
-        {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
-          isOpen ? (
-            <ChevronDown
-              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
-              aria-hidden
-              strokeWidth={2}
-            />
-          ) : (
-            <ChevronRight
-              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
-              aria-hidden
-              strokeWidth={2}
-            />
-          )
-        ) : null}
       </button>
       {isOpen && visibleSessions.length > 0 ? (
         <div className={SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS}>
