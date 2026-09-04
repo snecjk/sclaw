@@ -13,6 +13,7 @@ import {
   sidebarFooterSettingsIconClass,
 } from '@/lib/surfaces';
 import { resolveSupportGroupQrUrl } from '../../../shared/support-group-qr';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 /** Lucide CircleHelp paths — circle thin, question mark heavier. */
 function CircleHelpBoldQuestion({ className }: { className?: string }) {
@@ -75,6 +76,7 @@ export function SidebarSupportQrTooltip({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <SidebarTooltip label={t('sidebar.supportGroup.helpAria')} sideOffset={8}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -89,6 +91,7 @@ export function SidebarSupportQrTooltip({
           <CircleHelpBoldQuestion className={sidebarFooterSettingsIconClass} />
         </button>
       </DropdownMenuTrigger>
+      </SidebarTooltip>
       <DropdownMenuContent
         side="right"
         align="end"

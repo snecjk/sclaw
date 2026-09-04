@@ -11,9 +11,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-
-const toolbarTooltipClass =
-  'overflow-visible border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white shadow-none';
+import {
+  sidebarTooltipArrowClass,
+  sidebarTooltipContentClass,
+} from '@/lib/surfaces';
 
 export function InputComposerToolbarIconTooltip({
   label,
@@ -25,11 +26,11 @@ export function InputComposerToolbarIconTooltip({
   children: ReactNode;
 }) {
   return (
-    <Tooltip delayDuration={200}>
+    <Tooltip delayDuration={300}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="top" sideOffset={6} className={toolbarTooltipClass}>
+      <TooltipContent side="top" sideOffset={6} className={sidebarTooltipContentClass}>
         {label}
-        <TooltipArrow className="fill-[#1D2129]" width={10} height={5} />
+        <TooltipArrow className={sidebarTooltipArrowClass} width={10} height={5} />
       </TooltipContent>
     </Tooltip>
   );

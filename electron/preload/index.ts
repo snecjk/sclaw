@@ -73,6 +73,7 @@ const electronAPI = {
         'app:name',
         'app:getPath',
         'app:platform',
+        'system:summary',
         'app:quit',
         'app:relaunch',
         'app:request',

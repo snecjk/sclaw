@@ -6,6 +6,7 @@
  */
 import { PanelLeft, PanelLeftClose } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 export interface SidebarHeaderToggleProps {
   /** 侧栏是否处于收起/完全隐藏态 */
@@ -33,11 +34,11 @@ export function SidebarHeaderToggle({
   const Icon = isCollapsed ? PanelLeft : PanelLeftClose;
 
   return (
+    <SidebarTooltip label={label} sideOffset={8}>
     <button
       type="button"
       aria-expanded={!isCollapsed}
       aria-label={label}
-      title={label}
       data-sclaw-browser-sidebar-preserve="true"
       onClick={onToggle}
       className={cn(
@@ -51,5 +52,6 @@ export function SidebarHeaderToggle({
     >
       <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
     </button>
+    </SidebarTooltip>
   );
 }

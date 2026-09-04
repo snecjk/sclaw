@@ -17,6 +17,7 @@ import {
 } from '@/lib/surfaces';
 import mobileAppQr from '@/assets/channels/sclaw-mobile-app-qr.png';
 import { toast } from 'sonner';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 type SidebarMobileConnectTooltipProps = {
   className?: string;
@@ -97,6 +98,7 @@ export function SidebarMobileConnectTooltip({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <SidebarTooltip label={t('hub.mobile.title')} sideOffset={8}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -107,11 +109,11 @@ export function SidebarMobileConnectTooltip({
           )}
           aria-label={t('hub.mobile.title')}
           aria-expanded={open}
-          title={t('hub.mobile.title')}
         >
           <MonitorSmartphone className={sidebarFooterSettingsIconClass} strokeWidth={1.75} aria-hidden />
         </button>
       </DropdownMenuTrigger>
+      </SidebarTooltip>
       <DropdownMenuContent
         side="right"
         align="end"

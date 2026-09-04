@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/tooltip';
 import { invokeIpc } from '@/lib/api-client';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 interface SidebarProjectsSectionProps {
   collapsed: boolean;
@@ -448,9 +449,16 @@ export function SidebarProjectsSection({
                     />
                   ) : (
                     <>
+                      <SidebarTooltip
+                        label={(
+                          <span className="flex max-w-[min(24rem,calc(100vw-3rem))] flex-col gap-0.5 text-left leading-snug">
+                            <span>{workspace.name}</span>
+                            <span className="font-normal opacity-75">{workspace.rootPath}</span>
+                          </span>
+                        )}
+                      >
                       <button
                         type="button"
-                        title={`${workspace.name}\n${workspace.rootPath}`}
                         aria-expanded={canExpand ? isExpanded : undefined}
                         onClick={() => {
                           if (canExpand) toggleProjectExpand(workspace.id);
@@ -487,6 +495,7 @@ export function SidebarProjectsSection({
                           ) : null}
                         </span>
                       </button>
+                      </SidebarTooltip>
                       <SidebarProjectRowTrailing
                         onNewChat={() => {
                           void handleNewChatInProject(workspace.id);

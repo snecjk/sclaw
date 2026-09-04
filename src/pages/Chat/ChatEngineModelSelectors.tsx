@@ -43,6 +43,7 @@ import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
 import type { AgentEngineType } from '../../../shared/agent-engine';
+import { InputComposerToolbarIconTooltip } from '@/components/input-composer/input-composer-toolbar-icon-tooltip';
 
 /** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
 const remappedDelistedSessionKeys = new Set<string>();
@@ -1086,10 +1087,11 @@ export function ChatEngineModelCascade({
 
   return (
     <>
+      <InputComposerToolbarIconTooltip label={`${engineTriggerTitle} · ${switchTitle}`}>
+      <span className="inline-flex min-w-0 max-w-full">
       <button
         ref={triggerRef}
         type="button"
-        title={`${engineTriggerTitle} · ${switchTitle}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={triggerDisabled || busy}
@@ -1108,6 +1110,8 @@ export function ChatEngineModelCascade({
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
       </button>
+      </span>
+      </InputComposerToolbarIconTooltip>
       {open && typeof document !== 'undefined' ? createPortal(
         <div
           ref={menuRef}

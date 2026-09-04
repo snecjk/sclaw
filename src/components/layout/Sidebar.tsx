@@ -59,6 +59,7 @@ import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-coll
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
 import { SidebarSessionTitle } from '@/components/layout/sidebar-session-title';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
 import {
   isSessionInActiveWorkspace,
@@ -456,13 +457,16 @@ function SidebarTaskGroup({
 
   return (
     <div className="rounded-lg">
+      <SidebarTooltip
+        label={label}
+        contentClassName="max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words text-left leading-snug"
+      >
       <button
         type="button"
         id={`sto-sidebar-task-${taskId}-toggle`}
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={onToggle}
-        title={label}
         className={cn(
           'group/sto-task-row sto-sidebar-session-title-trigger',
           SIDEBAR_TASK_GROUP_ROW_CLASS,
@@ -497,6 +501,7 @@ function SidebarTaskGroup({
           ) : null}
         </span>
       </button>
+      </SidebarTooltip>
       {isOpen && visibleEntries.length > 0 ? (
         <div
           id={panelId}
@@ -552,11 +557,14 @@ function SidebarScheduledTaskGroup({
 
   return (
     <div className="rounded-lg">
+      <SidebarTooltip
+        label={displayName}
+        contentClassName="max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words text-left leading-snug"
+      >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isOpen}
-        title={displayName}
         className={cn(
           'group/sto-task-row sto-sidebar-session-title-trigger',
           SIDEBAR_TASK_GROUP_ROW_CLASS,
@@ -588,6 +596,7 @@ function SidebarScheduledTaskGroup({
           ) : null}
         </span>
       </button>
+      </SidebarTooltip>
       {isOpen && visibleSessions.length > 0 ? (
         <div className={SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS}>
           {visibleSessions.map((s) => {
@@ -619,13 +628,13 @@ function SidebarScheduledTaskGroup({
             const showUnreadDot = !active && !isRunning && !hasError && readSessionUnread(unreadKeys, s.key);
             return (
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
+                <SidebarTooltip label={label}>
                 <button
                   type="button"
                   data-sidebar-task-session={s.key}
                   onClick={() => {
                     navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                   }}
-                  title={label}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
                     'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
@@ -635,6 +644,7 @@ function SidebarScheduledTaskGroup({
                 >
                   <span className="min-w-0 truncate">{label}</span>
                 </button>
+                </SidebarTooltip>
                 <SidebarTaskSubitemDeleteTrailing
                   isActive={active}
                   sessionKey={s.key}
@@ -1844,17 +1854,18 @@ export function Sidebar() {
         <>
       {sidebarCollapsed ? (
         <div className="flex shrink-0 flex-col items-center border-b border-transparent px-2 pb-2 pt-3">
+          <SidebarTooltip label={t('common:sidebar.toggleSidebarExpand')} sideOffset={8}>
           <button
             type="button"
             aria-expanded={false}
             aria-label={t('common:sidebar.toggleSidebarExpand')}
-            title={t('common:sidebar.toggleSidebarExpand')}
             data-sclaw-browser-sidebar-preserve="true"
             onClick={() => setSidebarCollapsed(false)}
             className={SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS}
           >
             <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </button>
+          </SidebarTooltip>
         </div>
       ) : (
         <SidebarBrandHeader
@@ -2242,16 +2253,15 @@ export function Sidebar() {
             {accountFooterMode === 'expanded-hotzone' ? (
               <div className="flex w-full min-w-0 items-center gap-3">
                 {/* 展开态：整块账号信息为菜单热区，无齿轮；PC/手机联通与问号独立 */}
+                <SidebarTooltip
+                  label={isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}
+                  sideOffset={8}
+                >
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     className={sidebarAccountHotzoneTriggerClass}
                     aria-label={t('common:sidebar.compactAccountMenu')}
-                    title={
-                      isGatewayRunning
-                        ? t('common:status.connected')
-                        : t('common:status.disconnected')
-                    }
                     onPointerEnter={() => {
                       setSupportQrOpen(false);
                       setMobileConnectOpen(false);
@@ -2271,6 +2281,7 @@ export function Sidebar() {
                     ) : null}
                   </button>
                 </DropdownMenuTrigger>
+                </SidebarTooltip>
                 <SidebarMobileConnectTooltip
                   className={sidebarAccountHelpTriggerClass}
                   open={mobileConnectOpen}
@@ -2295,6 +2306,16 @@ export function Sidebar() {
                 />
               </div>
             ) : (
+              <SidebarTooltip
+                label={
+                  accountFooterMode === 'collapsed-avatar'
+                    ? isGatewayRunning
+                      ? t('common:status.connected')
+                      : t('common:status.disconnected')
+                    : `${t('common:sidebar.compactAccountMenu')} · ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
+                }
+                sideOffset={8}
+              >
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
@@ -2315,13 +2336,6 @@ export function Sidebar() {
                     setSupportQrOpen(false);
                     setMobileConnectOpen(false);
                   }}
-                  title={
-                    accountFooterMode === 'collapsed-avatar'
-                      ? isGatewayRunning
-                        ? t('common:status.connected')
-                        : t('common:status.disconnected')
-                      : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
-                  }
                   aria-label={
                     accountFooterMode === 'collapsed-avatar'
                       ? undefined
@@ -2337,6 +2351,7 @@ export function Sidebar() {
                   ) : null}
                 </button>
               </DropdownMenuTrigger>
+              </SidebarTooltip>
             )}
             <DropdownMenuContent
               side="top"

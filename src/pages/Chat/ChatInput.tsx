@@ -795,6 +795,8 @@ export function ChatInput({
               {t('composer.voiceConfirmCancel')}
             </Button>
           ) : null}
+          <InputComposerToolbarIconTooltip label={voiceButtonTitle}>
+          <span className="inline-flex shrink-0">
           <Button
             variant="ghost"
             type="button"
@@ -817,7 +819,6 @@ export function ChatInput({
             )}
             onClick={handleMicClick}
             disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
-            title={voiceButtonTitle}
             aria-pressed={voicePanelOpen}
           >
             {voiceStatus === 'connecting' ? (
@@ -826,6 +827,8 @@ export function ChatInput({
               <Mic className="h-4 w-4" aria-hidden />
             )}
           </Button>
+          </span>
+          </InputComposerToolbarIconTooltip>
           <InputComposerSendButton
             layout={layout}
             sending={sending}

@@ -21,6 +21,7 @@ import {
   sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 import type { SidebarRecentGroup } from '@/stores/sidebar-recent-groups';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 export interface SidebarRecentGroupRowProps {
   /** 分组实体 */
@@ -88,10 +89,10 @@ export function SidebarRecentGroupRow({
 
   return (
     <div className={cn('group/sto-recent-group-row relative', className)}>
+      <SidebarTooltip label={group.name}>
       <button
         type="button"
         aria-expanded={isOpen}
-        title={group.name}
         onClick={onToggle}
         className={cn(
           'flex h-[30px] w-full items-center rounded-lg px-[10px] py-[5px] text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring',
@@ -112,6 +113,7 @@ export function SidebarRecentGroupRow({
           ) : null}
         </span>
       </button>
+      </SidebarTooltip>
       <div className="pointer-events-none absolute right-[6px] top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/sto-recent-group-row:pointer-events-auto group-hover/sto-recent-group-row:opacity-100">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

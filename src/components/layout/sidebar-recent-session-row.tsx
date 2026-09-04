@@ -20,6 +20,7 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 import { handleSidebarSessionDoubleClick } from '@/lib/sidebar-project-session-navigation';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { SidebarSessionTitle } from '@/components/layout/sidebar-session-title';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 export interface SidebarRecentSessionRowProps {
   session: ChatSession;
@@ -102,12 +103,15 @@ export function SidebarRecentSessionRow({
             : sidebarSubitemTextIdleClass,
         )}
       >
+        <SidebarTooltip
+          label={label}
+          contentClassName="max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words text-left leading-snug"
+        >
         <button
           type="button"
           aria-current={isActive ? 'page' : undefined}
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
-          title={label}
           className={cn(
             'sto-sidebar-session-title-trigger flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 text-left',
             sidebarSingleActionRowPaddingClass,
@@ -119,6 +123,7 @@ export function SidebarRecentSessionRow({
             className={isActive ? sidebarBodyTextClass : sidebarListItemTextClass}
           />
         </button>
+        </SidebarTooltip>
         <SidebarRecentSessionRowTrailing
           sessionKey={session.key}
           isActive={isActive}

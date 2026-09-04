@@ -3,8 +3,8 @@
  * Registers all IPC handlers for main-renderer communication
  */
 import { ipcMain, BrowserWindow, shell, dialog, app, nativeImage } from 'electron';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, statfsSync } from 'node:fs';
+import { arch, cpus, freemem, homedir, platform, totalmem } from 'node:os';
 import { join, extname, basename, dirname } from 'node:path';
 import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
@@ -2075,6 +2075,52 @@ function registerAppHandlers(): void {
   // Get platform
   ipcMain.handle('app:platform', () => {
     return process.platform;
+  });
+
+  // Get a compact, read-only device summary for the setup wizard.
+  ipcMain.handle('system:summary', () => {
+    const currentPlatform = platform();
+    const platformName = currentPlatform === 'win32'
+      ? 'Windows'
+      : currentPlatform === 'darwin'
+        ? 'macOS'
+        : currentPlatform === 'linux'
+          ? 'Linux'
+          : currentPlatform;
+    const systemVersion = process.getSystemVersion?.() || 'Unknown';
+    const windowsVersionParts = systemVersion.split('.').map(Number);
+    const operatingSystem = currentPlatform === 'win32'
+      && windowsVersionParts[0] === 10
+      && (windowsVersionParts[2] ?? 0) >= 22000
+      ? 'Windows 11'
+      : `${platformName} ${systemVersion}`;
+    const currentArchitecture = arch();
+    const cpuInfo = cpus();
+    const memory = {
+      availableBytes: freemem(),
+      totalBytes: totalmem(),
+    };
+
+    let disk: { availableBytes: number; totalBytes: number } | null = null;
+    try {
+      const diskStats = statfsSync(app.getPath('userData'));
+      disk = {
+        availableBytes: diskStats.bavail * diskStats.bsize,
+        totalBytes: diskStats.blocks * diskStats.bsize,
+      };
+    } catch (error) {
+      logger.warn('Failed to read disk capacity for system summary', error);
+    }
+
+    return {
+      operatingSystem,
+      architecture: currentArchitecture === 'arm64' ? 'ARM64' : currentArchitecture,
+      cpuModel: cpuInfo[0]?.model?.trim() || null,
+      logicalCores: cpuInfo.length,
+      nodeVersion: process.versions.node,
+      memory,
+      disk,
+    };
   });
 
   // Quit app

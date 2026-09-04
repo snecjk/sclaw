@@ -15,6 +15,7 @@ import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import type { SidebarLayoutVariant } from '@/lib/sidebar-layout';
 import packageJson from '../../../package.json';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 /** 与 Sidebar nav 容器一致（展开态 `px-2`） */
 const SIDEBAR_BRAND_OUTER_X = 'px-2';
@@ -48,12 +49,11 @@ function SidebarBrandTitle({
         height={28}
         className={sidebarBrandLogoClass}
       />
-      <span
-        className={cn('min-w-0 truncate', sidebarBrandVersionClass)}
-        title={displayVersion}
-      >
-        {displayVersion}
-      </span>
+      <SidebarTooltip label={displayVersion} sideOffset={8}>
+        <span className={cn('min-w-0 truncate', sidebarBrandVersionClass)}>
+          {displayVersion}
+        </span>
+      </SidebarTooltip>
       {showEnvBadgeAfterVersion ? (
         <span className="no-drag shrink-0">
           <ChromeEnvBadge />
