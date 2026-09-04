@@ -102,6 +102,27 @@ describe('main-chat-navigation', () => {
     expect(navigate).toHaveBeenCalledWith({ pathname: '/', search: '?q=hello' });
   });
 
+  it('materializes one concrete session with the selected workflow engine', () => {
+    const navigate = vi.fn();
+    navigateToNewSessionWithPrompt(navigate as never, '/workflow', 'run workflow', {
+      workflowRun: true,
+      workflowEngine: 'claude',
+      workflowSession: {
+        workflowId: 'wf-1',
+        engineType: 'claude',
+        sessionTitle: '执行测试工作流（Claude）',
+      },
+    });
+
+    expect(newSession).toHaveBeenCalledTimes(1);
+    expect(newSession).toHaveBeenCalledWith({ materialize: true, engineType: 'claude' });
+    expect(renameSession).toHaveBeenCalledWith('agent:main:session-new', '执行测试工作流（Claude）');
+    expect(navigate).toHaveBeenCalledWith({
+      pathname: '/',
+      search: '?q=run+workflow&workflowRun=1&workflowEngine=claude',
+    });
+  });
+
   it('navigateToNewSessionWithPrompt supports sessionKey and legacy extraSearchParams', () => {
     const navigate = vi.fn();
     navigateToNewSessionWithPrompt(navigate as never, '/workflow', 'hello', {

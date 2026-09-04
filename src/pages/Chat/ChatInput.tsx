@@ -74,6 +74,7 @@ import {
 import { ComposerScenarioPills } from '@/components/flow-card/ComposerScenarioPills';
 import { useComposerFlowStore } from '@/stores/composer-flow';
 import type { EmbedComposerAction } from '../../../shared/embed-composer-actions';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 
 export { CHAT_EDIT_DRAFT_EVENT };
 export type { FileAttachment } from '@/components/attachments';
@@ -96,6 +97,8 @@ export type ChatSendExtras = {
   composerSegments?: PersistedComposerSegment[];
   gatewayText?: string;
   composition?: ModelMessageCompositionV1;
+  /** One-shot engine selected by the workflow "run now" dialog. */
+  workflowExecutionEngine?: AgentEngineType;
 };
 
 /** Chat 装配层 props：发送胶水 + 场景 chrome（底栏/项目选择器/内联选择器） */

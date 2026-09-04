@@ -76,6 +76,7 @@ export function useHomeChatEntrySend() {
         composerSegments: extras?.composerSegments,
         gatewayText: extras?.gatewayText,
         composition: extras?.composition,
+        workflowExecutionEngine: extras?.workflowExecutionEngine,
       });
     },
     [agents, isGatewayRunning, t],

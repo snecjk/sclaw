@@ -11,6 +11,7 @@ import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import type { ModelMessageCompositionV1 } from '../../shared/model-message-composition';
+import type { AgentEngineType } from '../../shared/agent-engine';
 import { isSingleTemplateWorkflowSend } from '@/lib/workflow-template-send';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
@@ -35,6 +36,8 @@ export interface DispatchChatSendOptions {
   composerSegments?: PersistedComposerSegment[];
   gatewayText?: string;
   composition?: ModelMessageCompositionV1;
+  /** Explicit one-shot workflow engine; never re-infer this from a rematerialized session. */
+  workflowExecutionEngine?: AgentEngineType;
 }
 
 async function materializeDefaultSessionForWorkflowShortcut(): Promise<{
@@ -73,6 +76,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     composerSegments,
     gatewayText,
     composition,
+    workflowExecutionEngine,
   } = options;
 
   const sendMessage = useChatStore.getState().sendMessage;
@@ -192,6 +196,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
         skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
       });
     },
+    engineType: workflowExecutionEngine,
   });
   if (startedRemembered) return;
 

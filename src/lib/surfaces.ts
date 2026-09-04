@@ -292,7 +292,9 @@ export const formFieldFocusClass = cn(
 /** 表单字段 focus-within（焦点在内部编辑器时画在外壳上） */
 export const formFieldFocusWithinClass = cn(
   'focus-within:outline-none focus-within:ring-0',
-  'focus-within:border-[var(--sto-form-interactive-border)] focus-within:shadow-[var(--sto-form-interactive-shadow)]',
+  // 与 dialog-field 控件保持一致：亮色主题也使用品牌描边和紧凑的 2px 光晕。
+  'focus-within:border-[var(--sto-brand-primary)]',
+  'focus-within:shadow-[0_0_0_2px_color-mix(in_srgb,var(--sto-brand-primary)_12%,transparent)]',
 );
 
 /** 表单触发器 focus-visible（button 类下拉） */
@@ -316,7 +318,7 @@ export const taskCreateFormLabelClass = cn(
 
 /** 定时任务弹窗：单行输入框 / 选择框 */
 export const taskCreateFormControlClass = cn(
-  'sto-control sto-control--dialog-field box-border flex h-[42px] w-full items-center',
+  'sto-control sto-control--dialog-field sto-control--task-create-focus box-border flex h-[42px] w-full items-center',
   'rounded-[8px] border px-3 py-2',
   'text-[12px] text-foreground',
 );

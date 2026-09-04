@@ -141,7 +141,21 @@ export function Home() {
           return;
         }
       }
-      await handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
+      if (isWorkflowRun) {
+        await handleHubSend(
+          querySeedText,
+          undefined,
+          undefined,
+          undefined,
+          seedWorkflowId,
+          undefined,
+          undefined,
+          undefined,
+          { workflowExecutionEngine: workflowEngine },
+        );
+      } else {
+        await handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
+      }
     })();
   }, [querySeedText, seedWorkflowId, isWorkflowRun, workflowEngine, workflowEnginePolicy.loaded, workflowEnginePolicy.loading, gatewayStatus.state, handleHubSend, setSearchParams]);
 
