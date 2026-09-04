@@ -1583,6 +1583,10 @@ export const sidebarTooltipContentClass = cn(
 export const sidebarTooltipArrowClass =
   'fill-[#1D2129] dark:fill-[var(--sto-surface-elevated)]';
 
+/** 设置页卡片右上角主操作，与“添加供应商”按钮保持一致。 */
+export const settingsPrimaryActionButtonClass =
+  'h-9 rounded-md px-4 text-[13px] font-medium shadow-none';
+
 /** 品牌头版本号 — Grey-8，MCP font_8:49208（SF Pro 11px）；相对 logo 基线下移 6px */
 export const sidebarBrandVersionClass = cn(
   'mt-1.5 text-[11px] leading-[13px]',

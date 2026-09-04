@@ -9,7 +9,13 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { glassNestedCard, glassSectionSurface, glassSegmentTrack, stoMainInnerShell } from '@/lib/surfaces';
+import {
+  glassNestedCard,
+  glassSectionSurface,
+  glassSegmentTrack,
+  settingsPrimaryActionButtonClass,
+  stoMainInnerShell,
+} from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore, resolveAiResourceIsSite } from '@/stores/auth';
 import { useSettingsStore } from '@/stores/settings';
@@ -299,9 +305,8 @@ export function Models() {
             </h2>
             {!isSiteForAi ? (
               <Button
-                variant="outline"
                 size="sm"
-                className="h-8 rounded-md border-border bg-transparent px-3 text-[13px] hover:bg-primary/[0.06]"
+                className={settingsPrimaryActionButtonClass}
                 onClick={() => {
                   void handleBalanceApplyClick();
                 }}
