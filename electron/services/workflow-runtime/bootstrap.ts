@@ -64,7 +64,10 @@ export async function workflowV2BackendFetch(
   return res.json();
 }
 
-export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager): EngineDeps {
+export function createWorkflowRuntimeEngineDeps(
+  gatewayManager?: GatewayManager,
+  getMainWindow?: () => BrowserWindow | null,
+): EngineDeps {
   const scheduleTaskRunRepo = new ScheduleTaskRunRepository();
   configureWorkflowIdPool(async (count) => {
     const response = await workflowV2BackendFetch('/agent/v2/ids/allocate', { method: 'POST', body: { count } });
@@ -231,14 +234,17 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
         for (const w of BrowserWindow.getAllWindows()) {
           w.webContents.send('workflow:status-update', payload);
         }
-        notifyWorkflowCompletion(BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null, {
-          runId,
-          sessionKey,
-          status,
-          workflowName: runRow?.workflow_id,
-          summary: typeof runRow?.last_agent_raw_text === 'string' ? runRow.last_agent_raw_text.slice(0, 120) : undefined,
-          error: extra?.error,
-        });
+        notifyWorkflowCompletion(
+          getMainWindow?.() ?? BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null,
+          {
+            runId,
+            sessionKey,
+            status,
+            workflowName: runRow?.workflow_id,
+            summary: typeof runRow?.last_agent_raw_text === 'string' ? runRow.last_agent_raw_text.slice(0, 120) : undefined,
+            error: extra?.error,
+          },
+        );
       })();
     },
     onTokenExpired: () => {
@@ -253,9 +259,12 @@ import { registerWorkflowRuntimeHandlers, type RuntimeHandlers } from './index';
 let _handlers: RuntimeHandlers | null = null;
 
 /** 在 registerIpcHandlers 中调用：注册 workflow-runtime IPC 通道。 */
-export function installWorkflowRuntime(gatewayManager?: GatewayManager): RuntimeHandlers {
+export function installWorkflowRuntime(
+  gatewayManager?: GatewayManager,
+  getMainWindow?: () => BrowserWindow | null,
+): RuntimeHandlers {
   if (_handlers) return _handlers;
-  _handlers = registerWorkflowRuntimeHandlers(createWorkflowRuntimeEngineDeps(gatewayManager));
+  _handlers = registerWorkflowRuntimeHandlers(createWorkflowRuntimeEngineDeps(gatewayManager, getMainWindow));
   return _handlers;
 }
 

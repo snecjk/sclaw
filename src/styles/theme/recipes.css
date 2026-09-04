@@ -562,10 +562,11 @@
 
   /* Overlay states remain color-stable; containers gain no new focus outline. */
   .sto-overlay,
-  .sto-overlay:where(:hover, :active, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
+  .sto-overlay:where(:hover, :active, :focus, :focus-visible, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
     background-color: var(--sto-overlay-background);
     border-color: var(--sto-overlay-border);
     color: var(--sto-overlay-foreground);
+    outline: none;
   }
 
   .sto-overlay--glass-border { border-color: var(--sto-control-field-border); }

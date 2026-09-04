@@ -1,11 +1,8 @@
 import { matchPath } from 'react-router-dom';
-import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
-import { isBridgeAiChatSessionKey } from '../../shared/bridge-ai-session';
 import { STO_TASK_IDS, type StoTaskId } from '@/lib/sto-tasks';
 import { parseClaudeScheduledTaskSessionKey, parseCronSessionKey } from '@/stores/chat/cron-session-utils';
 import { stoTaskSubitemKey } from '@/stores/sto-task-subitems';
-import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
-import { isWorkflowPiSessionKey } from '../../shared/workflow-pi-session';
+export { isSidebarHiddenChatSessionKey } from '../../shared/sidebar-chat-session';
 
 const ENTRY_YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -40,20 +37,6 @@ export function isClaudeScheduledTaskSummarySessionKey(sessionKey: string): bool
 export function isCronRunSessionKey(sessionKey: string): boolean {
   const parsed = parseCronSessionKey(sessionKey);
   return parsed?.runSessionId != null;
-}
-
-/** Sessions that must not appear as rows in the chat sidebar session list. */
-export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
-  return (
-    isHiddenStoTaskSubitemChatSessionKey(sessionKey) ||
-    isMainAgentChatSessionKey(sessionKey) ||
-    isSclawBrowserEmbedChatSessionKey(sessionKey) ||
-    isBridgeAiChatSessionKey(sessionKey) ||
-    isClaudeScheduledTaskSummarySessionKey(sessionKey) ||
-    isCronRunSessionKey(sessionKey) ||
-    isWorkflowOpenClawSessionKey(sessionKey) ||
-    isWorkflowPiSessionKey(sessionKey)
-  );
 }
 
 /** True when user left a task subitem route but the store still points at its hidden session. */
