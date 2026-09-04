@@ -48,4 +48,11 @@ describe('chat inline model selector layout', () => {
     expect(selectorSource).not.toContain('模型 ·');
     expect(selectorSource).not.toContain('<ChevronRight');
   });
+
+  it('shows a separate default-model star action without nesting it in the model option button', () => {
+    expect(selectorSource).toContain("option.key === defaultModelOptionKey");
+    expect(selectorSource).toContain("fill={isDefault ? 'currentColor' : 'none'}");
+    expect(selectorSource).toContain("onClick={() => void handleSetDefaultModel(option.key)}");
+    expect(selectorSource).toContain('role="option"');
+  });
 });

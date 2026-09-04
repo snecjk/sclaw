@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Bot, Check, ChevronDown, Cpu } from 'lucide-react';
+import { AlertCircle, Bot, Check, ChevronDown, Cpu, Loader2, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -20,6 +20,7 @@ import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
 import {
   buildChatModelOptions,
+  catalogModelIdsMatch,
   getWorkspaceDefaultModelId,
   getWorkspaceDefaultRawModelId,
   isConcreteModelId,
@@ -35,6 +36,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import {
   applySessionModel,
   applyOpenClawSessionModel,
+  syncWorkspaceDefaultModelToChat,
 } from '@/lib/sync-workspace-default-to-chat';
 import { isMainChatHomePath } from '@/lib/main-chat-navigation';
 import { isTaskExecutionSessionKey } from '../../../shared/session-agent-id';
@@ -576,13 +578,23 @@ function useChatModelSelection() {
   const isGatewayRunning = gatewayStatus.state === 'running';
   const { t } = useTranslation('chat');
 
-  const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
+  const {
+    accounts,
+    statuses,
+    vendors,
+    defaultAccountId,
+    init,
+    refreshProviderSnapshot,
+    setDefaultAccount,
+    updateAccount,
+  } = useProviderStore();
   const pendingNewSessionModel = useChatStore((s) => s.pendingNewSessionModel);
   const [selectionOverride, setSelectionOverride] = useState<{
     sessionKey: string;
     modelId: string;
   } | null>(null);
   const [modelSaving, setModelSaving] = useState(false);
+  const [defaultModelSavingKey, setDefaultModelSavingKey] = useState<string | null>(null);
   const delistRemapInFlight = useRef(false);
 
   useEffect(() => { void init(); }, [init]);
@@ -604,6 +616,10 @@ function useChatModelSelection() {
   const modelOptions = useMemo(() => buildChatModelOptions(providerItems), [providerItems]);
   const workspaceDefaultModelId = useMemo(
     () => getWorkspaceDefaultModelId(accounts, defaultAccountId),
+    [accounts, defaultAccountId],
+  );
+  const workspaceDefaultRawModelId = useMemo(
+    () => getWorkspaceDefaultRawModelId(accounts, defaultAccountId),
     [accounts, defaultAccountId],
   );
   const stoCatalogModelIds = useMemo(() => {
@@ -895,6 +911,40 @@ function useChatModelSelection() {
       </span>
     ),
   }));
+  const defaultModelOptionKey = modelOptions.find((option) => (
+    option.accountId === defaultAccountId
+    && catalogModelIdsMatch(workspaceDefaultRawModelId, option.modelId)
+  ))?.key ?? null;
+
+  const handleSetDefaultModel = async (optionKey: string) => {
+    const option = modelOptions.find((item) => item.key === optionKey);
+    if (!option || option.key === defaultModelOptionKey || defaultModelSavingKey) return;
+
+    const account = accounts.find((item) => item.id === option.accountId);
+    if (!account) return;
+
+    setDefaultModelSavingKey(option.key);
+    try {
+      if (defaultAccountId !== option.accountId) {
+        await setDefaultAccount(option.accountId);
+      }
+      if (account.model !== option.modelId) {
+        await updateAccount(option.accountId, { model: option.modelId });
+      } else {
+        await refreshProviderSnapshot();
+      }
+      await syncWorkspaceDefaultModelToChat({
+        modelId: option.modelId,
+        accountId: option.accountId,
+        previousWorkspaceModel: workspaceDefaultModelId,
+      });
+      toast.success(t('toolbar.defaultModelUpdated'));
+    } catch (err) {
+      toast.error(t('toolbar.defaultModelUpdateFailed', { message: String(err) }));
+    } finally {
+      setDefaultModelSavingKey(null);
+    }
+  };
 
   return {
     selectedModelId,
@@ -903,7 +953,10 @@ function useChatModelSelection() {
     selectorModelOptions,
     modelSelectDisabled,
     modelSaving,
+    defaultModelOptionKey,
+    defaultModelSavingKey,
     handleModelSwitch,
+    handleSetDefaultModel,
     switchTitle: t('toolbar.switchModelTitle'),
     builtinTag: t('toolbar.modelTagBuiltin'),
     customTag: t('toolbar.modelTagCustom'),
@@ -993,6 +1046,7 @@ export function ChatEngineModelPicker({
   className?: string;
   allowSessionSwitch?: boolean;
 }) {
+  const { t } = useTranslation('chat');
   const {
     agentDefaultEngineType,
     currentEngineType,
@@ -1010,7 +1064,10 @@ export function ChatEngineModelPicker({
     selectorModelOptions,
     modelSelectDisabled,
     modelSaving,
+    defaultModelOptionKey,
+    defaultModelSavingKey,
     handleModelSwitch,
+    handleSetDefaultModel,
     switchTitle,
   } = useChatModelSelection();
 
@@ -1020,7 +1077,7 @@ export function ChatEngineModelPicker({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const selectedEngine = canSwitchEngine ? agentDefaultEngineType : currentEngineType;
-  const busy = engineSaving || modelSaving;
+  const busy = engineSaving || modelSaving || defaultModelSavingKey !== null;
   const triggerDisabled = engineSelectDisabled && modelSelectDisabled;
 
   useEffect(() => {
@@ -1152,24 +1209,50 @@ export function ChatEngineModelPicker({
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">暂无可用模型</p>
               ) : selectorModelOptions.map((option) => {
                 const selected = option.value === selectedModelId;
+                const isDefault = option.key === defaultModelOptionKey;
+                const savingDefault = option.key === defaultModelSavingKey;
                 return (
-                  <button
+                  <div
                     key={option.key}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    disabled={modelSelectDisabled || busy}
                     className={cn(
                       'relative flex h-9 w-full select-none items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none',
                       'transition-colors hover:bg-accent hover:text-accent-foreground',
                       selected && 'bg-primary/8 font-medium',
                     )}
-                    onClick={() => pickModel(option.value)}
                   >
-                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      disabled={modelSelectDisabled || busy}
+                      className="min-w-0 flex-1 truncate text-left outline-none disabled:pointer-events-none disabled:opacity-60"
+                      onClick={() => pickModel(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDefault || busy}
+                      aria-label={t(isDefault ? 'toolbar.defaultModel' : 'toolbar.setDefaultModel')}
+                      title={t(isDefault ? 'toolbar.defaultModel' : 'toolbar.setDefaultModel')}
+                      className={cn(
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-md outline-none transition-colors',
+                        isDefault
+                          ? 'text-amber-500'
+                          : 'text-muted-foreground/45 hover:bg-amber-500/10 hover:text-amber-500',
+                        'focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:pointer-events-none',
+                      )}
+                      onClick={() => void handleSetDefaultModel(option.key)}
+                    >
+                      {savingDefault ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <Star className="h-3.5 w-3.5" fill={isDefault ? 'currentColor' : 'none'} aria-hidden />
+                      )}
+                    </button>
                     {option.decoration}
                     {selected ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden /> : null}
-                  </button>
+                  </div>
                 );
               })}
             </div>
