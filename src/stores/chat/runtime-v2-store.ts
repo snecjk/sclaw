@@ -22,7 +22,11 @@ interface ChatRuntimeV2State {
   initialized: boolean;
   hydrate: (sessionKey: string) => Promise<void>;
   applyEvent: (event: CanonicalChatEvent) => boolean;
-  setTranscript: (sessionKey: string, transcript: RawMessage[]) => void;
+  setTranscript: (
+    sessionKey: string,
+    transcript: RawMessage[],
+    options?: { invalidateDisplayProjection?: boolean },
+  ) => void;
   setHistoryFingerprint: (sessionKey: string, fingerprint: ChatHistoryFingerprint | null) => void;
   setHistoryTotalCount: (sessionKey: string, totalCount: number) => void;
   setHistoryCapabilities: (sessionKey: string, capabilities: ChatHistoryCapabilities) => void;
@@ -298,7 +302,7 @@ function transcriptContainsCompletedTurn(
 export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
   sessionsByKey: {},
   initialized: false,
-  setTranscript: (sessionKey, transcript) => {
+  setTranscript: (sessionKey, transcript, options) => {
     // 先对齐已排队 delta，避免用未含 delta 的 overlay 计算 transcriptSettled
     flushPendingChatRuntimeDeltas();
     set((state) => {
@@ -321,6 +325,12 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
       ? null
       : optimistic;
     const transcriptUnchanged = messagesEqual(current.transcript, transcript);
+    // Background history reconciliation cannot safely rebuild display-only
+    // decorations because the session is not mounted. Invalidate that derived
+    // projection atomically with the transcript update so selectors immediately
+    // fall back to the authoritative transcript instead of rendering stale rows.
+    const invalidateDisplayProjection = options?.invalidateDisplayProjection === true
+      && current.decorations.projectedMessages !== null;
     const overlayUnchanged = nextOptimistic === current.overlay.optimisticUserMessage
       && (!transcriptSettled || (
         current.overlay.streamingMessage === null
@@ -329,7 +339,7 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
         && current.overlay.streamingTools.length === 0
         && !current.overlay.awaitingTranscript
       ));
-    if (transcriptUnchanged && overlayUnchanged) return state;
+    if (transcriptUnchanged && overlayUnchanged && !invalidateDisplayProjection) return state;
     return {
       sessionsByKey: {
         ...state.sessionsByKey,
@@ -338,6 +348,9 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
           // 内容等价时保留原引用：下游展示模型以该数组为缓存键，
           // 无谓的新引用会让整条消息列表的 memo 失效。
           transcript: transcriptUnchanged ? current.transcript : [...transcript],
+          decorations: invalidateDisplayProjection
+            ? { ...current.decorations, projectedMessages: null }
+            : current.decorations,
           overlay: {
             ...current.overlay,
             optimisticUserMessage: nextOptimistic,

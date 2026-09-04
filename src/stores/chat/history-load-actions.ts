@@ -253,7 +253,9 @@ export function createHistoryLoadActions(
             return;
           }
           if (get().currentSessionKey !== targetSessionKey) {
-            useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, allMessages);
+            useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, allMessages, {
+              invalidateDisplayProjection: true,
+            });
             useChatRuntimeV2Store.getState().setHistoryFingerprint(targetSessionKey, nextFingerprint);
             useChatRuntimeV2Store.getState().setHistoryTotalCount(targetSessionKey, totalCount);
             finishHistoryLoadPerf(targetSessionKey, { path: 'background-transcript-only' });

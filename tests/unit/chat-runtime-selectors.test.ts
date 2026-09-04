@@ -207,6 +207,48 @@ describe('canonical chat runtime selectors', () => {
     expect(getSessionDisplayMessages('stable')).toBe(getSessionDisplayMessages('stable'));
   });
 
+  it.each(['claude-task:task-1:2026-09-04', 'pi:main:scheduled-1'])(
+    'invalidates a stale background projection for %s and displays the refreshed transcript',
+    (sessionKey) => {
+      const state = createClientSessionState();
+      state.transcript = [{ id: 'user-1', role: 'user', content: 'scheduled prompt' }];
+      state.decorations.projectedMessages = [
+        { id: 'user-1', role: 'user', content: 'scheduled prompt' },
+      ];
+      useChatRuntimeV2Store.setState({ sessionsByKey: { [sessionKey]: state } });
+
+      useChatRuntimeV2Store.getState().setTranscript(sessionKey, [
+        { id: 'user-1', role: 'user', content: 'scheduled prompt' },
+        { id: 'assistant-1', role: 'assistant', content: 'scheduled answer' },
+      ], { invalidateDisplayProjection: true });
+
+      const refreshed = useChatRuntimeV2Store.getState().sessionsByKey[sessionKey];
+      expect(refreshed.decorations.projectedMessages).toBeNull();
+      expect(getSessionDisplayMessages(sessionKey).map((message) => message.content)).toEqual([
+        'scheduled prompt',
+        'scheduled answer',
+      ]);
+    },
+  );
+
+  it('preserves the current-session display projection on a normal transcript update', () => {
+    const sessionKey = 'agent:main:normal-chat';
+    const state = createClientSessionState();
+    state.transcript = [{ id: 'user-1', role: 'user', content: 'question' }];
+    state.decorations.projectedMessages = [
+      { id: 'user-1', role: 'user', content: 'decorated question', _isSyntheticSessionLabel: true },
+    ];
+    useChatRuntimeV2Store.setState({ sessionsByKey: { [sessionKey]: state } });
+
+    useChatRuntimeV2Store.getState().setTranscript(sessionKey, [
+      { id: 'user-1', role: 'user', content: 'question' },
+      { id: 'assistant-1', role: 'assistant', content: 'answer' },
+    ]);
+
+    expect(useChatRuntimeV2Store.getState().sessionsByKey[sessionKey].decorations.projectedMessages)
+      .toEqual(state.decorations.projectedMessages);
+  });
+
   it('settles a scheduled run when the echo user timestamp slightly precedes startedAt (X2 clock boundary)', () => {
     // X2 时钟边界：scheduled 会话无乐观消息，完成判定走 transcriptContainsCompletedTurn
     // 兜底（startedAt 之后的首条 user + 其后非空 assistant）。echo user 的 timestamp
