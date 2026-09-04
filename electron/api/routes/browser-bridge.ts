@@ -5,6 +5,7 @@ import type { HostApiContext } from '../context';
 import { browserBridgeService } from '../../services/browser-bridge-service';
 import { parseJsonBody, sendJson, sendNoContent } from '../route-utils';
 import type { BrowserBridgeAction } from '../../../shared/browser-bridge/types';
+import { isCdpMethodAllowed } from '../../../shared/browser-automation/cdp-allowlist';
 import {
   getBundledBrowserBridgeExtensionVersion,
   resolveBrowserBridgeExtensionZipPath,
@@ -70,6 +71,15 @@ export async function handleBrowserBridgeRoutes(
       return true;
     }
     const body = await parseJsonBody<{ extensionVersion?: string }>(req);
+    const compatibility = browserBridgeService.checkExtensionCompatibility(body.extensionVersion);
+    if (!compatibility.compatible) {
+      sendJson(res, 403, {
+        success: false,
+        error: 'BRIDGE_VERSION_MISMATCH',
+        reason: compatibility.reason,
+      });
+      return true;
+    }
     const paired = browserBridgeService.autoConnect(body.extensionVersion);
     if (!paired) {
       sendJson(res, 403, { success: false, error: 'Auto-connect is disabled in StoClaw' });
@@ -86,10 +96,10 @@ export async function handleBrowserBridgeRoutes(
     }
     const settings = browserBridgeService.getSettings();
     const bundledVersion = getBundledBrowserBridgeExtensionVersion();
-    const updateAvailable = Boolean(
-      settings.installedExtensionVersion
-      && settings.installedExtensionVersion !== bundledVersion,
+    const compatibility = browserBridgeService.checkExtensionCompatibility(
+      settings.installedExtensionVersion,
     );
+    const updateAvailable = compatibility.updateAvailable;
     sendJson(res, 200, {
       success: true,
       ...settings,
@@ -170,6 +180,19 @@ export async function handleBrowserBridgeRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/browser-bridge/rotate-tokens' && req.method === 'POST') {
+    if (!isLoopback(req)) {
+      sendJson(res, 403, { success: false, error: 'Token rotation is localhost-only' });
+      return true;
+    }
+    const body = await parseJsonBody<{ keepGraceMs?: number }>(req);
+    browserBridgeService.rotateTokens({
+      keepGraceMs: typeof body.keepGraceMs === 'number' ? body.keepGraceMs : undefined,
+    });
+    sendJson(res, 200, { success: true });
+    return true;
+  }
+
   if (url.pathname === '/api/browser-bridge/connect' && req.method === 'POST') {
     if (!requireExtensionToken(req, res)) return true;
     const body = await parseJsonBody<{
@@ -177,9 +200,22 @@ export async function handleBrowserBridgeRoutes(
       tabId?: number;
       url?: string;
       title?: string;
+      extensionVersion?: string;
+      groupId?: string;
+      taskLabel?: string;
+      ownership?: 'owned' | 'borrowed';
     }>(req);
     if (!body.sessionId || body.tabId === undefined) {
       sendJson(res, 400, { success: false, error: 'sessionId and tabId are required' });
+      return true;
+    }
+    const compatibility = browserBridgeService.checkExtensionCompatibility(body.extensionVersion);
+    if (!compatibility.compatible) {
+      sendJson(res, 403, {
+        success: false,
+        error: 'BRIDGE_VERSION_MISMATCH',
+        reason: compatibility.reason,
+      });
       return true;
     }
     const session = browserBridgeService.connectSession({
@@ -188,6 +224,10 @@ export async function handleBrowserBridgeRoutes(
       url: body.url ?? '',
       title: body.title ?? '',
       token: readToken(req) ?? '',
+      extensionVersion: body.extensionVersion,
+      groupId: body.groupId,
+      taskLabel: body.taskLabel,
+      ownership: body.ownership,
     });
     emitBridgeEvent(ctx, 'browser:connected', session);
     sendJson(res, 200, { success: true, sessionId: session.sessionId });
@@ -237,6 +277,22 @@ export async function handleBrowserBridgeRoutes(
     }>(req);
     if (!body.sessionId || !body.action) {
       sendJson(res, 400, { success: false, error: 'sessionId and action are required' });
+      return true;
+    }
+    const target = browserBridgeService.getSession(body.sessionId);
+    if (!target) {
+      sendJson(res, 404, { success: false, error: 'Session not found' });
+      return true;
+    }
+    if (body.action === 'cdp') {
+      const method = typeof body.payload?.method === 'string' ? body.payload.method : '';
+      if (!method || !isCdpMethodAllowed(method)) {
+        sendJson(res, 400, { success: false, error: 'CDP_METHOD_NOT_ALLOWED' });
+        return true;
+      }
+    }
+    if ((body.action === 'group_tabs' || body.action === 'mark_tabs') && target.source !== 'extension') {
+      sendJson(res, 400, { success: false, error: `${body.action} is extension-only` });
       return true;
     }
     const command = browserBridgeService.enqueueCommand(
@@ -305,6 +361,10 @@ export async function handleBrowserBridgeRoutes(
       lastHeartbeat: session.lastHeartbeat,
       source: session.source ?? 'extension',
       embedRuntimeId: session.embedRuntimeId,
+      ownership: session.ownership,
+      extensionVersion: session.extensionVersion,
+      groupId: session.groupId,
+      taskLabel: session.taskLabel,
     }));
     sendJson(res, 200, { success: true, sessions });
     return true;

@@ -12,11 +12,22 @@ import {
   BROWSER_BRIDGE_EMBED_TOKEN,
   BROWSER_BRIDGE_SESSION_STALE_MS,
 } from '../../shared/browser-bridge/types';
+import { checkBrowserBridgeExtensionCompatibility } from '../../shared/browser-bridge/version';
 import { getOpenClawConfigDir } from '../utils/paths';
+import { getBundledBrowserBridgeExtensionVersion } from '../utils/browser-bridge-extension';
+
+const TOKEN_GRACE_DEFAULT_MS = 60_000;
+const COMMAND_RESULTS_MAX = 1000;
+
+interface TokenRecord {
+  createdAt: number;
+  extensionVersion?: string;
+  expiresAt?: number;
+}
 
 interface PersistedState {
   pairingCode: string | null;
-  tokens: string[];
+  tokens: Array<string | { token: string; createdAt: number; extensionVersion?: string }>;
   autoConnectEnabled?: boolean;
   installedExtensionVersion?: string | null;
 }
@@ -30,7 +41,8 @@ export class BrowserBridgeService {
   private readonly commandQueues = new Map<string, BrowserBridgeCommand[]>();
   private readonly commandResults = new Map<string, BrowserBridgeCommandResult>();
   private pairingCode: string | null = null;
-  private readonly tokens = new Set<string>();
+  private readonly tokens = new Map<string, TokenRecord>();
+  private readonly graceTokens = new Map<string, TokenRecord>();
   private autoConnectEnabled = true;
   private installedExtensionVersion: string | null = null;
 
@@ -56,7 +68,7 @@ export class BrowserBridgeService {
       return null;
     }
     const token = randomBytes(24).toString('hex');
-    this.tokens.add(token);
+    this.tokens.set(token, { createdAt: Date.now() });
     this.pairingCode = null;
     this.persistState();
     return { token };
@@ -64,7 +76,9 @@ export class BrowserBridgeService {
 
   validateToken(token: string | undefined | null): boolean {
     if (!token) return false;
-    return this.tokens.has(token);
+    if (this.tokens.has(token)) return true;
+    const grace = this.graceTokens.get(token);
+    return Boolean(grace && (grace.expiresAt ?? 0) > Date.now());
   }
 
   getSettings(): { autoConnectEnabled: boolean; installedExtensionVersion: string | null } {
@@ -78,23 +92,44 @@ export class BrowserBridgeService {
     this.autoConnectEnabled = enabled;
     if (!enabled) {
       this.tokens.clear();
+      this.graceTokens.clear();
     }
     this.persistState();
+  }
+
+  checkExtensionCompatibility(extensionVersion: string | undefined | null) {
+    return checkBrowserBridgeExtensionCompatibility(
+      extensionVersion,
+      getBundledBrowserBridgeExtensionVersion(),
+    );
   }
 
   autoConnect(extensionVersion?: string): { token: string } | null {
     if (!this.autoConnectEnabled) return null;
+    const compatibility = this.checkExtensionCompatibility(extensionVersion);
+    if (!compatibility.compatible) return null;
     if (typeof extensionVersion === 'string' && extensionVersion.trim()) {
       this.installedExtensionVersion = extensionVersion.trim();
     }
     const token = randomBytes(24).toString('hex');
-    this.tokens.add(token);
+    this.tokens.set(token, { createdAt: Date.now(), extensionVersion: extensionVersion?.trim() });
     this.persistState();
     return { token };
   }
 
+  rotateTokens(opts?: { keepGraceMs?: number }): void {
+    const graceMs = opts?.keepGraceMs ?? TOKEN_GRACE_DEFAULT_MS;
+    const expiresAt = Date.now() + graceMs;
+    for (const [token, record] of this.tokens.entries()) {
+      this.graceTokens.set(token, { ...record, expiresAt });
+    }
+    this.tokens.clear();
+    this.persistState();
+  }
+
   revokeAllTokens(): void {
     this.tokens.clear();
+    this.graceTokens.clear();
     this.persistState();
   }
 
@@ -106,7 +141,12 @@ export class BrowserBridgeService {
     token: string;
     source?: BrowserBridgeSession['source'];
     embedRuntimeId?: string;
+    ownership?: BrowserBridgeSession['ownership'];
+    extensionVersion?: string;
+    groupId?: string;
+    taskLabel?: string;
   }): BrowserBridgeSession {
+    const source = input.source ?? 'extension';
     const session: BrowserBridgeSession = {
       sessionId: input.sessionId,
       tabId: input.tabId,
@@ -115,8 +155,12 @@ export class BrowserBridgeService {
       connectedAt: Date.now(),
       lastHeartbeat: Date.now(),
       token: input.token,
-      source: input.source ?? 'extension',
+      source,
       embedRuntimeId: input.embedRuntimeId,
+      ownership: input.ownership ?? (source === 'embed' ? 'owned' : 'borrowed'),
+      extensionVersion: input.extensionVersion,
+      groupId: input.groupId,
+      taskLabel: input.taskLabel,
     };
     this.sessions.set(input.sessionId, session);
     if (!this.commandQueues.has(input.sessionId)) {
@@ -140,6 +184,7 @@ export class BrowserBridgeService {
       token: BROWSER_BRIDGE_EMBED_TOKEN,
       source: 'embed',
       embedRuntimeId: input.embedRuntimeId,
+      ownership: 'owned',
     });
   }
 
@@ -168,6 +213,14 @@ export class BrowserBridgeService {
       if (leftEmbed !== rightEmbed) return leftEmbed - rightEmbed;
       return right.lastHeartbeat - left.lastHeartbeat;
     });
+  }
+
+  listSessionsByGroup(groupId: string): BrowserBridgeSession[] {
+    return this.listActiveSessions().filter((session) => session.groupId === groupId);
+  }
+
+  getSession(sessionId: string): BrowserBridgeSession | null {
+    return this.sessions.get(sessionId) ?? null;
   }
 
   getPrimarySession(): BrowserBridgeSession | null {
@@ -217,6 +270,7 @@ export class BrowserBridgeService {
       completedAt: Date.now(),
     };
     this.commandResults.set(input.commandId, record);
+    this.pruneCommandResults();
     return record;
   }
 
@@ -243,6 +297,17 @@ export class BrowserBridgeService {
     });
   }
 
+  private pruneCommandResults(): void {
+    if (this.commandResults.size <= COMMAND_RESULTS_MAX) return;
+    const ordered = Array.from(this.commandResults.entries()).sort(
+      (left, right) => left[1].completedAt - right[1].completedAt,
+    );
+    const overflow = this.commandResults.size - COMMAND_RESULTS_MAX;
+    for (let index = 0; index < overflow; index += 1) {
+      this.commandResults.delete(ordered[index][0]);
+    }
+  }
+
   private loadPersistedState(): void {
     const filePath = stateFilePath();
     if (!existsSync(filePath)) return;
@@ -252,7 +317,14 @@ export class BrowserBridgeService {
       this.pairingCode = typeof parsed.pairingCode === 'string' ? parsed.pairingCode : null;
       if (Array.isArray(parsed.tokens)) {
         for (const token of parsed.tokens) {
-          if (typeof token === 'string' && token) this.tokens.add(token);
+          if (typeof token === 'string' && token) {
+            this.tokens.set(token, { createdAt: Date.now() });
+          } else if (token && typeof token === 'object' && typeof token.token === 'string') {
+            this.tokens.set(token.token, {
+              createdAt: token.createdAt,
+              extensionVersion: token.extensionVersion,
+            });
+          }
         }
       }
       this.autoConnectEnabled = parsed.autoConnectEnabled !== false;
@@ -269,7 +341,11 @@ export class BrowserBridgeService {
     mkdirSync(dir, { recursive: true });
     const payload: PersistedState = {
       pairingCode: this.pairingCode,
-      tokens: Array.from(this.tokens),
+      tokens: Array.from(this.tokens.entries()).map(([token, record]) => ({
+        token,
+        createdAt: record.createdAt,
+        extensionVersion: record.extensionVersion,
+      })),
       autoConnectEnabled: this.autoConnectEnabled,
       installedExtensionVersion: this.installedExtensionVersion,
     };
@@ -288,6 +364,10 @@ export class BrowserBridgeService {
       if (now - result.completedAt > 5 * 60 * 1000) {
         this.commandResults.delete(commandId);
       }
+    }
+    this.pruneCommandResults();
+    for (const [token, record] of this.graceTokens.entries()) {
+      if ((record.expiresAt ?? 0) <= now) this.graceTokens.delete(token);
     }
   }
 }

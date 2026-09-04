@@ -285,7 +285,12 @@
     "devMode": "Developer Mode",
     "devModeDesc": "Show developer tools and shortcuts",
     "telemetry": "Anonymous Usage Data",
-    "telemetryDesc": "Allow providing anonymous basic usage data to improve SClaw"
+    "telemetryDesc": "Allow providing anonymous basic usage data to improve SClaw",
+    "browserAutomation": "Browser automation",
+    "browserAutomationDesc": "Off disables workflow browser nodes, ba_* tools, and in-app automation. DOM / AX choose how pages are observed.",
+    "browserAutomationOff": "Off",
+    "browserAutomationDom": "DOM mode",
+    "browserAutomationAx": "AX mode"
   },
   "developer": {
     "title": "Developer",

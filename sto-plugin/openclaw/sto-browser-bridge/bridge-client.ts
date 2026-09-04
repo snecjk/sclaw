@@ -75,7 +75,7 @@ const RESULT_POLL_MS = 50;
 
 export async function runBridgeCommand(
 	cfg: BrowserBridgePluginConfig,
-	action: "snapshot" | "click" | "fill" | "navigate" | "screenshot" | "evaluate" | "scroll",
+	action: "snapshot" | "click" | "fill" | "navigate" | "screenshot" | "evaluate" | "scroll" | "read_page" | "print_pdf" | "cdp" | "group_tabs" | "mark_tabs",
 	payload: Record<string, unknown> = {},
 	options?: BridgeCommandOptions,
 ): Promise<unknown> {

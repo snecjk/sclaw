@@ -5,6 +5,9 @@ import {
   buildStoBrowserToolClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-browser-tool/sdk';
 import {
+  buildStoBrowserAutomationClaudeRuntimeOptions,
+} from '../../sto-plugin/claude/sto-browser-automation/sdk';
+import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
 import {
@@ -93,6 +96,17 @@ const browserToolExtension: ClaudeRuntimeExtension = {
   build({ sessionKey }) {
     if (isAppDevSessionKey(sessionKey)) return {};
     return buildStoBrowserToolClaudeRuntimeOptions({
+      sessionKey,
+      hostApiPort: PORTS.CLAWX_HOST_API,
+    });
+  },
+};
+
+const browserAutomationExtension: ClaudeRuntimeExtension = {
+  id: 'sto-browser-automation',
+  build({ sessionKey }) {
+    if (isAppDevSessionKey(sessionKey)) return {};
+    return buildStoBrowserAutomationClaudeRuntimeOptions({
       sessionKey,
       hostApiPort: PORTS.CLAWX_HOST_API,
     });
@@ -243,6 +257,7 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   connectorBashGateExtension,
   browserToolExtension,
+  browserAutomationExtension,
   dingTalkSendGuardExtension,
   workflowToolExtension,
   scheduledTaskToolExtension,

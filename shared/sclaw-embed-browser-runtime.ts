@@ -14,9 +14,21 @@ export interface SclawEmbedBrowserRuntimeMeta {
   bound: boolean;
   createdAt: number;
   boundAt: number | null;
+  /**
+   * D1 可见性上报（BAP assertPageActionable 的数据源）：
+   * 渲染层 SclawBrowserFrame 按 active/生命周期上报；undefined = 未上报（按可见处理，灰度兼容）。
+   */
+  visible?: boolean;
   /** JSBridge session bootstrap when page is *.sto.cn. */
   bridgeBootstrap?: import('./jsbridge/protocol').BridgeBootstrap | null;
 }
+
+/** D1 可见性上报原因（渲染层 → 主进程）。 */
+export type SclawEmbedBrowserVisibilityReason =
+  | 'drawer-toggle'
+  | 'tab-switch'
+  | 'window-blur'
+  | 'dom-ready';
 
 export interface SclawEmbedBrowserNetworkEvent {
   method: string;

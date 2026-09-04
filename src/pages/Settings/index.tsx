@@ -97,6 +97,8 @@ export function Settings() {
     setDevModeUnlocked,
     telemetryEnabled,
     setTelemetryEnabled,
+    browserAutomationLevel,
+    setBrowserAutomationLevel,
   } = useSettingsStore();
 
   const { status: gatewayStatus, restart: restartGateway } = useGatewayStore();
@@ -675,6 +677,31 @@ export function Settings() {
                     checked={telemetryEnabled}
                     onCheckedChange={setTelemetryEnabled}
                   />
+                </div>
+              )}
+
+              {!isSite && (
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <Label className="text-[15px] font-medium text-foreground">{t('advanced.browserAutomation')}</Label>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      {t('advanced.browserAutomationDesc')}
+                    </p>
+                  </div>
+                  <select
+                    className="sto-control-field h-9 min-w-[9.5rem] rounded-md px-2 text-[13px]"
+                    value={browserAutomationLevel}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      if (next === 'off' || next === 'dom' || next === 'ax') {
+                        setBrowserAutomationLevel(next);
+                      }
+                    }}
+                  >
+                    <option value="off">{t('advanced.browserAutomationOff')}</option>
+                    <option value="dom">{t('advanced.browserAutomationDom')}</option>
+                    <option value="ax">{t('advanced.browserAutomationAx')}</option>
+                  </select>
                 </div>
               )}
 

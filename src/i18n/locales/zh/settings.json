@@ -280,7 +280,12 @@
     "devMode": "开发者模式",
     "devModeDesc": "显示开发者工具和快捷方式",
     "telemetry": "匿名使用数据",
-    "telemetryDesc": "允许提供匿名的基础使用数据，用于改进 SClaw"
+    "telemetryDesc": "允许提供匿名的基础使用数据，用于改进 SClaw",
+    "browserAutomation": "浏览器自动化",
+    "browserAutomationDesc": "关闭后禁用工作流浏览器节点、ba_* 工具与内嵌自动操作。DOM / AX 为页面感知方式。",
+    "browserAutomationOff": "关闭",
+    "browserAutomationDom": "DOM 模式",
+    "browserAutomationAx": "AX 模式"
   },
   "developer": {
     "title": "开发者",

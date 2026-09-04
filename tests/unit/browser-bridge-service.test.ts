@@ -11,6 +11,14 @@ vi.mock('node:fs', async (importOriginal) => {
   };
 });
 
+vi.mock('../../electron/utils/browser-bridge-extension', () => ({
+  getBundledBrowserBridgeExtensionVersion: () => '1.0.0',
+}));
+
+vi.mock('../../electron/utils/paths', () => ({
+  getOpenClawConfigDir: () => '/tmp/stoclaw-browser-bridge-test',
+}));
+
 import { BrowserBridgeService } from '../../electron/services/browser-bridge-service';
 
 describe('BrowserBridgeService', () => {
@@ -86,5 +94,82 @@ describe('BrowserBridgeService', () => {
     });
     const result = service.getResult(command!.commandId);
     expect(result?.result).toEqual({ success: true });
+  });
+
+  it('defaults extension sessions to borrowed and embed to owned', () => {
+    const { code } = service.refreshPairingCode();
+    const { token } = service.pairWithCode(code)!;
+    const extension = service.connectSession({
+      sessionId: 'ext-1',
+      tabId: 3,
+      url: 'https://example.com',
+      title: 'Example',
+      token,
+    });
+    expect(extension.ownership).toBe('borrowed');
+
+    const embed = service.connectEmbedSession({
+      sessionId: 'embed-rt',
+      embedRuntimeId: 'rt',
+      url: 'https://app.example',
+      title: 'App',
+    });
+    expect(embed.ownership).toBe('owned');
+    expect(service.listSessionsByGroup('g1')).toEqual([]);
+    service.connectSession({
+      sessionId: 'ext-g',
+      tabId: 4,
+      url: 'https://example.com',
+      title: 'Grouped',
+      token,
+      groupId: 'g1',
+    });
+    expect(service.listSessionsByGroup('g1')).toHaveLength(1);
+  });
+
+  it('keeps rotated tokens valid during grace then drops them', () => {
+    const { code } = service.refreshPairingCode();
+    const { token } = service.pairWithCode(code)!;
+    expect(service.validateToken(token)).toBe(true);
+    service.rotateTokens({ keepGraceMs: 30_000 });
+    expect(service.validateToken(token)).toBe(true);
+    service.revokeAllTokens();
+    expect(service.validateToken(token)).toBe(false);
+  });
+
+  it('caps stored command results at 1000', () => {
+    const { code } = service.refreshPairingCode();
+    const { token } = service.pairWithCode(code)!;
+    service.connectSession({
+      sessionId: 'sess-cap',
+      tabId: 9,
+      url: 'https://example.com',
+      title: 'Cap',
+      token,
+    });
+    const first = service.enqueueCommand('sess-cap', 'snapshot')!;
+    service.storeResult({
+      sessionId: 'sess-cap',
+      commandId: first.commandId,
+      action: 'snapshot',
+      result: { n: 0 },
+    });
+    for (let index = 1; index <= 1000; index += 1) {
+      const command = service.enqueueCommand('sess-cap', 'snapshot')!;
+      service.storeResult({
+        sessionId: 'sess-cap',
+        commandId: command.commandId,
+        action: 'snapshot',
+        result: { n: index },
+      });
+    }
+    expect(service.getResult(first.commandId)).toBeNull();
+  });
+
+  it('rejects auto-connect when extension major version mismatches', () => {
+    service.setAutoConnectEnabled(true);
+    expect(service.autoConnect('2.0.0')).toBeNull();
+    expect(service.checkExtensionCompatibility('1.2.0').compatible).toBe(true);
+    expect(service.autoConnect('1.0.0')?.token).toBeTruthy();
   });
 });

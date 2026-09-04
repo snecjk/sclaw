@@ -79,9 +79,42 @@ export async function waitAfterAction(
   deps: WaitEngineDeps,
   options?: { source?: 'embed' | 'managed'; action?: string },
 ): Promise<void> {
+  // navigate：navigation + readyState 双等待（计划 §四 B8 / P1-7：load 事件后 readyState≥interactive 兜底）
+  if (options?.action === 'navigate') {
+    await waitForCondition(deps, { type: 'navigation', timeoutMs: 15_000 });
+    await waitForReadyState(deps, ['interactive', 'complete']);
+    return;
+  }
   if (options?.source === 'embed' && options.action === 'click') {
     await waitForCondition(deps, { type: 'navigation', timeoutMs: 3000 });
     return;
   }
   await waitForCondition(deps, { type: 'networkIdle', timeoutMs: 15_000 });
+}
+
+/**
+ * readyState 等待（计划 §四 B8 / P1-7）：executeJavaScript 轮询 document.readyState，
+ * 命中 states 之一即返回。navigate 分支的兜底（load 完成但子资源/脚本仍在跑的场景）。
+ */
+export async function waitForReadyState(
+  deps: WaitEngineDeps,
+  states: Array<'interactive' | 'complete'>,
+  timeoutMs = 10_000,
+): Promise<{ success: boolean; message: string }> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (deps.webContents.isDestroyed()) {
+      return { success: false, message: 'WebContents destroyed during readyState wait' };
+    }
+    const readyState = await deps.executeJavaScript('document.readyState');
+    // 假 WebContents / 注入失败时探测值不是字符串：导航等待已经完成，不再空转到超时。
+    if (typeof readyState !== 'string') {
+      return { success: true, message: 'readyState probe unavailable; proceeding after navigation wait' };
+    }
+    if (states.includes(readyState as 'interactive' | 'complete')) {
+      return { success: true, message: `readyState reached: ${readyState}` };
+    }
+    await sleep(50);
+  }
+  return { success: false, message: `readyState wait timed out after ${timeoutMs}ms (expected: ${states.join('|')})` };
 }

@@ -31,6 +31,8 @@ describe('browser workflow node types', () => {
       'ba_wait',
       'ba_validate',
       'ba_start_run',
+      'ba_find',
+      'ba_read_page',
     ]);
   });
 });

@@ -49,8 +49,36 @@ export async function createManagedSession(input: {
     managedWindows.delete(sessionId);
   });
 
+  // B2/B9：beforeunload 不触发 CDP javascriptDialogOpening，直接阻止其打断自动化会话
+  win.webContents.on('will-prevent-unload', (event) => {
+    event.preventDefault();
+  });
+
   await win.loadURL(input.url);
+  const prefix = '[自动操作] ';
+  const applyAutomationTitle = () => {
+    if (win.isDestroyed()) return;
+    const current = win.getTitle() || input.url;
+    if (!current.startsWith(prefix)) {
+      win.setTitle(`${prefix}${current}`);
+    }
+  };
+  applyAutomationTitle();
+  win.on('page-title-updated', (event, title) => {
+    if (title.startsWith(prefix)) return;
+    event.preventDefault();
+    win.setTitle(`${prefix}${title}`);
+  });
   return { sessionId, webContents: win.webContents };
+}
+
+/** B7 可见性守卫数据源：managed 窗口的可见/最小化状态；窗口不存在（已销毁）返回 null。 */
+export function getManagedWindowVisibility(
+  sessionId: string,
+): { visible: boolean; minimized: boolean } | null {
+  const managed = managedWindows.get(sessionId);
+  if (!managed || managed.window.isDestroyed()) return null;
+  return { visible: managed.window.isVisible(), minimized: managed.window.isMinimized() };
 }
 
 export function resolveSessionWebContents(session: BrowserAutomationSession): WebContents | null {
@@ -69,6 +97,14 @@ export function closeManagedSession(sessionId: string): void {
   if (!managed || managed.window.isDestroyed()) return;
   managed.window.close();
   managedWindows.delete(sessionId);
+}
+
+/** 仅 owned 会话可销毁窗口；borrowed（embed）只取消注册、不关用户 webview。 */
+export function closeOwnedSession(session: { ownership?: string; source?: string; sessionId: string }): void {
+  if (session.ownership === 'borrowed') return;
+  if (session.source === 'managed' || session.ownership === 'owned') {
+    closeManagedSession(session.sessionId);
+  }
 }
 
 export function buildEmbedSessionId(runtimeId: string): string {

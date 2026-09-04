@@ -282,7 +282,12 @@
       }
     },
     "devMode": "開発者モード",
-    "devModeDesc": "開発者ツールとショートカットを表示"
+    "devModeDesc": "開発者ツールとショートカットを表示",
+    "browserAutomation": "ブラウザ自動化",
+    "browserAutomationDesc": "オフにするとワークフローのブラウザノード、ba_* ツール、アプリ内自動操作を無効化します。DOM / AX はページ認識方式です。",
+    "browserAutomationOff": "オフ",
+    "browserAutomationDom": "DOM モード",
+    "browserAutomationAx": "AX モード"
   },
   "developer": {
     "title": "開発者",

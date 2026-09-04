@@ -7,25 +7,14 @@ import {
 	runBridgeCommand,
 	type BrowserBridgePluginConfig,
 } from "./bridge-client.js";
+import {
+	BRIDGE_SYSTEM_PROMPT,
+	EMBED_BRIDGE_SYSTEM_PROMPT,
+} from "../../../shared/browser-bridge/prompts.js";
 
 export const BROWSER_MCP_SERVER_NAME = "sto-browser-tool";
 
-export const BRIDGE_SYSTEM_PROMPT = [
-	"浏览器桥接工具（bridge_*，重要）：",
-	"- **应用广场内嵌预览（左侧 webview）**：必须用 bridge_*，且每次调用传 sessionId（embed-<runtimeId>）。禁止 browser / shell:openExternal。",
-	"- **简单点击/打开**：直接 bridge_click({ sessionId, name: \"菜单名\" })，返回 url 与 navigated；无需先 snapshot，无需 ba_wait。",
-	"- 需要定位 ref 时：bridge_snapshot({ sessionId }) → bridge_click({ sessionId, ref: \"@e5\" })。",
-	"- **外部 Chrome 已登录标签**：可用 bridge_*（无需 sessionId，自动选扩展会话）；需安装 StoClaw Browser Bridge 扩展。",
-	"- 无登录态爬取、自动化测试 → 使用原生 browser 工具（托管浏览器），不要用 bridge_*。",
-	"- 仅打开链接给用户看（非操作页面）→ shell:openExternal。",
-].join("\n");
-
-export const EMBED_BRIDGE_SYSTEM_PROMPT = [
-	"【当前为应用广场内嵌浏览器会话】用户左侧 webview 已连接 bridge；必须从用户消息 JSON 读取 bridgeSessionId 并在每次 bridge_* 调用中传入 sessionId。",
-	"**仅使用 bridge_*（bridge_click / bridge_snapshot / bridge_fill 等），不要调用 ba_*。**",
-	"",
-	BRIDGE_SYSTEM_PROMPT,
-].join("\n");
+export { BRIDGE_SYSTEM_PROMPT, EMBED_BRIDGE_SYSTEM_PROMPT };
 
 function textResult(value: unknown, isError = false): CallToolResult {
 	return {
@@ -57,8 +46,15 @@ export function createBrowserMcpTools(cfg: BrowserBridgePluginConfig) {
 	const bridgeSnapshot = tool(
 		"bridge_snapshot",
 		"获取当前浏览器页面可交互元素树（含 @e ref）。应用广场内嵌预览须传 sessionId。",
-		{ sessionId: sessionIdSchema },
-		async (params) => runBridgeTool(cfg, "snapshot", {}, bridgeOptionsFromParams(params)),
+		{
+			sessionId: sessionIdSchema,
+			mode: z.enum(["dom", "ax"]).optional().describe("ax 优先无障碍树；扩展未支持时回退 DOM"),
+		},
+		async (params) => {
+			const payload: Record<string, unknown> = {};
+			if (params.mode) payload.mode = params.mode;
+			return runBridgeTool(cfg, "snapshot", payload, bridgeOptionsFromParams(params));
+		},
 	);
 
 	const bridgeClick = tool(
@@ -131,6 +127,70 @@ export function createBrowserMcpTools(cfg: BrowserBridgePluginConfig) {
 		},
 	);
 
+	const bridgeReadPage = tool(
+		"bridge_read_page",
+		"滚动收集当前 bridge 会话可见正文。内嵌预览须传 sessionId。",
+		{ sessionId: sessionIdSchema },
+		async (params) => runBridgeTool(cfg, "read_page", {}, bridgeOptionsFromParams(params)),
+	);
+
+	const bridgePrintPdf = tool(
+		"bridge_print_pdf",
+		"将当前 bridge 会话页面导出为 PDF。内嵌预览须传 sessionId。",
+		{ sessionId: sessionIdSchema },
+		async (params) => runBridgeTool(cfg, "print_pdf", {}, bridgeOptionsFromParams(params)),
+	);
+
+	const bridgeCdp = tool(
+		"bridge_cdp",
+		"对当前会话发送白名单内的 CDP 方法。内嵌预览须传 sessionId。",
+		{
+			sessionId: sessionIdSchema,
+			method: z.string().describe("CDP 方法名，如 Runtime.evaluate"),
+			params: z.record(z.unknown()).optional(),
+		},
+		async (params) => {
+			const payload: Record<string, unknown> = { method: params.method };
+			if (params.params) payload.params = params.params;
+			return runBridgeTool(cfg, "cdp", payload, bridgeOptionsFromParams(params));
+		},
+	);
+
+	const bridgeGroupTabs = tool(
+		"bridge_group_tabs",
+		"仅真实 Chrome 扩展会话有效；内嵌 webview 会返回 unsupported。",
+		{
+			sessionId: sessionIdSchema,
+			groupId: z.string().optional(),
+			title: z.string().optional(),
+			color: z.string().optional(),
+			tabIds: z.array(z.number()).optional(),
+		},
+		async (params) => {
+			const payload: Record<string, unknown> = {};
+			if (params.groupId) payload.groupId = params.groupId;
+			if (params.title) payload.title = params.title;
+			if (params.color) payload.color = params.color;
+			if (params.tabIds) payload.tabIds = params.tabIds;
+			return runBridgeTool(cfg, "group_tabs", payload, bridgeOptionsFromParams(params));
+		},
+	);
+
+	const bridgeMarkTabs = tool(
+		"bridge_mark_tabs",
+		"仅真实 Chrome 扩展会话有效；给被驱动标签加/清视觉标记。",
+		{
+			sessionId: sessionIdSchema,
+			marked: z.boolean().describe("true 加上驱动标记，false 清除"),
+			label: z.string().optional(),
+		},
+		async (params) => {
+			const payload: Record<string, unknown> = { marked: params.marked };
+			if (params.label) payload.label = params.label;
+			return runBridgeTool(cfg, "mark_tabs", payload, bridgeOptionsFromParams(params));
+		},
+	);
+
 	return [
 		bridgeSnapshot,
 		bridgeClick,
@@ -138,6 +198,11 @@ export function createBrowserMcpTools(cfg: BrowserBridgePluginConfig) {
 		bridgeNavigate,
 		bridgeScreenshot,
 		bridgeListSessions,
+		bridgeReadPage,
+		bridgePrintPdf,
+		bridgeCdp,
+		bridgeGroupTabs,
+		bridgeMarkTabs,
 	];
 }
 

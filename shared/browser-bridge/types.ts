@@ -5,9 +5,16 @@ export type BrowserBridgeAction =
   | 'navigate'
   | 'screenshot'
   | 'evaluate'
-  | 'scroll';
+  | 'scroll'
+  | 'read_page'
+  | 'print_pdf'
+  | 'cdp'
+  | 'group_tabs'
+  | 'mark_tabs';
 
 export type BrowserBridgeSessionSource = 'extension' | 'embed';
+
+export type BrowserBridgeOwnership = 'owned' | 'borrowed';
 
 export interface BrowserBridgeSession {
   sessionId: string;
@@ -19,6 +26,11 @@ export interface BrowserBridgeSession {
   token: string;
   source?: BrowserBridgeSessionSource;
   embedRuntimeId?: string;
+  /** owned=应用创建可销毁；borrowed=用户已有 tab 只借不毁。 */
+  ownership: BrowserBridgeOwnership;
+  extensionVersion?: string;
+  groupId?: string;
+  taskLabel?: string;
 }
 
 export interface BrowserBridgeCommand {

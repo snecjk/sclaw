@@ -21,6 +21,7 @@ import type { ScheduleTaskRunsTable, ScheduleTasksTable } from './models/tables/
 import type { ArtifactSaveRecordsTable } from './models/tables/artifact-save-record-table';
 import type { ChatRuntimeRunsTable } from './models/tables/chat-runtime-table';
 import type {
+  BaArtifactTable,
   BaRunTable,
   BaSessionTable,
   BaStepRunTable,
@@ -84,4 +85,5 @@ export interface SqliteDbSchema {
   ba_session: BaSessionTable;
   ba_run: BaRunTable;
   ba_step_run: BaStepRunTable;
+  ba_artifact: BaArtifactTable;
 }

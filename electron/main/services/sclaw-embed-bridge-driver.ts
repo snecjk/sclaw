@@ -8,8 +8,11 @@ import {
   SCLAW_EMBED_BRIDGE_INJECT_SCRIPT,
 } from '../../../shared/sclaw-embed-bridge-inject';
 import { browserBridgeService } from '../../services/browser-bridge-service';
+import { cdpMethodTimeoutMs, isCdpMethodAllowed } from '../../../shared/browser-automation/cdp-allowlist';
 import { BrowserAutomationCdpSession } from '../../services/browser-automation/cdp-session';
 import { actFillOrType, getOrCreateCdpSession } from '../../services/browser-automation/input';
+import { collectReadPageText, paginateReadPageText } from '../../services/browser-automation/read-page';
+import { sendSclawEmbedAutomationMark } from './sclaw-embed-automation-mark';
 
 const EMBED_TAB_ID = -1;
 const POLL_INTERVAL_MS = 50;
@@ -81,6 +84,43 @@ async function runEmbedCommand(
     return { success: false, error: 'Embed webview is not ready' };
   }
 
+  if (action === 'group_tabs' || action === 'mark_tabs') {
+    return { success: false, error: 'unsupported on embed' };
+  }
+
+  if (action === 'cdp') {
+    const method = typeof payload.method === 'string' ? payload.method : '';
+    if (!method || !isCdpMethodAllowed(method)) {
+      return { success: false, error: 'CDP_METHOD_NOT_ALLOWED' };
+    }
+    const cdp = getOrCreateCdpSession(wc, embedCdpByWebContentsId);
+    const params = payload.params && typeof payload.params === 'object' && !Array.isArray(payload.params)
+      ? payload.params as Record<string, unknown>
+      : undefined;
+    try {
+      const result = await cdp.send(method, params, { timeoutMs: cdpMethodTimeoutMs(method) });
+      return { success: true, result };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  if (action === 'print_pdf') {
+    try {
+      const data = await wc.printToPDF({ printBackground: true });
+      return { success: true, mimeType: 'application/pdf', base64: data.toString('base64') };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  if (action === 'read_page') {
+    const collected = await collectReadPageText({
+      executeJavaScript: (script) => wc.executeJavaScript(script, true),
+    });
+    return { success: true, ...paginateReadPageText(collected) };
+  }
+
   if (action === 'navigate') {
     const url = typeof payload.url === 'string' ? payload.url.trim() : '';
     if (!url) return { success: false, error: 'url is required' };
@@ -148,13 +188,18 @@ async function runEmbedCommand(
 }
 
 async function executeCommand(entry: EmbedDriverEntry, command: BrowserBridgeCommand): Promise<void> {
-  const result = await runEmbedCommand(entry, command.action, command.payload);
-  browserBridgeService.storeResult({
-    sessionId: entry.sessionId,
-    commandId: command.commandId,
-    action: command.action,
-    result,
-  });
+  sendSclawEmbedAutomationMark(entry.webContentsId, entry.runtimeId, true);
+  try {
+    const result = await runEmbedCommand(entry, command.action, command.payload);
+    browserBridgeService.storeResult({
+      sessionId: entry.sessionId,
+      commandId: command.commandId,
+      action: command.action,
+      result,
+    });
+  } finally {
+    sendSclawEmbedAutomationMark(entry.webContentsId, entry.runtimeId, false);
+  }
 }
 
 async function tickEntry(entry: EmbedDriverEntry): Promise<void> {

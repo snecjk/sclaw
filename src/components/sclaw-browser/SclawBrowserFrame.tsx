@@ -10,6 +10,7 @@ import { isStoPolicyHostUrl, markStoPolicyWebAuthedInSession } from '@/lib/sto-p
 import { registerSclawBrowserWebview } from '@/lib/sclaw-browser-page-capture';
 import {
   bindSclawBrowserWebContents,
+  reportSclawBrowserVisibility,
   updateSclawBrowserPageState,
 } from '@/lib/sclaw-browser-host-api';
 import {
@@ -223,6 +224,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const bound = boundProp ?? Boolean(overlaySession?.appId);
     const [guestPreloadUrl, setGuestPreloadUrl] = useState<string | null>(null);
     const [preloadReady, setPreloadReady] = useState(!isElectron);
+    const [automationActive, setAutomationActive] = useState(false);
     const launchedSrcRef = useRef<string | null>(null);
     const domReadyRef = useRef(false);
     const pendingUrlRef = useRef(url);
@@ -243,6 +245,20 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     onConsoleMessageRef.current = onConsoleMessage;
     captureNetworkRef.current = captureGuestNetworkFailures;
     pendingUrlRef.current = url;
+
+    useEffect(() => {
+      const api = window.electron?.ipcRenderer;
+      if (!api?.on || !embedRuntimeId) return;
+      const unsubscribe = api.on('sclaw-browser:automation-mark', (...args: unknown[]) => {
+        const payload = args[0] as { runtimeId?: string; active?: boolean } | undefined;
+        if (!payload || payload.runtimeId !== embedRuntimeId) return;
+        setAutomationActive(payload.active === true);
+      });
+      return () => {
+        unsubscribe?.();
+        setAutomationActive(false);
+      };
+    }, [embedRuntimeId]);
 
     const emitWebviewLifecycle = (el: EmbedWebviewElement, event: SclawBrowserLifecycleEvent) => {
       onWebviewLifecycleRef.current?.({
@@ -286,6 +302,16 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       if (!isElectron || !preloadReady) return;
       navigateGuest(url);
     }, [preloadReady, url]);
+
+    // D1：BAP 可见性上报 —— active（tab 切换/drawer 显隐）变化与卸载时上报，
+    // 主进程写入 runtime meta.visible 供 assertPageActionable 查询（B7）。
+    useEffect(() => {
+      if (!isElectron || !embedRuntimeId) return;
+      void reportSclawBrowserVisibility(embedRuntimeId, active, 'tab-switch');
+      return () => {
+        void reportSclawBrowserVisibility(embedRuntimeId, false, 'tab-switch');
+      };
+    }, [embedRuntimeId, active]);
 
     useEffect(() => {
       if (!isElectron || !preloadReady || !onWebviewLifecycleRef.current) return;
@@ -499,6 +525,10 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         domReadyRef.current = true;
         navigateGuest(pendingUrlRef.current);
         bindAfterDomReady();
+        // D1：dom-ready 后补一次可见性上报（覆盖挂载即 active 但 effect 早于绑定的时序）
+        if (embedRuntimeId) {
+          void reportSclawBrowserVisibility(embedRuntimeId, active, 'dom-ready');
+        }
       };
 
       const onNavigate = () => {
@@ -622,15 +652,22 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         );
       }
       return (
-        <webview
-          ref={webviewRef as React.RefObject<HTMLElement>}
-          src="about:blank"
-          partition={SCLAW_EMBED_BROWSER_PARTITION}
-          allowpopups="true"
-          webpreferences={EMBED_WEBVIEW_PREFERENCES}
-          preload={guestPreloadUrl ?? undefined}
-          className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"
-        />
+        <div className="sclaw-browser-drawer__frame-host relative min-h-0 flex-1">
+          <webview
+            ref={webviewRef as React.RefObject<HTMLElement>}
+            src="about:blank"
+            partition={SCLAW_EMBED_BROWSER_PARTITION}
+            allowpopups="true"
+            webpreferences={EMBED_WEBVIEW_PREFERENCES}
+            preload={guestPreloadUrl ?? undefined}
+            className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"
+          />
+          {automationActive ? (
+            <div className="sclaw-browser-drawer__automation-mark" aria-hidden="true">
+              <span className="sclaw-browser-drawer__automation-badge">自动操作中</span>
+            </div>
+          ) : null}
+        </div>
       );
     }
 

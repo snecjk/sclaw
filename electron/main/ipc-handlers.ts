@@ -2994,6 +2994,19 @@ function registerSessionHandlers(): void {
     return { ok: true };
   });
 
+  // D1：渲染层可见性上报（BAP assertPageActionable 数据源，落地 runtime meta.visible）
+  ipcMain.handle('sclaw-browser:reportVisibility', async (_, payload: {
+    runtimeId?: string;
+    visible?: boolean;
+    reason?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { reportSclawEmbedBrowserVisibility } = await import('./services/sclaw-embed-browser-runtime');
+    reportSclawEmbedBrowserVisibility({ runtimeId, visible: payload?.visible === true });
+    return { ok: true };
+  });
+
   ipcMain.handle('sclaw-browser:capturePage', async (_, payload: { runtimeId?: string }) => {
     const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
     if (!runtimeId) return { ok: false };

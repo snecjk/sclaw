@@ -26,9 +26,9 @@ describe('sto-browser-bridge plugin', () => {
     };
   }
 
-  it('registers six bridge tools and before_prompt_build', () => {
+  it('registers eleven bridge tools and before_prompt_build', () => {
     register.register(buildApi() as never);
-    expect(registerTool).toHaveBeenCalledTimes(6);
+    expect(registerTool).toHaveBeenCalledTimes(11);
     expect(on).toHaveBeenCalledWith('before_prompt_build', expect.any(Function));
   });
 

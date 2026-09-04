@@ -49,6 +49,9 @@ export function buildSclawBrowserEmbedContextText(
       navigate: 'bridge_navigate',
       screenshot: 'bridge_screenshot',
       listSessions: 'bridge_list_sessions',
+      readPage: 'bridge_read_page',
+      printPdf: 'bridge_print_pdf',
+      cdp: 'bridge_cdp',
     },
     automationTools: {
       observe: 'ba_observe',

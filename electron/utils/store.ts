@@ -74,6 +74,9 @@ export interface AppSettings {
   channelSessionIdleEnabled: boolean;
   /** 默认 24；合法范围由写入侧钳制 */
   channelSessionIdleHours: number;
+
+  /** 浏览器自动化总开关：off 全链路禁用；dom/ax 为感知引擎。 */
+  browserAutomationLevel: 'off' | 'dom' | 'ax';
 }
 
 /**
@@ -136,6 +139,8 @@ function createDefaultSettings(): AppSettings {
     // Channel session idle → new session
     channelSessionIdleEnabled: true,
     channelSessionIdleHours: 24,
+
+    browserAutomationLevel: 'dom',
   };
 }
 
@@ -155,6 +160,9 @@ async function getSettingsStore() {
       store.set('autoCheckUpdate', true);
       store.set('autoDownloadUpdate', true);
       store.set('_updatePrefsMigrationV1', true);
+    }
+    if (!store.has('browserAutomationLevel')) {
+      store.set('browserAutomationLevel', 'dom');
     }
     if (!store.has('sidebarPreferredWidth')) {
       store.set('sidebarPreferredWidth', 260);
