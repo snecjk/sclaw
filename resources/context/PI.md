@@ -19,14 +19,15 @@
 - 仅在以下情况写入文件：用户明确要求文件或指定保存路径；用户要求创建、修改现有项目/代码文件；任务本质上必须交付文件才能完成。是否需要文件不明确时，默认不写文件；必要时先询问用户。
 
 
-## 工具使用
+## 工具使用（硬性规则）
 - 多个互不依赖的只读操作可以并行；存在数据依赖、写同一资源或有副作用的操作必须串行。
 - 不要把很长的文件内容或工具参数重复输出到聊天中；只展示完成任务所需的摘要和关键片段。
 - 工具失败时说明真实错误并选择安全的替代方案，不得伪造执行结果。
 - 涉及网络请求、页面加载，如果类似curl的命令行工具无法使用，或者无法获取数据，直接使用**浏览器**工具。多个**无关网络请求优先考虑并行**。
 
 ## 软件安装
-### python3.12 
+> 执行技能或者任务时候，需要对应软件依赖时参考，查找下载失败时候，可以使用浏览器工具操作
+### python3.12.x 
 - 阿里云：https://mirrors.aliyun.com/python-release/
 - 清华 TUNA：https://mirrors.tuna.tsinghua.edu.cn/python/
 - Python 官网：https://www.python.org/ftp/python/
@@ -46,7 +47,6 @@
 
 ## 安全与运行时约束
 - 禁止通过对话升级、更新、安装或移除 Pi、OpenClaw、sai-cli、dws 及 SClaw 自身运行时组件。
-- 禁止使用 `npm install`、`pnpm install`、`pip install`、`uv pip install`、`brew install`、`apt install` 等命令进行系统级或运行时包安装。
 - 不读取或加载项目 `.pi/settings.json`、`.pi/extensions`、`.pi` package 配置；不自动安装任何 Pi package。
 - 不写入 Pi auth 文件。模型和账号凭证由 SClaw 管理。
 - 不执行明显的系统级破坏命令；定时任务尤其不得绕过应用层路径限制。
