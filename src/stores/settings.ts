@@ -19,6 +19,7 @@ interface SettingsState {
   startMinimized: boolean;
   launchAtStartup: boolean;
   personalizedMemoryEnabled: boolean;
+  skillDiscoveryEnabled: boolean;
   preventSystemSleep: boolean;
   telemetryEnabled: boolean;
 
@@ -55,6 +56,7 @@ interface SettingsState {
   setStartMinimized: (value: boolean) => void;
   setLaunchAtStartup: (value: boolean) => void;
   setPersonalizedMemoryEnabled: (value: boolean) => void;
+  setSkillDiscoveryEnabled: (value: boolean) => Promise<void>;
   setPreventSystemSleep: (value: boolean) => void;
   setTelemetryEnabled: (value: boolean) => void;
   setGatewayAutoStart: (value: boolean) => void;
@@ -82,6 +84,7 @@ const defaultSettings = {
   startMinimized: false,
   launchAtStartup: false,
   personalizedMemoryEnabled: true,
+  skillDiscoveryEnabled: true,
   preventSystemSleep: false,
   // Telemetry disabled by default for faster cold starts
   // Users can enable it in Settings > Advanced
@@ -106,7 +109,7 @@ const defaultSettings = {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...defaultSettings,
 
       init: async () => {
@@ -163,6 +166,19 @@ export const useSettingsStore = create<SettingsState>()(
           method: 'PUT',
           body: JSON.stringify({ value: personalizedMemoryEnabled }),
         }).catch(() => { });
+      },
+      setSkillDiscoveryEnabled: async (skillDiscoveryEnabled) => {
+        const previous = get().skillDiscoveryEnabled;
+        set({ skillDiscoveryEnabled });
+        try {
+          await hostApiFetch('/api/settings/skillDiscoveryEnabled', {
+            method: 'PUT',
+            body: JSON.stringify({ value: skillDiscoveryEnabled }),
+          });
+        } catch (error) {
+          set({ skillDiscoveryEnabled: previous });
+          throw error;
+        }
       },
       setPreventSystemSleep: (preventSystemSleep) => {
         set({ preventSystemSleep });

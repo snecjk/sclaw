@@ -24,10 +24,10 @@ import {
   skillPickerShellClass,
 } from '@/lib/surfaces';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { useSettingsStore } from '@/stores/settings';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { PickerEmptyState } from '@/components/picker-empty-state';
 import { Switch } from '@/components/ui/switch';
-import { invokeIpc } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 export interface SkillPickerProps {
@@ -73,8 +73,9 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     const { t } = useTranslation('chat');
     const [toolbarQuery, setToolbarQuery] = useState('');
     const [position, setPosition] = useState<PickerPosition | null>(null);
-    const [skillDiscoveryEnabled, setSkillDiscoveryEnabled] = useState(true);
     const [savingSkillDiscovery, setSavingSkillDiscovery] = useState(false);
+    const skillDiscoveryEnabled = useSettingsStore((s) => s.skillDiscoveryEnabled);
+    const setSkillDiscoveryEnabled = useSettingsStore((s) => s.setSkillDiscoveryEnabled);
     const mySkills = useSkillPlazaStore((s) => s.mySkills);
     const loading = useSkillPlazaStore((s) => s.loading);
     const fetchLocalSkills = useSkillPlazaStore((s) => s.fetchLocalSkills);
@@ -83,19 +84,6 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     const localRef = useRef<HTMLDivElement | null>(null);
     const listViewportRef = useRef<HTMLDivElement>(null);
     const listContentRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      if (!open) return undefined;
-      let active = true;
-      void invokeIpc<{ skillDiscoveryEnabled?: boolean }>('settings:getAll')
-        .then((settings) => {
-          if (active) setSkillDiscoveryEnabled(settings.skillDiscoveryEnabled !== false);
-        })
-        .catch(() => undefined);
-      return () => {
-        active = false;
-      };
-    }, [open]);
 
     useEffect(() => {
       if (!open) {
@@ -180,13 +168,10 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
 
     const handleSkillDiscoveryChange = async (enabled: boolean) => {
       if (savingSkillDiscovery) return;
-      const previous = skillDiscoveryEnabled;
-      setSkillDiscoveryEnabled(enabled);
       setSavingSkillDiscovery(true);
       try {
-        await invokeIpc('settings:setMany', { skillDiscoveryEnabled: enabled });
+        await setSkillDiscoveryEnabled(enabled);
       } catch {
-        setSkillDiscoveryEnabled(previous);
         toast.error(t('composer.skillDiscoverySaveFailed'));
       } finally {
         setSavingSkillDiscovery(false);

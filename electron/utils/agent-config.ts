@@ -798,8 +798,8 @@ export async function createAgent(
 
 /**
  * Create an agent with an explicit ID (instead of auto-generating from name).
- * Used by the biz-agent sync service to create agents whose ID matches the
- * remote `code` field, enabling dedup-by-code on subsequent syncs.
+ * Used by internal runtimes and project-agent provisioning when the caller
+ * needs a stable, explicit agent ID.
  *
  * Idempotent for project-agent ensure: if the ID is already in config, returns
  * the current snapshot. If only the on-disk agent dir exists (orphan after a
