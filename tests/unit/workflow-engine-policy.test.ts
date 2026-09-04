@@ -3,7 +3,10 @@ import { resolveWorkflowEngineSelection } from '@/hooks/use-workflow-engine-poli
 import {
   getAgentEnginePolicyOptionLabel,
   normalizeAgentEnginePolicy,
+  useAgentEnginePolicyStore,
 } from '@/stores/agent-engine-policy';
+import { resolveImmediateWorkflowEngine } from '@/hooks/use-workflow-send';
+import { useChatStore } from '@/stores/chat';
 
 describe('workflow engine policy', () => {
   const policy = normalizeAgentEnginePolicy({
@@ -27,5 +30,16 @@ describe('workflow engine policy', () => {
     expect(resolveWorkflowEngineSelection('claude', policy.engines, policy.defaultEngine)).toBe('claude');
     expect(resolveWorkflowEngineSelection('pi', policy.engines, policy.defaultEngine, new Set(['pi'])))
       .toBe('openclaw');
+  });
+
+  it('keeps the explicitly selected run-now engine over the current session default', () => {
+    useAgentEnginePolicyStore.setState(policy);
+    useChatStore.setState({
+      currentSessionKey: 'pi:main:current',
+      sessions: [{ key: 'pi:main:current', engineType: 'pi' }],
+    });
+
+    expect(resolveImmediateWorkflowEngine('claude')).toBe('claude');
+    expect(resolveImmediateWorkflowEngine()).toBe('pi');
   });
 });

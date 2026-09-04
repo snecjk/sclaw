@@ -322,6 +322,33 @@ describe('chat target routing', () => {
     });
   });
 
+  it('materializes a project workflow session once with its explicit engine', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      pendingProjectId: 'project-a',
+      sessions: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      loading: false,
+    });
+
+    useChatStore.getState().newSession({ materialize: true, engineType: 'claude' });
+
+    const state = useChatStore.getState();
+    expect(state.currentSessionKey).not.toBe('agent:main:main');
+    expect(state.pendingProjectId).toBeNull();
+    expect(state.sessions).toEqual([
+      expect.objectContaining({ key: state.currentSessionKey, engineType: 'claude' }),
+    ]);
+    await vi.waitFor(() => expect(bindSessionMock).toHaveBeenCalledWith(
+      state.currentSessionKey,
+      'project-a',
+      'claude',
+    ));
+  });
+
   it('does not provision an OpenClaw project agent for a Pi project draft', async () => {
     const { useChatStore } = await import('@/stores/chat');
     agentsState.agents[0] = { ...agentsState.agents[0], engineType: 'pi' };

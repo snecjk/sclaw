@@ -15,12 +15,15 @@ export interface IconCheckboxProps
   onCheckedChange?: (checked: boolean) => void;
   /** 图标边长，默认 16 */
   size?: number;
+  /** 亮色主题使用产品主题色渲染选中态，默认保留设计稿图标。 */
+  variant?: 'default' | 'primary';
 }
 
 export function IconCheckbox({
   checked = false,
   onCheckedChange,
   size = 16,
+  variant = 'default',
   className,
   disabled,
   onClick,
@@ -28,16 +31,27 @@ export function IconCheckbox({
 }: IconCheckboxProps) {
   const icon = (
     <>
-      <img
-        src={checked ? checkedIcon : uncheckedIcon}
-        alt=""
-        width={size}
-        height={size}
-        className="sto-checkbox-light-visual pointer-events-none select-none object-contain"
-        style={{ width: size, height: size }}
-        draggable={false}
-        aria-hidden
-      />
+      {variant === 'primary' ? (
+        <span
+          className="sto-checkbox-primary-light-visual pointer-events-none shrink-0 items-center justify-center rounded-[4px] border text-primary-foreground"
+          style={{ width: size, height: size }}
+          data-state={checked ? 'checked' : 'unchecked'}
+          aria-hidden
+        >
+          {checked ? <Check style={{ width: size * 0.75, height: size * 0.75 }} strokeWidth={3} /> : null}
+        </span>
+      ) : (
+        <img
+          src={checked ? checkedIcon : uncheckedIcon}
+          alt=""
+          width={size}
+          height={size}
+          className="sto-checkbox-light-visual pointer-events-none select-none object-contain"
+          style={{ width: size, height: size }}
+          draggable={false}
+          aria-hidden
+        />
+      )}
       <span
         className="sto-checkbox-dark-visual pointer-events-none shrink-0 items-center justify-center rounded-[4px] border bg-transparent text-primary-foreground"
         style={{ width: size, height: size }}

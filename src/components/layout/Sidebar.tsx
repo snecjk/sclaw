@@ -87,6 +87,7 @@ import {
   isAnyCronSessionKey,
   isVirtualTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
+import { isTemporaryAgentSessionKey } from '@/stores/chat/session-identity';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
 import {
@@ -243,10 +244,6 @@ function collapsedEntryLabel(full: string): string {
   if (!s) return '…';
   const first = [...s][0];
   return `${first}…`;
-}
-
-function isTemporaryAgentSessionKey(key: string): boolean {
-  return /^agent:[^:]+:session-\d+/.test(key);
 }
 
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [

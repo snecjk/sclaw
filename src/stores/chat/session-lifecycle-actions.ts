@@ -599,7 +599,7 @@ export function createSessionLifecycleActions(
 
     // ── New session ──
 
-    newSession: (options?: { projectId?: string; materialize?: boolean }) => {
+    newSession: (options?: { projectId?: string; materialize?: boolean; engineType?: ChatSession['engineType'] }) => {
       const user = useAuthStore.getState().user;
       const ownerCode = String(user?.code || user?.empCode || user?.id || '').trim();
       if (ownerCode) {
@@ -626,7 +626,7 @@ export function createSessionLifecycleActions(
       // This avoids empty catalog rows while still carrying project/agent/model context.
       if (projectId && projectId !== 'default' && !shouldMaterialize) {
         const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
-        const draftEngineType = getAgentEngineType(draftAgentId) ?? 'openclaw';
+        const draftEngineType = options?.engineType ?? getAgentEngineType(draftAgentId) ?? 'openclaw';
         set((s) => ({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: draftAgentId,
@@ -670,7 +670,7 @@ export function createSessionLifecycleActions(
             ?? getCanonicalPrefixFromSessions(sessions)
             ?? DEFAULT_CANONICAL_PREFIX
         }:session-${Date.now()}`);
-      const newEngineType = getAgentEngineType(newAgentId) ?? 'openclaw';
+      const newEngineType = options?.engineType ?? getAgentEngineType(newAgentId) ?? 'openclaw';
       const newKey = createTemporaryAgentSessionKey(newAgentId, Date.now(), newEngineType);
       // Carry over model from home/default session or Claude agent toolbar selection
       let currentSessionModel = get().pendingNewSessionModel

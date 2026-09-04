@@ -29,8 +29,7 @@ const DROPDOWN_ESTIMATE_HEIGHT = 300;
  * 根据 trigger 在视口中的位置，智能判断下拉展开方向。
  * 下方空间不足时向上展开，否则向下。
  */
-function useDropdownDirection(
-  triggerRef: RefObject<HTMLElement | null>,
+export function useDropdownDirection(  triggerRef: RefObject<HTMLElement | null>,
   open: boolean,
 ): DropDirection {
   const [dir, setDir] = useState<DropDirection>('down');
@@ -44,7 +43,7 @@ function useDropdownDirection(
 }
 
 /** 根据方向返回下拉面板的 className */
-function dropdownPositionClass(dir: DropDirection): string {
+export function dropdownPositionClass(dir: DropDirection): string {
   return dir === 'up'
     ? 'absolute bottom-[calc(100%+6px)] left-0 z-20'
     : 'absolute top-[calc(100%+6px)] left-0 z-20';

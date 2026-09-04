@@ -241,7 +241,12 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: (options?: { projectId?: string; materialize?: boolean }) => void;
+  newSession: (options?: {
+    projectId?: string;
+    materialize?: boolean;
+    /** Explicit engine for preconfigured flows such as workflow "run now". */
+    engineType?: AgentEngineType;
+  }) => void;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];
