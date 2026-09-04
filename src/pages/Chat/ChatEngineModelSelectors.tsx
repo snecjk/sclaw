@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Bot, Check, ChevronDown, ChevronRight, Cpu } from 'lucide-react';
+import { AlertCircle, Bot, Check, ChevronDown, Cpu } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -982,9 +982,9 @@ export function ChatModelSelector({
   );
 }
 
-/* ── Combined cascade (engine → model) ───────────────────────── */
+/* ── Combined independent engine/model picker ────────────────── */
 
-export function ChatEngineModelCascade({
+export function ChatEngineModelPicker({
   className,
   allowSessionSwitch = false,
 }: {
@@ -1013,21 +1013,16 @@ export function ChatEngineModelCascade({
   } = useChatModelSelection();
 
   const [open, setOpen] = useState(false);
-  const [previewEngine, setPreviewEngine] = useState<'openclaw' | 'claude' | 'pi' | null>(null);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({ visibility: 'hidden' });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const activeEngine = previewEngine
-    ?? (canSwitchEngine ? agentDefaultEngineType : currentEngineType);
+  const selectedEngine = canSwitchEngine ? agentDefaultEngineType : currentEngineType;
   const busy = engineSaving || modelSaving;
   const triggerDisabled = engineSelectDisabled && modelSelectDisabled;
 
   useEffect(() => {
-    if (!open) {
-      setPreviewEngine(null);
-      return;
-    }
+    if (!open) return;
 
     const updatePosition = () => {
       const trigger = triggerRef.current;
@@ -1075,7 +1070,6 @@ export function ChatEngineModelCascade({
 
   const pickEngine = (engineType: 'openclaw' | 'claude' | 'pi') => {
     if (!canSwitchEngine || engineSelectDisabled || busy) return;
-    setPreviewEngine(engineType);
     void handleEngineSwitch(engineType);
   };
 
@@ -1126,7 +1120,7 @@ export function ChatEngineModelCascade({
           <div className="flex w-[168px] shrink-0 flex-col border-r border-border/70 p-1">
             <p className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">引擎</p>
             {engineOptions.map((option) => {
-              const selected = option.value === activeEngine;
+              const selected = option.value === selectedEngine;
               const lockedOut = !canSwitchEngine && option.value !== currentEngineType;
               return (
                 <button
@@ -1139,26 +1133,23 @@ export function ChatEngineModelCascade({
                     selected && 'bg-primary/8 font-medium',
                     lockedOut && 'opacity-40',
                   )}
-                  onMouseEnter={() => {
-                    if (!lockedOut) setPreviewEngine(option.value);
-                  }}
                   onClick={() => pickEngine(option.value)}
                 >
                   <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  {selected ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden /> : null}
                 </button>
               );
             })}
           </div>
           <div className="flex min-w-0 flex-1 flex-col p-1">
             <p className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-              模型 · {activeEngine === 'claude' ? 'Claude Agent' : activeEngine === 'pi' ? 'SAgent' : 'OpenClaw'}
+              模型
             </p>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {selectorModelOptions.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">暂无可用模型</p>
               ) : selectorModelOptions.map((option) => {
-                const selected = option.value === selectedModelId && activeEngine === (canSwitchEngine ? agentDefaultEngineType : currentEngineType);
+                const selected = option.value === selectedModelId;
                 return (
                   <button
                     key={option.key}
