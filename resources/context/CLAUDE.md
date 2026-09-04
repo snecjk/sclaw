@@ -29,7 +29,8 @@
 - 有依赖时不要为了并发而拆步；拿齐依赖后再调用
 
 ## 软件安装
-### python3.12
+> 执行技能或者任务时候，需要对应软件依赖时参考
+### python3.12.x
 - 阿里云：https://mirrors.aliyun.com/python-release/
 - 清华 TUNA：https://mirrors.tuna.tsinghua.edu.cn/python/
 - Python 官网：https://www.python.org/ftp/python/
