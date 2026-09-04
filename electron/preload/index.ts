@@ -245,6 +245,7 @@ const electronAPI = {
         'gateway:status-changed',
         'gateway:message',
         'chat-runtime:event',
+        'chat:result-open',
         'gateway:channel-status',
         'channel:whatsapp-qr',
         'channel:whatsapp-success',
