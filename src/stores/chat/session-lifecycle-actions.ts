@@ -2,7 +2,6 @@ import {
   applyWorkspaceDefaultToNewSession,
   syncSessionModelToGateway,
 } from '@/lib/sync-workspace-default-to-chat';
-import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
@@ -672,19 +671,11 @@ export function createSessionLifecycleActions(
         }:session-${Date.now()}`);
       const newEngineType = options?.engineType ?? getAgentEngineType(newAgentId) ?? 'openclaw';
       const newKey = createTemporaryAgentSessionKey(newAgentId, Date.now(), newEngineType);
-      // Carry over model from home/default session or Claude agent toolbar selection
-      let currentSessionModel = get().pendingNewSessionModel
+      // Carry over an explicit pending choice or the previous session model.
+      const currentSessionModel = get().pendingNewSessionModel
         ?? (currentSessionKey !== DEFAULT_SESSION_KEY
           ? sessions.find((s) => s.key === currentSessionKey)?.model
           : undefined);
-      if (!currentSessionModel?.trim()) {
-        const carryAgent = useAgentsStore.getState().agents.find(
-          (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
-        );
-        if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
-          currentSessionModel = normalizeModelIdForChat(carryAgent.modelDisplay);
-        }
-      }
       const newSessionEntry: ChatSession = {
         key: newKey,
         label: NEW_SESSION_TEMP_LABEL,

@@ -24,6 +24,7 @@ import {
   getWorkspaceDefaultRawModelId,
   isConcreteModelId,
   normalizeModelIdForChat,
+  resolveNewChatSelectedModelId,
   resolveChatSelectedModelId,
   resolveChatToolbarModelId,
   sanitizeChatModelHint,
@@ -639,10 +640,11 @@ function useChatModelSelection() {
     });
   let resolvedSelectedModelId: string;
   if (currentSessionKey === DEFAULT_SESSION_KEY) {
-    const hint = currentEngineType === 'claude'
-      ? safePending || toolbarHint
-      : safePending || workspaceDefaultModelId || '';
-    resolvedSelectedModelId = resolveChatSelectedModelId(modelOptions, hint) || hint || '';
+    resolvedSelectedModelId = resolveNewChatSelectedModelId(
+      modelOptions,
+      safePending,
+      workspaceDefaultModelId,
+    );
   } else if (isTaskExecutionSessionKey(currentSessionKey) && sessionHint) {
     resolvedSelectedModelId = resolveChatSelectedModelId(modelOptions, sessionHint) || sessionHint;
   } else {
