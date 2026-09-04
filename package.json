@@ -97,6 +97,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.2",
+    "@loongsuite/cms_node_sdk": "^1.0.8",
     "@mistralai/mistralai": "^1.14.1",
     "@monaco-editor/react": "^4.7.0",
     "@qdrant/js-client-rest": "^1.18.0",

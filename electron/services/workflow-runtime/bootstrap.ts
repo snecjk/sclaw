@@ -27,11 +27,10 @@ import { workflowExecLog } from './logging';
 import { configureWorkflowIdPool } from './id-pool';
 import { runWorkspacePath, workspacePath } from './workspace-paths';
 import { notifyWorkflowCompletion } from './completion-notification';
+import { loadClaudeAgentSdkAsync } from '../../utils/claude-agent-sdk-loader';
 
-let cachedSdk: any = null;
-async function getSdk(): Promise<any> {
-  if (!cachedSdk) cachedSdk = await import('@anthropic-ai/claude-agent-sdk');
-  return cachedSdk;
+async function getSdk(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
+  return loadClaudeAgentSdkAsync();
 }
 
 /** 带鉴权的后端 v2 调用：resolveStoBaseUrl + getStoToken + buildStoMemoryCenterAuthHeaders + proxyAwareFetch。

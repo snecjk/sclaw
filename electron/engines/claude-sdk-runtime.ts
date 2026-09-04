@@ -19,6 +19,7 @@ import { getClaudeConfigDir } from '../utils/paths';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { getApiKey } from '../utils/secure-storage';
 import { resolveAvailableClaudeModel } from './claude-model-selection';
+import { loadClaudeAgentSdkAsync } from '../utils/claude-agent-sdk-loader';
 
 type ClaudeAgentSdk = typeof import('@anthropic-ai/claude-agent-sdk');
 export type ClaudeQueryInput = Parameters<ClaudeAgentSdk['query']>[0];
@@ -45,7 +46,6 @@ export interface PreparedClaudeRuntime {
 
 let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
 let ensureClaudeConfigDirPromise: Promise<void> | null = null;
-let claudeSdkPromise: Promise<ClaudeAgentSdk> | null = null;
 
 function getBundledClaudeExecutablePath(): string | undefined {
   if (!process.resourcesPath) return undefined;
@@ -62,11 +62,6 @@ function getBundledClaudeExecutablePath(): string | undefined {
   );
 
   return existsSync(candidate) ? candidate : undefined;
-}
-
-async function loadClaudeAgentSdk(): Promise<ClaudeAgentSdk> {
-  claudeSdkPromise ??= import('@anthropic-ai/claude-agent-sdk');
-  return claudeSdkPromise;
 }
 
 export async function ensureClaudeRuntimeReady(): Promise<void> {
@@ -249,7 +244,7 @@ export async function createClaudeQuery(
   const query = await withClaudeConfigDirEnv(async () => {
     logTiming('config_env_entered');
     const sdkLoadStartedAt = Date.now();
-    const sdk = await loadClaudeAgentSdk();
+    const sdk = await loadClaudeAgentSdkAsync();
     logTiming('sdk_loaded', sdkLoadStartedAt);
     const sdkQueryStartedAt = Date.now();
     const createdQuery = sdk.query(input);
@@ -263,7 +258,7 @@ export async function createClaudeQuery(
 export async function getClaudeSessionMessages(sessionId: string, cwd: string) {
   await ensureClaudeRuntimeReady();
   return withClaudeConfigDirEnv(async () => {
-    const sdk = await loadClaudeAgentSdk();
+    const sdk = await loadClaudeAgentSdkAsync();
     return sdk.getSessionMessages(sessionId, { dir: cwd, includeSystemMessages: false });
   });
 }
@@ -271,7 +266,7 @@ export async function getClaudeSessionMessages(sessionId: string, cwd: string) {
 export async function deleteClaudeSdkSession(sessionId: string, cwd: string): Promise<void> {
   await ensureClaudeRuntimeReady();
   await withClaudeConfigDirEnv(async () => {
-    const sdk = await loadClaudeAgentSdk();
+    const sdk = await loadClaudeAgentSdkAsync();
     await sdk.deleteSession(sessionId, { dir: cwd });
   });
 }

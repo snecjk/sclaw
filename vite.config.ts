@@ -15,11 +15,11 @@ function copyGatewayPreloadCjs(outDir: string) {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 含 .env.development.local；electron 子构建需通过 define 注入，否则读不到
-  const env = loadEnv(mode, process.cwd(), '');
-  const appEnv = env.VITE_APP_ENV || process.env.VITE_APP_ENV || (mode === 'development' ? 'development' : 'production');
-  const stoMemoryCenterBaseUrl = (env.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
-  const stoSclawHubBaseUrl = (env.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
-  const stoWisdomStarBaseUrl = (env.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
+  const loadedEnv = loadEnv(mode, process.cwd(), '');
+  const appEnv = loadedEnv.VITE_APP_ENV || process.env.VITE_APP_ENV || (mode === 'development' ? 'development' : 'production');
+  const stoMemoryCenterBaseUrl = (loadedEnv.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
+  const stoSclawHubBaseUrl = (loadedEnv.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
+  const stoWisdomStarBaseUrl = (loadedEnv.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
   const envDefine = {
     'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
     'process.env.STO_MEMORY_CENTER_BASE_URL': JSON.stringify(stoMemoryCenterBaseUrl),
@@ -42,9 +42,27 @@ export default defineConfig(({ mode }) => {
           onstart(options) {
             // Cursor/CI may set ELECTRON_RUN_AS_NODE=1, which makes require('electron')
             // resolve to the npm path string instead of the Electron API in the main process.
-            const env = { ...process.env };
-            delete env.ELECTRON_RUN_AS_NODE;
-            options.startup(['.', '--no-sandbox'], { env });
+            const electronEnv = { ...process.env, ...loadedEnv };
+            delete electronEnv.ELECTRON_RUN_AS_NODE;
+
+            // AgentLoop / ARMS: inject CMS probe only into the Electron main process.
+            // Do NOT set NODE_OPTIONS globally — that loads the probe into vite,
+            // electron-rebuild, and zx scripts during predev and breaks local startup.
+            const armsLicense = (electronEnv.ARMS_LICENSE_KEY || electronEnv.ARMS_LICENSE || '').trim();
+            if (armsLicense && armsLicense !== 'auto') {
+              const registerFlag = '-r @loongsuite/cms_node_sdk/register';
+              electronEnv.NODE_OPTIONS = electronEnv.NODE_OPTIONS?.includes(registerFlag)
+                ? electronEnv.NODE_OPTIONS
+                : [registerFlag, electronEnv.NODE_OPTIONS].filter(Boolean).join(' ');
+              console.log(`[ARMS] CMS probe enabled for Electron main process (service=${electronEnv.ARMS_APP_NAME || electronEnv.CMS_SERVICE_NAME || 'unknown'})`);
+            } else if (armsLicense === 'auto') {
+              console.warn(
+                '[ARMS] ARMS_LICENSE=auto is not valid for @loongsuite/cms_node_sdk. '
+                  + 'Set ARMS_LICENSE_KEY in .env.development.local (from AgentLoop console).',
+              );
+            }
+
+            options.startup(['.', '--no-sandbox'], { env: electronEnv });
           },
           vite: {
             define: envDefine,
@@ -63,6 +81,10 @@ export default defineConfig(({ mode }) => {
                   'electron',
                   'electron-store',
                   'electron-updater',
+                  // Keep SDK external so @loongsuite/cms_node_sdk can auto-instrument
+                  // claude-agent-sdk at runtime (bundled code cannot be patched).
+                  '@anthropic-ai/claude-agent-sdk',
+                  /^@anthropic-ai\/claude-agent-sdk/,
                   // mem0's official OSS entry imports its provider peers at runtime.
                   // Keep it external so electron-builder packages those dependencies
                   // once under node_modules instead of duplicating them in this bundle.
