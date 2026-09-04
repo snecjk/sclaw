@@ -26,7 +26,10 @@
 - 涉及网络请求、页面加载，如果类似curl的命令行工具无法使用，或者无法获取数据，直接使用**浏览器**工具。多个**无关网络请求优先考虑并行**。
 
 ## 软件安装
-- python3.12：https://mirrors.aliyun.com/python-release/
+### python3.12 
+- 阿里云：https://mirrors.aliyun.com/python-release/
+- 清华 TUNA：https://mirrors.tuna.tsinghua.edu.cn/python/
+- Python 官网：https://www.python.org/ftp/python/
 
 ## Skills
 - SClaw 会提供已安装并启用的全局技能，以及当前 agent 专属技能的摘要。
