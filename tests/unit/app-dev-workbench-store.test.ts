@@ -14,6 +14,7 @@ const DEFAULT_STATE = {
   tuneMode: 'chat',
   diffRequest: null,
   versionRestoreRequest: null,
+  assetRevealPath: null,
 } as const;
 
 describe('useAppDevWorkbenchStore', () => {
@@ -123,6 +124,7 @@ describe('isAppDevStageMode', () => {
     'more-git',
     'more-external',
     'more-community',
+    'more-assets',
   ] as const)('accepts %s', (mode) => {
     expect(isAppDevStageMode(mode)).toBe(true);
   });

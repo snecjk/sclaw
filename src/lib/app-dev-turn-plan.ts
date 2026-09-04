@@ -11,6 +11,11 @@
  */
 import type { ToolStatus } from '@/stores/chat';
 import { describeAppDevTool } from '@/lib/app-dev-tool-rollup';
+import {
+  extractSclawPlan,
+  extractSclawStepUpdates,
+  planDocumentToTurnPlanItems,
+} from '@/lib/app-dev-plan-gate';
 
 export type AppDevTurnPlanItemState = 'done' | 'active' | 'pending';
 
@@ -167,6 +172,34 @@ export function deriveAppDevTurnPlan(input: {
   sending: boolean;
 }): AppDevTurnPlan {
   const { texts, tools, sending } = input;
+  const joined = texts.join('\n');
+
+  // T12 Wave2：优先消费 ```sclaw_plan``` 契约；叙述派生永驻降级。
+  const contract = extractSclawPlan(joined);
+  if (contract) {
+    const base = planDocumentToTurnPlanItems(contract);
+    const stepUpdates = extractSclawStepUpdates(joined);
+    const doneIds = new Set(
+      stepUpdates.filter((s) => /done|completed|ok/i.test(s.status)).map((s) => s.id),
+    );
+    const completedTools = tools.filter((tool) => tool.status === 'completed').length;
+    const doneBySteps = base.filter((item) => doneIds.has(item.key)).length;
+    const advanced = Math.max(doneBySteps, completedTools);
+    const currentIndex = Math.min(Math.max(advanced, 0), base.length - 1);
+    const titles = base.map((item) => item.title);
+    const plan = finalizeStates(titles, currentIndex, sending);
+    return {
+      ...plan,
+      items: plan.items.map((item, index) => ({
+        ...item,
+        key: base[index]?.key ?? item.key,
+        state: doneIds.has(base[index]?.key ?? '')
+          ? 'done'
+          : item.state,
+      })),
+    };
+  }
+
   const narration = parseNarration(texts);
 
   if (narration.planTitles) {

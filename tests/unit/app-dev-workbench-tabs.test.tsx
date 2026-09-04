@@ -28,6 +28,12 @@ vi.mock('@/components/app-dev/AppDevMonacoEditor', () => ({
 vi.mock('@/components/app-dev/AppDevDiffViewer', () => ({
   AppDevDiffViewer: () => <div data-testid="diff-viewer" />,
 }));
+vi.mock('@/components/app-dev/AppDevVersionsPanel', () => ({
+  AppDevVersionsPanel: () => <div data-testid="versions-panel" />,
+}));
+vi.mock('@/components/app-dev/AppDevAssetsPanel', () => ({
+  AppDevAssetsPanel: () => <div data-testid="assets-panel" />,
+}));
 vi.mock('@/components/app-dev/AppDevGitPanel', () => ({
   AppDevGitPanel: () => <div data-testid="git-panel" />,
 }));
@@ -92,9 +98,10 @@ describe('AppDevWorkbenchStage 页签收敛（预览 / 代码 / 版本 + 溢出�
     await renderStage();
     expect(screen.getByTestId('preview-frame')).toBeInTheDocument();
 
-    // 版本页签：T04 已挂载 diff 容器（本测试 mock 掉 Monaco）
+    // 版本页签：T10 时间线 + T04 diff
     useAppDevWorkbenchStore.getState().setMode('versions');
     await waitFor(() => {
+      expect(screen.getByTestId('versions-panel')).toBeInTheDocument();
       expect(screen.getByTestId('diff-viewer')).toBeInTheDocument();
     });
 
@@ -102,6 +109,11 @@ describe('AppDevWorkbenchStage 页签收敛（预览 / 代码 / 版本 + 溢出�
     useAppDevWorkbenchStore.getState().setMode('more-git');
     await waitFor(() => {
       expect(screen.getByTestId('git-panel')).toBeInTheDocument();
+    });
+
+    useAppDevWorkbenchStore.getState().setMode('more-assets');
+    await waitFor(() => {
+      expect(screen.getByTestId('assets-panel')).toBeInTheDocument();
     });
 
     useAppDevWorkbenchStore.getState().setMode('more-external');
@@ -124,6 +136,7 @@ describe('AppDevWorkbenchStage 页签收敛（预览 / 代码 / 版本 + 溢出�
     const gitItem = await screen.findByRole('menuitem', { name: /Git 代码管理/ });
     expect(screen.getByRole('menuitem', { name: /外部服务/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /社区/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^文件$/ })).toBeInTheDocument();
 
     fireEvent.click(gitItem);
     await waitFor(() => {

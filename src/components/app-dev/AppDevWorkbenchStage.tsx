@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Eye,
   FileCode2,
+  FolderOpen,
   FolderTree,
   GitBranch,
   History,
@@ -22,12 +23,19 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
+import { AppDevAssetsPanel } from '@/components/app-dev/AppDevAssetsPanel';
 import { AppDevDiffViewer } from '@/components/app-dev/AppDevDiffViewer';
+import { AppDevVersionsPanel } from '@/components/app-dev/AppDevVersionsPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
 import { AppExternalServicesPanel } from '@/components/app-dev/AppExternalServicesPanel';
 import { AppDevMonacoEditor, formatAppDevDiagnosticsPrompt } from '@/components/app-dev/AppDevMonacoEditor';
 import { AppDevPreviewToolbar } from '@/components/app-dev/AppDevPreviewToolbar';
+import {
+  AppDevElementIntentBar,
+  buildElementIntentPrompt,
+  type AppDevPickedElement,
+} from '@/components/app-dev/AppDevElementIntentBar';
 import {
   SclawBrowserFrame,
   type SclawBrowserFrameHandle,
@@ -39,6 +47,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ELEMENT_PICKER_SCRIPT,
+  ELEMENT_PICKER_TEARDOWN_SCRIPT,
+  SCLAW_TUNE_EVENT_PREFIX,
+} from '@/lib/app-dev-tune-scripts';
 import { AppDevSetupProgress, AppDevCommandLog } from '@/components/app-dev/AppDevSetupProgress';
 import { buildAppDevFileTree } from '@/lib/app-dev-file-tree';
 import {
@@ -75,7 +88,7 @@ type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
 
-// 页签收敛：主区 3 个 + 溢出菜单（Git / 外部服务 / 社区）。
+// 页签收敛：主区 3 个 + 溢出菜单（Git / 文件 / 外部服务 / 社区）。
 const PRIMARY_TABS = [
   { id: 'preview', label: '预览', icon: Eye },
   { id: 'code', label: '代码', icon: FileCode2 },
@@ -84,6 +97,7 @@ const PRIMARY_TABS = [
 
 const OVERFLOW_TABS = [
   { id: 'more-git', label: 'Git 代码管理', icon: GitBranch },
+  { id: 'more-assets', label: '文件', icon: FolderOpen },
   { id: 'more-external', label: '外部服务', icon: PlugZap },
   { id: 'more-community', label: '社区', icon: Users },
 ] as const;
@@ -107,6 +121,16 @@ interface AppDevWorkbenchStageProps {
   onCancelSetup?: () => void;
   /** Monaco diagnostics → fill chat composer (no auto-send). */
   onFillComposerFromDiagnostics?: (text: string) => void;
+  /** 向父层暴露预览 executeJS / webContentsId（T06/T09）。 */
+  onPreviewBridgeChange?: (bridge: {
+    executeJS: (code: string) => Promise<unknown>;
+    getWebContentsId: () => number | null;
+  } | null) => void;
+  /** 打开手动微调（T06）。 */
+  onOpenTune?: () => void;
+  tuneActive?: boolean;
+  /** 父层请求进入元素圈选（T07）。 */
+  elementPickerRequest?: number;
   /**
    * Bumped when AI / restore writes files on disk.
    * Open code tabs reload from disk (no manual「刷新代码」按钮).
@@ -138,6 +162,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onRetryStart,
   onCancelSetup,
   onFillComposerFromDiagnostics,
+  onPreviewBridgeChange,
+  onOpenTune,
+  tuneActive = false,
+  elementPickerRequest = 0,
   sourceRevision = 0,
   previewRevision = 0,
   initialMode,
@@ -165,6 +193,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHits, setSearchHits] = useState<AppSourceSearchHit[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [pickerActive, setPickerActive] = useState(false);
+  const [pickedElements, setPickedElements] = useState<AppDevPickedElement[]>([]);
+  const pickerActiveRef = useRef(false);
 
   const phase = status?.phase ?? 'created';
   const isRunning = phase === 'ready' && Boolean(status?.previewUrl);
@@ -210,6 +241,53 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   useEffect(() => {
     if (initialMode) setMode(initialMode);
   }, [initialMode, workspaceId, setMode]);
+
+  // 向父层暴露预览桥（微调面板 / 截图）
+  useEffect(() => {
+    if (!onPreviewBridgeChange) return;
+    onPreviewBridgeChange({
+      executeJS: (code) => {
+        const frame = previewFrameRef.current;
+        if (!frame) return Promise.reject(new Error('预览未就绪'));
+        return frame.executeJS(code);
+      },
+      getWebContentsId: () => previewFrameRef.current?.getWebContentsId() ?? null,
+    });
+    return () => onPreviewBridgeChange(null);
+  }, [onPreviewBridgeChange, previewMountUrl, previewRevision, previewReloadNonce, isRunning]);
+
+  useEffect(() => {
+    pickerActiveRef.current = pickerActive;
+  }, [pickerActive]);
+
+  const stopElementPicker = async () => {
+    setPickerActive(false);
+    setPickedElements([]);
+    try {
+      await previewFrameRef.current?.executeJS(ELEMENT_PICKER_TEARDOWN_SCRIPT);
+    } catch {
+      // ignore
+    }
+  };
+
+  const startElementPicker = async () => {
+    setMode('preview');
+    setPickerActive(true);
+    setPickedElements([]);
+    try {
+      await previewFrameRef.current?.executeJS(ELEMENT_PICKER_SCRIPT);
+    } catch (err) {
+      setPickerActive(false);
+      toast.error(err instanceof Error ? err.message : '无法启动元素圈选');
+    }
+  };
+
+  // 父层（微调面板）请求圈选
+  useEffect(() => {
+    if (!elementPickerRequest) return;
+    void startElementPicker();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅响应 request 递增
+  }, [elementPickerRequest]);
 
   const loadFileList = async () => {
     setFilesLoading(true);
@@ -457,6 +535,16 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     setSidebar('files');
   };
 
+  // T14：从「文件」资产页请求打开源码路径。
+  const assetRevealPath = useAppDevWorkbenchStore((s) => s.assetRevealPath);
+  useEffect(() => {
+    if (!assetRevealPath) return;
+    openFile(assetRevealPath);
+    useAppDevWorkbenchStore.getState().setAssetRevealPath(null);
+    // openFile 稳定引用不必要；仅消费路径请求
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetRevealPath]);
+
   const closeTab = (path: string) => {
     setTabs((prev) => {
       const next = prev.filter((t) => t.path !== path);
@@ -536,7 +624,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                   <ChevronDown className="h-3.5 w-3.5" aria-hidden />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-[9rem]">
+              {/* Electron <webview> 原生层会盖住默认 z-50；与 RunStatus/Deploy 菜单一致抬到 z-[260] */}
+              <DropdownMenuContent align="start" className="z-[260] min-w-[9rem]">
                 {OVERFLOW_TABS.map((tab) => {
                   const Icon = tab.icon;
                   return (
@@ -616,13 +705,15 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
               onAddressEscape={handleAddressEscape}
               onOpenExternal={openPreviewInSystemBrowser}
               onNavigateRoute={navigatePreviewRoute}
+              onOpenTune={onOpenTune}
+              tuneActive={tuneActive}
             />
             {/*
               设备切换只改变外层视口宽度与设备框样式（200ms CSS 过渡），
               SclawBrowserFrame 的 key 不含 device —— webview 不 remount，
               页面状态（表单输入、HMR 会话）保留。
             */}
-            <div className="app-dev-preview-viewport" data-device={device}>
+            <div className="relative app-dev-preview-viewport" data-device={device}>
               <div className="app-dev-preview-device">
                 <SclawBrowserFrame
                   key={`${previewMountUrl || stripLegacyAppDevPreviewAuth(status.previewUrl)}:${previewRevision}:${previewReloadNonce}`}
@@ -635,7 +726,30 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                   onPageUrl={(pageUrl) =>
                     setPreviewAddress(stripLegacyAppDevPreviewAuth(pageUrl) || pageUrl)
                   }
+                  onWebviewLifecycle={(event) => {
+                    if (event.type === 'did-finish-load' && pickerActiveRef.current) {
+                      void previewFrameRef.current?.executeJS(ELEMENT_PICKER_SCRIPT).catch(() => undefined);
+                    }
+                  }}
                   onConsoleMessage={({ message }) => {
+                    if (typeof message === 'string' && message.startsWith(SCLAW_TUNE_EVENT_PREFIX)) {
+                      try {
+                        const payload = JSON.parse(message.slice(SCLAW_TUNE_EVENT_PREFIX.length)) as {
+                          type?: string;
+                          payload?: { elements?: AppDevPickedElement[] } | null;
+                        };
+                        if (payload.type === 'select' && Array.isArray(payload.payload?.elements)) {
+                          setPickedElements(payload.payload.elements);
+                        }
+                        if (payload.type === 'cancel') {
+                          setPickerActive(false);
+                          setPickedElements([]);
+                        }
+                      } catch {
+                        // ignore malformed tune events
+                      }
+                      return;
+                    }
                     if (!onPreviewRuntimeError) return;
                     if (!isHiddenPreviewFailureMessage(message)) return;
                     const pageUrl =
@@ -648,6 +762,17 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                   }}
                 />
               </div>
+              {pickerActive ? (
+                <AppDevElementIntentBar
+                  elements={pickedElements}
+                  onCancel={() => void stopElementPicker()}
+                  onSubmit={(intent, elements) => {
+                    const prompt = buildElementIntentPrompt(intent, elements);
+                    onFillComposerFromDiagnostics?.(prompt);
+                    void stopElementPicker();
+                  }}
+                />
+              ) : null}
             </div>
           </div>
         ) : (
@@ -697,8 +822,13 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       ) : null}
 
       {mode === 'versions' ? (
-        // T04：消息级「查看修改」行级 diff（T10 将在此页签补版本时间线）。
-        <AppDevDiffViewer workspaceId={workspaceId} />
+        <div className="flex min-h-0 flex-1 overflow-hidden" data-testid="app-dev-versions-stage">
+          <AppDevVersionsPanel
+            workspaceId={workspaceId}
+            className="w-[300px] shrink-0 border-r border-border"
+          />
+          <AppDevDiffViewer workspaceId={workspaceId} className="min-w-0 flex-1" />
+        </div>
       ) : null}
 
       {mode === 'more-git' ? (
@@ -712,6 +842,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
           onOpenDeploy={onOpenDeploy}
         />
       ) : null}
+
+      {mode === 'more-assets' ? <AppDevAssetsPanel workspaceId={workspaceId} /> : null}
 
       {mode === 'more-external' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
 

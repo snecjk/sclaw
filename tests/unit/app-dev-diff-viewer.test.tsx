@@ -94,7 +94,7 @@ describe('AppDevDiffViewer（版本页行级 diff）', () => {
     });
     // 请求-消费：处理后清空
     expect(useAppDevWorkbenchStore.getState().diffRequest).toBeNull();
-    expect(mocks.diffAppCheckpoint).toHaveBeenCalledWith('ws-1', 'abc123def456');
+    expect(mocks.diffAppCheckpoint).toHaveBeenCalledWith('ws-1', 'abc123def456', undefined);
 
     // 头部：subject + parent→hash + 文件数
     const viewer = screen.getByTestId('app-dev-diff-viewer');

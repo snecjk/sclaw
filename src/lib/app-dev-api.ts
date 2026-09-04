@@ -472,10 +472,16 @@ export interface AppCheckpointDiff {
 export async function diffAppCheckpoint(
   workspaceId: string,
   hash: string,
+  baseHash?: string,
 ): Promise<AppCheckpointDiff | null> {
   try {
+    const params = new URLSearchParams({
+      workspaceId,
+      hash,
+    });
+    if (baseHash?.trim()) params.set('baseHash', baseHash.trim());
     const res = await hostApiFetch<{ success?: boolean; diff?: AppCheckpointDiff }>(
-      `/api/app-dev/checkpoints/diff?workspaceId=${encodeURIComponent(workspaceId)}&hash=${encodeURIComponent(hash)}`,
+      `/api/app-dev/checkpoints/diff?${params.toString()}`,
     );
     return res.diff ?? null;
   } catch {
@@ -560,6 +566,108 @@ export async function listAppRoutes(workspaceId: string): Promise<AppRouteEntry[
     `/api/app-dev/routes?workspaceId=${encodeURIComponent(workspaceId)}`,
   );
   return res.routes ?? [];
+}
+
+export interface AppDevDesignTokenDef {
+  name: string;
+  label: string;
+  type: 'color' | 'font' | 'radius';
+  format?: 'oklch' | 'rem';
+  group: string;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
+export async function getAppDesignTokens(workspaceId: string): Promise<{
+  schemaVersion: number;
+  source: string;
+  tokens: AppDevDesignTokenDef[];
+  degraded: boolean;
+}> {
+  return hostApiFetch(
+    `/api/app-dev/theme/tokens?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+}
+
+export async function applyAppTheme(
+  workspaceId: string,
+  overrides: Record<string, string>,
+): Promise<{ updated: string[]; themePath: string }> {
+  return hostApiFetch('/api/app-dev/theme', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, overrides }),
+  });
+}
+
+export interface AppDevArtifactRecord {
+  id: string;
+  turnKey: string;
+  commitHash?: string;
+  title: string;
+  thumbnailDataUrl?: string;
+  previewUrl?: string;
+  createdAt: string;
+  favorite: boolean;
+  suggestions: Array<{ label: string; prompt: string }>;
+}
+
+export async function listAppArtifacts(workspaceId: string): Promise<AppDevArtifactRecord[]> {
+  const res = await hostApiFetch<{ items: AppDevArtifactRecord[] }>(
+    `/api/app-dev/artifacts?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.items ?? [];
+}
+
+export async function putAppArtifacts(
+  workspaceId: string,
+  items: AppDevArtifactRecord[],
+): Promise<AppDevArtifactRecord[]> {
+  const res = await hostApiFetch<{ items: AppDevArtifactRecord[] }>('/api/app-dev/artifacts', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, items }),
+  });
+  return res.items ?? [];
+}
+
+export async function captureAppPreview(
+  workspaceId: string,
+  webContentsId: number,
+): Promise<{ dataUrl: string; width: number; height: number }> {
+  return hostApiFetch('/api/app-dev/preview/capture', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, webContentsId }),
+  });
+}
+
+export interface AppGeneratedAsset {
+  path: string;
+  name: string;
+  size: number;
+  ext: string;
+  mtimeMs: number;
+  kind: 'image' | 'document' | 'archive' | 'media' | 'other';
+}
+
+export async function listAppGeneratedAssets(workspaceId: string): Promise<AppGeneratedAsset[]> {
+  const res = await hostApiFetch<{ items: AppGeneratedAsset[] }>(
+    `/api/app-dev/generated-assets?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.items ?? [];
+}
+
+export async function exportAppGeneratedAsset(
+  workspaceId: string,
+  path: string,
+): Promise<{ saved: boolean; savedPath?: string }> {
+  return hostApiFetch('/api/app-dev/generated-assets/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, path }),
+  });
 }
 
 export async function installAppNpmPackage(

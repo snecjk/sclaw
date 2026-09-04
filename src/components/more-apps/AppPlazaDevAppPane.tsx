@@ -34,8 +34,17 @@ import { AppDevToolRollupLine } from '@/components/app-dev/AppDevToolRollupLine'
 import { AppDevTodoCapsule } from '@/components/app-dev/AppDevTodoCapsule';
 import { AppDevTurnSummaryCard } from '@/components/app-dev/AppDevTurnSummaryCard';
 import { AppDevTurnVersionActions } from '@/components/app-dev/AppDevTurnVersionActions';
+import { AppDevTunePanel } from '@/components/app-dev/AppDevTunePanel';
+import { AppDevArtifactCard } from '@/components/app-dev/AppDevArtifactCard';
+import { AppDevPlanCard } from '@/components/app-dev/AppDevPlanCard';
+import {
+  AppDevSuggestionChips,
+  buildFallbackSuggestions,
+  extractSclawSuggestions,
+} from '@/components/app-dev/AppDevSuggestionChips';
 import {
   appDevCompletedToolsSignature,
+  classifyAppDevTool,
   isAppDevToolRollupEmpty,
   normalizeAppDevTimestamp,
   resolveAppDevTurnDurationMs,
@@ -44,6 +53,22 @@ import {
 } from '@/lib/app-dev-tool-rollup';
 import { deriveAppDevTurnPlan } from '@/lib/app-dev-turn-plan';
 import { buildTurnCheckpointSubject, excerptUserText } from '@/lib/app-dev-turn-versions';
+import {
+  buildPlanConfirmPrompt,
+  extractSclawPlan,
+  wrapUserTextForPlanGate,
+} from '@/lib/app-dev-plan-gate';
+import {
+  RESPONSIVE_AUDIT_SCRIPT,
+  buildResponsiveFixPrompt,
+  type AppDevResponsiveAuditResult,
+} from '@/lib/app-dev-responsive-audit';
+import {
+  buildFollowUpQuestion,
+  getAppDevTurnRating,
+  setAppDevTurnRating,
+  type AppDevTurnRating,
+} from '@/lib/app-dev-turn-feedback';
 import { useAppDevVersionRestore } from '@/hooks/use-app-dev-version-restore';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -69,6 +94,7 @@ import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import {
   createAppCheckpoint,
   continueStoAppMerge,
+  captureAppPreview,
   drainAppErrors,
   getAppDevEnvironment,
   getStoAppStatus,
@@ -86,6 +112,7 @@ import {
   type AppPlazaDevAppTab,
   useAppPlazaShellStore,
 } from '@/stores/app-plaza-shell';
+import { useAppDevArtifactsStore } from '@/stores/app-dev-artifacts';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions, canUseStoCloudPipeline } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { openAppDevIdeWindow, useAppDevIdeOwnership } from '@/hooks/use-app-dev-ide-ownership';
@@ -111,14 +138,24 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   composerSeed,
   onBeforeSend,
   onEditMessage,
+  onOpenPreview,
+  onOpenPublish,
+  onPickSuggestion,
+  auditsByTurn,
+  onFixResponsive,
 }: {
   sessionKey: string;
   workspaceId: string;
   appName: string;
   composerSeed?: { text: string; version: number } | null;
-  onBeforeSend?: (text: string) => boolean;
+  onBeforeSend?: (text: string) => boolean | string | void;
   /** T05：用户消息「编辑重发」——点击后由外层把文本回填 composer */
   onEditMessage?: (text: string) => void;
+  onOpenPreview?: () => void;
+  onOpenPublish?: () => void;
+  onPickSuggestion?: (prompt: string) => void;
+  auditsByTurn?: Record<string, AppDevResponsiveAuditResult>;
+  onFixResponsive?: (result: AppDevResponsiveAuditResult) => void;
 }) {
   const messages = useSessionDisplayMessages(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
@@ -238,7 +275,12 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     prevSendingRef.current = sending;
   }, [sending, workspaceId]);
 
-  // 轮次汇总卡注入（ChatStaticItemsList renderTurnFooter；T04 操作按钮亦经此挂载）
+  // 轮次汇总卡注入（ChatStaticItemsList renderTurnFooter；T04 操作按钮 / T09 产物卡亦经此挂载）
+  const artifactsByWorkspace = useAppDevArtifactsStore((s) => s.byWorkspace[workspaceId]);
+  const toggleFavorite = useAppDevArtifactsStore((s) => s.toggleFavorite);
+  const [dismissedPlans, setDismissedPlans] = useState<Record<string, true>>({});
+  const [ratings, setRatings] = useState<Record<string, AppDevTurnRating>>({});
+
   const renderTurnFooter = useCallback((item: AssistantTurnDisplayItem) => {
     const captured = capturedSummariesRef.current.get(item.key);
     const tools = captured?.tools ?? resolveAppDevTurnTools({
@@ -249,28 +291,105 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
       precedingUserMessage: item.precedingUserMessage,
       engineType,
     });
-    if (tools.length === 0 && !captured?.interrupted) return null;
+    const assistantText = item.messages.map((m) => extractText(m)).join('\n');
+    const plan = extractSclawPlan(assistantText);
+    const audit = auditsByTurn?.[item.key] ?? null;
+    if (tools.length === 0 && !captured?.interrupted && !plan && !audit) return null;
     const durationMs = captured?.durationMs ?? resolveAppDevTurnDurationMs({
       tools,
       anchorAt: normalizeAppDevTimestamp(item.precedingUserMessage?.timestamp),
       endedAt: normalizeAppDevTimestamp(item.messages[item.messages.length - 1]?.timestamp),
     });
+    const artifact = (artifactsByWorkspace ?? []).find((x) => x.turnKey === item.key) ?? null;
+    const fromAgent = extractSclawSuggestions(assistantText);
+    const suggestions = fromAgent.length > 0
+      ? fromAgent
+      : (artifact?.suggestions ?? []);
+    const hasFileOps = tools.some((tool) => classifyAppDevTool(tool.name) === 'file');
+    const showPlan = Boolean(plan && !hasFileOps && !dismissedPlans[item.key]);
+    const followUp = buildFollowUpQuestion(suggestions[0]?.label);
+    const rating = ratings[item.key] ?? getAppDevTurnRating(workspaceId, item.key);
+
     return (
-      <AppDevTurnSummaryCard
-        tools={tools}
-        durationMs={durationMs}
-        interrupted={captured?.interrupted ?? false}
-        className="mt-2"
-        actions={(
-          <AppDevTurnVersionActions
-            workspaceId={workspaceId}
-            turnKey={item.key}
-            turnEndedAt={normalizeAppDevTimestamp(item.messages[item.messages.length - 1]?.timestamp)}
+      <div className="mt-2 space-y-0">
+        {showPlan && plan ? (
+          <AppDevPlanCard
+            plan={plan}
+            onDismiss={() => setDismissedPlans((prev) => ({ ...prev, [item.key]: true }))}
+            onConfirm={(next) => {
+              setDismissedPlans((prev) => ({ ...prev, [item.key]: true }));
+              onPickSuggestion?.(buildPlanConfirmPrompt(next));
+            }}
           />
-        )}
-      />
+        ) : null}
+        {(tools.length > 0 || captured?.interrupted) ? (
+          <AppDevTurnSummaryCard
+            tools={tools}
+            durationMs={durationMs}
+            interrupted={captured?.interrupted ?? false}
+            responsiveAudit={audit}
+            onFixResponsive={audit && !audit.ok && onFixResponsive
+              ? () => onFixResponsive(audit)
+              : undefined}
+            followUpQuestion={followUp}
+            rating={rating}
+            onRate={(next) => {
+              setAppDevTurnRating(workspaceId, item.key, next);
+              setRatings((prev) => ({ ...prev, [item.key]: next }));
+            }}
+            actions={(
+              <AppDevTurnVersionActions
+                workspaceId={workspaceId}
+                turnKey={item.key}
+                turnEndedAt={normalizeAppDevTimestamp(item.messages[item.messages.length - 1]?.timestamp)}
+              />
+            )}
+          />
+        ) : null}
+        {artifact ? (
+          <AppDevArtifactCard
+            artifact={artifact}
+            onOpenPreview={() => onOpenPreview?.()}
+            onPublish={onOpenPublish}
+            onToggleFavorite={() => void toggleFavorite(workspaceId, artifact.id)}
+          />
+        ) : null}
+        {suggestions.length > 0 ? (
+          <AppDevSuggestionChips
+            suggestions={suggestions}
+            onPick={(prompt) => onPickSuggestion?.(prompt)}
+          />
+        ) : null}
+      </div>
     );
-  }, [sessionKey, workspaceId, engineType]);
+  }, [
+    sessionKey,
+    workspaceId,
+    engineType,
+    artifactsByWorkspace,
+    toggleFavorite,
+    onOpenPreview,
+    onOpenPublish,
+    onPickSuggestion,
+    auditsByTurn,
+    onFixResponsive,
+    dismissedPlans,
+    ratings,
+  ]);
+
+  const priorUserMessageCount = useMemo(
+    () => messages.filter((m) => m.role === 'user').length,
+    [messages],
+  );
+
+  const handleBeforeSend = useCallback((text: string): boolean | string => {
+    if (onBeforeSend?.(text) === true) return true;
+    const wrapped = wrapUserTextForPlanGate({
+      userText: text,
+      priorUserMessageCount,
+    });
+    return wrapped ?? false;
+  }, [onBeforeSend, priorUserMessageCount]);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -341,7 +460,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
         <AppDevComposer
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}
-          onBeforeSend={onBeforeSend}
+          onBeforeSend={handleBeforeSend}
           composerDraftSessionKey={sessionKey}
         />
       </div>
@@ -364,6 +483,16 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [chatOpen, setChatOpen] = useState(true);
   const stageCollapsed = useAppDevWorkbenchStore((s) => s.stageCollapsed);
   const toggleStageCollapsed = useAppDevWorkbenchStore((s) => s.toggleStageCollapsed);
+  const tuneMode = useAppDevWorkbenchStore((s) => s.tuneMode);
+  const setTuneMode = useAppDevWorkbenchStore((s) => s.setTuneMode);
+  const setMode = useAppDevWorkbenchStore((s) => s.setMode);
+  const device = useAppDevWorkbenchStore((s) => s.device);
+  const [previewBridge, setPreviewBridge] = useState<{
+    executeJS: (code: string) => Promise<unknown>;
+    getWebContentsId: () => number | null;
+  } | null>(null);
+  const [auditsByTurn, setAuditsByTurn] = useState<Record<string, AppDevResponsiveAuditResult>>({});
+  const [elementPickerRequest, setElementPickerRequest] = useState(0);
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -466,6 +595,61 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   useAppDevStatusPoll(workspaceId, setStatus, active);
 
   useEffect(() => {
+    if (!workspaceId) return;
+    void useAppDevArtifactsStore.getState().load(workspaceId).catch(() => undefined);
+  }, [workspaceId]);
+
+  const parseResponsiveAudit = useCallback((raw: unknown): AppDevResponsiveAuditResult | null => {
+    let value: unknown = raw;
+    if (typeof raw === 'string') {
+      try {
+        value = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    if (!value || typeof value !== 'object') return null;
+    const obj = value as Partial<AppDevResponsiveAuditResult>;
+    if (typeof obj.ok !== 'boolean') return null;
+    return {
+      ok: obj.ok,
+      hasViewport: Boolean(obj.hasViewport),
+      docOverflow: Boolean(obj.docOverflow),
+      overflowCount: typeof obj.overflowCount === 'number' ? obj.overflowCount : 0,
+      topOverflows: Array.isArray(obj.topOverflows)
+        ? obj.topOverflows.filter((item): item is AppDevResponsiveAuditResult['topOverflows'][number] => (
+          Boolean(item)
+          && typeof item === 'object'
+          && typeof (item as { selector?: unknown }).selector === 'string'
+        ))
+        : [],
+    };
+  }, []);
+
+  const runResponsiveAudit = useCallback(async (turnKey: string | null) => {
+    if (!previewBridge || !turnKey) return;
+    try {
+      const raw = await previewBridge.executeJS(RESPONSIVE_AUDIT_SCRIPT);
+      const result = parseResponsiveAudit(raw);
+      if (!result) return;
+      setAuditsByTurn((prev) => ({ ...prev, [turnKey]: result }));
+    } catch {
+      // preview 未就绪时忽略
+    }
+  }, [previewBridge, parseResponsiveAudit]);
+
+  // T11：切到移动端预览时立刻体检，结果挂到最近一轮。
+  useEffect(() => {
+    if (device !== 'mobile' || !previewBridge) return;
+    const pending = useAppDevVersionsStore.getState().peekPendingTurn(workspaceId);
+    const versions = useAppDevVersionsStore.getState().versionsByWorkspace[workspaceId] ?? {};
+    const latestTurnKey = pending?.turnKey
+      ?? Object.entries(versions).sort((a, b) => b[1].turnEndedAt - a[1].turnEndedAt)[0]?.[0]
+      ?? null;
+    void runResponsiveAudit(latestTurnKey);
+  }, [device, previewBridge, workspaceId, runResponsiveAudit]);
+
+  useEffect(() => {
     if (prevSendingRef.current && !sending && workspaceId) {
       void (async () => {
         // T04：checkpoint subject 带用户消息摘要；hash 回传后补全 turn↔commit 映射。
@@ -480,13 +664,43 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         } else {
           versionsStore.discardPendingTurn(workspaceId);
         }
+
+        // T09：轮结束截图 + 产物卡（失败降级无缩略图；建议 chips 在 footer 再解析助手文本）
+        if (pending?.turnKey) {
+          const webContentsId = previewBridge?.getWebContentsId() ?? null;
+          let thumbnailDataUrl: string | undefined;
+          if (webContentsId) {
+            await new Promise((r) => setTimeout(r, 800));
+            const shot = await captureAppPreview(workspaceId, webContentsId).catch(() => null);
+            thumbnailDataUrl = shot?.dataUrl;
+          }
+          const title = (pending.userTextExcerpt || '本轮产物').slice(0, 12);
+          void useAppDevArtifactsStore.getState().upsert(workspaceId, {
+            id: `${pending.turnKey}-${Date.now()}`,
+            turnKey: pending.turnKey,
+            commitHash: result?.hash,
+            title,
+            thumbnailDataUrl,
+            previewUrl: status?.previewUrl,
+            createdAt: new Date().toISOString(),
+            favorite: false,
+            suggestions: buildFallbackSuggestions({
+              changedStyles: /style|css|theme|颜色|样式|配色/i.test(title),
+              changedData: /接口|数据|列表|查询|api/i.test(title),
+            }),
+          });
+
+          // T11：轮结束响应式体检（mobile 设备或任意轮次均跑，结果挂汇总卡）
+          await runResponsiveAudit(pending.turnKey);
+        }
+
         const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
         if (errors.length > 0) setPendingErrors(errors);
         setSourceRevision((n) => n + 1);
       })();
     }
     prevSendingRef.current = sending;
-  }, [sending, workspaceId]);
+  }, [sending, workspaceId, previewBridge, status?.previewUrl, runResponsiveAudit]);
 
   const handleFixErrors = useCallback(() => {
     const text = [
@@ -866,6 +1080,18 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 </p>
               </div>
             )
+            : tuneMode === 'tune'
+            ? (
+              <AppDevTunePanel
+                workspaceId={workspaceId}
+                executeJS={previewBridge ? (code) => previewBridge.executeJS(code) : null}
+                onClose={() => setTuneMode('chat')}
+                onStartElementPicker={() => {
+                  setChatOpen(true);
+                  setElementPickerRequest((n) => n + 1);
+                }}
+              />
+            )
             : appDevSessionKey
             ? (
               <WorkbenchChatPane
@@ -875,6 +1101,25 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 composerSeed={composerSeed}
                 onBeforeSend={interceptRestartIntent}
                 onEditMessage={handleEditMessage}
+                onOpenPreview={() => {
+                  setMode('preview');
+                  setTuneMode('chat');
+                }}
+                onOpenPublish={canDeploy ? () => setDeployOpen(true) : undefined}
+                onPickSuggestion={(prompt) => {
+                  setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
+                  setChatOpen(true);
+                  setTuneMode('chat');
+                }}
+                auditsByTurn={auditsByTurn}
+                onFixResponsive={(audit) => {
+                  setComposerSeed((prev) => ({
+                    text: buildResponsiveFixPrompt(audit),
+                    version: (prev?.version ?? 0) + 1,
+                  }));
+                  setChatOpen(true);
+                  setTuneMode('chat');
+                }}
               />
             )
             : null
@@ -891,6 +1136,13 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           onRetryStart={handleRetryStart}
           onCancelSetup={() => void stopRun()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
+          onPreviewBridgeChange={setPreviewBridge}
+          onOpenTune={() => {
+            setTuneMode('tune');
+            setChatOpen(true);
+          }}
+          tuneActive={tuneMode === 'tune'}
+          elementPickerRequest={elementPickerRequest}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
           canDeploy={canDeploy}

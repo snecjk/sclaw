@@ -16,6 +16,7 @@ import {
   Minimize,
   Monitor,
   RotateCw,
+  SlidersHorizontal,
   Smartphone,
 } from 'lucide-react';
 import {
@@ -52,6 +53,9 @@ interface AppDevPreviewToolbarProps {
   onOpenExternal: () => void;
   /** 选中路由条目（兜底单条不会触发）；完整地址由宿主按当前预览 URL 拼接。 */
   onNavigateRoute: (route: AppRouteEntry) => void;
+  /** 打开手动微调面板（T06）。 */
+  onOpenTune?: () => void;
+  tuneActive?: boolean;
 }
 
 export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
@@ -68,6 +72,8 @@ export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
   onAddressEscape,
   onOpenExternal,
   onNavigateRoute,
+  onOpenTune,
+  tuneActive = false,
 }: AppDevPreviewToolbarProps) {
   const device = useAppDevWorkbenchStore((s) => s.device);
   const setDevice = useAppDevWorkbenchStore((s) => s.setDevice);
@@ -191,7 +197,7 @@ export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
             <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[10rem]">
+        <DropdownMenuContent align="start" className="z-[260] min-w-[10rem]">
           {routeItems.map((route) => {
             const active = currentRoute?.path === route.path;
             return (
@@ -246,6 +252,22 @@ export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
           </TabsTrigger>
         </TabsList>
       </Tabs>
+
+      {onOpenTune ? (
+        <button
+          type="button"
+          className={cn(
+            'app-plaza-browser-toolbar__nav-btn',
+            tuneActive && 'bg-muted text-foreground',
+          )}
+          onClick={onOpenTune}
+          aria-pressed={tuneActive}
+          title="手动微调"
+          aria-label="手动微调"
+        >
+          <SlidersHorizontal className="h-4 w-4" aria-hidden />
+        </button>
+      ) : null}
 
       <button
         type="button"

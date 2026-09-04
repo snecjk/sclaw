@@ -4,7 +4,7 @@
  * 消费 workbench store 的 diffRequest（请求-消费模式，处理后置 null）；
  * 左侧 240px 变更文件清单（M/A/D 徽章 + +N −M，复用代码页侧栏模式），
  * 右侧 Monaco DiffEditor 双栏红绿对比（readOnly + 未改动区折叠）；
- * 二进制/超大文件只显示统计不渲染编辑器。T10 将在此页签补版本时间线。
+ * 二进制/超大文件只显示统计不渲染编辑器。T10：支持 baseHash 任意两版对比。
  */
 import { memo, useEffect, useMemo, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
@@ -47,6 +47,7 @@ export const AppDevDiffViewer = memo(function AppDevDiffViewer({
 }) {
   const diffRequest = useAppDevWorkbenchStore((s) => s.diffRequest);
   const [activeHash, setActiveHash] = useState<string | null>(null);
+  const [activeBaseHash, setActiveBaseHash] = useState<string | null>(null);
   const [diff, setDiff] = useState<AppCheckpointDiff | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -59,10 +60,11 @@ export const AppDevDiffViewer = memo(function AppDevDiffViewer({
     setMonacoReady(true);
   }, []);
 
-  // 请求-消费：汇总卡「查看修改」→ 这里接管 hash 并清空请求。
+  // 请求-消费：汇总卡「查看修改」/ 时间线对比 → 这里接管 hash 并清空请求。
   useEffect(() => {
     if (!diffRequest) return;
     setActiveHash(diffRequest.hash);
+    setActiveBaseHash(diffRequest.baseHash?.trim() || null);
     useAppDevWorkbenchStore.getState().setDiffRequest(null);
   }, [diffRequest]);
 
@@ -71,7 +73,7 @@ export const AppDevDiffViewer = memo(function AppDevDiffViewer({
     let alive = true;
     setLoading(true);
     setFailed(false);
-    void diffAppCheckpoint(workspaceId, activeHash)
+    void diffAppCheckpoint(workspaceId, activeHash, activeBaseHash ?? undefined)
       .then((result) => {
         if (!alive) return;
         setDiff(result);
@@ -95,7 +97,7 @@ export const AppDevDiffViewer = memo(function AppDevDiffViewer({
     return () => {
       alive = false;
     };
-  }, [workspaceId, activeHash]);
+  }, [workspaceId, activeHash, activeBaseHash]);
 
   const selectedFile = useMemo(
     () => diff?.files.find((file) => file.path === selectedPath) ?? null,
@@ -111,7 +113,7 @@ export const AppDevDiffViewer = memo(function AppDevDiffViewer({
         <History className="h-9 w-9 text-muted-foreground" aria-hidden />
         <p className="text-sm font-medium text-foreground">版本对比</p>
         <p className="max-w-[280px] text-xs leading-relaxed text-muted-foreground">
-          在对话轮次的汇总卡点击「查看修改」，即可在这里对比该轮的行级修改。
+          在左侧时间线选择版本，或在对话汇总卡点击「查看修改」；勾选两个版本可对比任意区间。
         </p>
       </div>
     );

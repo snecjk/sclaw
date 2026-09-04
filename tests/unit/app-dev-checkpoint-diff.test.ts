@@ -139,6 +139,24 @@ describe('diffCheckpoint（两 hash 间逐文件差异）', () => {
     expect(file!.modified).toBeUndefined();
   }, 20_000);
 
+  it('T10：baseHash..hash 任意两版区间对比', async () => {
+    const root = await initRepo();
+    await writeFile(join(root, 'a.txt'), 'v1\n', 'utf8');
+    const v1 = await createCheckpointDetailed(root, 'v1');
+    await writeFile(join(root, 'a.txt'), 'v2\n', 'utf8');
+    await createCheckpointDetailed(root, 'v2');
+    await writeFile(join(root, 'a.txt'), 'v3\n', 'utf8');
+    const v3 = await createCheckpointDetailed(root, 'v3');
+
+    const diff = await diffCheckpoint(root, v3.hash!, v1.hash!);
+    expect(diff).not.toBeNull();
+    expect(diff!.parentHash).toBe(v1.hash);
+    const file = diff!.files.find((item) => item.path === 'a.txt');
+    expect(file?.status).toBe('M');
+    expect(file?.original).toBe('v1\n');
+    expect(file?.modified).toBe('v3\n');
+  });
+
   it('非法 / 不存在的 hash 返回 null（含 HEAD~1 这类拼接注入）', async () => {
     const root = await initRepo();
     await writeFile(join(root, 'a.txt'), '1\n', 'utf8');

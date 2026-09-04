@@ -5,12 +5,12 @@
  * background pipeline reported as one continuous progress to the workbench.
  */
 
-import { app } from 'electron';
+import { app, dialog } from 'electron';
 import { spawn, type ChildProcess } from 'child_process';
 import { existsSync, readFileSync, statSync } from 'fs';
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
+import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { homedir } from 'os';
-import { extname, dirname, join, relative, resolve, sep } from 'path';
+import { basename, extname, dirname, join, relative, resolve, sep } from 'path';
 import {
   buildSnpmInstallArgs,
   creepRatio,
@@ -442,6 +442,20 @@ function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppP
 - 同意后：\`sai-cli siteapp menu sync --params '{"app_code":"<app_code>","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json\`
 - 菜单项字段：\`menu_code\` / \`parent_code\`（一级为 null） / \`menu_name\` / \`menu_type\`（directory 或 page，不要用 menu）
 - 不要同步 404、redirect、\`developerOnly\`；\`app_code\` 以 \`.sto/workspace.json\` 为准
+
+## 设计规范（强制）
+- 颜色/圆角/阴影/间距**只允许**使用 \`src/theme/theme.css\` 中声明的 token（含 \`--sto-*\` 与 shadcn 别名 \`--background/--foreground/--primary/--muted/--border/--radius\`）；**禁止**在页面或组件中硬编码 hex/rgb（违禁示例：\`#1677ff\` antd 默认蓝、\`#FF6700\` 散落写死）
+- 字阶只用 12 / 13 / 14 / 16 / 20 / 28 / 36；行高 1.5 或 1.7；标题字重 600、正文字重 400
+- 间距只用 \`--sto-space-1\` ~ \`--sto-space-8\`（4px 网格）；section 垂直间距 ≥ 48px；内容最大宽建议 1120px 居中
+- 圆角语义：控件 6px（\`--sto-radius-md\`）/ 卡片 8px（\`--sto-radius-lg\`）/ 面板 12px（\`--sto-radius-panel\`）；阴影只用 \`--sto-shadow-1\` / \`--sto-shadow-3\`
+- 每个页面须在 ≥390px 与 ≥1280px 双宽度可用，禁止横向溢出（自查 \`overflow-x\`）
+- 图片/图标未生成时必须用语义化占位（渐变块 + 居中文案），并在总结中披露「当前为模拟内容」
+- 起始页 \`HomePage\` / \`home.page.json\` 是设计规范实例，新页面优先仿写其层级与 token 用法
+
+## 输出协议（可选增强，失败时宿主会降级）
+- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"...","steps":[{"id":"1","title":"...","fileHints":["src/pages/..."]}]}\\n\`\`\`，**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
+- 每步完成可输出 \`\`\`sclaw_step\\n{"id":"1","status":"done"}\\n\`\`\`
+- 轮结束可输出 ≤3 条建议：\`\`\`sclaw_suggestions\\n[{"label":"检查移动端","prompt":"请检查一下移动端效果并修复溢出"}]\\n\`\`\`
 <!-- /sclaw-app-dev-context -->`;
 }
 
@@ -1994,14 +2008,14 @@ export interface AppCheckpointDiff {
 }
 
 /**
- * 取某个 checkpoint 相对其父版本的逐文件差异：
- * `git diff --no-renames`（重命名展开为 D+A，前端无需处理路径对），
- * 文本文件回前后全量内容供 Monaco DiffEditor 直接渲染；
- * 二进制 / 超大 / 超数量文件只回 numstat。
+ * 取两个 checkpoint 之间的逐文件差异：
+ * - 仅 `hash`：相对其父版本（T04 默认）
+ * - `baseHash` + `hash`：任意两版对比（T10）
  */
 export async function diffCheckpoint(
   appPath: string,
   hash: string,
+  baseHash?: string,
 ): Promise<AppCheckpointDiff | null> {
   if (!(await isGitAvailable())) return null;
   const target = hash.trim();
@@ -2011,9 +2025,20 @@ export async function diffCheckpoint(
   if (!verify.ok) return null;
   const fullHash = verify.output;
 
-  const parent = await runGit(appPath, ['rev-parse', '--verify', `${fullHash}^`]);
-  const parentHash = parent.ok ? parent.output : null;
-  const base = parentHash ?? GIT_EMPTY_TREE_HASH;
+  let parentHash: string | null = null;
+  let base: string;
+  const explicitBase = typeof baseHash === 'string' ? baseHash.trim() : '';
+  if (explicitBase) {
+    if (!/^[0-9a-f]{4,40}$/i.test(explicitBase)) return null;
+    const baseVerify = await runGit(appPath, ['rev-parse', '--verify', `${explicitBase}^{commit}`]);
+    if (!baseVerify.ok) return null;
+    parentHash = baseVerify.output;
+    base = parentHash;
+  } else {
+    const parent = await runGit(appPath, ['rev-parse', '--verify', `${fullHash}^`]);
+    parentHash = parent.ok ? parent.output : null;
+    base = parentHash ?? GIT_EMPTY_TREE_HASH;
+  }
 
   const [nameStatus, numstat, subjectResult] = await Promise.all([
     runGit(appPath, ['diff', '--no-renames', '--name-status', base, fullHash]),
@@ -2373,6 +2398,325 @@ export async function listAppRoutes(appPath: string): Promise<AppRouteEntry[]> {
   const routerRoutes = await scanRouterRoutes(appPath).catch(() => [] as AppRouteEntry[]);
   if (routerRoutes.length > 0) return routerRoutes;
   return scanA2uiRoutes(appPath).catch(() => [] as AppRouteEntry[]);
+}
+
+// ── Theme tune / artifacts / preview capture (P1 T06 / T09) ─────────────────
+
+const DESIGN_TOKENS_CONTRACT_REL = join('contracts', 'design-tokens.v1.json');
+const THEME_CSS_REL = join('src', 'theme', 'theme.css');
+const ARTIFACTS_REL = join('.sclaw', 'app-dev-artifacts.json');
+const TUNE_OVERRIDES_REL = join('.sclaw', 'tune-overrides.json');
+
+export interface AppDevDesignTokenDef {
+  name: string;
+  label: string;
+  type: 'color' | 'font' | 'radius';
+  format?: 'oklch' | 'rem';
+  group: string;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
+export interface AppDevDesignTokensContract {
+  schemaVersion: number;
+  source: string;
+  tokens: AppDevDesignTokenDef[];
+  /** true = 模板无契约，宿主使用内置默认项。 */
+  degraded: boolean;
+}
+
+const DEFAULT_DESIGN_TOKENS: AppDevDesignTokenDef[] = [
+  { name: '--sto-color-bg-layout', label: '页面背景', type: 'color', format: 'oklch', group: '颜色' },
+  { name: '--sto-color-primary', label: '主题色', type: 'color', format: 'oklch', group: '颜色' },
+  { name: '--sto-color-text', label: '正文色', type: 'color', format: 'oklch', group: '颜色' },
+  {
+    name: '--sto-font-family',
+    label: '正文字体',
+    type: 'font',
+    group: '字体',
+    options: [
+      '"PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
+      'Georgia, "Times New Roman", serif',
+      'Menlo, Consolas, monospace',
+    ],
+  },
+  { name: '--sto-radius-lg', label: '卡片圆角', type: 'radius', format: 'rem', group: '圆角', min: 0, max: 1 },
+  { name: '--sto-color-border', label: '边框色', type: 'color', format: 'oklch', group: '颜色' },
+];
+
+function normalizeDesignTokenDefs(raw: unknown): AppDevDesignTokenDef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AppDevDesignTokenDef[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.name !== 'string' || !rec.name.startsWith('--')) continue;
+    if (typeof rec.label !== 'string') continue;
+    if (rec.type !== 'color' && rec.type !== 'font' && rec.type !== 'radius') continue;
+    out.push({
+      name: rec.name,
+      label: rec.label,
+      type: rec.type,
+      format: rec.format === 'oklch' || rec.format === 'rem' ? rec.format : undefined,
+      group: typeof rec.group === 'string' ? rec.group : '其他',
+      options: Array.isArray(rec.options)
+        ? rec.options.filter((x): x is string => typeof x === 'string')
+        : undefined,
+      min: typeof rec.min === 'number' ? rec.min : undefined,
+      max: typeof rec.max === 'number' ? rec.max : undefined,
+    });
+  }
+  return out;
+}
+
+export async function readAppDesignTokens(appPath: string): Promise<AppDevDesignTokensContract> {
+  const contractPath = join(appPath, DESIGN_TOKENS_CONTRACT_REL);
+  if (!existsSync(contractPath)) {
+    return {
+      schemaVersion: 1,
+      source: THEME_CSS_REL,
+      tokens: DEFAULT_DESIGN_TOKENS,
+      degraded: true,
+    };
+  }
+  try {
+    const raw = JSON.parse(await readFile(contractPath, 'utf8')) as Record<string, unknown>;
+    const tokens = normalizeDesignTokenDefs(raw.tokens);
+    if (tokens.length === 0) {
+      return {
+        schemaVersion: 1,
+        source: THEME_CSS_REL,
+        tokens: DEFAULT_DESIGN_TOKENS,
+        degraded: true,
+      };
+    }
+    return {
+      schemaVersion: typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 1,
+      source: typeof raw.source === 'string' ? raw.source : THEME_CSS_REL,
+      tokens,
+      degraded: false,
+    };
+  } catch {
+    return {
+      schemaVersion: 1,
+      source: THEME_CSS_REL,
+      tokens: DEFAULT_DESIGN_TOKENS,
+      degraded: true,
+    };
+  }
+}
+
+/** 行级替换 theme.css 中 `--name: value;` 的值部；不存在的变量追加到 `:root` 块末尾。 */
+export async function applyAppThemeOverrides(
+  appPath: string,
+  overrides: Record<string, string>,
+): Promise<{ updated: string[]; themePath: string }> {
+  const themePath = join(appPath, THEME_CSS_REL);
+  if (!existsSync(themePath)) {
+    throw Object.assign(new Error('未找到 src/theme/theme.css，无法落盘主题'), { statusCode: 404 });
+  }
+  let css = await readFile(themePath, 'utf8');
+  const updated: string[] = [];
+  const missing: Array<{ name: string; value: string }> = [];
+
+  for (const [rawName, rawValue] of Object.entries(overrides)) {
+    const name = rawName.trim();
+    const value = String(rawValue ?? '').trim();
+    if (!name.startsWith('--') || !value) continue;
+    const re = new RegExp(`(${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*)([^;]+)(;)`);
+    if (re.test(css)) {
+      css = css.replace(re, `$1${value}$3`);
+      updated.push(name);
+    } else {
+      missing.push({ name, value });
+    }
+  }
+
+  if (missing.length > 0) {
+    const insert = missing.map(({ name, value }) => `  ${name}: ${value};`).join('\n');
+    const rootClose = css.indexOf('}', css.indexOf(':root'));
+    if (rootClose > 0) {
+      css = `${css.slice(0, rootClose)}${insert}\n${css.slice(rootClose)}`;
+      updated.push(...missing.map((m) => m.name));
+    }
+  }
+
+  await writeFile(themePath, css.endsWith('\n') ? css : `${css}\n`, 'utf8');
+  const sclawDir = join(appPath, '.sclaw');
+  await mkdir(sclawDir, { recursive: true });
+  await writeFile(
+    join(appPath, TUNE_OVERRIDES_REL),
+    `${JSON.stringify({ updatedAt: new Date().toISOString(), overrides }, null, 2)}\n`,
+    'utf8',
+  );
+  return { updated, themePath: THEME_CSS_REL };
+}
+
+export interface AppDevArtifactRecord {
+  id: string;
+  turnKey: string;
+  commitHash?: string;
+  title: string;
+  thumbnailDataUrl?: string;
+  previewUrl?: string;
+  createdAt: string;
+  favorite: boolean;
+  suggestions: Array<{ label: string; prompt: string }>;
+}
+
+export async function listAppArtifacts(appPath: string): Promise<AppDevArtifactRecord[]> {
+  const path = join(appPath, ARTIFACTS_REL);
+  if (!existsSync(path)) return [];
+  try {
+    const raw = JSON.parse(await readFile(path, 'utf8')) as { items?: unknown };
+    if (!Array.isArray(raw.items)) return [];
+    return raw.items.filter((item): item is AppDevArtifactRecord => {
+      return Boolean(item && typeof item === 'object' && typeof (item as AppDevArtifactRecord).id === 'string');
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function putAppArtifacts(
+  appPath: string,
+  items: AppDevArtifactRecord[],
+): Promise<AppDevArtifactRecord[]> {
+  const sclawDir = join(appPath, '.sclaw');
+  await mkdir(sclawDir, { recursive: true });
+  const normalized = items.slice(0, 50);
+  await writeFile(
+    join(appPath, ARTIFACTS_REL),
+    `${JSON.stringify({ updatedAt: new Date().toISOString(), items: normalized }, null, 2)}\n`,
+    'utf8',
+  );
+  return normalized;
+}
+
+/**
+ * 预览截图：按 webContentsId capturePage → 缩放到宽 480 JPEG q=70。
+ * 失败抛错，由路由返回占位由渲染侧处理。
+ */
+export async function captureAppPreviewByWebContentsId(
+  webContentsId: number,
+): Promise<{ dataUrl: string; width: number; height: number }> {
+  const { webContents } = await import('electron');
+  const wc = webContents.fromId(webContentsId);
+  if (!wc || wc.isDestroyed()) {
+    throw Object.assign(new Error('预览 webContents 不可用'), { statusCode: 409 });
+  }
+  const image = await wc.capturePage();
+  const size = image.getSize();
+  const targetW = 480;
+  const scale = targetW / Math.max(1, size.width);
+  const targetH = Math.max(1, Math.round(size.height * scale));
+  const resized = typeof image.resize === 'function'
+    ? image.resize({ width: targetW, height: targetH })
+    : image;
+  const jpeg = resized.toJPEG(70);
+  return {
+    dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
+    width: targetW,
+    height: targetH,
+  };
+}
+
+/** 生成资产扫描（T14）：图片 / 文档 / 导出文件，跳过源码与依赖目录。 */
+const GENERATED_ASSET_EXTS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico',
+  '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx',
+  '.csv', '.zip', '.tar', '.gz', '.mp4', '.webm', '.mp3',
+]);
+
+const GENERATED_ASSET_SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'dist-electron', 'coverage',
+  '.next', '.turbo', '.cache', 'src', 'contracts', 'openspec',
+]);
+
+export interface AppGeneratedAsset {
+  path: string;
+  name: string;
+  size: number;
+  ext: string;
+  mtimeMs: number;
+  kind: 'image' | 'document' | 'archive' | 'media' | 'other';
+}
+
+function classifyGeneratedAsset(ext: string): AppGeneratedAsset['kind'] {
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'].includes(ext)) return 'image';
+  if (['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.csv'].includes(ext)) return 'document';
+  if (['.zip', '.tar', '.gz'].includes(ext)) return 'archive';
+  if (['.mp4', '.webm', '.mp3'].includes(ext)) return 'media';
+  return 'other';
+}
+
+async function walkGeneratedAssets(
+  root: string,
+  dir: string,
+  out: AppGeneratedAsset[],
+  maxFiles: number,
+): Promise<void> {
+  if (out.length >= maxFiles) return;
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (out.length >= maxFiles) return;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (GENERATED_ASSET_SKIP_DIRS.has(entry.name)) continue;
+      await walkGeneratedAssets(root, full, out, maxFiles);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const ext = extname(entry.name).toLowerCase();
+    if (!GENERATED_ASSET_EXTS.has(ext)) continue;
+    try {
+      const st = await stat(full);
+      const rel = relative(root, full).split(sep).join('/');
+      out.push({
+        path: rel,
+        name: entry.name,
+        size: st.size,
+        ext,
+        mtimeMs: st.mtimeMs,
+        kind: classifyGeneratedAsset(ext),
+      });
+    } catch {
+      // skip unreadable
+    }
+  }
+}
+
+export async function listAppGeneratedAssets(appPath: string): Promise<AppGeneratedAsset[]> {
+  if (!existsSync(appPath) || !statSync(appPath).isDirectory()) return [];
+  const out: AppGeneratedAsset[] = [];
+  await walkGeneratedAssets(appPath, appPath, out, 200);
+  out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return out;
+}
+
+/** T14：另存为下载生成资产（save dialog → copy）。 */
+export async function exportAppGeneratedAsset(
+  appPath: string,
+  relativePath: string,
+): Promise<{ saved: boolean; savedPath?: string }> {
+  const full = assertPathInsideApp(appPath, relativePath);
+  if (!existsSync(full) || !statSync(full).isFile()) {
+    throw new Error('文件不存在');
+  }
+  const name = basename(full);
+  const result = await dialog.showSaveDialog({
+    title: '下载文件',
+    defaultPath: join(homedir(), 'Downloads', name),
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+  await copyFile(full, result.filePath);
+  return { saved: true, savedPath: result.filePath };
 }
 
 // ── Community skill package install ─────────────────────────────────────────

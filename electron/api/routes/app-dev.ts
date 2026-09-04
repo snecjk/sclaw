@@ -20,17 +20,25 @@ import {
   isGitAvailable,
   listAppRoutes,
   listAppSourceFiles,
+  listAppArtifacts,
+  listAppGeneratedAssets,
+  exportAppGeneratedAsset,
   listCheckpoints,
   listDevAppWorkspaceIds,
   listDevApps,
   resolveCloudAppForWorkspace,
   readAppSourceFile,
+  readAppDesignTokens,
+  applyAppThemeOverrides,
+  captureAppPreviewByWebContentsId,
+  putAppArtifacts,
   restartApp,
   restoreCheckpoint,
   runSetupPipeline,
   searchAppSourceFiles,
   stopApp,
   writeAppSourceFile,
+  type AppDevArtifactRecord,
   installNpmPackage,
   installPipPackage,
   listAppDevAssistSkills,
@@ -333,12 +341,13 @@ export async function handleAppDevRoutes(
       return true;
     }
 
-    // T04：消息级「查看修改」——某 checkpoint 相对父版本的逐文件差异（含全文对）。
+    // T04 / T10：checkpoint diff；可选 baseHash 做任意两版对比。
     if (url.pathname === '/api/app-dev/checkpoints/diff' && req.method === 'GET') {
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
       const hash = url.searchParams.get('hash') ?? '';
+      const baseHash = url.searchParams.get('baseHash') ?? undefined;
       const appPath = await resolveAppPath(workspaceId);
-      const diff = await diffCheckpoint(appPath, hash);
+      const diff = await diffCheckpoint(appPath, hash, baseHash || undefined);
       if (!diff) {
         sendJson(res, 200, { success: false, error: '无法读取该版本的差异' });
         return true;
@@ -393,6 +402,81 @@ export async function handleAppDevRoutes(
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
       const appPath = await resolveAppPath(workspaceId);
       sendJson(res, 200, { success: true, routes: await listAppRoutes(appPath) });
+      return true;
+    }
+
+    // 设计 token 契约（T06/T08）：旧模板无契约时 degraded=true + 内置默认项。
+    if (url.pathname === '/api/app-dev/theme/tokens' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, ...(await readAppDesignTokens(appPath)) });
+      return true;
+    }
+
+    // 主题落盘（T06）：行级替换 theme.css 变量值。
+    if (url.pathname === '/api/app-dev/theme' && req.method === 'PUT') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        overrides?: Record<string, string>;
+      }>(req);
+      const workspaceId = (body.workspaceId ?? '').trim();
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const overrides = body.overrides && typeof body.overrides === 'object' ? body.overrides : {};
+      const appPath = await resolveAppPath(workspaceId);
+      const result = await applyAppThemeOverrides(appPath, overrides);
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    // 产物卡持久化（T09）
+    if (url.pathname === '/api/app-dev/artifacts' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, items: await listAppArtifacts(appPath) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/artifacts' && req.method === 'PUT') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        items?: AppDevArtifactRecord[];
+      }>(req);
+      const workspaceId = (body.workspaceId ?? '').trim();
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const appPath = await resolveAppPath(workspaceId);
+      const items = await putAppArtifacts(appPath, Array.isArray(body.items) ? body.items : []);
+      sendJson(res, 200, { success: true, items });
+      return true;
+    }
+
+    // 预览截图（T09）：webContentsId → JPEG dataURL
+    if (url.pathname === '/api/app-dev/preview/capture' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId?: string; webContentsId?: number }>(req);
+      const webContentsId = Number(body.webContentsId);
+      if (!Number.isInteger(webContentsId) || webContentsId <= 0) {
+        throw Object.assign(new Error('缺少有效的 webContentsId'), { statusCode: 400 });
+      }
+      // workspaceId 仅用于鉴权路径存在（防止任意 id 滥调）；真正截图按 webContentsId。
+      if (body.workspaceId) await resolveAppPath(body.workspaceId);
+      const shot = await captureAppPreviewByWebContentsId(webContentsId);
+      sendJson(res, 200, { success: true, ...shot });
+      return true;
+    }
+
+    // 生成资产列表（T14）
+    if (url.pathname === '/api/app-dev/generated-assets' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, items: await listAppGeneratedAssets(appPath) });
+      return true;
+    }
+
+    // 生成资产下载（另存为）
+    if (url.pathname === '/api/app-dev/generated-assets/export' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; path: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await exportAppGeneratedAsset(appPath, body.path ?? '');
+      sendJson(res, 200, { success: true, ...result });
       return true;
     }
 

@@ -5,9 +5,10 @@
  * 中断时显示「已中断 · 已完成 N 个任务」。
  *
  * T04 挂载点：`actions` 渲染于卡片头部右侧，用于挂 [恢复版本｜查看修改] 按钮。
+ * T11/T13：响应式体检行 + 跟进问句 + 👍/👎。
  */
 import { memo, useMemo, useState, type ReactNode } from 'react';
-import { ChevronDown, ListTodo } from 'lucide-react';
+import { ChevronDown, ListTodo, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { ToolStatus } from '@/stores/chat';
 import {
   describeAppDevTool,
@@ -15,6 +16,11 @@ import {
   formatAppDevDurationMs,
   rollupAppDevTools,
 } from '@/lib/app-dev-tool-rollup';
+import {
+  formatResponsiveAuditSummary,
+  type AppDevResponsiveAuditResult,
+} from '@/lib/app-dev-responsive-audit';
+import type { AppDevTurnRating } from '@/lib/app-dev-turn-feedback';
 import { cn } from '@/lib/utils';
 
 export interface AppDevTurnSummaryCardProps {
@@ -26,6 +32,13 @@ export interface AppDevTurnSummaryCardProps {
   interrupted?: boolean;
   /** T04 挂载点：版本操作按钮（恢复版本｜查看修改）。 */
   actions?: ReactNode;
+  /** T11：移动端响应式体检结果。 */
+  responsiveAudit?: AppDevResponsiveAuditResult | null;
+  onFixResponsive?: () => void;
+  /** T13：跟进引导问句。 */
+  followUpQuestion?: string | null;
+  rating?: AppDevTurnRating | null;
+  onRate?: (rating: AppDevTurnRating) => void;
   className?: string;
 }
 
@@ -34,13 +47,18 @@ export const AppDevTurnSummaryCard = memo(function AppDevTurnSummaryCard({
   durationMs,
   interrupted = false,
   actions,
+  responsiveAudit = null,
+  onFixResponsive,
+  followUpQuestion = null,
+  rating = null,
+  onRate,
   className,
 }: AppDevTurnSummaryCardProps) {
   const [expanded, setExpanded] = useState(false);
   const rollup = useMemo(() => rollupAppDevTools(tools), [tools]);
 
   const taskCount = rollup.totals.completedTools;
-  if (taskCount === 0 && !interrupted) return null;
+  if (taskCount === 0 && !interrupted && !responsiveAudit && !followUpQuestion) return null;
 
   const title = interrupted
     ? `已中断 · 已完成 ${taskCount} 个任务`
@@ -116,6 +134,78 @@ export const AppDevTurnSummaryCard = memo(function AppDevTurnSummaryCard({
                 </div>
               );
             })}
+        </div>
+      ) : null}
+
+      {responsiveAudit ? (
+        <div
+          className="mt-1.5 flex items-center gap-2 border-t border-border pt-1.5"
+          data-testid="app-dev-responsive-audit"
+        >
+          <span className={cn(
+            'text-[11px]',
+            responsiveAudit.ok ? 'text-[var(--sto-success-primary)]' : 'text-[var(--sto-warning-primary,#FAAD14)]',
+          )}
+          >
+            {formatResponsiveAuditSummary(responsiveAudit)}
+          </span>
+          <span className="flex-1" />
+          {!responsiveAudit.ok && onFixResponsive ? (
+            <button
+              type="button"
+              className="text-[11px] text-[var(--sto-brand-primary)] hover:underline"
+              onClick={onFixResponsive}
+            >
+              一键修复
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {(followUpQuestion || onRate) ? (
+        <div
+          className="mt-1.5 flex items-center gap-2 border-t border-border pt-1.5"
+          data-testid="app-dev-turn-feedback"
+        >
+          {followUpQuestion ? (
+            <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--sto-text-secondary)]">
+              {followUpQuestion}
+            </span>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {onRate ? (
+            <span className="inline-flex items-center gap-0.5">
+              <button
+                type="button"
+                aria-label="有帮助"
+                aria-pressed={rating === 'up'}
+                className={cn(
+                  'inline-flex h-6 w-6 items-center justify-center rounded transition-colors',
+                  rating === 'up'
+                    ? 'text-[var(--sto-success-primary)]'
+                    : 'text-[var(--sto-text-tertiary)] hover:bg-[var(--sto-control-hover-bg)] hover:text-foreground',
+                )}
+                onClick={() => onRate('up')}
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label="没帮助"
+                aria-pressed={rating === 'down'}
+                className={cn(
+                  'inline-flex h-6 w-6 items-center justify-center rounded transition-colors',
+                  rating === 'down'
+                    ? 'text-[var(--sto-danger-primary)]'
+                    : 'text-[var(--sto-text-tertiary)] hover:bg-[var(--sto-control-hover-bg)] hover:text-foreground',
+                )}
+                onClick={() => onRate('down')}
+              >
+                <ThumbsDown className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

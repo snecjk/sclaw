@@ -47,7 +47,7 @@ export interface HomeComposerProps {
     skillMeta?: SkillMeta,
   ) => void;
   /** Return true to consume a local command before it is sent to the agent. */
-  onBeforeSend?: (text: string) => boolean;
+  onBeforeSend?: (text: string) => boolean | string | void;
   onQueue?: (
     text: string,
     attachments?: FileAttachment[],
@@ -138,9 +138,11 @@ export function HomeComposer({
   const inputProps = useChatInputBindings({
     onSend: onBeforeSend
       ? (text, attachments, targetAgentId, dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta) => {
-          if (onBeforeSend(text)) return;
+          const gate = onBeforeSend(text);
+          if (gate === true) return;
+          const outbound = typeof gate === 'string' ? gate : text;
           sendMessage(
-            text,
+            outbound,
             attachments,
             targetAgentId,
             dingTalkMentions,

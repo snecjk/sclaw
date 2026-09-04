@@ -3,7 +3,7 @@ import { HomeComposer } from '@/pages/Home/HomeComposer';
 
 export interface AppDevComposerProps {
   seedText?: string;
-  onBeforeSend?: (text: string) => boolean;
+  onBeforeSend?: (text: string) => boolean | string | void;
   composerDraftSessionKey?: string | null;
 }
 
