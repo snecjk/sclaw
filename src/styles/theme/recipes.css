@@ -593,6 +593,13 @@
   :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control--primary { background-color: var(--sto-dialog-action-background); border-color: transparent; color: var(--sto-dialog-action-foreground); }
   :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control--primary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-dialog-action-hover-background); border-color: transparent; }
   :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control:is(:focus-visible, [data-sto-state='focus']) { box-shadow: var(--sto-dialog-action-focus-shadow); }
+  /* 任务名称与任务内容共用紧凑焦点光晕，不能被弹窗通用的双层键盘焦点环覆盖。 */
+  :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control.sto-control--task-create-focus:is(:focus, :focus-visible, :focus-within, [data-sto-state='focus']) {
+    border-color: var(--sto-brand-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 12%, transparent);
+    outline: none;
+    outline-offset: 0;
+  }
   .sto-icon--neutral { color: var(--sto-icon-secondary); }
   .sto-icon--neutral-strong { color: var(--sto-icon-primary); }
   .sto-icon--neutral-quiet { color: var(--sto-icon-tertiary); }
