@@ -9,6 +9,8 @@ import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEn
 import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from '../gateway';
 import { useAgentsStore } from '../agents';
+import { useAgentEnginePolicyStore } from '../agent-engine-policy';
+import { useAuthStore } from '../auth';
 import {
   isVirtualTaskSessionKey,
   parseCronSessionKey,
@@ -598,6 +600,12 @@ export function createSessionLifecycleActions(
     // ── New session ──
 
     newSession: (options?: { projectId?: string; materialize?: boolean }) => {
+      const user = useAuthStore.getState().user;
+      const ownerCode = String(user?.code || user?.empCode || user?.id || '').trim();
+      if (ownerCode) {
+        void useAgentEnginePolicyStore.getState().fetchPolicy(ownerCode);
+      }
+
       // Generate a new unique session key and switch to it.
       // NOTE: We intentionally do NOT call sessions.reset on the old session.
       // sessions.reset archives (renames) the session JSONL file, making old

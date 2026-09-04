@@ -54,7 +54,7 @@ export const LEGACY_AGENT_ENGINE_OPTIONS: AgentEnginePolicyOption[] = AGENT_ENGI
 
 const cachedPolicies = new Map<string, ReturnType<typeof normalizeAgentEnginePolicy>>();
 let inFlight: { ownerCode: string; promise: Promise<void> } | null = null;
-const POLICY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const POLICY_REFRESH_INTERVAL_MS = 20 * 60 * 1000;
 
 export function normalizeAgentEnginePolicy(payload: AgentEnginePolicyPayload | undefined) {
   const seen = new Set<AgentEngineType>();

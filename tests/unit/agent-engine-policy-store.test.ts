@@ -73,4 +73,29 @@ describe('agent engine policy store', () => {
     expect(state.loaded).toBe(true);
     expect(state.error).toBe('offline');
   });
+
+  it('reuses the policy for 20 minutes and refreshes it after expiry', async () => {
+    let now = 1_800_000_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    hostApiFetchMock.mockResolvedValue({
+      success: true,
+      data: {
+        engines: [{ code: 'openclaw', name: 'OpenClaw', order: 10 }],
+        defaultEngine: 'openclaw',
+      },
+    });
+
+    try {
+      await useAgentEnginePolicyStore.getState().fetchPolicy('employee-cache');
+      now += 19 * 60 * 1000;
+      await useAgentEnginePolicyStore.getState().fetchPolicy('employee-cache');
+      expect(hostApiFetchMock).toHaveBeenCalledTimes(1);
+
+      now += 60 * 1000 + 1;
+      await useAgentEnginePolicyStore.getState().fetchPolicy('employee-cache');
+      expect(hostApiFetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
 });
