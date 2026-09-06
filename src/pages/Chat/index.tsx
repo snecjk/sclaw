@@ -91,6 +91,7 @@ export function Chat() {
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    activity: runtimeActivity,
     error,
   } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
@@ -216,6 +217,7 @@ export function Chat() {
     streamingToolResults,
     streamingTools,
     turnAnchorAt,
+    runtimeActivity,
   });
 
   const streamContentKey = useMemo(

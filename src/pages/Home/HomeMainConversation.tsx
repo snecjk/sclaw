@@ -98,6 +98,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    activity: runtimeActivity,
     error,
   } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
@@ -192,6 +193,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingToolResults,
     streamingTools,
     turnAnchorAt,
+    runtimeActivity,
   });
 
   useEffect(() => {

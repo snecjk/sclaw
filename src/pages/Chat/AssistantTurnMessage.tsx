@@ -94,6 +94,8 @@ export interface ActiveTurnStream {
   isConnecting: boolean;
   isProcessing: boolean;
   isStillExecuting?: boolean;
+  isCompacting?: boolean;
+  isCompactionRetrying?: boolean;
 }
 
 interface AssistantTurnMessageProps {
@@ -329,6 +331,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const isConnecting = activeStream?.isConnecting ?? false;
   const isProcessing = activeStream?.isProcessing ?? false;
   const isStillExecuting = activeStream?.isStillExecuting ?? false;
+  const isCompacting = activeStream?.isCompacting ?? false;
+  const isCompactionRetrying = activeStream?.isCompactionRetrying ?? false;
 
   const precedingUserText = useMemo(() => {
     if (precedingUserMessage) {
@@ -365,12 +369,13 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   );
 
   const showThinkingPanel =
-    showThinking &&
-    (thinkingLayout.segments.length > 0 ||
+    (showThinking && (thinkingLayout.segments.length > 0 ||
       bakedStreamingTools.length > 0 ||
       isConnecting ||
       isProcessing ||
-      isStillExecuting);
+      isStillExecuting))
+    || isCompacting
+    || isCompactionRetrying;
 
   const replyMessage = useMemo(() => {
     // A completed run can still be displayed from the retained overlay while
@@ -560,10 +565,12 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     () =>
       resolveTurnProcessStatus({
         isLiveStream:
-          isStreaming || isConnecting || isProcessing || isStillExecuting,
+          isStreaming || isConnecting || isProcessing || isStillExecuting || isCompacting || isCompactionRetrying,
         isConnecting,
         isProcessing,
         isStillExecuting,
+        isCompacting,
+        isCompactionRetrying,
         streamingTools: bakedStreamingTools,
         hasProcessSegments:
           thinkingSegmentsForDisplay.length > 0 || bakedStreamingTools.length > 0,
@@ -576,6 +583,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isConnecting,
       isProcessing,
       isStillExecuting,
+      isCompacting,
+      isCompactionRetrying,
       bakedStreamingTools,
       thinkingSegmentsForDisplay.length,
       replyDisplayHasText,

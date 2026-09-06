@@ -7,6 +7,9 @@ import type {
   CanonicalChatEvent,
   ChatRunPhase,
   ChatRuntimeSnapshot,
+  ContextCompactionActivity,
+  ContextCompactionReason,
+  ChatContextUsage,
 } from '../../../shared/chat-runtime-protocol';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
 import type { ChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
@@ -43,6 +46,8 @@ export interface ClientRunState {
   sequence: number;
   startedAt: number;
   lastEventAt: number;
+  activity?: ContextCompactionActivity | null;
+  contextUsage?: ChatContextUsage | null;
 }
 
 export interface ClientSessionSyncState {
@@ -151,6 +156,8 @@ export function applyRuntimeSnapshot(
       sequence: snapshot.sequence,
       startedAt: snapshot.startedAt,
       lastEventAt: snapshot.lastEventAt,
+      activity: snapshot.activity ?? null,
+      contextUsage: snapshot.contextUsage ?? null,
     },
     error: snapshot.error ? new AppError('GATEWAY', snapshot.error) : null,
     overlay: {
@@ -174,6 +181,10 @@ function phaseFromEvent(event: CanonicalChatEvent, current: ClientRunState | nul
     case 'run.started':
     case 'message.delta':
     case 'tool.updated': return 'running';
+    case 'context.compaction.started':
+    case 'context.compaction.completed':
+    case 'context.compaction.failed': return current?.phase ?? 'running';
+    case 'context.usage.updated': return current?.phase ?? 'completed';
     case 'message.final': return current?.phase ?? 'running';
     case 'transcript.updated': return current?.phase ?? 'completed';
     case 'run.awaiting_transcript': return 'awaiting_transcript';
@@ -190,6 +201,7 @@ export function reduceSessionEvent(
 ): SessionEventReduction {
   const current = state.runtime;
   const phase = phaseFromEvent(event, current);
+  const isContextEvent = event.type.startsWith('context.');
   if (current) {
     if (event.epoch < current.epoch) return { state, accepted: false, needsHydration: false };
     if (event.epoch === current.epoch && event.sequence < current.sequence) {
@@ -203,13 +215,14 @@ export function reduceSessionEvent(
     if (event.epoch === current.epoch && event.sequence > current.sequence + 1) {
       return { state, accepted: false, needsHydration: true };
     }
-    if (event.epoch === current.epoch && current.runId && event.runId && current.runId !== event.runId) {
+    if (!isContextEvent && event.epoch === current.epoch && current.runId && event.runId && current.runId !== event.runId) {
       return { state, accepted: false, needsHydration: true };
     }
     if (
       event.epoch === current.epoch
       && isTerminalChatRunPhase(current.phase)
       && event.type !== 'transcript.updated'
+      && !isContextEvent
     ) {
       return { state, accepted: false, needsHydration: false };
     }
@@ -279,6 +292,43 @@ export function reduceSessionEvent(
   const nextToolEventCount = startsNewRun || clearOverlay
     ? newToolKeys
     : (state.overlay.toolEventCount ?? 0) + newToolKeys;
+  const compactionReason = payload?.reason;
+  const normalizedCompactionReason: ContextCompactionReason =
+    compactionReason === 'manual'
+    || compactionReason === 'threshold'
+    || compactionReason === 'overflow'
+    || compactionReason === 'auto'
+      ? compactionReason
+      : 'unknown';
+  const compactionAttemptId = typeof payload?.attemptId === 'string' ? payload.attemptId : '';
+  const terminalEvent = event.type === 'run.completed'
+    || event.type === 'run.failed'
+    || event.type === 'run.aborted'
+    || event.type === 'run.interrupted';
+  let nextActivity = startsNewRun || terminalEvent ? null : current?.activity ?? null;
+  if (event.type === 'context.compaction.started' && compactionAttemptId) {
+    nextActivity = {
+      type: 'context_compaction',
+      attemptId: compactionAttemptId,
+      status: 'running',
+      reason: normalizedCompactionReason,
+      startedAt: event.occurredAt,
+    };
+  } else if (
+    event.type === 'context.compaction.failed'
+    && compactionAttemptId
+    && nextActivity?.attemptId === compactionAttemptId
+  ) {
+    nextActivity = payload?.willRetry === true
+      ? { ...nextActivity, status: 'retrying' }
+      : null;
+  } else if (
+    event.type === 'context.compaction.completed'
+    && compactionAttemptId
+    && nextActivity?.attemptId === compactionAttemptId
+  ) {
+    nextActivity = null;
+  }
 
   return {
     accepted: true,
@@ -294,6 +344,10 @@ export function reduceSessionEvent(
         sequence: event.sequence,
         startedAt: current && current.epoch === event.epoch ? current.startedAt : event.occurredAt,
         lastEventAt: event.occurredAt,
+        activity: nextActivity,
+        contextUsage: event.type === 'context.usage.updated'
+          ? (payload?.usage as ChatContextUsage | undefined) ?? current?.contextUsage ?? null
+          : current?.contextUsage ?? null,
       },
       overlay: {
         ...state.overlay,

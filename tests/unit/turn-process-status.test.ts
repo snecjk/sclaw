@@ -88,4 +88,35 @@ describe('TurnProcessStatus', () => {
     expect(status).toBe('still_executing');
     expect(shouldShowProcessStatusLoading(status)).toBe(true);
   });
+
+  it('shows compaction ahead of tools, visible replies, and stale execution fallbacks', () => {
+    const status = resolveTurnProcessStatus({
+      isLiveStream: true,
+      isConnecting: false,
+      isProcessing: true,
+      isStillExecuting: true,
+      isCompacting: true,
+      streamingTools: [{ status: 'running', input: { path: '/tmp' } }],
+      hasProcessSegments: true,
+      hasFinalReplyStreaming: true,
+      hasVisibleFinalReply: true,
+    });
+    expect(status).toBe('compacting');
+    expect(resolveProcessStatusLabelKey(status)).toBe('streaming.compactingContext');
+  });
+
+  it('uses the retrying compaction label when summarization will retry', () => {
+    const status = resolveTurnProcessStatus({
+      isLiveStream: true,
+      isConnecting: true,
+      isProcessing: false,
+      isStillExecuting: false,
+      isCompactionRetrying: true,
+      streamingTools: [],
+      hasProcessSegments: false,
+      hasFinalReplyStreaming: false,
+    });
+    expect(status).toBe('compaction_retrying');
+    expect(resolveProcessStatusLabelKey(status)).toBe('streaming.compactionRetrying');
+  });
 });

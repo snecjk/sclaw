@@ -177,6 +177,51 @@ describe('chat runtime repository', () => {
       .resolves.toMatchObject({ engineType: 'pi' });
   });
 
+  it('persists active context compaction for renderer recovery', async () => {
+    await repository.upsert(snapshot({
+      runId: 'run-compact',
+      phase: 'running',
+      activity: {
+        type: 'context_compaction',
+        attemptId: 'attempt-1',
+        status: 'running',
+        reason: 'threshold',
+        startedAt: 150,
+      },
+    }));
+
+    await expect(repository.getLatestForSession('agent:main:session-1')).resolves.toMatchObject({
+      activity: {
+        type: 'context_compaction',
+        attemptId: 'attempt-1',
+        status: 'running',
+        reason: 'threshold',
+        startedAt: 150,
+      },
+    });
+  });
+
+  it('persists the latest context usage for renderer recovery', async () => {
+    await repository.upsert(snapshot({
+      contextUsage: {
+        tokens: 64_000,
+        contextWindow: 128_000,
+        percent: 50,
+        accuracy: 'exact',
+        updatedAt: 175,
+      },
+    }));
+
+    await expect(repository.getLatestForSession('agent:main:session-1')).resolves.toMatchObject({
+      contextUsage: {
+        tokens: 64_000,
+        contextWindow: 128_000,
+        percent: 50,
+        accuracy: 'exact',
+      },
+    });
+  });
+
   it('prunes terminal overflow with SQLite-compatible limit and offset syntax', async () => {
     await Promise.all(Array.from({ length: 501 }, (_, index) => repository.upsert(snapshot({
       sessionKey: `agent:main:terminal-${index}`,
