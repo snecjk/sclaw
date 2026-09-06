@@ -9,7 +9,7 @@
 import { useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selectors';
 import { useMessageQueueStore } from '@/stores/message-queue';
@@ -113,7 +113,7 @@ export function HomeComposer({
   const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
 
   const currentAgent = useMemo(
-    () => agents.find((agent) => agent.id === currentAgentId),
+    () => resolveAgentById(agents, currentAgentId),
     [agents, currentAgentId],
   );
   const currentSession = useMemo(

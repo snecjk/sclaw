@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useMessageQueueStore } from '@/stores/message-queue';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -46,7 +46,7 @@ export function useHomeChatEntrySend() {
       const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
       const messages = getCurrentChatDisplayMessages();
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
-      const agentEngineType = (agents ?? []).find((agent) => agent.id === (targetAgentId || currentAgentId))?.engineType
+      const agentEngineType = resolveAgentById(agents ?? [], targetAgentId || currentAgentId)?.engineType
         ?? 'openclaw';
       const targetEngineType = targetAgentId
         ? agentEngineType
