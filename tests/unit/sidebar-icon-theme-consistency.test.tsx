@@ -75,6 +75,24 @@ describe('theme-aware operational icons', () => {
     expect(container.innerHTML).not.toContain('#86909C');
   });
 
+  it('uses semantic, theme-aware icons for account menu actions', () => {
+    expect(sidebarSource).toContain("const SIDEBAR_ACCOUNT_MENU_ICON_CLASS = 'h-4 w-4 shrink-0 sto-icon--neutral';");
+    for (const icon of ['SettingsIcon', 'RefreshCw', 'Languages', 'Palette', 'Gauge', 'LogOut']) {
+      expect(sidebarSource).toContain(`<${icon} className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS}`);
+    }
+  });
+
+  it('keeps update checking and update availability actionable in the account menu', () => {
+    expect(sidebarSource).toContain("const updateStatus = useUpdateStore((s) => s.status);");
+    expect(sidebarSource).toContain("updateStatus === 'checking' && 'animate-spin'");
+    expect(sidebarSource).toContain("updateStatus === 'available'");
+    expect(sidebarSource).toContain('void downloadUpdate();');
+    expect(sidebarSource).toContain("updateStatus === 'downloaded'");
+    expect(sidebarSource).toContain('void installUpdate();');
+    expect(sidebarSource).toContain("updateStatus === 'not-available'");
+    expect(sidebarSource).toContain('<CircleCheck');
+  });
+
   it('gives every inline SVG instance its own internal definition IDs', () => {
     const source = '<svg><defs><clipPath id="clip"><rect width="16" height="16" /></clipPath></defs><g clip-path="url(#clip)"><path fill="#4E5969" d="M0 0h16v16H0z" /></g></svg>';
     const { container } = render(
