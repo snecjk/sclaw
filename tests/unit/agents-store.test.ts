@@ -58,4 +58,24 @@ describe('agents store engine policy reuse', () => {
     const createCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/agents');
     expect(JSON.parse(createCall?.[1]?.body as string)).toMatchObject({ defaultEngine: 'pi' });
   });
+
+  it('resolves a project-scoped Agent to the base Agent engine', async () => {
+    const { resolveAgentById } = await import('@/stores/agents');
+    const { resolveProjectAgentId } = await import('../../shared/project-agent');
+
+    const projectAgentId = resolveProjectAgentId('project-001', 'sagent');
+    const resolved = resolveAgentById([
+      {
+        id: 'sagent',
+        name: 'SAgent',
+        engineType: 'pi',
+      } as import('@/types/agent').AgentSummary,
+    ], projectAgentId);
+
+    expect(resolved).toMatchObject({
+      id: projectAgentId,
+      name: 'SAgent · project-',
+      engineType: 'pi',
+    });
+  });
 });
