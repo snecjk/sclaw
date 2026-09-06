@@ -15,6 +15,7 @@ import type { ModelMessageCompositionV1 } from '../../../shared/model-message-co
 import type { ModelMessageMediaInput } from '../../services/model-message-normalizer';
 import { submitModelTurn } from '../../services/submit-model-turn';
 import { projectUserTurnCompositions } from '../../services/user-turn-composition-history';
+import { getChatRuntimeRepository } from '../../db/repositories/chat-runtime-repository';
 
 type ChatSendRouteBody = {
   sessionKey: string;
@@ -172,33 +173,22 @@ export async function handleGatewayRoutes(
         sendJson(res, 400, { success: false, error: 'sessionKey is required' });
         return true;
       }
-      const runtimeSupervisor = getChatRuntimeSupervisor(ctx.gatewayManager);
-      const snapshot = await runtimeSupervisor.getHydrated(sessionKey);
       const adapter = await getAdapterForSession(sessionKey, parseEngineType(url.searchParams.get('engineType')));
-      if (!adapter.chatCapabilities.supportsContextUsage || !adapter.getContextUsage) {
+      if (!adapter.chatCapabilities.supportsContextUsage) {
         sendJson(res, 200, { success: true, supported: false, usage: null });
         return true;
       }
-      const live = await adapter.getContextUsage(
-        { gatewayManager: ctx.gatewayManager },
-        { sessionKey },
-      );
-      if (live.success && live.result) {
-        await runtimeSupervisor.handleEngineEvent({
-          type: 'context.usage.updated',
-          sessionKey,
-          usage: live.result,
-        }, adapter.type);
-      }
+      // This endpoint is the persisted recovery path for the renderer. Live SDK
+      // sampling belongs to the engine's turn/compaction lifecycle; keeping GET
+      // read-only prevents a page mount from mutating runtime state or returning
+      // a process-local value that has not been committed yet.
+      const snapshot = await getChatRuntimeRepository().getLatestForSession(sessionKey);
       const persistedUsage = snapshot?.contextUsage ?? null;
-      const usablePersistedUsage = adapter.type === 'claude' && persistedUsage?.accuracy !== 'exact'
-        ? null
-        : persistedUsage;
       sendJson(res, 200, {
         success: true,
         supported: true,
         canCompact: Boolean(adapter.chatCapabilities.supportsManualCompaction && adapter.compactSession),
-        usage: live.result ?? usablePersistedUsage,
+        usage: persistedUsage,
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

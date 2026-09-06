@@ -63,7 +63,7 @@
     "gatewayDisconnectedPlaceholder": "网关未连接...",
     "messagePlaceholder": "今天能帮你做些什么？@钉钉联系或群，/调用工作流和技能",
     "send": "发送",
-    "contextUsageTooltip": "上下文已使用 {{percent}}% · 约 {{tokens}} / {{window}} tokens",
+    "contextUsageTooltip": "上下文已使用 {{percent}}%",
     "contextUsagePending": "上下文使用率将在下一次回复后更新",
     "contextCompactAfterReply": "本轮回答结束后可压缩上下文",
     "contextCompactTitle": "压缩当前会话？",

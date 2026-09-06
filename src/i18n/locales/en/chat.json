@@ -63,7 +63,7 @@
     "gatewayDisconnectedPlaceholder": "Gateway not connected...",
     "messagePlaceholder": "Message {{agent}} — type @ to search DingTalk contacts or groups",
     "send": "Send",
-    "contextUsageTooltip": "Context {{percent}}% used · about {{tokens}} / {{window}} tokens",
+    "contextUsageTooltip": "Context {{percent}}% used",
     "contextUsagePending": "Context usage will update after the next response",
     "contextCompactAfterReply": "Context can be compacted after this response finishes",
     "contextCompactTitle": "Compact this conversation?",

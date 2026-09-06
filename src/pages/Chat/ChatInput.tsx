@@ -783,7 +783,9 @@ export function ChatInput({
       )}
       toolbarRight={(
         <>
-          {isHomeLayout && !voicePanelOpen ? <ContextUsageControl engineType={engineType} /> : null}
+          {isHomeLayout && !voicePanelOpen && engineType === 'pi'
+            ? <ContextUsageControl engineType={engineType} />
+            : null}
           {isHomeLayout && !voicePanelOpen ? toolbarInlineSelectors : null}
           {voiceConfirming ? (
             <Button

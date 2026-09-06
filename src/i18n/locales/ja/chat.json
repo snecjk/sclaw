@@ -63,7 +63,7 @@
     "gatewayDisconnectedPlaceholder": "ゲートウェイ未接続...",
     "messagePlaceholder": "{{agent}} に送信 — @ で連絡先またはグループを検索",
     "send": "送信",
-    "contextUsageTooltip": "コンテキスト使用率 {{percent}}% · 約 {{tokens}} / {{window}} tokens",
+    "contextUsageTooltip": "コンテキスト使用率 {{percent}}%",
     "contextUsagePending": "コンテキスト使用率は次の応答後に更新されます",
     "contextCompactAfterReply": "この応答の完了後にコンテキストを圧縮できます",
     "contextCompactTitle": "この会話を圧縮しますか？",
