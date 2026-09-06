@@ -75,6 +75,24 @@ describe('theme-aware operational icons', () => {
     expect(container.innerHTML).not.toContain('#86909C');
   });
 
+  it('gives every inline SVG instance its own internal definition IDs', () => {
+    const source = '<svg><defs><clipPath id="clip"><rect width="16" height="16" /></clipPath></defs><g clip-path="url(#clip)"><path fill="#4E5969" d="M0 0h16v16H0z" /></g></svg>';
+    const { container } = render(
+      <>
+        <ThemedMonochromeIcon source={source} />
+        <ThemedMonochromeIcon source={source} />
+      </>,
+    );
+
+    const clipPaths = container.querySelectorAll('clipPath');
+    const clippedGroups = container.querySelectorAll('g[clip-path]');
+
+    expect(clipPaths).toHaveLength(2);
+    expect(clipPaths[0].id).not.toBe(clipPaths[1].id);
+    expect(clippedGroups[0].getAttribute('clip-path')).toBe(`url(#${clipPaths[0].id})`);
+    expect(clippedGroups[1].getAttribute('clip-path')).toBe(`url(#${clipPaths[1].id})`);
+  });
+
   it('uses the same neutral dark role for header and composer action icons', () => {
     expect(contentHeaderActionBtnClass).toContain('sto-icon--neutral');
     expect(composerIconSource).toContain(
