@@ -10,18 +10,9 @@ vi.mock('../../electron/engines/session-registry', () => ({
   upsertEngineSessionRegistryEntry: vi.fn(),
 }));
 
-function createQuery(
-  messages: Array<Record<string, unknown>>,
-  contextUsage?: Record<string, unknown> | Array<Record<string, unknown>>,
-) {
-  const contextUsageResponses = Array.isArray(contextUsage) ? [...contextUsage] : null;
+function createQuery(messages: Array<Record<string, unknown>>) {
   return {
     close() {},
-    ...(contextUsage ? {
-      getContextUsage: vi.fn(async () => contextUsageResponses
-        ? contextUsageResponses.shift() ?? contextUsageResponses.at(-1)
-        : contextUsage),
-    } : {}),
     async *[Symbol.asyncIterator]() {
       for (const message of messages) yield message;
     },
@@ -51,35 +42,33 @@ function createSink() {
 }
 
 describe('consumeClaudeQuery stream projection', () => {
-  it('does not estimate Claude context usage when the SDK live API is unavailable', async () => {
+  it('does not query or publish Claude context usage during a normal turn', async () => {
     const { chatEvents, sink } = createSink();
-    await consumeClaudeQuery(
-      'agent:test:session:usage',
-      'session-usage',
-      'D:\\workspace',
-      createQuery([
+    const getContextUsage = vi.fn(async () => ({
+      totalTokens: 12_500,
+      maxTokens: 100_000,
+      percentage: 12.5,
+    }));
+    const query = {
+      ...createQuery([
         {
           type: 'assistant',
           uuid: 'assistant-usage',
           message: {
             model: 'claude-sonnet',
             content: [{ type: 'text', text: 'done' }],
-            usage: {
-              input_tokens: 10_000,
-              cache_read_input_tokens: 5_000,
-              cache_creation_input_tokens: 1_000,
-              output_tokens: 1_000,
-            },
+            usage: { input_tokens: 10_000, output_tokens: 1_000 },
           },
         },
-        {
-          type: 'result',
-          subtype: 'success',
-          modelUsage: {
-            'claude-sonnet': { contextWindow: 100_000 },
-          },
-        },
+        { type: 'result', subtype: 'success' },
       ]),
+      getContextUsage,
+    };
+    await consumeClaudeQuery(
+      'agent:test:session:usage',
+      'session-usage',
+      'D:\\workspace',
+      query,
       sink,
       'run-usage',
     );
@@ -88,86 +77,7 @@ describe('consumeClaudeQuery stream projection', () => {
       .map((item) => item.engineEvent)
       .filter((item) => item.type === 'context.usage.updated');
     expect(usageEvents).toHaveLength(0);
-  });
-
-  it('publishes exact Claude context usage only after the stable result', async () => {
-    const { chatEvents, sink } = createSink();
-    await consumeClaudeQuery(
-      'agent:test:session:live-usage',
-      'session-live-usage',
-      'D:\\workspace',
-      createQuery(
-        [
-          {
-            type: 'assistant',
-            uuid: 'assistant-live-usage',
-            message: {
-              model: 'claude-sonnet',
-              content: [{ type: 'text', text: 'done' }],
-              usage: { input_tokens: 99_999, output_tokens: 1 },
-            },
-          },
-          { type: 'result', subtype: 'success' },
-        ],
-        {
-          totalTokens: 12_500,
-          maxTokens: 100_000,
-          rawMaxTokens: 100_000,
-          percentage: 12.5,
-          model: 'claude-sonnet',
-        },
-      ),
-      sink,
-      'run-live-usage',
-    );
-
-    const usageEvents = chatEvents
-      .map((item) => item.engineEvent)
-      .filter((item) => item.type === 'context.usage.updated');
-    expect(usageEvents.at(-1)).toMatchObject({
-      type: 'context.usage.updated',
-      usage: {
-        tokens: 12_500,
-        contextWindow: 100_000,
-        percent: 12.5,
-        accuracy: 'exact',
-      },
-    });
-    expect(usageEvents).toHaveLength(1);
-  });
-
-  it('coalesces multi-step Claude usage samples into one final update', async () => {
-    const { chatEvents, sink } = createSink();
-    const samples = [35, 16, 35, 19].map((percentage, index) => ({
-      totalTokens: percentage * 1_000,
-      maxTokens: 100_000,
-      percentage,
-      model: `claude-step-${index}`,
-    }));
-    await consumeClaudeQuery(
-      'agent:test:session:multi-step-usage',
-      'session-multi-step-usage',
-      'D:\\workspace',
-      createQuery([
-        ...samples.map((_, index) => ({
-          type: 'assistant',
-          uuid: `assistant-step-${index}`,
-          message: { content: [{ type: 'text', text: `step ${index}` }] },
-        })),
-        { type: 'result', subtype: 'success' },
-      ], samples),
-      sink,
-      'run-multi-step-usage',
-    );
-
-    const usageEvents = chatEvents
-      .map((item) => item.engineEvent)
-      .filter((item) => item.type === 'context.usage.updated');
-    expect(usageEvents).toHaveLength(1);
-    expect(usageEvents[0]).toMatchObject({
-      type: 'context.usage.updated',
-      usage: { percent: 19, accuracy: 'exact' },
-    });
+    expect(getContextUsage).not.toHaveBeenCalled();
   });
 
   it('maps Claude compact status and boundary messages to canonical compaction events', async () => {
@@ -176,25 +86,17 @@ describe('consumeClaudeQuery stream projection', () => {
       'agent:test:session:compact',
       'session-compact',
       'D:\\workspace',
-      createQuery(
-        [
-          { type: 'system', subtype: 'status', status: 'compacting' },
-          {
-            type: 'system',
-            subtype: 'compact_boundary',
-            compact_metadata: {
-              trigger: 'auto', pre_tokens: 120_000, duration_ms: 850,
-            },
-          },
-        ],
+      createQuery([
+        { type: 'system', subtype: 'status', status: 'compacting' },
         {
-          totalTokens: 24_000,
-          maxTokens: 100_000,
-          rawMaxTokens: 100_000,
-          percentage: 24,
-          model: 'claude-sonnet',
+          type: 'system',
+          subtype: 'compact_boundary',
+          compact_metadata: {
+            trigger: 'auto', pre_tokens: 120_000, duration_ms: 850,
+          },
         },
-      ),
+        { type: 'result', subtype: 'success' },
+      ]),
       sink,
       'run-compact',
     );
@@ -212,19 +114,8 @@ describe('consumeClaudeQuery stream projection', () => {
       tokensBefore: 120_000,
       durationMs: 850,
     });
-    const usageEvents = chatEvents
-      .map((item) => item.engineEvent)
-      .filter((item) => item.type === 'context.usage.updated');
-    expect(usageEvents).toHaveLength(1);
-    expect(usageEvents[0]).toMatchObject({
-      type: 'context.usage.updated',
-      usage: {
-        tokens: null,
-        contextWindow: null,
-        percent: null,
-        accuracy: 'unknown',
-      },
-    });
+    expect(chatEvents.map((item) => item.engineEvent)
+      .filter((item) => item.type === 'context.usage.updated')).toHaveLength(0);
   });
 
   it('emits one canonical delta for each text fragment', async () => {

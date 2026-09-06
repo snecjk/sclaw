@@ -3,8 +3,8 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 
+import { InputComposerToolbarIconTooltip } from '@/components/input-composer/input-composer-toolbar-icon-tooltip';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selectors';
 import type { AgentEngineType } from '../../../../shared/agent-engine';
 import type { CanonicalChatEvent, ChatContextUsage } from '../../../../shared/chat-runtime-protocol';
+import { selectLatestContextUsage } from './context-usage-selection';
 
 type ContextUsageResponse = {
   success: boolean;
@@ -20,13 +21,6 @@ type ContextUsageResponse = {
   canCompact?: boolean;
   usage: ChatContextUsage | null;
 };
-
-function formatTokens(value: number | null): string {
-  if (value == null) return '—';
-  if (value < 1_000) return String(Math.round(value));
-  if (value < 1_000_000) return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}K`;
-  return `${(value / 1_000_000).toFixed(1)}M`;
-}
 
 function ContextUsageRing({ percent }: { percent: number }) {
   const normalized = Math.max(0, Math.min(100, percent));
@@ -54,7 +48,7 @@ function ContextUsageControlInner({
   engineType,
 }: {
   sessionKey: string;
-  engineType: Extract<AgentEngineType, 'claude' | 'pi'>;
+  engineType: Extract<AgentEngineType, 'pi'>;
 }) {
   const { t } = useTranslation('chat');
   const runtime = useCurrentChatRuntimeView();
@@ -64,13 +58,8 @@ function ContextUsageControlInner({
   const [requesting, setRequesting] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const failureHandledRef = useRef(false);
-  const runtimeUsage = engineType === 'claude' && runtime.contextUsage?.accuracy !== 'exact'
-    ? null
-    : runtime.contextUsage;
-  const apiUsage = engineType === 'claude' && fetchedUsage?.accuracy !== 'exact'
-    ? null
-    : fetchedUsage;
-  const usage = runtimeUsage ?? (runtime.contextUsage == null ? apiUsage : null);
+  const latestUsage = selectLatestContextUsage(runtime.contextUsage, fetchedUsage);
+  const usage = latestUsage;
   const compactionActive = runtime.activity?.type === 'context_compaction';
   const busy = runtime.sending || compactionActive || requesting;
 
@@ -124,10 +113,8 @@ function ContextUsageControlInner({
     if (percent == null) return t('composer.contextUsagePending');
     return t('composer.contextUsageTooltip', {
       percent: Math.round(percent),
-      tokens: formatTokens(usage?.tokens ?? null),
-      window: formatTokens(usage?.contextWindow ?? null),
     });
-  }, [percent, runtime.sending, t, usage?.contextWindow, usage?.tokens]);
+  }, [percent, runtime.sending, t]);
 
   const handleCompact = async () => {
     if (busy || !canCompact) return;
@@ -152,35 +139,29 @@ function ContextUsageControlInner({
 
   return (
     <div ref={wrapperRef} className="relative shrink-0">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">
-            <Button
-              type="button"
-              variant="ghost"
-              className={cn(
-                'h-[30px] min-w-[58px] gap-1.5 rounded-xl px-2 text-[12px] tabular-nums',
-                tone,
-                open && 'bg-[var(--sto-control-subtle-hover-background)] text-foreground',
-              )}
-              disabled={busy || !canCompact}
-              aria-label={tooltip}
-              aria-expanded={open}
-              onClick={() => setOpen((value) => !value)}
-            >
-              {compactionActive || requesting ? (
-                <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
-              ) : (
-                <ContextUsageRing percent={roundedPercent ?? 0} />
-              )}
-              <span className="hidden sm:inline">{compactionActive || requesting
-                ? t('composer.contextCompactingShort')
-                : `${roundedPercent ?? '—'}%`}</span>
-            </Button>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top">{tooltip}</TooltipContent>
-      </Tooltip>
+      <InputComposerToolbarIconTooltip label={tooltip}>
+        <span className="inline-flex">
+          <Button
+            type="button"
+            variant="ghost"
+            className={cn(
+              'h-[30px] w-[30px] rounded-xl p-1',
+              tone,
+              open && 'bg-[var(--sto-control-subtle-hover-background)] text-foreground',
+            )}
+            disabled={busy || !canCompact}
+            aria-label={tooltip}
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {compactionActive || requesting ? (
+              <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden />
+            ) : (
+              <ContextUsageRing percent={roundedPercent ?? 0} />
+            )}
+          </Button>
+        </span>
+      </InputComposerToolbarIconTooltip>
 
       {open ? (
         <div
@@ -214,10 +195,10 @@ function ContextUsageControlInner({
             {t('composer.contextCompactNotice')}
           </p>
           <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+            <Button type="button" variant="ghost" className="h-8 rounded-md px-3 text-[12px]" onClick={() => setOpen(false)}>
               {t('composer.contextCompactCancel')}
             </Button>
-            <Button type="button" size="sm" onClick={() => { void handleCompact(); }}>
+            <Button type="button" className="h-8 rounded-md px-3 text-[12px]" onClick={() => { void handleCompact(); }}>
               {t('composer.contextCompactConfirm')}
             </Button>
           </div>
@@ -230,6 +211,6 @@ function ContextUsageControlInner({
 export function ContextUsageControl({ engineType }: { engineType?: AgentEngineType }) {
   const sessionKey = useChatStore((state) => state.currentSessionKey);
   const messageCount = useCurrentChatDisplayMessageCount();
-  if (!sessionKey || messageCount === 0 || (engineType !== 'claude' && engineType !== 'pi')) return null;
+  if (!sessionKey || messageCount === 0 || engineType !== 'pi') return null;
   return <ContextUsageControlInner key={`${engineType}:${sessionKey}`} sessionKey={sessionKey} engineType={engineType} />;
 }

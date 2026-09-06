@@ -869,7 +869,7 @@ export const stoMainCardBodyClass = cn(
 export const stoMainCardBodyHomeClass = cn(
   'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain',
   // Conversation Header bottom → Body Surface = 0px；正文 8px 由 scroll viewport 持有。
-  'pt-[var(--sto-conversation-header-to-surface-gap,0px)] pb-5',
+  'pt-[var(--sto-conversation-header-to-surface-gap,0px)] pb-2',
 );
 
 /**

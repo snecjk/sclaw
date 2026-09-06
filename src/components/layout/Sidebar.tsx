@@ -20,6 +20,13 @@ import {
   LayoutGrid,
   Database,
   BookOpen,
+  RefreshCw,
+  Languages,
+  Palette,
+  Gauge,
+  LogOut,
+  CircleCheck,
+  Download,
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg?raw';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg?raw';
@@ -131,6 +138,7 @@ import { resolveSidebarPrimaryNavActiveOverride } from '@/lib/sidebar-primary-na
 import { pageLearningDomains } from '@/lib/learning-center-api';
 import { hostApiFetch } from '@/lib/host-api';
 import { calculateTokenBalanceUsage } from '@/lib/token-balance-usage';
+import { useUpdateStore } from '@/stores/update';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -182,9 +190,15 @@ const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
 const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS =
   'min-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-1 shadow-lg dark:border-border dark:bg-card';
 const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] leading-[18px] text-[#1D2129] dark:text-foreground';
+  'flex h-[34px] w-full min-w-0 items-center gap-2 rounded-[6px] px-3 py-2 text-[13px] leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
+  'flex h-[34px] w-full min-w-0 items-center gap-2 rounded-[6px] px-3 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
+const SIDEBAR_ACCOUNT_MENU_ICON_CLASS = 'h-4 w-4 shrink-0 sto-icon--neutral';
+const SIDEBAR_ACCOUNT_MENU_UPDATE_ICON_BUTTON_CLASS = cn(
+  'ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+  'text-[var(--sto-brand-6)] transition-colors hover:bg-[var(--sto-brand-6)]/[0.10]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sto-brand-6)]/40',
+);
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'sto-navigation-item--account-menu hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
@@ -797,6 +811,10 @@ export function Sidebar() {
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const updateStatus = useUpdateStore((s) => s.status);
+  const checkForUpdates = useUpdateStore((s) => s.checkForUpdates);
+  const downloadUpdate = useUpdateStore((s) => s.downloadUpdate);
+  const installUpdate = useUpdateStore((s) => s.installUpdate);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -2389,20 +2407,60 @@ export function Sidebar() {
                 onClick={() => navigate('/settings')}
                 className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                {t('common:sidebar.settings')}
+                <SettingsIcon className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{t('common:sidebar.settings')}</span>
               </DropdownMenuItem>
 
               <DropdownMenuItem
-                onClick={() => navigate('/settings/updates')}
                 className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  if (event.target instanceof Element && event.target.closest('[data-update-action]')) return;
+                  void checkForUpdates();
+                }}
               >
-                {t('common:sidebar.checkUpdates')}
+                <RefreshCw
+                  className={cn(SIDEBAR_ACCOUNT_MENU_ICON_CLASS, updateStatus === 'checking' && 'animate-spin')}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">{t('common:sidebar.checkUpdates')}</span>
+                {updateStatus === 'available' || updateStatus === 'downloaded' ? (
+                  <button
+                    type="button"
+                    data-update-action
+                    aria-label={updateStatus === 'downloaded'
+                      ? t('settings:updates.action.install')
+                      : t('settings:updates.sidebar.updateNow')}
+                    title={updateStatus === 'downloaded'
+                      ? t('settings:updates.action.install')
+                      : t('settings:updates.sidebar.updateNow')}
+                    className={SIDEBAR_ACCOUNT_MENU_UPDATE_ICON_BUTTON_CLASS}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (updateStatus === 'downloaded') {
+                        void installUpdate();
+                      } else {
+                        void downloadUpdate();
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  </button>
+                ) : updateStatus === 'not-available' ? (
+                  <CircleCheck
+                    className="ml-auto h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                    strokeWidth={2}
+                    aria-label={t('settings:updates.status.latest')}
+                  />
+                ) : null}
               </DropdownMenuItem>
 
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
+                  <Languages className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
                   <span className="flex-1">{t('settings:appearance.language')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
@@ -2428,6 +2486,7 @@ export function Sidebar() {
                 <DropdownMenuSubTrigger
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
+                  <Palette className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
@@ -2453,6 +2512,7 @@ export function Sidebar() {
                 onClick={() => navigate('/settings/models')}
                 className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
               >
+                <Gauge className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
                 <span className="min-w-0 flex-1 truncate">{t('common:sidebar.tokenBalance')}</span>
                 <span
                   className={cn(
@@ -2485,7 +2545,8 @@ export function Sidebar() {
                 onClick={() => setShowLogoutConfirm(true)}
                 className={cn(SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                {t('auth:logout.button')}
+                <LogOut className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{t('auth:logout.button')}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

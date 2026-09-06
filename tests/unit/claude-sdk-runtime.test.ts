@@ -114,6 +114,7 @@ describe('claude-sdk-runtime', () => {
     });
     expect(mocks.applyStoClaudeInferenceEnv).toHaveBeenCalledOnce();
     expect(runtime.env.ANTHROPIC_BASE_URL).toBe('https://sto.example/v1/anthropic');
+    expect(runtime.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe('256000');
     expect(mocks.query).toHaveBeenCalledWith({ prompt: 'hello', options: { cwd: 'D:\\workspace' } });
     expect(query).toBeDefined();
   });

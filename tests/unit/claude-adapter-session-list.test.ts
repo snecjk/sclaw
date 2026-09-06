@@ -35,6 +35,15 @@ describe('claude adapter SQLite session metadata', () => {
     vi.mocked(ensureClaudeRuntimeReady).mockResolvedValue();
   });
 
+  it('does not expose context usage or manual compaction capabilities', () => {
+    expect(claudeAdapter.chatCapabilities).toMatchObject({
+      supportsContextUsage: false,
+      supportsManualCompaction: false,
+    });
+    expect(claudeAdapter.getContextUsage).toBeUndefined();
+    expect(claudeAdapter.compactSession).toBeUndefined();
+  });
+
   it('lists sessions in SQLite order without reading or healing transcripts', async () => {
     vi.mocked(listEngineSessionRegistryEntries).mockResolvedValue([
       {

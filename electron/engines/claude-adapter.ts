@@ -26,7 +26,6 @@ import { LIVE_CLAUDE_MESSAGE_CAP, capWindow, truncateToolPayload } from '../../s
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, patchEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { ChatContextUsage } from '../../shared/chat-runtime-protocol';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 import type { NormalizedModelTurn } from '../services/model-message-normalizer';
 import {
@@ -75,70 +74,10 @@ const CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS = 400;
 const CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS = 4_096;
 
 const activeClaudeQueries = new Map<string, ActiveClaudeQuery>();
-type ClaudeContextUsageQuery = AsyncIterable<Record<string, unknown>> & {
+type ClaudeQuery = AsyncIterable<Record<string, unknown>> & {
   close(): void;
-  getContextUsage?: () => Promise<unknown>;
 };
-const claudeContextUsageBySession = new Map<string, ChatContextUsage>();
 
-function recordOf(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-async function readClaudeContextUsage(
-  sessionKey: string,
-  query: ClaudeContextUsageQuery,
-): Promise<ChatContextUsage | null> {
-  if (!query.getContextUsage) return null;
-  try {
-    const response = recordOf(await query.getContextUsage());
-    const tokens = response?.totalTokens;
-    const contextWindow = response?.maxTokens ?? response?.rawMaxTokens;
-    const percent = response?.percentage;
-    if (
-      typeof tokens !== 'number'
-      || !Number.isFinite(tokens)
-      || typeof contextWindow !== 'number'
-      || !Number.isFinite(contextWindow)
-      || contextWindow <= 0
-      || typeof percent !== 'number'
-      || !Number.isFinite(percent)
-    ) {
-      return null;
-    }
-    const normalizedTokens = Math.max(0, tokens);
-    const usage: ChatContextUsage = {
-      tokens: normalizedTokens,
-      contextWindow,
-      percent: Math.min(100, Math.max(0, percent)),
-      accuracy: 'exact',
-      updatedAt: Date.now(),
-    };
-    return usage;
-  } catch (error) {
-    logger.debug('[claude-adapter] live context usage unavailable', { sessionKey, error: String(error) });
-    return null;
-  }
-}
-
-function invalidateClaudeContextUsage(
-  sessionKey: string,
-  emit: (event: NormalizedEngineEvent) => void,
-): void {
-  claudeContextUsageBySession.delete(sessionKey);
-  emit({
-    type: 'context.usage.updated',
-    usage: {
-      tokens: null,
-      contextWindow: null,
-      percent: null,
-      accuracy: 'unknown',
-      updatedAt: Date.now(),
-    },
-  });
-}
 type ClaudeConsumeTiming = {
   launchStartedAt: number;
   queryCreatedAt: number;
@@ -897,7 +836,7 @@ export async function consumeClaudeQuery(
   sessionKey: string,
   sessionId: string,
   cwd: string,
-  query: ClaudeContextUsageQuery,
+  query: ClaudeQuery,
   eventSink: ClaudeEventSink | null,
   runId: string,
   onMessage?: (message: Record<string, unknown>) => void | Promise<void>,
@@ -950,8 +889,6 @@ export async function consumeClaudeQuery(
     tokensBefore?: number;
   } | null = null;
   let lastCompactionCompletedAt = 0;
-  let pendingContextUsage: ChatContextUsage | null = null;
-  const contextUsageMessageIds = new Set<string>();
 
   const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
@@ -962,12 +899,6 @@ export async function consumeClaudeQuery(
     completionEmitted = true;
     if (!eventSink) return;
     eventSink.emit('notification', { method: 'agent', params: { phase: 'completed', runId, sessionKey } });
-  };
-  const publishPendingContextUsage = () => {
-    if (!pendingContextUsage) return;
-    claudeContextUsageBySession.set(sessionKey, pendingContextUsage);
-    emitEngineEvent({ type: 'context.usage.updated', usage: pendingContextUsage });
-    pendingContextUsage = null;
   };
   const emitStreamingDelta = (options?: { partialToolInput?: boolean }) => {
     const content: Array<Record<string, unknown>> = [];
@@ -1102,8 +1033,6 @@ export async function consumeClaudeQuery(
             tokensAfter: metadata?.post_tokens,
             durationMs: metadata?.duration_ms ?? Date.now() - attempt.startedAt,
           });
-          pendingContextUsage = null;
-          invalidateClaudeContextUsage(sessionKey, emitEngineEvent);
           lastCompactionCompletedAt = Date.now();
           activeCompaction = null;
         } else if (taskMessage.subtype === 'status' && taskMessage.compact_result === 'failed') {
@@ -1130,8 +1059,6 @@ export async function consumeClaudeQuery(
             tokensBefore: activeCompaction.tokensBefore,
             durationMs: Date.now() - activeCompaction.startedAt,
           });
-          pendingContextUsage = null;
-          invalidateClaudeContextUsage(sessionKey, emitEngineEvent);
           lastCompactionCompletedAt = Date.now();
           activeCompaction = null;
         }
@@ -1241,7 +1168,6 @@ export async function consumeClaudeQuery(
         // messages remain visible. A later result after all tasks settle is the
         // actual terminal signal.
         if (pendingTaskIds.size === 0) {
-          publishPendingContextUsage();
           if (completionDeferred) {
             logger.debug('[claude-adapter] completing resumed run after background tasks settled', {
               sessionKey,
@@ -1324,15 +1250,6 @@ export async function consumeClaudeQuery(
         // isClaudeRunFragment guard keeps these non-terminal (sending stays true)
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
-          if (!message.parent_tool_use_id && !message.parentToolUseId) {
-            const messageId = typeof liveMessage.uuid === 'string'
-              ? liveMessage.uuid
-              : recordOf(liveMessage.message)?.id;
-            if (typeof messageId !== 'string' || !contextUsageMessageIds.has(messageId)) {
-              if (typeof messageId === 'string') contextUsageMessageIds.add(messageId);
-              pendingContextUsage = await readClaudeContextUsage(sessionKey, query) ?? pendingContextUsage;
-            }
-          }
           for (const slug of extractClaudeSkillSlugs(nextEntry.content)) {
             await markSkillUsed(sessionKey, runId, slug).catch((error) => {
               logger.warn('[skill-router] failed to persist Claude skill usage', {
@@ -1423,7 +1340,6 @@ export async function consumeClaudeQuery(
     // iterator without producing another result. At iterator EOF all observed
     // tasks are terminal, so finalize the already-seen result here.
     if (seenResult && !completionEmitted && pendingTaskIds.size === 0) {
-      publishPendingContextUsage();
       emitAgentCompleted();
     }
     // If the loop ended without a result and without an error, the query was
@@ -1845,8 +1761,8 @@ export const claudeAdapter: EngineAdapter = {
     hasStructuredReasoningEvents: true,
     hasStructuredToolEvents: true,
     requiresHistoryProjection: false,
-    supportsContextUsage: true,
-    supportsManualCompaction: true,
+    supportsContextUsage: false,
+    supportsManualCompaction: false,
   },
 
   classifyFinalMessage({ message, phase }) {
@@ -1986,31 +1902,6 @@ export const claudeAdapter: EngineAdapter = {
     } catch (error) {
       return { success: false, error: String(error) };
     }
-  },
-
-  async getContextUsage(_ctx, params) {
-    return { success: true, result: claudeContextUsageBySession.get(params.sessionKey) ?? null };
-  },
-
-  async compactSession(ctx, params) {
-    if (activeClaudeQueries.has(params.sessionKey)) {
-      return { success: false, error: 'COMPACTION_IN_PROGRESS: Claude session is busy' };
-    }
-    const entry = await getEngineSessionRegistryEntry(params.sessionKey);
-    if (!entry?.sessionId) {
-      return { success: false, error: 'SESSION_NOT_READY: no Claude conversation to compact' };
-    }
-    const result = await startClaudeQuery(params.sessionKey, '/compact', {
-      eventSink: ctx.eventSink
-        ? { emit: (event, payload) => Boolean(ctx.eventSink?.emit(event, payload)) }
-        : ctx.gatewayManager ?? null,
-      userPrompt: '/compact',
-      suppressStartedEvent: true,
-      compactionReason: 'manual',
-    });
-    return result.success
-      ? { success: true, result: { compacted: true } }
-      : { success: false, error: result.error };
   },
 
   async sendMessage(ctx: EngineAdapterContext, params) {
