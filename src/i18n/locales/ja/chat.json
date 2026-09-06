@@ -208,6 +208,10 @@
     "completedBadge": "完了",
     "jumpToLatest": "最新へ戻る"
   },
+  "navigator": {
+    "noReply": "返信はまだありません",
+    "jumpToTurn": "会話 {{count}} 回目へ移動: {{prompt}}"
+  },
   "parameterForm": {
     "defaultSelectedPrefix": "デフォルト選択：",
     "submitFailed": "フォームの送信に失敗しました。ページを更新して再試行してください。"

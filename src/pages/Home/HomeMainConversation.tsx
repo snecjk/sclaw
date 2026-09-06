@@ -18,6 +18,7 @@ import {
   findChatMessageSearchTarget,
 } from '@/pages/Chat/chat-message-search';
 import { ChatStaticItemsList, type ChatStaticItemsListHandle } from '@/components/chat/ChatStaticItemsList';
+import { ChatTurnNavigator } from '@/components/chat/ChatTurnNavigator';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from '@/pages/Chat/ChatSearchBar';
@@ -259,6 +260,10 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
     container.scrollBy({ top: delta, behavior });
   }, [contentRef, scrollRef]);
+
+  const scrollToDisplayItem = useCallback((itemKey: string) => {
+    staticItemsListRef.current?.scrollToDisplayItemKey(itemKey, 'smooth');
+  }, []);
 
   useEffect(() => {
     if (!activeSearchMatch || !deferredSearchQuery) return;
@@ -580,6 +585,13 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           )}
         </div>
       </div>
+      <ChatTurnNavigator
+        key={currentSessionKey}
+        items={staticItems}
+        scrollRef={scrollRef}
+        sessionKey={currentSessionKey}
+        onNavigate={scrollToDisplayItem}
+      />
       <OverlayScrollbar viewportRef={scrollRef} contentRef={contentRef} />
       </div>
 

@@ -208,6 +208,10 @@
     "completedBadge": "已完成",
     "jumpToLatest": "回到最新"
   },
+  "navigator": {
+    "noReply": "暂无回复",
+    "jumpToTurn": "跳转到第 {{count}} 轮对话：{{prompt}}"
+  },
   "parameterForm": {
     "defaultSelectedPrefix": "默认已选类型：",
     "submitFailed": "表单提交失败，请刷新页面后重试"
