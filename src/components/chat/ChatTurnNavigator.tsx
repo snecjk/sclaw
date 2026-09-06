@@ -84,8 +84,9 @@ export function ChatTurnNavigator({
     return 9;
   };
 
-  const updateNearestPreview = (rail: HTMLElement, clientY: number) => {
+  const findNearestIndex = (rail: HTMLElement, clientY: number) => {
     const buttons = Array.from(rail.querySelectorAll<HTMLButtonElement>('button'));
+    if (buttons.length === 0) return -1;
     let nearestIndex = 0;
     let nearestDistance = Number.POSITIVE_INFINITY;
     buttons.forEach((button, index) => {
@@ -96,6 +97,12 @@ export function ChatTurnNavigator({
         nearestDistance = distance;
       }
     });
+    return nearestIndex;
+  };
+
+  const updateNearestPreview = (rail: HTMLElement, clientY: number) => {
+    const nearestIndex = findNearestIndex(rail, clientY);
+    if (nearestIndex < 0) return;
     setPreviewIndex((current) => current === nearestIndex ? current : nearestIndex);
   };
 
@@ -113,6 +120,13 @@ export function ChatTurnNavigator({
           updateNearestPreview(event.currentTarget, event.clientY);
         }}
         onPointerMove={(event) => updateNearestPreview(event.currentTarget, event.clientY)}
+        onClick={(event) => {
+          const nearestIndex = findNearestIndex(event.currentTarget, event.clientY);
+          const target = entries[nearestIndex];
+          if (!target) return;
+          setPreviewIndex(nearestIndex);
+          onNavigate(target.targetItemKey);
+        }}
         onPointerLeave={() => {
           setIsRailFocused(false);
           setPreviewIndex(null);
@@ -127,7 +141,10 @@ export function ChatTurnNavigator({
             key={entry.key}
             type="button"
             aria-label={t('navigator.jumpToTurn', { count: index + 1, prompt: entry.prompt })}
-            onClick={() => onNavigate(entry.targetItemKey)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onNavigate(entry.targetItemKey);
+            }}
             onFocus={() => setPreviewIndex(index)}
             onBlur={() => setPreviewIndex(null)}
             onPointerEnter={() => setPreviewIndex(index)}

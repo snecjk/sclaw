@@ -184,7 +184,7 @@ export function HomeComposer({
       {showDisclaimer ? (
         <p
           className={cn(
-            'mt-4',
+            'mt-2',
             homeHubFooterDisclaimerClass,
             footerAlign === 'right' ? 'text-right' : 'text-center',
           )}
