@@ -24,6 +24,31 @@ function event(overrides: Partial<CanonicalChatEvent> = {}): CanonicalChatEvent 
 }
 
 describe('canonical chat client session reducer', () => {
+  it('does not create a running chat turn from standalone manual compaction events', () => {
+    let state = reduceSessionEvent(createClientSessionState(), event({
+      eventId: 'manual-compact-start',
+      runId: 'control-run',
+      type: 'context.compaction.started',
+      payload: { attemptId: 'manual-1', reason: 'manual' },
+    })).state;
+
+    expect(state.runtime).toMatchObject({
+      phase: 'completed',
+      activity: { attemptId: 'manual-1', status: 'running', reason: 'manual' },
+    });
+
+    state = reduceSessionEvent(state, event({
+      eventId: 'manual-compact-completed',
+      runId: 'control-run',
+      sequence: 2,
+      type: 'context.compaction.completed',
+      payload: { attemptId: 'manual-1', reason: 'manual' },
+    })).state;
+
+    expect(state.runtime?.phase).toBe('completed');
+    expect(state.runtime?.activity).toBeNull();
+  });
+
   it('tracks compaction activity without changing run phase and ignores stale completion attempts', () => {
     const started = reduceSessionEvent(createClientSessionState(), event()).state;
     const compacting = reduceSessionEvent(started, event({

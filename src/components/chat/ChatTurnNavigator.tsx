@@ -136,26 +136,28 @@ export function ChatTurnNavigator({
           if (!event.currentTarget.contains(event.relatedTarget)) setIsRailFocused(false);
         }}
       >
-        {entries.map((entry, index) => (
-          <button
-            key={entry.key}
-            type="button"
-            aria-label={t('navigator.jumpToTurn', { count: index + 1, prompt: entry.prompt })}
-            onClick={(event) => {
-              event.stopPropagation();
-              onNavigate(entry.targetItemKey);
-            }}
-            onFocus={() => setPreviewIndex(index)}
-            onBlur={() => setPreviewIndex(null)}
-            onPointerEnter={() => setPreviewIndex(index)}
-            style={{ width: `${resolveLineWidth(index)}px` }}
-            className={cn(
-              'block h-0.5 rounded-full bg-[var(--sto-border-heavy)] transition-[width,background-color] duration-150',
-              index === activeIndex && 'bg-[var(--sto-brand-primary)]',
-              'hover:bg-[var(--sto-text-secondary)] focus-visible:bg-[var(--sto-brand-primary)] focus-visible:outline-none',
-            )}
-          />
-        ))}
+        {entries.map((entry, index) => {
+          const isHighlighted = isRailFocused ? index === focusedIndex : index === activeIndex;
+
+          return (
+            <button
+              key={entry.key}
+              type="button"
+              aria-label={t('navigator.jumpToTurn', { count: index + 1, prompt: entry.prompt })}
+              onClick={(event) => {
+                event.stopPropagation();
+                onNavigate(entry.targetItemKey);
+              }}
+              onFocus={() => setPreviewIndex(index)}
+              onBlur={() => setPreviewIndex(null)}
+              style={{ width: `${resolveLineWidth(index)}px` }}
+              className={cn(
+                'block h-0.5 rounded-full bg-[var(--sto-border-heavy)] transition-[width,background-color] duration-150 focus-visible:outline-none',
+                isHighlighted && 'bg-[var(--sto-brand-primary)]',
+              )}
+            />
+          );
+        })}
       </div>
     </div>
   );

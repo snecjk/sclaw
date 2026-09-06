@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { selectLatestContextUsage } from '../../src/pages/Chat/context-usage/context-usage-selection';
+import {
+  meetsManualContextCompactionThreshold,
+  selectLatestContextUsage,
+} from '../../src/pages/Chat/context-usage/context-usage-selection';
 import type { ChatContextUsage } from '../../shared/chat-runtime-protocol';
 
 function usage(percent: number | null, updatedAt: number, accuracy: ChatContextUsage['accuracy'] = 'exact'): ChatContextUsage {
@@ -31,5 +34,14 @@ describe('selectLatestContextUsage', () => {
   it('falls back to whichever source exists', () => {
     expect(selectLatestContextUsage(null, usage(30, 200))).toEqual(usage(30, 200));
     expect(selectLatestContextUsage(usage(30, 200), null)).toEqual(usage(30, 200));
+  });
+});
+
+describe('meetsManualContextCompactionThreshold', () => {
+  it('requires a known usage of at least 30 percent', () => {
+    expect(meetsManualContextCompactionThreshold(null)).toBe(false);
+    expect(meetsManualContextCompactionThreshold(29)).toBe(false);
+    expect(meetsManualContextCompactionThreshold(30)).toBe(true);
+    expect(meetsManualContextCompactionThreshold(31)).toBe(true);
   });
 });
