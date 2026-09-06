@@ -225,6 +225,10 @@
     "completedBadge": "Done",
     "jumpToLatest": "Jump to latest"
   },
+  "navigator": {
+    "noReply": "No reply yet",
+    "jumpToTurn": "Jump to conversation turn {{count}}: {{prompt}}"
+  },
   "parameterForm": {
     "defaultSelectedPrefix": "Default selection: ",
     "submitFailed": "Failed to submit the form. Please refresh and try again."

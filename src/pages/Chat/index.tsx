@@ -34,6 +34,7 @@ import { useTranslation } from 'react-i18next';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import { ChatTurnNavigator } from '@/components/chat/ChatTurnNavigator';
 import {
   stoParameterFormDockLayout,
   stoSplitChatScrollClass,
@@ -345,6 +346,11 @@ export function Chat() {
     const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
     container.scrollBy({ top: delta, behavior });
   }, [contentRef, scrollRef, stopScroll]);
+
+  const scrollToDisplayItem = useCallback((itemKey: string) => {
+    stopScroll();
+    staticItemsListRef.current?.scrollToDisplayItemKey(itemKey, 'smooth');
+  }, [stopScroll]);
 
   useEffect(() => {
     if (!activeSearchMatch || !deferredSearchQuery) return;
@@ -667,17 +673,18 @@ export function Chat() {
       </div>
 
       {/* Messages Area */}
-      <div
-        ref={scrollRef}
-        className={cn(
-          'relative z-10 min-h-0 flex-1',
-          'pt-[var(--sto-workbench-body-content-inset-y,8px)] pb-4',
-          isSplitChatLayout
-            ? stoSplitChatScrollClass
-            : 'sto-thin-scrollbar overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
-        )}
-      >
-        <div ref={contentRef} className={stoChatScrollContentClass}>
+      <div className="relative z-10 min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          className={cn(
+            'h-full min-h-0',
+            'pt-[var(--sto-workbench-body-content-inset-y,8px)] pb-4',
+            isSplitChatLayout
+              ? stoSplitChatScrollClass
+              : 'sto-thin-scrollbar overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+          )}
+        >
+          <div ref={contentRef} className={stoChatScrollContentClass}>
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
@@ -721,7 +728,15 @@ export function Chat() {
               ) : null}
             </>
           )}
+          </div>
         </div>
+        <ChatTurnNavigator
+          key={currentSessionKey}
+          items={staticItems}
+          scrollRef={scrollRef}
+          sessionKey={currentSessionKey}
+          onNavigate={scrollToDisplayItem}
+        />
       </div>
 
       {/* Error bar */}
