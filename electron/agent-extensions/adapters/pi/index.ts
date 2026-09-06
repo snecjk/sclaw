@@ -27,7 +27,9 @@ import {
   validateAgentExtensionRegistry,
   type RegisteredAgentExtension,
 } from '../../registry';
-import { PI_AGENT_EXTENSIONS } from './registry';
+import { selectPiAgentExtensions } from './registry';
+import { STO_BROWSER_BRIDGE_CAPABILITY } from '../../extensions/sto-browser-tool/capability';
+import { createHostApiBrowserBridgePort } from '../../extensions/sto-browser-tool/host-api-capability';
 import { STO_SCHEDULED_TASK_CAPABILITY } from '../../extensions/sto-scheduled-task-tool/capability';
 import { createHostApiScheduledTaskPort } from '../../extensions/sto-scheduled-task-tool/host-api-capability';
 import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtalk-send-guard/capability';
@@ -42,6 +44,7 @@ import {
 } from '../../extensions/sto-skill-runtime/access';
 
 const defaultCapabilities = new SclawCapabilityRegistry()
+  .provide(STO_BROWSER_BRIDGE_CAPABILITY, createHostApiBrowserBridgePort())
   .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
   .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())
   .provide(STO_SKILL_RUNTIME_CAPABILITY, createHostApiSkillRuntimePort())
@@ -102,7 +105,7 @@ function normalizeNativeExtensions(value: InlineExtension | readonly InlineExten
 export async function buildPiAgentExtensions(
   input: BuildPiAgentExtensionsInput,
 ): Promise<BuildPiAgentExtensionsResult> {
-  const entries = input.entries ?? PI_AGENT_EXTENSIONS;
+  const entries = selectPiAgentExtensions(input.sessionKey, input.entries);
   const capabilities = input.capabilities ?? defaultCapabilities;
   const stateManager = input.stateManager ?? defaultStateManager;
   const extensionLogger = input.logger ?? defaultLogger;

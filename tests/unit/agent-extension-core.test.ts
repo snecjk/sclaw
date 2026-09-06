@@ -221,7 +221,7 @@ describe('agent extension registry validation', () => {
         'sto-dingtalk-send-guard',
         'sto-skill-runtime',
       ]);
-    expect(SCLAW_AGENT_EXTENSIONS[0].common.engines).toEqual(['claude']);
+    expect(SCLAW_AGENT_EXTENSIONS[0].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS[1].common.engines).toEqual(['pi']);
     expect(SCLAW_AGENT_EXTENSIONS[2].common.engines).toBeUndefined();
     expect(SCLAW_AGENT_EXTENSIONS[3].common.engines).toEqual(['claude', 'pi']);

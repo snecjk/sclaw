@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +8,7 @@ import { InputComposerToolbarIconTooltip } from '@/components/input-composer/inp
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
+import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
@@ -14,6 +16,10 @@ import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selecto
 import type { AgentEngineType } from '../../../../shared/agent-engine';
 import type { CanonicalChatEvent, ChatContextUsage } from '../../../../shared/chat-runtime-protocol';
 import { isSessionTooSmallToCompact } from './context-compaction-error';
+import {
+  resolveEmbedContextUsageDialogLayout,
+  type ContextUsageDialogLayout,
+} from './context-usage-dialog-layout';
 import {
   MANUAL_CONTEXT_COMPACTION_MIN_PERCENT,
   meetsManualContextCompactionThreshold,
@@ -66,12 +72,15 @@ function ContextUsageControlInner({
   const [canCompact, setCanCompact] = useState(false);
   const [open, setOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [embedDialogLayout, setEmbedDialogLayout] = useState<ContextUsageDialogLayout | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const failureHandledRef = useRef(false);
   const latestUsage = selectLatestContextUsage(runtime.contextUsage, fetchedUsage);
   const usage = latestUsage;
   const compactionActive = runtime.activity?.type === 'context_compaction';
   const busy = runtime.sending || compactionActive || requesting;
+  const embedChat = isSclawBrowserEmbedChatSessionKey(sessionKey);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,11 +97,42 @@ function ContextUsageControlInner({
   useEffect(() => {
     if (!open) return undefined;
     const closeOnOutsideClick = (event: MouseEvent) => {
-      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (
+        !wrapperRef.current?.contains(target)
+        && !dialogRef.current?.contains(target)
+      ) setOpen(false);
     };
     document.addEventListener('mousedown', closeOnOutsideClick);
     return () => document.removeEventListener('mousedown', closeOnOutsideClick);
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !embedChat) return undefined;
+    const panelElement = wrapperRef.current?.closest('.sclaw-browser-split__chat');
+    if (!panelElement) return undefined;
+
+    const updateLayout = () => {
+      const anchor = wrapperRef.current?.getBoundingClientRect();
+      const panel = panelElement.getBoundingClientRect();
+      if (!anchor || !panel) return;
+      setEmbedDialogLayout(resolveEmbedContextUsageDialogLayout({
+        anchor,
+        panel,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }));
+    };
+
+    updateLayout();
+    const resizeObserver = new ResizeObserver(updateLayout);
+    resizeObserver.observe(panelElement);
+    window.addEventListener('resize', updateLayout);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateLayout);
+    };
+  }, [embedChat, open]);
 
   useEffect(() => subscribeHostEvent<CanonicalChatEvent>('chat-runtime:event', (event) => {
     if (event.sessionKey !== sessionKey) return;
@@ -165,6 +205,67 @@ function ContextUsageControlInner({
     }
   };
 
+  const compactDialog = open ? (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-label={t('composer.contextCompactTitle')}
+      className={cn(
+        'sto-overlay sto-overlay--glass-border z-[60000] rounded-2xl border p-4',
+        'bg-[var(--sto-panel-bg)] shadow-[var(--sto-shadow-selector-raised)]',
+        embedChat
+          ? 'fixed overflow-y-auto'
+          : 'absolute bottom-full right-0 mb-2 w-[340px] max-w-[calc(100vw-32px)]',
+      )}
+      style={embedChat && embedDialogLayout ? {
+        left: embedDialogLayout.left,
+        bottom: embedDialogLayout.bottom,
+        width: embedDialogLayout.width,
+        maxHeight: embedDialogLayout.maxHeight,
+      } : undefined}
+    >
+      <h3 className="text-[14px] font-medium text-foreground">{t('composer.contextCompactTitle')}</h3>
+      <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">
+        {t('composer.contextCompactDescription')}
+      </p>
+      <div className="mt-3 flex items-center gap-2">
+        <div
+          className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={roundedPercent ?? undefined}
+        >
+          <div
+            className={cn('h-full rounded-full', (roundedPercent ?? 0) >= 90 ? 'bg-destructive' : (roundedPercent ?? 0) >= 75 ? 'bg-amber-500' : 'bg-muted-foreground')}
+            style={{ width: `${roundedPercent ?? 0}%` }}
+          />
+        </div>
+        <span className="w-9 text-right text-[12px] tabular-nums text-foreground">{roundedPercent ?? '—'}%</span>
+      </div>
+      <p className="mt-2 text-[11px] leading-[18px] text-muted-foreground">
+        {t('composer.contextCompactNotice')}
+      </p>
+      {belowCompactionThreshold ? (
+        <p className="mt-2 text-[11px] leading-[18px] text-amber-600 dark:text-amber-400">
+          {t('composer.contextCompactThresholdHint', {
+            percent: MANUAL_CONTEXT_COMPACTION_MIN_PERCENT,
+          })}
+        </p>
+      ) : null}
+      <div className="mt-4 flex justify-end">
+        <Button
+          type="button"
+          className="h-8 rounded-md px-3 text-[12px]"
+          disabled={compactDisabled}
+          onClick={() => { void handleCompact(); }}
+        >
+          {t('composer.contextCompactConfirm')}
+        </Button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div ref={wrapperRef} className="relative shrink-0">
       <InputComposerToolbarIconTooltip label={tooltip}>
@@ -191,56 +292,9 @@ function ContextUsageControlInner({
         </span>
       </InputComposerToolbarIconTooltip>
 
-      {open ? (
-        <div
-          role="dialog"
-          aria-label={t('composer.contextCompactTitle')}
-          className={cn(
-            'sto-overlay sto-overlay--glass-border absolute bottom-full right-0 z-[60000] mb-2 w-[340px] max-w-[calc(100vw-32px)] rounded-2xl border p-4',
-            'bg-[var(--sto-panel-bg)] shadow-[var(--sto-shadow-selector-raised)]',
-          )}
-        >
-          <h3 className="text-[14px] font-medium text-foreground">{t('composer.contextCompactTitle')}</h3>
-          <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">
-            {t('composer.contextCompactDescription')}
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <div
-              className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={roundedPercent ?? undefined}
-            >
-              <div
-                className={cn('h-full rounded-full', (roundedPercent ?? 0) >= 90 ? 'bg-destructive' : (roundedPercent ?? 0) >= 75 ? 'bg-amber-500' : 'bg-muted-foreground')}
-                style={{ width: `${roundedPercent ?? 0}%` }}
-              />
-            </div>
-            <span className="w-9 text-right text-[12px] tabular-nums text-foreground">{roundedPercent ?? '—'}%</span>
-          </div>
-          <p className="mt-2 text-[11px] leading-[18px] text-muted-foreground">
-            {t('composer.contextCompactNotice')}
-          </p>
-          {belowCompactionThreshold ? (
-            <p className="mt-2 text-[11px] leading-[18px] text-amber-600 dark:text-amber-400">
-              {t('composer.contextCompactThresholdHint', {
-                percent: MANUAL_CONTEXT_COMPACTION_MIN_PERCENT,
-              })}
-            </p>
-          ) : null}
-          <div className="mt-4 flex justify-end">
-            <Button
-              type="button"
-              className="h-8 rounded-md px-3 text-[12px]"
-              disabled={compactDisabled}
-              onClick={() => { void handleCompact(); }}
-            >
-              {t('composer.contextCompactConfirm')}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      {embedChat && compactDialog
+        ? createPortal(compactDialog, document.body)
+        : compactDialog}
     </div>
   );
 }
