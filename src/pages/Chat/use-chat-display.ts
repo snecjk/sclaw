@@ -15,6 +15,7 @@ import {
   getAgentPreparationStatus,
   isAgentPreparationProgressMessage,
 } from '@/lib/agent-preparation-progress';
+import type { ContextCompactionActivity } from '../../../shared/chat-runtime-protocol';
 
 type StreamingTool = ActiveTurnStream['streamingTools'][number];
 
@@ -81,6 +82,7 @@ export function useChatDisplay(params: {
   streamingToolResults: RawMessage[];
   streamingTools: StreamingTool[];
   turnAnchorAt: number | null;
+  runtimeActivity?: ContextCompactionActivity | null;
   workflowCards?: ChatWorkflowCardRef[];
 }) {
   const {
@@ -97,6 +99,7 @@ export function useChatDisplay(params: {
     streamingTools = [],
     workflowCards = [],
     turnAnchorAt,
+    runtimeActivity = null,
   } = params;
 
   const [staleCheckAt, setStaleCheckAt] = useState(0);
@@ -154,10 +157,10 @@ export function useChatDisplay(params: {
 
   const isStillExecuting = useMemo(() => {
     if (!sending || pendingFinal) return false;
-    if (hasModelStreamContent || hasRunningPreparation) return false;
+    if (hasModelStreamContent || hasRunningPreparation || runtimeActivity?.type === 'context_compaction') return false;
     if (lastChatEventAt <= 0) return false;
     return staleCheckAt - lastChatEventAt > STALE_EXECUTION_SILENCE_MS;
-  }, [sending, pendingFinal, hasModelStreamContent, hasRunningPreparation, lastChatEventAt, staleCheckAt]);
+  }, [sending, pendingFinal, hasModelStreamContent, hasRunningPreparation, runtimeActivity, lastChatEventAt, staleCheckAt]);
 
   const { staticItems, activeTurn } = useMemo(() => {
     if (!displayActive) {
@@ -196,6 +199,8 @@ export function useChatDisplay(params: {
         && !isStillExecuting,
       isProcessing: pendingFinal && sending && !hasLiveStreamContent,
       isStillExecuting,
+      isCompacting: runtimeActivity?.type === 'context_compaction' && runtimeActivity.status === 'running',
+      isCompactionRetrying: runtimeActivity?.type === 'context_compaction' && runtimeActivity.status === 'retrying',
     };
 
     // Only promote the last assistant turn/message into activeTurn when the
@@ -284,6 +289,7 @@ export function useChatDisplay(params: {
     hasLiveStreamContent,
     hasRunningPreparation,
     isStillExecuting,
+    runtimeActivity,
     turnAnchorAt,
   ]);
 

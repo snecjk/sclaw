@@ -1,4 +1,5 @@
 import type { GatewayManager } from '../gateway/manager';
+import type { ChatContextUsage } from '../../shared/chat-runtime-protocol';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
 import type { ChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
@@ -94,6 +95,8 @@ export interface EngineChatCapabilities {
   hasStructuredReasoningEvents: boolean;
   hasStructuredToolEvents: boolean;
   requiresHistoryProjection: boolean;
+  supportsContextUsage?: boolean;
+  supportsManualCompaction?: boolean;
 }
 
 export interface EngineScheduledTaskCapabilities {
@@ -122,6 +125,14 @@ export interface EngineAdapter {
     error?: string;
     result?: { aborted?: boolean; runIds?: unknown[] };
   }>;
+  getContextUsage?(
+    ctx: EngineAdapterContext,
+    params: { sessionKey: string },
+  ): Promise<{ success: boolean; result?: ChatContextUsage | null; error?: string }>;
+  compactSession?(
+    ctx: EngineAdapterContext,
+    params: { sessionKey: string },
+  ): Promise<{ success: boolean; result?: { compacted: boolean }; error?: string }>;
   getHistory(
     ctx: EngineAdapterContext,
     params: { sessionKey: string; limit: number; beforeId?: string },

@@ -38,6 +38,7 @@ import type {
 } from './types';
 import type {
   PiHistoryResult,
+  PiContextUsageResult,
   PiInspectResult,
   PiModelConfig,
   PiPromptAttachment,
@@ -284,6 +285,8 @@ export const piAdapter: EngineAdapter = {
     hasStructuredReasoningEvents: true,
     hasStructuredToolEvents: true,
     requiresHistoryProjection: true,
+    supportsContextUsage: true,
+    supportsManualCompaction: true,
   },
 
   classifyFinalMessage({ message, phase }) {
@@ -354,6 +357,41 @@ export const piAdapter: EngineAdapter = {
 
   async getExecutionSnapshot() {
     return { success: true, result: null };
+  },
+
+  async getContextUsage(_ctx, params) {
+    try {
+      const { config } = await buildPiSessionConfig(params.sessionKey);
+      const usage = await getPiRuntimeService().request<PiContextUsageResult>('session.contextUsage', {
+        sessionKey: params.sessionKey,
+        payload: { config },
+      });
+      return {
+        success: true,
+        result: {
+          ...usage,
+          accuracy: usage.percent == null ? 'unknown' : 'exact',
+          updatedAt: Date.now(),
+        },
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+
+  async compactSession(ctx, params) {
+    try {
+      attachEventSink(ctx);
+      const { config } = await buildPiSessionConfig(params.sessionKey);
+      await getPiRuntimeService().request('session.compact', {
+        sessionKey: params.sessionKey,
+        payload: { config },
+        timeoutMs: 120_000,
+      });
+      return { success: true, result: { compacted: true } };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
 
   async sendMessage(ctx, params) {

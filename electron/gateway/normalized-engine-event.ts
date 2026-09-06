@@ -1,3 +1,5 @@
+import type { ChatContextUsage, ContextCompactionReason } from '../../shared/chat-runtime-protocol';
+
 type EngineEventState = 'started' | 'delta' | 'final' | 'completed' | 'error' | 'aborted';
 
 type EngineEventBase = {
@@ -24,6 +26,32 @@ export type NormalizedEngineEvent =
       type: 'tool.result';
       message: unknown;
       phase?: string;
+    })
+  | (EngineEventBase & {
+      type: 'context.compaction.started';
+      attemptId: string;
+      reason: ContextCompactionReason;
+      tokensBefore?: number;
+    })
+  | (EngineEventBase & {
+      type: 'context.compaction.completed';
+      attemptId: string;
+      reason: ContextCompactionReason;
+      tokensBefore?: number;
+      tokensAfter?: number;
+      durationMs?: number;
+    })
+  | (EngineEventBase & {
+      type: 'context.compaction.failed';
+      attemptId: string;
+      reason: ContextCompactionReason;
+      willRetry?: boolean;
+      errorMessage?: string;
+      durationMs?: number;
+    })
+  | (EngineEventBase & {
+      type: 'context.usage.updated';
+      usage: ChatContextUsage;
     })
   | (EngineEventBase & {
       type: 'turn.completed';
@@ -158,6 +186,21 @@ export function toLegacyChatMessagePayload(event: NormalizedEngineEvent): Legacy
       if (event.phase) message.phase = event.phase;
       return legacyPayload(event, message);
     }
+    case 'context.compaction.started':
+    case 'context.compaction.completed':
+    case 'context.compaction.failed':
+      return legacyPayload(event, withCommonFields({
+        state: event.type,
+        attemptId: event.attemptId,
+        reason: event.reason,
+        ...('tokensBefore' in event && event.tokensBefore != null ? { tokensBefore: event.tokensBefore } : {}),
+        ...('tokensAfter' in event && event.tokensAfter != null ? { tokensAfter: event.tokensAfter } : {}),
+        ...('durationMs' in event && event.durationMs != null ? { durationMs: event.durationMs } : {}),
+        ...('willRetry' in event && event.willRetry != null ? { willRetry: event.willRetry } : {}),
+        ...('errorMessage' in event && event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+      }, event));
+    case 'context.usage.updated':
+      return legacyPayload(event, withCommonFields({ state: event.type, usage: event.usage }, event));
     case 'turn.completed': {
       const message = withCommonFields({ state: 'completed' }, event);
       if (event.phase) message.phase = event.phase;

@@ -16,6 +16,8 @@ export type TurnProcessStatus =
   | 'finalizing'
   | 'waiting_user'
   | 'queued'
+  | 'compacting'
+  | 'compaction_retrying'
   | 'still_executing'
   | 'interrupted'
   | 'failed'
@@ -26,6 +28,8 @@ export interface ResolveTurnProcessStatusInput {
   isConnecting: boolean;
   isProcessing: boolean;
   isStillExecuting: boolean;
+  isCompacting?: boolean;
+  isCompactionRetrying?: boolean;
   streamingTools: Array<{ status: string; input?: unknown }>;
   /** 思考区已有 segment / 流式工具 */
   hasProcessSegments: boolean;
@@ -50,6 +54,8 @@ export function resolveTurnProcessStatus(input: ResolveTurnProcessStatusInput): 
   if (input.isFailed) return 'failed';
   if (input.isWaitingUser) return 'waiting_user';
   if (input.isQueued) return 'queued';
+  if (input.isCompactionRetrying) return 'compaction_retrying';
+  if (input.isCompacting) return 'compacting';
 
   const runningTool = input.streamingTools.find((tool) => tool.status === 'running');
   if (runningTool) {
@@ -105,6 +111,10 @@ export function resolveProcessStatusLabelKey(
       return 'streaming.awaitingReply';
     case 'queued':
       return 'streaming.queued';
+    case 'compacting':
+      return 'streaming.compactingContext';
+    case 'compaction_retrying':
+      return 'streaming.compactionRetrying';
     case 'still_executing':
       return 'streaming.stillExecuting';
     default:

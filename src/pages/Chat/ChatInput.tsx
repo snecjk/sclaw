@@ -75,6 +75,7 @@ import { ComposerScenarioPills } from '@/components/flow-card/ComposerScenarioPi
 import { useComposerFlowStore } from '@/stores/composer-flow';
 import type { EmbedComposerAction } from '../../../shared/embed-composer-actions';
 import type { AgentEngineType } from '../../../shared/agent-engine';
+import { ContextUsageControl } from './context-usage/ContextUsageControl';
 
 export { CHAT_EDIT_DRAFT_EVENT };
 export type { FileAttachment } from '@/components/attachments';
@@ -782,6 +783,7 @@ export function ChatInput({
       )}
       toolbarRight={(
         <>
+          {isHomeLayout && !voicePanelOpen ? <ContextUsageControl engineType={engineType} /> : null}
           {isHomeLayout && !voicePanelOpen ? toolbarInlineSelectors : null}
           {voiceConfirming ? (
             <Button

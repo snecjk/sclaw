@@ -165,6 +165,85 @@ export async function handleGatewayRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/chat/context-usage' && req.method === 'GET') {
+    try {
+      const sessionKey = (url.searchParams.get('sessionKey') ?? '').trim();
+      if (!sessionKey) {
+        sendJson(res, 400, { success: false, error: 'sessionKey is required' });
+        return true;
+      }
+      const runtimeSupervisor = getChatRuntimeSupervisor(ctx.gatewayManager);
+      const snapshot = await runtimeSupervisor.getHydrated(sessionKey);
+      const adapter = await getAdapterForSession(sessionKey, parseEngineType(url.searchParams.get('engineType')));
+      if (!adapter.chatCapabilities.supportsContextUsage || !adapter.getContextUsage) {
+        sendJson(res, 200, { success: true, supported: false, usage: null });
+        return true;
+      }
+      const live = await adapter.getContextUsage(
+        { gatewayManager: ctx.gatewayManager },
+        { sessionKey },
+      );
+      if (live.success && live.result) {
+        await runtimeSupervisor.handleEngineEvent({
+          type: 'context.usage.updated',
+          sessionKey,
+          usage: live.result,
+        }, adapter.type);
+      }
+      const persistedUsage = snapshot?.contextUsage ?? null;
+      const usablePersistedUsage = adapter.type === 'claude' && persistedUsage?.accuracy !== 'exact'
+        ? null
+        : persistedUsage;
+      sendJson(res, 200, {
+        success: true,
+        supported: true,
+        canCompact: Boolean(adapter.chatCapabilities.supportsManualCompaction && adapter.compactSession),
+        usage: live.result ?? usablePersistedUsage,
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/compact' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ sessionKey?: string; engineType?: AgentEngineType }>(req);
+      const sessionKey = body.sessionKey?.trim() ?? '';
+      if (!sessionKey) {
+        sendJson(res, 400, { success: false, error: 'SESSION_NOT_READY: sessionKey is required' });
+        return true;
+      }
+      const runtimeSupervisor = getChatRuntimeSupervisor(ctx.gatewayManager);
+      const snapshot = await runtimeSupervisor.getHydrated(sessionKey);
+      if (snapshot && !['completed', 'failed', 'aborted', 'interrupted'].includes(snapshot.phase)) {
+        sendJson(res, 409, { success: false, error: 'RUN_ACTIVE: wait for the current response to finish' });
+        return true;
+      }
+      if (snapshot?.activity?.type === 'context_compaction') {
+        sendJson(res, 409, { success: false, error: 'COMPACTION_IN_PROGRESS' });
+        return true;
+      }
+      const adapter = await getAdapterForSession(sessionKey, parseEngineType(body.engineType));
+      if (!adapter.chatCapabilities.supportsManualCompaction || !adapter.compactSession) {
+        sendJson(res, 409, { success: false, error: 'COMPACTION_UNSUPPORTED' });
+        return true;
+      }
+      const result = await adapter.compactSession(
+        { gatewayManager: ctx.gatewayManager },
+        { sessionKey },
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 202, result);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/chat/send' && req.method === 'POST') {
     try {
       const rawBody = await parseJsonBody<ChatSendRouteBody>(req);

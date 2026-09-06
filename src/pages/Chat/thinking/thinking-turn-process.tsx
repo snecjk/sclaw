@@ -839,6 +839,33 @@ export interface ThinkingTurnProcessProps {
 }
 
 /** 分段思考过程：phase text 与 tool-group 交替。使用位置：AssistantTurnMessage。 */
+const DelayedCompactionLoadingIndicator = memo(function DelayedCompactionLoadingIndicator({
+  processStatus,
+}: {
+  processStatus: Extract<TurnProcessStatus, 'compacting' | 'compaction_retrying'>;
+}) {
+  const { t } = useTranslation('chat');
+  const [isVisible, setIsVisible] = useState(false);
+  const [isSlow, setIsSlow] = useState(false);
+
+  useEffect(() => {
+    const visibleTimer = window.setTimeout(() => setIsVisible(true), 600);
+    const slowTimer = window.setTimeout(() => setIsSlow(true), 10_000);
+    return () => {
+      window.clearTimeout(visibleTimer);
+      window.clearTimeout(slowTimer);
+    };
+  }, []);
+
+  if (!isVisible) return null;
+
+  const labelKey = isSlow && processStatus === 'compacting'
+    ? 'streaming.compactingContextSlow'
+    : resolveProcessStatusLabelKey(processStatus);
+
+  return labelKey ? <ChatProcessLoadingIndicator label={t(labelKey)} /> : null;
+});
+
 export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
   turnStableKey,
   segments,
@@ -860,6 +887,7 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
 
   const isLiveStream =
     isStreaming || isConnecting || isProcessing || isStillExecuting;
+  const isCompactionStatus = processStatus === 'compacting' || processStatus === 'compaction_retrying';
 
   const displaySegments = useStableThinkingSegments(
     turnStableKey,
@@ -920,7 +948,9 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
 
   const lastSegmentIndex = segments.length - 1;
   const statusLabelKey = resolveProcessStatusLabelKey(processStatus, connectingLabelKey);
-  const showStatusLoading = isLiveStream && shouldShowProcessStatusLoading(processStatus);
+  const showStatusLoading = isLiveStream
+    && shouldShowProcessStatusLoading(processStatus)
+    && !isCompactionStatus;
 
   return (
     <div className={cn(thinkingPanelRootClass, thinkingProcessSegmentStackClass, className)}>
@@ -973,6 +1003,9 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
 
       {showStatusLoading && statusLabelKey ? (
         <ChatProcessLoadingIndicator label={t(statusLabelKey)} />
+      ) : null}
+      {isLiveStream && isCompactionStatus ? (
+        <DelayedCompactionLoadingIndicator processStatus={processStatus} />
       ) : null}
     </div>
   );

@@ -17,6 +17,8 @@ export interface ChatRuntimeRunsTable {
   terminal_at: number | null;
   error: string | null;
   acceptance_result_json: string | null;
+  activity_json: string | null;
+  context_usage_json: string | null;
   created_at: string;
   updated_at: string;
   version: Generated<number>;

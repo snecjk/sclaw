@@ -8,6 +8,7 @@ import type {
 } from '@earendil-works/pi-coding-agent';
 import type {
   PiPromptResult,
+  PiContextUsageResult,
   PiPromptPayload,
   PiSessionConfig,
   PiWorkerMessage,
@@ -349,6 +350,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     setExtensionTurnContext: unifiedExtensions.setTurnContext,
     unsubscribe: () => {},
   };
+  let activeCompaction: { attemptId: string; startedAt: number; reason: 'manual' | 'threshold' | 'overflow' } | null = null;
   entry.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
     const runId = entry.activeRunId;
     if (!runId) return;
@@ -406,6 +408,19 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
             break;
           }
           emit(config.sessionKey, { type: 'message.final', sessionKey: config.sessionKey, runId, message });
+          const contextUsage = entry.session.getContextUsage();
+          emit(config.sessionKey, {
+            type: 'context.usage.updated',
+            sessionKey: config.sessionKey,
+            runId,
+            usage: {
+              tokens: contextUsage?.tokens ?? null,
+              contextWindow: contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null,
+              percent: contextUsage?.percent ?? null,
+              accuracy: contextUsage?.percent == null ? 'unknown' : 'exact',
+              updatedAt: Date.now(),
+            },
+          });
           entry.streamingAssistant = undefined;
         } else if (message.role === 'toolResult') {
           emit(config.sessionKey, { type: 'tool.result', sessionKey: config.sessionKey, runId, message });
@@ -418,6 +433,83 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
         entry.settledRunId = runId;
         logPiCore('event.agent-settled', { sessionKey: config.sessionKey, runId });
         break;
+      case 'compaction_start': {
+        activeCompaction = {
+          attemptId: randomUUID(),
+          startedAt: Date.now(),
+          reason: event.reason,
+        };
+        logPiCore('event.compaction-start', {
+          sessionKey: config.sessionKey,
+          runId,
+          attemptId: activeCompaction.attemptId,
+          reason: event.reason,
+        });
+        emit(config.sessionKey, {
+          type: 'context.compaction.started',
+          sessionKey: config.sessionKey,
+          runId,
+          attemptId: activeCompaction.attemptId,
+          reason: event.reason,
+        });
+        break;
+      }
+      case 'compaction_end': {
+        const attempt = activeCompaction ?? {
+          attemptId: randomUUID(),
+          startedAt: Date.now(),
+          reason: event.reason,
+        };
+        const durationMs = Date.now() - attempt.startedAt;
+        if (event.result && !event.aborted && !event.errorMessage) {
+          emit(config.sessionKey, {
+            type: 'context.compaction.completed',
+            sessionKey: config.sessionKey,
+            runId,
+            attemptId: attempt.attemptId,
+            reason: event.reason,
+            tokensBefore: event.result.tokensBefore,
+            tokensAfter: event.result.estimatedTokensAfter,
+            durationMs,
+          });
+        } else {
+          emit(config.sessionKey, {
+            type: 'context.compaction.failed',
+            sessionKey: config.sessionKey,
+            runId,
+            attemptId: attempt.attemptId,
+            reason: event.reason,
+            willRetry: event.willRetry,
+            errorMessage: event.errorMessage ?? (event.aborted ? 'Context compaction was aborted' : undefined),
+            durationMs,
+          });
+        }
+        logPiCore('event.compaction-end', {
+          sessionKey: config.sessionKey,
+          runId,
+          attemptId: attempt.attemptId,
+          reason: event.reason,
+          success: Boolean(event.result && !event.aborted && !event.errorMessage),
+          aborted: event.aborted,
+          willRetry: event.willRetry,
+          durationMs,
+        });
+        activeCompaction = null;
+        const contextUsage = entry.session.getContextUsage();
+        emit(config.sessionKey, {
+          type: 'context.usage.updated',
+          sessionKey: config.sessionKey,
+          runId,
+          usage: {
+            tokens: contextUsage?.tokens ?? null,
+            contextWindow: contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null,
+            percent: contextUsage?.percent ?? null,
+            accuracy: contextUsage?.percent == null ? 'unknown' : 'exact',
+            updatedAt: Date.now(),
+          },
+        });
+        break;
+      }
     }
   });
   logPiCore('session.create.ready', {
@@ -646,6 +738,74 @@ async function handle(request: PiWorkerRequest): Promise<void> {
         runId: entry.activeRunId ?? entry.lastRunId ?? null,
         messageCount: messages.length,
       });
+      return;
+    }
+    case 'session.contextUsage': {
+      const config = payload.config as unknown as PiSessionConfig;
+      const entry = sessions.get(config.sessionKey) ?? await ensureSession(config);
+      const usage = entry.session.getContextUsage();
+      const result: PiContextUsageResult = {
+        tokens: usage?.tokens ?? null,
+        contextWindow: usage?.contextWindow ?? entry.session.model?.contextWindow ?? null,
+        percent: usage?.percent ?? null,
+      };
+      respond(request.requestId, true, result);
+      return;
+    }
+    case 'session.compact': {
+      const config = payload.config as unknown as PiSessionConfig;
+      const entry = sessions.get(config.sessionKey) ?? await ensureSession(config);
+      if (entry.activeRunId) throw new Error('RUN_ACTIVE: wait for the current response to finish');
+      if (entry.session.isCompacting) throw new Error('COMPACTION_IN_PROGRESS');
+      const attemptId = randomUUID();
+      const startedAt = Date.now();
+      const before = entry.session.getContextUsage();
+      emit(config.sessionKey, {
+        type: 'context.compaction.started',
+        sessionKey: config.sessionKey,
+        attemptId,
+        reason: 'manual',
+        tokensBefore: before?.tokens ?? undefined,
+      });
+      try {
+        const result = await entry.session.compact();
+        const after = entry.session.getContextUsage();
+        emit(config.sessionKey, {
+          type: 'context.compaction.completed',
+          sessionKey: config.sessionKey,
+          attemptId,
+          reason: 'manual',
+          tokensBefore: result.tokensBefore,
+          tokensAfter: after?.tokens ?? undefined,
+          durationMs: Date.now() - startedAt,
+        });
+        const usage: PiContextUsageResult = {
+          tokens: after?.tokens ?? null,
+          contextWindow: after?.contextWindow ?? entry.session.model?.contextWindow ?? null,
+          percent: after?.percent ?? null,
+        };
+        emit(config.sessionKey, {
+          type: 'context.usage.updated',
+          sessionKey: config.sessionKey,
+          usage: {
+            ...usage,
+            accuracy: usage.percent == null ? 'unknown' : 'exact',
+            updatedAt: Date.now(),
+          },
+        });
+        respond(request.requestId, true, { compacted: true, usage });
+      } catch (error) {
+        emit(config.sessionKey, {
+          type: 'context.compaction.failed',
+          sessionKey: config.sessionKey,
+          attemptId,
+          reason: 'manual',
+          willRetry: false,
+          errorMessage: serializeError(error).message,
+          durationMs: Date.now() - startedAt,
+        });
+        throw error;
+      }
       return;
     }
     case 'session.delete': {

@@ -22,6 +22,24 @@ export type ChatRunPhase =
   | 'aborted'
   | 'interrupted';
 
+export type ContextCompactionReason = 'manual' | 'threshold' | 'overflow' | 'auto' | 'unknown';
+
+export interface ContextCompactionActivity {
+  type: 'context_compaction';
+  attemptId: string;
+  status: 'running' | 'retrying';
+  reason: ContextCompactionReason;
+  startedAt: number;
+}
+
+export interface ChatContextUsage {
+  tokens: number | null;
+  contextWindow: number | null;
+  percent: number | null;
+  accuracy: 'exact' | 'estimated' | 'unknown';
+  updatedAt: number;
+}
+
 export type CanonicalChatEventType =
   | 'run.dispatching'
   | 'run.accepted'
@@ -29,6 +47,10 @@ export type CanonicalChatEventType =
   | 'message.delta'
   | 'message.final'
   | 'tool.updated'
+  | 'context.compaction.started'
+  | 'context.compaction.completed'
+  | 'context.compaction.failed'
+  | 'context.usage.updated'
   | 'transcript.updated'
   | 'run.awaiting_transcript'
   | 'run.completed'
@@ -65,6 +87,10 @@ export interface ChatRuntimeSnapshot {
   lastEventAt: number;
   terminalAt: number | null;
   error: string | null;
+  /** Transient engine activity inside the current run; it does not change run phase. */
+  activity?: ContextCompactionActivity | null;
+  /** Most recent engine-reported context occupancy for this session. */
+  contextUsage?: ChatContextUsage | null;
   acceptanceResult: unknown | null;
   updatedAt: number;
 }

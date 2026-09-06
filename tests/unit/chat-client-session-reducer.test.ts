@@ -24,6 +24,98 @@ function event(overrides: Partial<CanonicalChatEvent> = {}): CanonicalChatEvent 
 }
 
 describe('canonical chat client session reducer', () => {
+  it('tracks compaction activity without changing run phase and ignores stale completion attempts', () => {
+    const started = reduceSessionEvent(createClientSessionState(), event()).state;
+    const compacting = reduceSessionEvent(started, event({
+      eventId: 'compact-1',
+      sequence: 2,
+      type: 'context.compaction.started',
+      occurredAt: 200,
+      payload: { attemptId: 'attempt-1', reason: 'threshold' },
+    })).state;
+    expect(compacting.runtime).toMatchObject({
+      phase: 'running',
+      activity: {
+        type: 'context_compaction',
+        attemptId: 'attempt-1',
+        status: 'running',
+        reason: 'threshold',
+        startedAt: 200,
+      },
+    });
+
+    const stale = reduceSessionEvent(compacting, event({
+      eventId: 'compact-stale',
+      sequence: 3,
+      type: 'context.compaction.completed',
+      payload: { attemptId: 'older-attempt', reason: 'threshold' },
+    })).state;
+    expect(stale.runtime?.activity?.attemptId).toBe('attempt-1');
+
+    const completed = reduceSessionEvent(stale, event({
+      eventId: 'compact-2',
+      sequence: 4,
+      type: 'context.compaction.completed',
+      payload: { attemptId: 'attempt-1', reason: 'threshold' },
+    })).state;
+    expect(completed.runtime?.phase).toBe('running');
+    expect(completed.runtime?.activity).toBeNull();
+  });
+
+  it('keeps retrying compaction activity and clears it at the run terminal event', () => {
+    let state = reduceSessionEvent(createClientSessionState(), event()).state;
+    state = reduceSessionEvent(state, event({
+      eventId: 'compact-1', sequence: 2, type: 'context.compaction.started',
+      payload: { attemptId: 'attempt-1', reason: 'overflow' },
+    })).state;
+    state = reduceSessionEvent(state, event({
+      eventId: 'compact-2', sequence: 3, type: 'context.compaction.failed',
+      payload: { attemptId: 'attempt-1', reason: 'overflow', willRetry: true },
+    })).state;
+    expect(state.runtime?.activity?.status).toBe('retrying');
+
+    state = reduceSessionEvent(state, event({
+      eventId: 'done', sequence: 4, type: 'run.completed',
+    })).state;
+    expect(state.runtime?.activity).toBeNull();
+  });
+
+  it('accepts manual compaction and usage updates after the chat run is terminal', () => {
+    let state = reduceSessionEvent(createClientSessionState(), event({
+      type: 'run.completed',
+      sequence: 1,
+    })).state;
+    state = reduceSessionEvent(state, event({
+      eventId: 'manual-compact',
+      runId: 'control-run',
+      sequence: 2,
+      type: 'context.compaction.started',
+      payload: { attemptId: 'manual-1', reason: 'manual' },
+    })).state;
+    expect(state.runtime).toMatchObject({
+      phase: 'completed',
+      runId: 'control-run',
+      activity: { attemptId: 'manual-1', status: 'running', reason: 'manual' },
+    });
+
+    state = reduceSessionEvent(state, event({
+      eventId: 'usage',
+      runId: 'control-run',
+      sequence: 3,
+      type: 'context.usage.updated',
+      payload: {
+        usage: {
+          tokens: 24_000,
+          contextWindow: 128_000,
+          percent: 18.75,
+          accuracy: 'exact',
+          updatedAt: 300,
+        },
+      },
+    })).state;
+    expect(state.runtime?.contextUsage).toMatchObject({ tokens: 24_000, percent: 18.75 });
+  });
+
   it('applies ordered lifecycle events to one explicit run phase', () => {
     const started = reduceSessionEvent(createClientSessionState(), event());
     expect(started.state.runtime).toMatchObject({ phase: 'running', runId: 'run-1', sequence: 1 });

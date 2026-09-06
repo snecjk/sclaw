@@ -7,6 +7,8 @@ export type PiWorkerCommand =
   | 'session.abort'
   | 'session.history'
   | 'session.inspect'
+  | 'session.contextUsage'
+  | 'session.compact'
   | 'session.delete'
   | 'runtime.shutdown';
 
@@ -83,6 +85,12 @@ export interface PiPromptResult {
   runId: string;
   sessionId: string;
   sessionFile?: string;
+}
+
+export interface PiContextUsageResult {
+  tokens: number | null;
+  contextWindow: number | null;
+  percent: number | null;
 }
 
 export interface PiHistoryResult {

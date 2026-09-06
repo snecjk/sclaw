@@ -109,4 +109,52 @@ describe('claude adapter SQLite session metadata', () => {
     expect(getClaudeSessionMessages).toHaveBeenCalledTimes(1);
     expect(upsertEngineSessionRegistryEntry).not.toHaveBeenCalled();
   });
+
+  it('hides Claude local compact commands and compact summaries from history', async () => {
+    vi.mocked(getEngineSessionRegistryEntry).mockResolvedValue({
+      sessionKey: 'agent:main:session:compact-history',
+      sessionId: 'sdk-compact-history',
+      cwd: 'D:\\workspace',
+      agentId: 'main',
+      engineType: 'claude',
+      updatedAt: 123,
+    });
+    vi.mocked(getClaudeSessionMessages).mockResolvedValue([
+      {
+        type: 'user',
+        uuid: 'command',
+        message: { content: [{ type: 'text', text: '<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args></command-args>' }] },
+      },
+      {
+        type: 'user',
+        uuid: 'summary',
+        isVisibleInTranscriptOnly: true,
+        isCompactSummary: true,
+        message: { content: [{ type: 'text', text: 'This session is being continued from a previous conversation that ran out of context.' }] },
+      },
+      {
+        type: 'user',
+        uuid: 'stdout',
+        message: { content: [{ type: 'text', text: '<local-command-stdout>Compacted</local-command-stdout>' }] },
+      },
+      {
+        type: 'user',
+        uuid: 'visible',
+        message: { content: [{ type: 'text', text: 'real question' }] },
+      },
+    ] as never);
+
+    const result = await claudeAdapter.getHistory(engineContext, {
+      sessionKey: 'agent:main:session:compact-history',
+      limit: 50,
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.result.messages).toHaveLength(1);
+    expect(result.result.messages[0]).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: 'real question' }],
+    });
+  });
 });
