@@ -17,6 +17,8 @@ import type { SidebarLayoutVariant } from '@/lib/sidebar-layout';
 import packageJson from '../../../package.json';
 import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
+const SCLAW_OFFICIAL_WEBSITE = 'https://sclaw.sto.cn/';
+
 /** 与 Sidebar nav 容器一致（展开态 `px-2`） */
 const SIDEBAR_BRAND_OUTER_X = 'px-2';
 /** 品牌标题左缘比 nav 图标左移 2px（pl-2 + pr-[10px]） */
@@ -39,16 +41,33 @@ function SidebarBrandTitle({
   showEnvBadgeAfterVersion: boolean;
 }) {
   const appearance = useThemeAppearance();
+  const openOfficialWebsite = () => {
+    if (window.electron?.openExternal) {
+      void window.electron.openExternal(SCLAW_OFFICIAL_WEBSITE);
+      return;
+    }
+
+    window.open(SCLAW_OFFICIAL_WEBSITE, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <img
-        src={appearance === 'dark' ? sidebarLogoDarkSvg : sidebarLogoSvg}
-        alt="SClaw"
-        width={85}
-        height={28}
-        className={sidebarBrandLogoClass}
-      />
+      <SidebarTooltip label="打开 SClaw 官网" sideOffset={8}>
+        <button
+          type="button"
+          aria-label="打开 SClaw 官网"
+          onClick={openOfficialWebsite}
+          className="no-drag shrink-0 rounded-md p-0 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-[var(--sto-focus-ring)] focus-visible:ring-offset-1"
+        >
+          <img
+            src={appearance === 'dark' ? sidebarLogoDarkSvg : sidebarLogoSvg}
+            alt="SClaw"
+            width={85}
+            height={28}
+            className={sidebarBrandLogoClass}
+          />
+        </button>
+      </SidebarTooltip>
       <SidebarTooltip label={displayVersion} sideOffset={8}>
         <span className={cn('min-w-0 truncate', sidebarBrandVersionClass)}>
           {displayVersion}
