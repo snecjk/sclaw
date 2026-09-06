@@ -183,7 +183,11 @@ function phaseFromEvent(event: CanonicalChatEvent, current: ClientRunState | nul
     case 'tool.updated': return 'running';
     case 'context.compaction.started':
     case 'context.compaction.completed':
-    case 'context.compaction.failed': return current?.phase ?? 'running';
+    case 'context.compaction.failed':
+      // Context maintenance is out-of-band. When it is the first event seen by
+      // this renderer, it must not manufacture an active chat turn; automatic
+      // compaction during a real turn still preserves that turn's current phase.
+      return current?.phase ?? 'completed';
     case 'context.usage.updated': return current?.phase ?? 'completed';
     case 'message.final': return current?.phase ?? 'running';
     case 'transcript.updated': return current?.phase ?? 'completed';

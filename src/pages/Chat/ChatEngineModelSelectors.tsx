@@ -1157,7 +1157,11 @@ export function ChatEngineModelPicker({
         onClick={() => setOpen((current) => !current)}
       >
         <span className="min-w-0 truncate">
-          <span className="text-muted-foreground">{displayEngineLabel}</span>
+          <span className={cn(
+            canSwitchEngine && !engineSelectDisabled ? 'text-foreground' : 'text-muted-foreground',
+          )}>
+            {displayEngineLabel}
+          </span>
           <span className="mx-1 text-muted-foreground/50">·</span>
           <span>{modelDisplayText}</span>
         </span>

@@ -13,7 +13,12 @@ import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selectors';
 import type { AgentEngineType } from '../../../../shared/agent-engine';
 import type { CanonicalChatEvent, ChatContextUsage } from '../../../../shared/chat-runtime-protocol';
-import { selectLatestContextUsage } from './context-usage-selection';
+import { isSessionTooSmallToCompact } from './context-compaction-error';
+import {
+  MANUAL_CONTEXT_COMPACTION_MIN_PERCENT,
+  meetsManualContextCompactionThreshold,
+  selectLatestContextUsage,
+} from './context-usage-selection';
 
 type ContextUsageResponse = {
   success: boolean;
@@ -21,6 +26,11 @@ type ContextUsageResponse = {
   canCompact?: boolean;
   usage: ChatContextUsage | null;
 };
+
+// PI owns the actual compaction deadline (currently 120s). Keep the renderer
+// request alive slightly longer so a still-running compaction is not reported
+// as a failed 15s Host API request while the worker continues in the background.
+const MANUAL_COMPACTION_REQUEST_TIMEOUT_MS = 130_000;
 
 function ContextUsageRing({ percent }: { percent: number }) {
   const normalized = Math.max(0, Math.min(100, percent));
@@ -91,9 +101,17 @@ function ContextUsageControlInner({
       : null;
     if (payload?.reason !== 'manual') return;
     if (event.type === 'context.compaction.failed') {
+      if (failureHandledRef.current) return;
       failureHandledRef.current = true;
+      const errorMessage = typeof payload.errorMessage === 'string'
+        ? payload.errorMessage
+        : t('composer.contextCompactUnknownError');
+      if (isSessionTooSmallToCompact(errorMessage)) {
+        toast.info(t('composer.contextCompactNotNeeded'));
+        return;
+      }
       toast.error(t('composer.contextCompactFailed', {
-        message: typeof payload.errorMessage === 'string' ? payload.errorMessage : t('composer.contextCompactUnknownError'),
+        message: errorMessage,
       }));
       return;
     }
@@ -103,6 +121,9 @@ function ContextUsageControlInner({
 
   const percent = usage?.percent;
   const roundedPercent = percent == null ? null : Math.round(percent);
+  const meetsCompactionThreshold = meetsManualContextCompactionThreshold(percent);
+  const belowCompactionThreshold = roundedPercent != null && !meetsCompactionThreshold;
+  const compactDisabled = busy || !canCompact || !meetsCompactionThreshold;
   const tone = roundedPercent != null && roundedPercent >= 90
     ? 'text-destructive'
     : roundedPercent != null && roundedPercent >= 75
@@ -117,7 +138,7 @@ function ContextUsageControlInner({
   }, [percent, runtime.sending, t]);
 
   const handleCompact = async () => {
-    if (busy || !canCompact) return;
+    if (compactDisabled) return;
     failureHandledRef.current = false;
     setRequesting(true);
     setOpen(false);
@@ -125,11 +146,18 @@ function ContextUsageControlInner({
       await hostApiFetch('/api/chat/compact', {
         method: 'POST',
         body: JSON.stringify({ sessionKey, engineType }),
+        timeoutMs: MANUAL_COMPACTION_REQUEST_TIMEOUT_MS,
       });
     } catch (error) {
       if (!failureHandledRef.current) {
+        failureHandledRef.current = true;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (isSessionTooSmallToCompact(errorMessage)) {
+          toast.info(t('composer.contextCompactNotNeeded'));
+          return;
+        }
         toast.error(t('composer.contextCompactFailed', {
-          message: error instanceof Error ? error.message : String(error),
+          message: errorMessage,
         }));
       }
     } finally {
@@ -194,11 +222,20 @@ function ContextUsageControlInner({
           <p className="mt-2 text-[11px] leading-[18px] text-muted-foreground">
             {t('composer.contextCompactNotice')}
           </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="ghost" className="h-8 rounded-md px-3 text-[12px]" onClick={() => setOpen(false)}>
-              {t('composer.contextCompactCancel')}
-            </Button>
-            <Button type="button" className="h-8 rounded-md px-3 text-[12px]" onClick={() => { void handleCompact(); }}>
+          {belowCompactionThreshold ? (
+            <p className="mt-2 text-[11px] leading-[18px] text-amber-600 dark:text-amber-400">
+              {t('composer.contextCompactThresholdHint', {
+                percent: MANUAL_CONTEXT_COMPACTION_MIN_PERCENT,
+              })}
+            </p>
+          ) : null}
+          <div className="mt-4 flex justify-end">
+            <Button
+              type="button"
+              className="h-8 rounded-md px-3 text-[12px]"
+              disabled={compactDisabled}
+              onClick={() => { void handleCompact(); }}
+            >
               {t('composer.contextCompactConfirm')}
             </Button>
           </div>

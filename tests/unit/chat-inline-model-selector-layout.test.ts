@@ -49,6 +49,15 @@ describe('chat inline model selector layout', () => {
     expect(selectorSource).not.toContain('<ChevronRight');
   });
 
+  it('only mutes the engine label when engine switching is unavailable', () => {
+    expect(selectorSource).toContain(
+      "canSwitchEngine && !engineSelectDisabled ? 'text-foreground' : 'text-muted-foreground'",
+    );
+    expect(selectorSource).not.toContain(
+      '<span className="text-muted-foreground">{displayEngineLabel}</span>',
+    );
+  });
+
   it('shows a separate default-model star action without nesting it in the model option button', () => {
     expect(selectorSource).toContain("option.key === defaultModelOptionKey");
     expect(selectorSource).toContain("fill={isDefault ? 'currentColor' : 'none'}");
