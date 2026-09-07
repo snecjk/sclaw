@@ -10,18 +10,41 @@ import type {
   HookEvent,
   HookInput,
   HookJSONOutput,
+  PostToolUseHookInput,
   PreToolUseHookInput,
 } from '@anthropic-ai/claude-agent-sdk';
 import {
   buildToolCallSignature,
   buildToolRepeatBlockReason,
   createToolRepeatTracker,
+  shouldAbortRepeatedTool,
   type ToolRepeatTracker,
 } from '../../shared/claude-loop-guard';
+import {
+  createFillProgressTracker,
+  inspectFillLikeTool,
+  isProgressUnlockTool,
+  toolResponseLooksSuccessful,
+  FILL_DONE_HINT,
+  REPEAT_FILL_HINT,
+  type FillProgressTracker,
+} from '../../shared/browser-bridge/act-progress';
+import { rememberRunInterrupt } from './run-interrupt-store';
 import { logger } from '../utils/logger';
 import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
 
 const trackers = new Map<string, ToolRepeatTracker>();
+const fillProgressBySession = new Map<string, FillProgressTracker>();
+const abortQueryBySession = new Map<string, () => void>();
+
+/** query 注册后挂上 close 句柄；consume 结束必须卸掉，避免打到下一轮。 */
+export function bindClaudeLoopGuardAbort(sessionKey: string, abort: () => void): void {
+  abortQueryBySession.set(sessionKey, abort);
+}
+
+export function unbindClaudeLoopGuardAbort(sessionKey: string): void {
+  abortQueryBySession.delete(sessionKey);
+}
 
 function trackerFor(sessionKey: string): ToolRepeatTracker {
   const existing = trackers.get(sessionKey);
@@ -31,8 +54,20 @@ function trackerFor(sessionKey: string): ToolRepeatTracker {
   return created;
 }
 
+function fillProgressFor(sessionKey: string): FillProgressTracker {
+  const existing = fillProgressBySession.get(sessionKey);
+  if (existing) return existing;
+  const created = createFillProgressTracker();
+  fillProgressBySession.set(sessionKey, created);
+  return created;
+}
+
 function isPreToolUse(input: HookInput): input is PreToolUseHookInput {
   return input.hook_event_name === 'PreToolUse';
+}
+
+function isPostToolUse(input: HookInput): input is PostToolUseHookInput {
+  return input.hook_event_name === 'PostToolUse';
 }
 
 function allow(): HookJSONOutput {
@@ -51,6 +86,26 @@ function deny(reason: string): HookJSONOutput {
 
 export function resetClaudeLoopGuard(sessionKey: string): void {
   trackers.get(sessionKey)?.reset();
+  fillProgressBySession.get(sessionKey)?.reset();
+}
+
+function stampLoopGuardBlocked(sessionKey: string): void {
+  rememberRunInterrupt(sessionKey, 'loop_guard_blocked');
+  void getChatRuntimeRepository().stampInterruptCause(sessionKey, 'loop_guard_blocked').catch((error) => {
+    logger.warn('[claude-loop-guard] failed to persist interrupt cause', { sessionKey, error });
+  });
+}
+
+function abortQuerySoon(sessionKey: string, toolName: string, count: number, reason: string): void {
+  const abort = abortQueryBySession.get(sessionKey);
+  logger.warn('[claude-loop-guard] aborting query after ignored denials', {
+    sessionKey,
+    toolName,
+    count,
+    reason,
+    hasAbortHandle: Boolean(abort),
+  });
+  if (abort) queueMicrotask(abort);
 }
 
 export function buildClaudeLoopGuardHooks(
@@ -61,7 +116,47 @@ export function buildClaudeLoopGuardHooks(
       resetClaudeLoopGuard(sessionKey);
       return allow();
     }
+
+    if (isPostToolUse(input)) {
+      const fill = inspectFillLikeTool(input.tool_name, input.tool_input);
+      if (fill && toolResponseLooksSuccessful(input.tool_response)) {
+        fillProgressFor(sessionKey).recordSuccess(fill.targetKey);
+      }
+      if (isProgressUnlockTool(input.tool_name) && toolResponseLooksSuccessful(input.tool_response)) {
+        fillProgressFor(sessionKey).unlock();
+      }
+      if (fill && toolResponseLooksSuccessful(input.tool_response)) {
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PostToolUse',
+            additionalContext: FILL_DONE_HINT,
+          },
+        };
+      }
+      return allow();
+    }
+
     if (!isPreToolUse(input)) return allow();
+
+    const fill = inspectFillLikeTool(input.tool_name, input.tool_input);
+    const progress = fillProgressFor(sessionKey);
+    if (fill && progress.shouldBlock(fill.targetKey)) {
+      const blocked = progress.recordBlock();
+      logger.warn('[claude-loop-guard] blocked repeat fill after success', {
+        sessionKey,
+        toolName: input.tool_name,
+        targetKey: fill.targetKey,
+        count: blocked.count,
+      });
+      stampLoopGuardBlocked(sessionKey);
+      if (blocked.abort) {
+        abortQuerySoon(sessionKey, input.tool_name, blocked.count, 'repeat_fill');
+      }
+      return deny(REPEAT_FILL_HINT);
+    }
+    if (isProgressUnlockTool(input.tool_name)) {
+      progress.unlock();
+    }
 
     const signature = buildToolCallSignature(input.tool_name, input.tool_input);
     const decision = trackerFor(sessionKey).record(signature);
@@ -72,11 +167,10 @@ export function buildClaudeLoopGuardHooks(
       toolName: input.tool_name,
       count: decision.count,
     });
-    const { rememberRunInterrupt } = await import('./run-interrupt-store');
-    rememberRunInterrupt(sessionKey, 'loop_guard_blocked');
-    void getChatRuntimeRepository().stampInterruptCause(sessionKey, 'loop_guard_blocked').catch((error) => {
-      logger.warn('[claude-loop-guard] failed to persist interrupt cause', { sessionKey, error });
-    });
+    stampLoopGuardBlocked(sessionKey);
+    if (shouldAbortRepeatedTool(decision)) {
+      abortQuerySoon(sessionKey, input.tool_name, decision.count, 'repeat_signature');
+    }
     return deny(buildToolRepeatBlockReason({
       toolName: input.tool_name,
       count: decision.count,
@@ -85,6 +179,7 @@ export function buildClaudeLoopGuardHooks(
 
   return {
     PreToolUse: [{ hooks: [guard] }],
+    PostToolUse: [{ hooks: [guard] }],
     UserPromptSubmit: [{ hooks: [guard] }],
     Stop: [{ hooks: [guard] }],
   };

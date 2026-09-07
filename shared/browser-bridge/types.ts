@@ -1,3 +1,5 @@
+import type { AxEditableKind, PageObservation } from './page-observation';
+
 export type BrowserBridgeAction =
   | 'snapshot'
   | 'click'
@@ -41,11 +43,21 @@ export interface BrowserBridgeCommand {
   expiresAt: number;
 }
 
+export interface BrowserBridgeCommandFailure {
+  success: false;
+  error: string;
+  errorCode?: string;
+  actionHint?: string;
+  observation?: PageObservation;
+}
+
+export type BrowserBridgeCommandPayload = BrowserBridgeCommandFailure | Record<string, unknown>;
+
 export interface BrowserBridgeCommandResult {
   commandId: string;
   sessionId: string;
   action: BrowserBridgeAction;
-  result: unknown;
+  result: BrowserBridgeCommandPayload;
   completedAt: number;
 }
 
@@ -59,6 +71,7 @@ export interface BrowserBridgeSnapshot {
     name?: string;
     clickable?: boolean;
     editable?: boolean;
+    editableKind?: AxEditableKind;
   }>;
   documentGeneration: number;
   observationMode: 'ax' | 'dom';

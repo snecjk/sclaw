@@ -11,6 +11,7 @@ export function isFailedToolPayload(value: unknown): boolean {
 export function annotateFailedToolPayload(value: unknown): unknown {
   if (!isFailedToolPayload(value)) return value;
   const rec = value as Record<string, unknown>;
+  if (typeof rec.actionHint === 'string' && rec.actionHint.trim()) return rec;
   const error = typeof rec.error === 'string' ? rec.error : '';
   const actionHint = error === 'SESSION_STALE' || /session not found/i.test(error)
     ? '会话已刷新。使用 currentSessionId 或省略 sessionId 再调一次；不要反复 list_sessions。'

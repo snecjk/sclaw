@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildClaudeResumeContinueUserPrompt,
   buildClaudeResumeInterruptAppend,
+  inspectClaudeAssistantPayload,
+  isClaudeRuntimeControlText,
+  isClaudeTurnContentless,
   isContinueUserPrompt,
+  shouldAutoResumeContentlessTurn,
 } from '../../shared/claude-runtime-control-text';
 
 describe('isContinueUserPrompt', () => {
@@ -13,6 +17,7 @@ describe('isContinueUserPrompt', () => {
     expect(isContinueUserPrompt('分析这个站点')).toBe(false);
     expect(isContinueUserPrompt('Continue from where you left off.')).toBe(true);
     expect(isContinueUserPrompt('Continue from where you left off')).toBe(true);
+    expect(isContinueUserPrompt('[Your previous response had no visible output. Please continue and produce a user-visible response.]')).toBe(true);
   });
 });
 
@@ -57,5 +62,51 @@ describe('buildClaudeResumeContinueUserPrompt', () => {
 
   it('user_abort tells the model not to continue on its own', () => {
     expect(buildClaudeResumeContinueUserPrompt('user_abort')).toContain('不要自行接着干');
+  });
+});
+
+describe('contentless turn + auto-resume mutex', () => {
+  it('treats SDK no-visible-output as control text', () => {
+    expect(isClaudeRuntimeControlText('[Your previous response had no visible output. Please continue and produce a user-visible response.]')).toBe(true);
+    expect(isClaudeRuntimeControlText('No response requested.')).toBe(true);
+  });
+
+  it('thinking-only / control-line is contentless; result Done. without assistant is not', () => {
+    expect(inspectClaudeAssistantPayload({ content: [{ type: 'thinking', thinking: '...' }] })).toEqual({
+      hasToolUse: false,
+      hasVisibleText: false,
+    });
+    expect(inspectClaudeAssistantPayload({ content: [{ type: 'text', text: 'No response requested.' }] })).toEqual({
+      hasToolUse: false,
+      hasVisibleText: false,
+    });
+    expect(inspectClaudeAssistantPayload({ content: [{ type: 'tool_use', name: 'bridge_fill' }] }).hasToolUse).toBe(true);
+    expect(isClaudeTurnContentless({
+      hadAssistant: true,
+      hadToolUse: false,
+      hadVisibleAssistantText: false,
+      resultText: 'No response requested.',
+    })).toBe(true);
+    expect(isClaudeTurnContentless({
+      hadAssistant: false,
+      hadToolUse: false,
+      hadVisibleAssistantText: false,
+      resultText: 'Done.',
+    })).toBe(false);
+  });
+
+  it('auto-resume mutex: cap 1, user_abort, owner mismatch', () => {
+    const base = {
+      turnWasContentless: true,
+      autoResumeCount: 0,
+      interruptCause: null as const,
+      ownerRunId: 'run-a',
+      currentRunId: 'run-a',
+    };
+    expect(shouldAutoResumeContentlessTurn(base)).toBe(true);
+    expect(shouldAutoResumeContentlessTurn({ ...base, autoResumeCount: 1 })).toBe(false);
+    expect(shouldAutoResumeContentlessTurn({ ...base, interruptCause: 'user_abort' })).toBe(false);
+    expect(shouldAutoResumeContentlessTurn({ ...base, interruptCause: 'loop_guard_blocked' })).toBe(false);
+    expect(shouldAutoResumeContentlessTurn({ ...base, ownerRunId: 'run-b' })).toBe(false);
   });
 });

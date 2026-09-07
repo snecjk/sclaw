@@ -8,6 +8,7 @@ import {
 	runBridgeCommand,
 	type BrowserBridgePluginConfig,
 } from "./bridge-client.js";
+import { attachSuccessfulActProgress } from "../../../shared/browser-bridge/act-progress.js";
 
 const TAG = "sto-browser-bridge";
 
@@ -68,7 +69,14 @@ export default definePluginEntry({
 				const payload: Record<string, unknown> = {};
 				if (params.ref) payload.ref = params.ref;
 				if (params.name) payload.name = params.name;
-				return runBridgeCommand(cfg, "click", payload, bridgeOptionsFromParams(params));
+				const options = bridgeOptionsFromParams(params);
+				const result = await runBridgeCommand(cfg, "click", payload, options);
+				return attachSuccessfulActProgress({
+					action: "click",
+					payload,
+					result,
+					snapshot: () => runBridgeCommand(cfg, "snapshot", {}, options),
+				});
 			},
 		});
 
@@ -88,7 +96,14 @@ export default definePluginEntry({
 				const payload: Record<string, unknown> = { value: params.value };
 				if (params.ref) payload.ref = params.ref;
 				if (params.name) payload.name = params.name;
-				return runBridgeCommand(cfg, "fill", payload, bridgeOptionsFromParams(params));
+				const options = bridgeOptionsFromParams(params);
+				const result = await runBridgeCommand(cfg, "fill", payload, options);
+				return attachSuccessfulActProgress({
+					action: "fill",
+					payload,
+					result,
+					snapshot: () => runBridgeCommand(cfg, "snapshot", {}, options),
+				});
 			},
 		});
 
@@ -169,7 +184,14 @@ export default definePluginEntry({
 			execute: async (params) => {
 				const payload: Record<string, unknown> = { method: params.method };
 				if (params.params) payload.params = params.params;
-				return runBridgeCommand(cfg, "cdp", payload, bridgeOptionsFromParams(params));
+				const options = bridgeOptionsFromParams(params);
+				const result = await runBridgeCommand(cfg, "cdp", payload, options);
+				return attachSuccessfulActProgress({
+					action: "cdp",
+					payload,
+					result,
+					snapshot: () => runBridgeCommand(cfg, "snapshot", {}, options),
+				});
 			},
 		});
 

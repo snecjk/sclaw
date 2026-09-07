@@ -15,6 +15,7 @@ import {
 	annotateFailedToolPayload,
 	isFailedToolPayload,
 } from "../../../shared/browser-bridge/failed-payload.js";
+import { attachSuccessfulActProgress } from "../../../shared/browser-bridge/act-progress.js";
 
 export const BROWSER_MCP_SERVER_NAME = "sto-browser-tool";
 
@@ -40,7 +41,13 @@ async function runBridgeTool(
 		if (isFailedToolPayload(result)) {
 			return textResult(annotateFailedToolPayload(result), true);
 		}
-		return textResult(result, false);
+		const progressed = await attachSuccessfulActProgress({
+			action,
+			payload,
+			result,
+			snapshot: () => runBridgeCommand(cfg, "snapshot", {}, options),
+		});
+		return textResult(progressed, false);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return textResult({ success: false, error: message }, true);

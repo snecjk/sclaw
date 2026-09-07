@@ -2,10 +2,11 @@
  * Drives browser-bridge commands against embed webviews (no Chrome extension).
  */
 import { webContents } from 'electron';
-import type { BrowserBridgeAction, BrowserBridgeCommand } from '../../../shared/browser-bridge/types';
+import type { BrowserBridgeAction, BrowserBridgeCommand, BrowserBridgeCommandFailure } from '../../../shared/browser-bridge/types';
 import {
   applyObservationCharBudget,
   flattenDomSnapshotToElements,
+  STALE_REF_RETRY_HINT,
   toPageObservation,
   type DomSnapshotNode,
   type PageObservation,
@@ -195,6 +196,31 @@ async function snapshotEmbedPage(
   }
 }
 
+async function failEmbedWithObservation(
+  entry: EmbedDriverEntry,
+  wc: NonNullable<ReturnType<typeof resolveWebContents>>,
+  error: string,
+): Promise<BrowserBridgeCommandFailure> {
+  let observation: PageObservation | undefined;
+  try {
+    const snap = await snapshotEmbedPage(entry, wc, {});
+    if (snap && typeof snap === 'object' && Array.isArray((snap as { elements?: unknown }).elements)) {
+      const rec = snap as PageObservation & { success?: boolean };
+      const { success: _ignored, ...rest } = rec;
+      observation = rest;
+    }
+  } catch {
+    observation = undefined;
+  }
+  return {
+    success: false,
+    error,
+    errorCode: error,
+    actionHint: STALE_REF_RETRY_HINT,
+    observation,
+  };
+}
+
 async function waitForEmbedNavigation(
   wc: NonNullable<ReturnType<typeof resolveWebContents>>,
   startUrl: string,
@@ -287,7 +313,7 @@ async function runEmbedCommand(
     if (ref && perception?.refTable) {
       const backendNodeId = perception.refTable.resolve(ref);
       if (backendNodeId === undefined) {
-        return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 fill。' };
+        return failEmbedWithObservation(entry, wc, 'STALE_REF');
       }
       const fillResult = await actFillByBackendNodeId({ cdp, backendNodeId, ref, value });
       return {
@@ -320,11 +346,11 @@ async function runEmbedCommand(
     const cdp = getOrCreateCdpSession(wc, embedCdpByWebContentsId);
     if (ref && perception?.refTable) {
       if (perception.refTable.resolve(ref) === undefined) {
-        return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 click。' };
+        return failEmbedWithObservation(entry, wc, 'STALE_REF');
       }
       const point = await resolveAxClickPoint(cdp, perception.refTable, ref);
       if (!point) {
-        return { success: false, error: 'ELEMENT_NOT_FOUND' };
+        return failEmbedWithObservation(entry, wc, 'ELEMENT_NOT_FOUND');
       }
       const startUrl = wc.getURL();
       const clickResult = await actClickWithFallback({

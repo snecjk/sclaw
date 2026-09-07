@@ -18,6 +18,10 @@ import {
   type BrowserAutomationFindMatch,
   type BrowserAutomationFindQuery,
 } from '../../../shared/browser-automation/types';
+import {
+  axEditableKindFromProperties,
+  type AxEditableKind,
+} from '../../../shared/browser-bridge/page-observation';
 import type { BrowserAutomationCdpSession } from './cdp-session';
 
 /**
@@ -120,6 +124,7 @@ export interface AxTreeNode {
   ignored: boolean;
   interactive: boolean;
   states: string[];
+  editableKind?: AxEditableKind;
   /** 父节点在 nodes 数组中的下标；根为 -1。 */
   parentIndex: number;
   depth: number;
@@ -191,6 +196,7 @@ function collectStates(node: RawAxNode): string[] {
     if (prop.name === 'expanded' && value === true) states.push('expanded');
     if (prop.name === 'expanded' && value === false) states.push('collapsed');
   }
+  if (axEditableKindFromProperties(node.properties)) states.push('editable');
   return states;
 }
 
@@ -270,6 +276,7 @@ export async function captureAxTree(
   let nodes: AxTreeNode[] = rawNodes.map((raw, index) => {
     const parentIndex = parentOf.get(index) ?? -1;
     const role = stringValue(raw.role) ?? '';
+    const editableKind = axEditableKindFromProperties(raw.properties);
     return {
       nodeId: raw.nodeId,
       backendNodeId: typeof raw.backendDOMNodeId === 'number' ? raw.backendDOMNodeId : undefined,
@@ -278,8 +285,9 @@ export async function captureAxTree(
       value: stringValue(raw.value),
       description: stringValue(raw.description),
       ignored: raw.ignored === true,
-      interactive: AX_INTERACTIVE_ROLES.has(role.toLowerCase()),
+      interactive: AX_INTERACTIVE_ROLES.has(role.toLowerCase()) || Boolean(editableKind),
       states: collectStates(raw),
+      editableKind,
       parentIndex,
       depth: 0, // 下方统一回填
       collapsed: false,
@@ -520,7 +528,8 @@ export async function captureAxTree(
       tag: '',
       selector: '',
       clickable: AX_CLICKABLE_ROLES.has(role),
-      editable: AX_EDITABLE_ROLES.has(role),
+      editable: AX_EDITABLE_ROLES.has(role) || Boolean(node.editableKind),
+      editableKind: node.editableKind,
       value: node.value,
       states: node.states,
       boundingBox: node.boundingBox,

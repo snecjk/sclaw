@@ -31,6 +31,7 @@ interface RawAxNodeSpec {
   backendId?: number;
   ignored?: boolean;
   childIds?: string[];
+  properties?: Array<{ name: string; value?: { value?: unknown } }>;
 }
 
 function raw(spec: RawAxNodeSpec) {
@@ -42,6 +43,7 @@ function raw(spec: RawAxNodeSpec) {
     value: spec.value !== undefined ? { value: spec.value } : undefined,
     childIds: spec.childIds,
     backendDOMNodeId: spec.backendId,
+    properties: spec.properties,
   };
 }
 
@@ -138,6 +140,29 @@ describe('B6 captureAxTree 基础抓取', () => {
     // refTable 可双向解析
     expect(result.refTable.resolve('@e1')).toBe(100);
     expect(result.refTable.size()).toBe(2);
+  });
+
+  it('AX editable=richtext 的 generic 节点获得 @e ref 并透出 editableKind', async () => {
+    const tree = [
+      raw({ nodeId: '1', role: 'WebArea', name: '秒悟', backendId: 1, childIds: ['276'] }),
+      raw({
+        nodeId: '276',
+        role: 'generic',
+        name: '',
+        backendId: 276,
+        properties: [{ name: 'editable', value: { value: 'richtext' } }, { name: 'focusable', value: { value: true } }],
+      }),
+    ];
+    const result = await captureAxTree(mockCdp(tree), 1, { interactiveOnly: true });
+    expect(result.elements).toHaveLength(1);
+    expect(result.elements[0]).toMatchObject({
+      ref: '@e1',
+      role: 'generic',
+      editable: true,
+      editableKind: 'richtext',
+      backendNodeId: 276,
+    });
+    expect(result.snapshot.nodes.find((node) => node.nodeId === '276')?.states).toContain('editable');
   });
 
   it('getContentQuads 失败的节点跳过 bbox（字段 optional 化），不影响其余节点', async () => {

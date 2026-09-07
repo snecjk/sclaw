@@ -394,7 +394,7 @@ export class BrowserAutomationService {
     }
     const current = this.generations.get(sessionId) ?? 0;
     if (generation !== current) {
-      throw baError('STALE_REF', '页面已变更，请重新 ba_observe');
+      throw baError('STALE_REF', '页面已变更，用本次返回 observation.elements 里的新 @e 直接重试');
     }
   }
 
@@ -607,11 +607,18 @@ export class BrowserAutomationService {
       this.assertGeneration(sessionId, payload.generation);
     } catch (error) {
       if (errorCodeOf(error) === 'STALE_REF') {
+        let observation;
+        try {
+          observation = await this.observeNow(sessionId, { mode: 'ax' });
+        } catch {
+          observation = undefined;
+        }
         return {
           success: false,
           action: payload.action,
           error: error instanceof Error ? error.message : String(error),
           errorCode: 'STALE_REF',
+          observation,
         };
       }
       throw error;
@@ -649,7 +656,7 @@ export class BrowserAutomationService {
       return {
         success: false,
         action: payload.action,
-        error: '页面已发生导航或重载，请携带最新 documentGeneration 重试',
+        error: '页面已发生导航或重载，用本次返回 observation.elements 里的新 @e 直接重试',
         errorCode: 'STALE_REF',
         observation: observationBefore,
       };

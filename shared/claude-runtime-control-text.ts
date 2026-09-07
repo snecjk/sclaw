@@ -1,11 +1,14 @@
 /** Claude Agent SDK transcript control lines — not user-facing replies. */
 import type { ChatRunInterruptCause } from './chat-run-interrupt';
 
+const SDK_NO_VISIBLE_OUTPUT = /\[Your previous response had no visible output\. Please continue/i;
+
 export function isClaudeRuntimeControlText(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
   if (/^No response requested\.?$/i.test(trimmed)) return true;
   if (/^\[Request interrupted by user for tool use\]$/i.test(trimmed)) return true;
+  if (SDK_NO_VISIBLE_OUTPUT.test(trimmed)) return true;
   return false;
 }
 
@@ -18,8 +21,79 @@ export function isContinueUserPrompt(text: string | undefined): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
   if (SDK_RESUME_CONTINUE_PROMPT.test(trimmed)) return true;
+  if (SDK_NO_VISIBLE_OUTPUT.test(trimmed)) return true;
   if (/^(继续|接着|go on|continue|resume)([。.!！]?)$/i.test(trimmed)) return true;
   return /^(请)?继续(吧|啊|分析|写)?[。.!！]?$/.test(trimmed);
+}
+
+export function inspectClaudeAssistantPayload(payload: unknown): {
+  hasToolUse: boolean;
+  hasVisibleText: boolean;
+} {
+  const blocks = extractAssistantBlocks(payload);
+  let hasToolUse = false;
+  let hasVisibleText = false;
+  for (const block of blocks) {
+    if (block.type === 'tool_use') hasToolUse = true;
+    if (typeof block.text === 'string') {
+      const trimmed = block.text.trim();
+      if (trimmed && !isClaudeRuntimeControlText(trimmed)) hasVisibleText = true;
+    }
+  }
+  if (blocks.length === 0 && typeof payload === 'string') {
+    const trimmed = payload.trim();
+    hasVisibleText = Boolean(trimmed) && !isClaudeRuntimeControlText(trimmed);
+  }
+  return { hasToolUse, hasVisibleText };
+}
+
+/**
+ * 本轮没有对用户可见的输出：纯控制行、thinking-only、或 result 本身是控制行。
+ * 有 tool_use / 可见正文 / 无 assistant 但 result 有实文 → 不算空。
+ */
+export function isClaudeTurnContentless(input: {
+  hadAssistant: boolean;
+  hadToolUse: boolean;
+  hadVisibleAssistantText: boolean;
+  resultText?: string;
+}): boolean {
+  if (input.hadToolUse || input.hadVisibleAssistantText) return false;
+  const result = input.resultText?.trim() ?? '';
+  if (!input.hadAssistant && result && !isClaudeRuntimeControlText(result)) {
+    return false;
+  }
+  return true;
+}
+
+export function shouldAutoResumeContentlessTurn(input: {
+  turnWasContentless: boolean;
+  autoResumeCount: number;
+  interruptCause: ChatRunInterruptCause | null;
+  ownerRunId: string | null | undefined;
+  currentRunId: string;
+}): boolean {
+  if (!input.turnWasContentless) return false;
+  if (input.autoResumeCount >= 1) return false;
+  // 已经定性中断的回合（空转熔断 / 用户停止 / 流断开）再续跑，会把同一轮空转推回去。
+  if (input.interruptCause) return false;
+  if (input.ownerRunId && input.ownerRunId !== input.currentRunId) return false;
+  return true;
+}
+
+function extractAssistantBlocks(payload: unknown): Array<{ type?: string; text?: string }> {
+  if (typeof payload === 'string') {
+    return [{ type: 'text', text: payload }];
+  }
+  if (!payload || typeof payload !== 'object') return [];
+  const rec = payload as Record<string, unknown>;
+  let content: unknown = rec.content;
+  if (content === undefined && rec.message && typeof rec.message === 'object') {
+    const nested = rec.message as Record<string, unknown>;
+    content = nested.content ?? rec.message;
+  }
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (!Array.isArray(content)) return [];
+  return content.filter((block): block is { type?: string; text?: string } => Boolean(block) && typeof block === 'object');
 }
 
 /**

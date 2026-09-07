@@ -174,12 +174,11 @@ describe('B4 代际校验（documentGeneration）', () => {
 
   it('负例：act 携带旧 generation → STALE_REF，不计 step、不重试', async () => {
     const service = new BrowserAutomationService();
-    const { executeJavaScript } = setupSession(service);
+    setupSession(service);
     await service.createSession({ embedRuntimeId: 'r1' });
     await service.observe('embed-r1'); // gen 1
     await service.observe('embed-r1'); // gen 2
 
-    const callsBefore = executeJavaScript.mock.calls.length;
     const result = await service.act(
       'embed-r1',
       { action: 'click', ref: '@e1', generation: 1, snapshot: false },
@@ -188,10 +187,11 @@ describe('B4 代际校验（documentGeneration）', () => {
 
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe('STALE_REF');
-    expect(result.error).toContain('重新 ba_observe');
-    // 前置失败：不计 step、不触碰页面
+    expect(result.error).toContain('新 @e');
+    expect(result.observation?.elements).toBeDefined();
+    expect(result.observation?.documentGeneration).toBeGreaterThan(1);
+    // 前置失败：不计 step、不投递 click（允许为附观测再 observe）
     expect(repoMock.upsertStepRun).not.toHaveBeenCalled();
-    expect(executeJavaScript.mock.calls.length).toBe(callsBefore);
   });
 
   it('灰度期：generation 缺省放行（未 observe 过也可 act）', async () => {

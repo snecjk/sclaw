@@ -81,6 +81,8 @@ export interface BrowserAutomationElementRef {
   selector: string;
   clickable: boolean;
   editable: boolean;
+  /** AX `editable` 属性原值；contenteditable 节点即使 role=generic 也会带上。 */
+  editableKind?: 'richtext' | 'plaintext' | 'true';
   value?: string;
   states: string[];
   /**

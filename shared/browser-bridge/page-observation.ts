@@ -13,12 +13,18 @@ import {
 
 export type PageObservationMode = 'ax' | 'dom';
 
+export type AxEditableKind = 'richtext' | 'plaintext' | 'true';
+
+/** STALE_REF / ELEMENT_NOT_FOUND 失败体的 actionHint：观测已附在本次返回里。 */
+export const STALE_REF_RETRY_HINT = '用本次返回 observation.elements 里的新 @e 直接重试';
+
 export interface PageObservationElement {
   ref: string;
   role: string;
   name?: string;
   clickable?: boolean;
   editable?: boolean;
+  editableKind?: AxEditableKind;
   boundingBox?: BrowserAutomationBoundingBox;
 }
 
@@ -51,6 +57,7 @@ export interface RawAxObservationNode {
   role?: { value?: unknown };
   name?: { value?: unknown };
   backendDOMNodeId?: number;
+  properties?: Array<{ name: string; value?: { value?: unknown } }>;
 }
 
 /** 与 BA AX 白名单对齐；扩展 background.js 必须手抄同一组 role。 */
@@ -101,18 +108,37 @@ function axSlotString(slot: { value?: unknown } | undefined): string {
   return typeof slot?.value === 'string' ? slot.value : '';
 }
 
+export function axEditableKindFromValue(value: unknown): AxEditableKind | undefined {
+  if (value === true || value === 'true') return 'true';
+  if (value === 'richtext' || value === 'plaintext') return value;
+  return undefined;
+}
+
+export function axEditableKindFromProperties(
+  properties?: Array<{ name: string; value?: { value?: unknown } }>,
+): AxEditableKind | undefined {
+  for (const prop of properties ?? []) {
+    if (prop.name !== 'editable') continue;
+    const kind = axEditableKindFromValue(prop.value?.value);
+    if (kind) return kind;
+  }
+  return undefined;
+}
+
 export function compactObservationElement(el: {
   ref: string;
   role: string;
   name?: string;
   clickable?: boolean;
   editable?: boolean;
+  editableKind?: AxEditableKind;
   boundingBox?: BrowserAutomationBoundingBox;
 }): PageObservationElement {
   const out: PageObservationElement = { ref: el.ref, role: el.role };
   if (el.name) out.name = el.name;
   if (el.clickable) out.clickable = true;
   if (el.editable) out.editable = true;
+  if (el.editableKind) out.editableKind = el.editableKind;
   if (el.boundingBox) out.boundingBox = el.boundingBox;
   return out;
 }
@@ -128,6 +154,7 @@ export function toPageObservation(input: {
     name?: string;
     clickable?: boolean;
     editable?: boolean;
+    editableKind?: AxEditableKind;
     boundingBox?: BrowserAutomationBoundingBox;
   }>;
   timestamp?: number;
@@ -207,7 +234,8 @@ export function flattenRawAxNodes(
   for (const node of rawNodes) {
     if (node.ignored) continue;
     const role = axSlotString(node.role).toLowerCase();
-    if (!OBSERVATION_INTERACTIVE_ROLES.has(role)) continue;
+    const editableKind = axEditableKindFromProperties(node.properties);
+    if (!OBSERVATION_INTERACTIVE_ROLES.has(role) && !editableKind) continue;
     if (elements.length >= limit) {
       truncated = true;
       break;
@@ -215,7 +243,7 @@ export function flattenRawAxNodes(
     const ref = `@e${elements.length + 1}`;
     const name = axSlotString(node.name);
     const clickable = OBSERVATION_CLICKABLE_ROLES.has(role);
-    const editable = OBSERVATION_EDITABLE_ROLES.has(role);
+    const editable = OBSERVATION_EDITABLE_ROLES.has(role) || Boolean(editableKind);
     if (typeof node.backendDOMNodeId === 'number') {
       refToBackendNodeId.set(ref, node.backendDOMNodeId);
     }
@@ -225,6 +253,7 @@ export function flattenRawAxNodes(
       name: name || undefined,
       clickable,
       editable,
+      editableKind,
     }));
   }
 

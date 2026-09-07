@@ -9,6 +9,12 @@
 /** 连续第 N+1 次同名同参调用被拦截。 */
 export const CLAUDE_TOOL_REPEAT_LIMIT = 3;
 
+/**
+ * 拦截后模型仍无视 deny、继续同参调用时，在这个 count 掐掉 query。
+ * 判定阈值不变（第 4 次起 deny）；这是 deny 被忽略之后的熔断，不是把检测收得更紧。
+ */
+export const CLAUDE_TOOL_REPEAT_ABORT_COUNT = 6;
+
 const SIGNATURE_MAX_DEPTH = 4;
 
 /** MCP 工具名形如 mcp__server__tool，签名只取末段。 */
@@ -54,6 +60,11 @@ export interface ToolRepeatDecision {
   blocked: boolean;
   /** 当前签名的连续次数（含本次）。 */
   count: number;
+}
+
+/** deny 已经发出去、模型还在同一签名上空转时，应该关掉 query。 */
+export function shouldAbortRepeatedTool(decision: ToolRepeatDecision): boolean {
+  return decision.blocked && decision.count >= CLAUDE_TOOL_REPEAT_ABORT_COUNT;
 }
 
 export interface ToolRepeatTracker {

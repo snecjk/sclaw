@@ -297,4 +297,31 @@ describe('consumeClaudeQuery stream projection', () => {
       params: { phase: 'completed', runId: 'run-ambient-task' },
     });
   });
+
+  it('does not complete a control-line / thinking-only result', async () => {
+    const { notifications, sink } = createSink();
+    const outcome = await consumeClaudeQuery(
+      'agent:test:session:contentless',
+      'session-contentless',
+      'D:\\workspace',
+      createQuery([
+        {
+          type: 'assistant',
+          uuid: 'control-line',
+          message: { content: [{ type: 'text', text: 'No response requested.' }] },
+        },
+        {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'session-contentless',
+          result: 'No response requested.',
+        },
+      ]),
+      sink,
+      'run-contentless',
+    );
+
+    expect(notifications).toEqual([]);
+    expect(outcome.autoResume).toBe(true);
+  });
 });

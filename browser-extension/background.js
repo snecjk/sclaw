@@ -40,6 +40,7 @@ const AX_EDITABLE_ROLES = {
 };
 const AX_ELEMENT_LIMIT = 400;
 const AX_TRUNCATED_HINT = '观察已达预算并截断。请先滚动或收窄到目标区域再观察，不要指望一次拿到整页。';
+const STALE_REF_RETRY_HINT = '用本次返回 observation.elements 里的新 @e 直接重试';
 
 chrome.runtime.onInstalled.addListener(() => scheduleAlarms());
 chrome.runtime.onStartup.addListener(() => {
@@ -501,8 +502,21 @@ function compactElement(el) {
   if (el.name) out.name = el.name;
   if (el.clickable) out.clickable = true;
   if (el.editable) out.editable = true;
+  if (el.editableKind) out.editableKind = el.editableKind;
   if (el.boundingBox) out.boundingBox = el.boundingBox;
   return out;
+}
+
+function axEditableKind(node) {
+  const props = node.properties || [];
+  for (let i = 0; i < props.length; i++) {
+    if (props[i].name !== 'editable') continue;
+    const slot = props[i].value;
+    const value = slot && typeof slot === 'object' ? slot.value : slot;
+    if (value === true || value === 'true') return 'true';
+    if (value === 'richtext' || value === 'plaintext') return value;
+  }
+  return undefined;
 }
 
 function assembleAxObservation(tabId, rawNodes, url, title) {
@@ -513,7 +527,8 @@ function assembleAxObservation(tabId, rawNodes, url, title) {
     const node = rawNodes[i];
     if (node.ignored) continue;
     const role = axSlotString(node.role).toLowerCase();
-    if (!AX_INTERACTIVE_ROLES[role]) continue;
+    const editableKind = axEditableKind(node);
+    if (!AX_INTERACTIVE_ROLES[role] && !editableKind) continue;
     if (elements.length >= AX_ELEMENT_LIMIT) {
       truncated = true;
       break;
@@ -526,7 +541,8 @@ function assembleAxObservation(tabId, rawNodes, url, title) {
       role,
       name,
       clickable: Boolean(AX_CLICKABLE_ROLES[role]),
-      editable: Boolean(AX_EDITABLE_ROLES[role]),
+      editable: Boolean(AX_EDITABLE_ROLES[role]) || Boolean(editableKind),
+      editableKind,
     }));
   }
   if (elements.length === 0) return { success: true, elements: [] };
@@ -569,6 +585,26 @@ async function snapshotDomObservation(tabId, url, title) {
   return observation;
 }
 
+async function failWithFreshObservation(tabId, error) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  let observation;
+  try {
+    observation = await cmdSnapshot(tabId, {});
+  } catch {
+    observation = undefined;
+  }
+  const payload = {
+    success: false,
+    error,
+    errorCode: error,
+    actionHint: STALE_REF_RETRY_HINT,
+  };
+  if (observation && typeof observation === 'object' && Array.isArray(observation.elements)) {
+    payload.observation = observation;
+  }
+  return payload;
+}
+
 async function cmdClick(tabId, payload) {
   const ref = typeof payload.ref === 'string' ? payload.ref : '';
   const backendNodeId = ref ? axRefMaps.get(tabId)?.get(ref) : undefined;
@@ -576,7 +612,7 @@ async function cmdClick(tabId, payload) {
     return clickAxRef(tabId, ref, backendNodeId);
   }
   if (ref && axRefMaps.has(tabId)) {
-    return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 click。' };
+    return failWithFreshObservation(tabId, 'STALE_REF');
   }
   await ensureAgent(tabId);
   await evaluateBridge(tabId, `window.__stoBridge.installClickProbe(${JSON.stringify(payload)})`);
@@ -628,7 +664,7 @@ async function clickAxRef(tabId, ref, backendNodeId) {
     }
     const quadsResult = await chrome.debugger.sendCommand({ tabId }, 'DOM.getContentQuads', { backendNodeId });
     const point = centerFromContentQuads(quadsResult?.quads);
-    if (!point) return { success: false, error: 'ELEMENT_NOT_FOUND' };
+    if (!point) return failWithFreshObservation(tabId, 'ELEMENT_NOT_FOUND');
     await dispatchMouseClick(tabId, point.x, point.y);
     return { success: true, ref };
   });
@@ -661,7 +697,7 @@ async function cmdFill(tabId, payload) {
     return fillAxRef(tabId, ref, backendNodeId, payload.value);
   }
   if (ref && axRefMaps.has(tabId)) {
-    return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 fill。' };
+    return failWithFreshObservation(tabId, 'STALE_REF');
   }
   return evaluateBridge(tabId, `window.__stoBridge.nativeFill(${JSON.stringify(payload)})`);
 }
@@ -673,7 +709,7 @@ async function fillAxRef(tabId, ref, backendNodeId, value) {
     await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
     const resolved = await chrome.debugger.sendCommand({ tabId }, 'DOM.resolveNode', { backendNodeId });
     const objectId = resolved?.object?.objectId;
-    if (!objectId) return { success: false, error: 'ELEMENT_NOT_FOUND' };
+    if (!objectId) return failWithFreshObservation(tabId, 'ELEMENT_NOT_FOUND');
     try {
       const result = await chrome.debugger.sendCommand({ tabId }, 'Runtime.callFunctionOn', {
         objectId,

@@ -31,11 +31,13 @@ import { inspectTranscript } from './chat-runtime-inspection';
 import { logUserSend } from '../../shared/user-send-log';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
-import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend, buildClaudeResumeContinueUserPrompt } from '../../shared/claude-runtime-control-text';
+import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend, buildClaudeResumeContinueUserPrompt, inspectClaudeAssistantPayload, isClaudeTurnContentless, shouldAutoResumeContentlessTurn } from '../../shared/claude-runtime-control-text';
 import { resolveClaudeResumePlan } from '../../shared/claude-resume-plan';
 import { classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
+import { claudeThinkingConfigForModel } from '../../shared/claude-kimi-thinking';
 import { assembleSystemPromptAppend } from '../../shared/system-prompt-sections';
 import { consumeRunInterrupt, peekRunInterrupt, rememberRunInterrupt } from './run-interrupt-store';
+import { bindClaudeLoopGuardAbort, unbindClaudeLoopGuardAbort } from './claude-loop-guard';
 import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
 import { ActiveQueryRegistry } from './active-query-registry';
 import {
@@ -305,6 +307,7 @@ function formatClaudeError(error: unknown): string {
 }
 
 const lastClaudeInterruptBySession = new Map<string, string>();
+const autoResumeCountBySession = new Map<string, number>();
 
 function rememberClaudeInterrupt(sessionKey: string, error: unknown): void {
   lastClaudeInterruptBySession.set(sessionKey, formatClaudeError(error));
@@ -797,7 +800,7 @@ export async function consumeClaudeQuery(
     initialSeq?: number;
     timing?: ClaudeConsumeTiming;
   },
-): Promise<void> {
+): Promise<{ autoResume: boolean }> {
   const iterationStartedAt = Date.now();
   const timing = recoveryOptions?.timing ?? {
     launchStartedAt: iterationStartedAt,
@@ -810,6 +813,7 @@ export async function consumeClaudeQuery(
   let completionEmitted = false;
   let completionDeferred = false;
   let errorThrown = false;
+  let autoResume = false;
   // Claude can finish the current main-agent turn while background subagents
   // are still running. Their task notifications can then trigger another main
   // turn on the same query. A `result` therefore is terminal for the app run
@@ -831,6 +835,16 @@ export async function consumeClaudeQuery(
   let pendingToolInputDelta = false;
   let lastToolInputDeltaAt = 0;
   let firstSdkMessageSeen = false;
+  let turnHadAssistant = false;
+  let turnHadToolUse = false;
+  let turnHadVisibleAssistant = false;
+  let resultText = '';
+
+  const markAssistantPayload = (payload: unknown) => {
+    const inspected = inspectClaudeAssistantPayload(payload);
+    if (inspected.hasToolUse) turnHadToolUse = true;
+    if (inspected.hasVisibleText) turnHadVisibleAssistant = true;
+  };
 
   const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
@@ -1026,6 +1040,11 @@ export async function consumeClaudeQuery(
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
         seenResult = true;
+        markAssistantPayload({ content: streamContent.buildContentArray() });
+        if (streamThinking) turnHadAssistant = true;
+        if (typeof (message as { result?: unknown }).result === 'string') {
+          resultText = (message as { result: string }).result;
+        }
         // A main-agent result may merely mean "waiting for background tasks".
         // Keep the same app run alive so task_notification/auto-continuation
         // messages remain visible. A later result after all tasks settle is the
@@ -1037,7 +1056,13 @@ export async function consumeClaudeQuery(
               runId,
             });
           }
-          emitAgentCompleted();
+          const contentless = isClaudeTurnContentless({
+            hadAssistant: turnHadAssistant,
+            hadToolUse: turnHadToolUse,
+            hadVisibleAssistantText: turnHadVisibleAssistant,
+            resultText,
+          });
+          if (!contentless) emitAgentCompleted();
         } else {
           completionDeferred = true;
           logger.debug('[claude-adapter] deferring run completion for background tasks', {
@@ -1110,6 +1135,8 @@ export async function consumeClaudeQuery(
         // isClaudeRunFragment guard keeps these non-terminal (sending stays true)
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
+          turnHadAssistant = true;
+          markAssistantPayload(liveMessage.message);
           clearPendingToolInputDelta();
           streamContent.reset();
           streamThinking = '';
@@ -1168,6 +1195,32 @@ export async function consumeClaudeQuery(
     flushPendingToolInputDelta();
     clearPendingToolInputDelta();
     // 只释放自己那一格：若已有更新的 run 接管，抹掉它会让停止按钮失去句柄。
+    const contentless = isClaudeTurnContentless({
+      hadAssistant: turnHadAssistant,
+      hadToolUse: turnHadToolUse,
+      hadVisibleAssistantText: turnHadVisibleAssistant,
+      resultText,
+    });
+    const owner = activeClaudeQueries.get(sessionKey);
+    autoResume = shouldAutoResumeContentlessTurn({
+      turnWasContentless: Boolean(contentless && seenResult && !errorThrown && pendingTaskIds.size === 0),
+      autoResumeCount: autoResumeCountBySession.get(sessionKey) ?? 0,
+      interruptCause: peekRunInterrupt(sessionKey),
+      ownerRunId: owner?.runId ?? runId,
+      currentRunId: runId,
+    });
+    if (autoResume) {
+      logger.info('[claude-adapter] deferring completion for contentless auto-resume', {
+        sessionKey,
+        runId,
+      });
+    } else if (seenResult && !completionEmitted && pendingTaskIds.size === 0) {
+      emitAgentCompleted();
+    }
+    if (!contentless && seenResult) {
+      autoResumeCountBySession.delete(sessionKey);
+    }
+    unbindClaudeLoopGuardAbort(sessionKey);
     activeClaudeQueries.releaseIfCurrent(sessionKey, runId);
     logClaudeQueryTiming('active_query_removed', {
       sessionKey,
@@ -1175,20 +1228,15 @@ export async function consumeClaudeQuery(
       launchStartedAt: timing.launchStartedAt,
       stageStartedAt: iterationStartedAt,
       mode: timing.mode,
-      details: { seenResult, completionEmitted, errorThrown },
+      details: { seenResult, completionEmitted, errorThrown, autoResume },
     });
-    // Some SDK task modes settle the outstanding task and then close the
-    // iterator without producing another result. At iterator EOF all observed
-    // tasks are terminal, so finalize the already-seen result here.
-    if (seenResult && !completionEmitted && pendingTaskIds.size === 0) {
-      emitAgentCompleted();
-    }
     // If the loop ended without a result and without an error, the query was
     // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
     if (!seenResult && !errorThrown) {
       emitEngineEvent({ type: 'turn.aborted' });
     }
   }
+  return { autoResume };
 }
 
 async function ensureClaudeRegistryEntry(
@@ -1231,6 +1279,9 @@ async function startClaudeQuery(
     systemPromptAppend?: string;
     /** 定时任务执行时由 executor 透传；交互式 chat 不设（→ 保留默认 bypass）。 */
     permissionProfile?: EnginePermissionProfile;
+    suppressStartedEvent?: boolean;
+    initialSeq?: number;
+    contentlessAutoResume?: boolean;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   const launchStartedAt = Date.now();
@@ -1268,6 +1319,13 @@ async function startClaudeQuery(
       interruptCause,
       userPrompt: typeof prompt === 'string' ? prompt : options?.userPrompt,
     });
+    const isRealUserTurn = !options?.contentlessAutoResume
+      && typeof prompt === 'string'
+      && Boolean(prompt.trim())
+      && !isContinueUserPrompt(prompt);
+    if (resumePlan.mode === 'new' || isRealUserTurn) {
+      autoResumeCountBySession.delete(sessionKey);
+    }
     const queryMode = resumePlan.mode === 'new' ? 'new' as const : 'resume' as const;
     logClaudeQueryTiming('launch_prepared', {
       sessionKey,
@@ -1342,6 +1400,9 @@ async function startClaudeQuery(
       // consumer loop can forward text deltas to the renderer in real time.
       includePartialMessages: true,
       settings: launchSelection.model ? { model: launchSelection.model } : undefined,
+      ...(claudeThinkingConfigForModel(launchSelection.model)
+        ? { thinking: { type: 'disabled' as const } }
+        : {}),
       additionalDirectories: mergeAppDevAdditionalDirectories(
         sessionKey,
         cwd,
@@ -1396,6 +1457,9 @@ async function startClaudeQuery(
       sessionId,
       sessionKey,
     });
+    bindClaudeLoopGuardAbort(sessionKey, () => {
+      activeClaudeQueries.abortIfCurrent(sessionKey, runId);
+    });
     consumeRunInterrupt(sessionKey);
     logClaudeQueryTiming('active_query_registered', {
       sessionKey,
@@ -1429,7 +1493,7 @@ async function startClaudeQuery(
 
     const consumeWithMissingSessionRecovery = async (): Promise<void> => {
       try {
-        await consumeClaudeQuery(
+        const outcome = await consumeClaudeQuery(
           sessionKey,
           sessionId,
           cwd,
@@ -1439,9 +1503,25 @@ async function startClaudeQuery(
           undefined,
           {
             suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof queryPrompt === 'string',
+            suppressStartedEvent: options?.suppressStartedEvent,
+            initialSeq: options?.initialSeq,
             timing: { launchStartedAt, queryCreatedAt, mode: queryMode },
           },
         );
+        if (outcome.autoResume && !options?.contentlessAutoResume) {
+          autoResumeCountBySession.set(sessionKey, 1);
+          logger.info('[claude-adapter] auto-resuming contentless turn', { sessionKey, runId });
+          await startClaudeQuery(sessionKey, '', {
+            additionalDirectories: options?.additionalDirectories,
+            eventSink: options?.eventSink,
+            userPrompt: '',
+            systemPromptAppend: options?.systemPromptAppend,
+            permissionProfile: options?.permissionProfile,
+            suppressStartedEvent: true,
+            initialSeq: 1,
+            contentlessAutoResume: true,
+          });
+        }
       } catch (error) {
         const invalidSessionId = existing?.sessionId;
         if (
@@ -1509,6 +1589,9 @@ async function startClaudeQuery(
             sessionId: recoverySessionId,
             sessionKey,
           });
+          bindClaudeLoopGuardAbort(sessionKey, () => {
+            activeClaudeQueries.abortIfCurrent(sessionKey, runId);
+          });
           await upsertEngineSessionRegistryEntry({
             ...recoveryEntry,
             sessionId: recoverySessionId,
@@ -1546,19 +1629,23 @@ async function startClaudeQuery(
       stageStartedAt: queryCreatedAt,
       mode: queryMode,
     });
-    void consumeWithMissingSessionRecovery().catch((error) => {
-      logger.error('Claude query failed:', error);
-      cacheClaudeErrorMessage(sessionKey, error);
-      rememberClaudeInterrupt(sessionKey, error);
-      void patchEngineSessionRegistryEntry(sessionKey, {
-        updatedAt: Date.now(),
-        model: launchSelection.model,
-        provider: launchSelection.provider,
-        accountId: launchSelection.accountId,
-      }).catch((registryError) => {
-        logger.warn('Failed to persist Claude session metadata after query error:', registryError);
+    if (options?.contentlessAutoResume) {
+      await consumeWithMissingSessionRecovery();
+    } else {
+      void consumeWithMissingSessionRecovery().catch((error) => {
+        logger.error('Claude query failed:', error);
+        cacheClaudeErrorMessage(sessionKey, error);
+        rememberClaudeInterrupt(sessionKey, error);
+        void patchEngineSessionRegistryEntry(sessionKey, {
+          updatedAt: Date.now(),
+          model: launchSelection.model,
+          provider: launchSelection.provider,
+          accountId: launchSelection.accountId,
+        }).catch((registryError) => {
+          logger.warn('Failed to persist Claude session metadata after query error:', registryError);
+        });
       });
-    });
+    }
     return { success: true, result: { runId } };
   } catch (error) {
     return { success: false, error: String(error) };

@@ -17,6 +17,17 @@ describe('failed tool payload', () => {
     expect(isFailedToolPayload(annotated)).toBe(true);
     expect(annotated.actionHint).toContain('list_sessions');
   });
+
+  it('preserves a failure-site actionHint (STALE_REF 附观测)', () => {
+    const annotated = annotateFailedToolPayload({
+      success: false,
+      error: 'STALE_REF',
+      actionHint: '用本次返回 observation.elements 里的新 @e 直接重试',
+      observation: { elements: [{ ref: '@e1', role: 'generic' }], documentGeneration: 2 },
+    }) as { actionHint: string; observation: { elements: unknown[] } };
+    expect(annotated.actionHint).toContain('新 @e');
+    expect(annotated.observation.elements).toHaveLength(1);
+  });
 });
 
 describe('annotateHealedSession', () => {

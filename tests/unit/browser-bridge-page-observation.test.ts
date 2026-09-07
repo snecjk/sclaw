@@ -79,6 +79,21 @@ describe('flattenRawAxNodes', () => {
     expect(result.refToBackendNodeId.get('@e2')).toBe(4);
   });
 
+  it('AX properties.editable=richtext 的 generic 进入 elements 并带 editableKind', () => {
+    const result = flattenRawAxNodes([
+      {
+        role: { value: 'generic' },
+        name: { value: '' },
+        backendDOMNodeId: 276,
+        properties: [{ name: 'editable', value: { value: 'richtext' } }],
+      },
+    ], 400);
+    expect(result.elements).toEqual([
+      { ref: '@e1', role: 'generic', editable: true, editableKind: 'richtext' },
+    ]);
+    expect(result.refToBackendNodeId.get('@e1')).toBe(276);
+  });
+
   it('超出节点上限时截断且不重编号', () => {
     const nodes = Array.from({ length: 10 }, (_, i) => ({
       role: { value: 'button' },

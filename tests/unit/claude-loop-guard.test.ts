@@ -8,6 +8,7 @@ import {
   buildToolRepeatBlockReason,
   createToolRepeatTracker,
   normalizeToolNameForSignature,
+  shouldAbortRepeatedTool,
 } from '../../shared/claude-loop-guard';
 
 describe('buildToolCallSignature', () => {
@@ -81,6 +82,23 @@ describe('createToolRepeatTracker', () => {
     expect(tracker.record(listSessions).blocked).toBe(true);
     tracker.reset();
     expect(tracker.record(listSessions).blocked).toBe(false);
+  });
+});
+
+describe('shouldAbortRepeatedTool', () => {
+  it('does not abort on the first deny, only after ignored repeats', () => {
+    const tracker = createToolRepeatTracker(3);
+    const sig = buildToolCallSignature('bridge_screenshot', {});
+    expect(tracker.record(sig).blocked).toBe(false);
+    expect(tracker.record(sig).blocked).toBe(false);
+    expect(tracker.record(sig).blocked).toBe(false);
+    const fourth = tracker.record(sig);
+    expect(fourth.blocked).toBe(true);
+    expect(shouldAbortRepeatedTool(fourth)).toBe(false);
+    tracker.record(sig);
+    const sixth = tracker.record(sig);
+    expect(sixth.count).toBe(6);
+    expect(shouldAbortRepeatedTool(sixth)).toBe(true);
   });
 });
 
