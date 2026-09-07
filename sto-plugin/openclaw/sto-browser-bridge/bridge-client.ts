@@ -105,6 +105,28 @@ function pickBridgeSession(
 const RESULT_POLL_MS = 50;
 
 /**
+ * 超时预算（与 shared/browser-bridge/command-budget.ts 保持一致）。
+ * 按动作的预算是生效值，config 里的 commandTimeoutMs 只是天花板：注入的 30s
+ * 曾盖过 snapshot 的 45s 预算，让慢页面的快照必然假超时。
+ */
+const COMMAND_TIMEOUT_CEILING_MS = 240_000;
+const ACTION_BUDGET_MS: Record<string, number> = {
+	read_page: 45_000,
+	screenshot: 45_000,
+	snapshot: 45_000,
+};
+const DEFAULT_ACTION_BUDGET_MS = 25_000;
+
+function resolveCommandTimeoutMs(action: string, configuredCeilingMs?: number): number {
+	const budget = ACTION_BUDGET_MS[action] ?? DEFAULT_ACTION_BUDGET_MS;
+	const configured =
+		typeof configuredCeilingMs === "number" && Number.isFinite(configuredCeilingMs) && configuredCeilingMs > 0
+			? configuredCeilingMs
+			: COMMAND_TIMEOUT_CEILING_MS;
+	return Math.min(budget, configured, COMMAND_TIMEOUT_CEILING_MS);
+}
+
+/**
  * 会话自愈必须对模型可见（与 shared/browser-bridge/failed-payload.ts 保持一致）。
  * 命令被改投到另一个会话却仍返回裸 success:true 时，模型会继续拿错误 / 编造的
  * sessionId 重试——实测出现过同一个 ref 连点 16 次、每次换一个不存在的会话。
@@ -154,8 +176,7 @@ export async function runBridgeCommand(
 		sessionId = target.sessionId;
 	}
 
-	const timeoutMs = cfg.commandTimeoutMs
-		?? (action === "read_page" || action === "screenshot" || action === "snapshot" ? 45_000 : 25_000);
+	const timeoutMs = resolveCommandTimeoutMs(action, cfg.commandTimeoutMs);
 
 	const postOrHeal = async (id: string): Promise<{ commandId: string; sessionId: string }> => {
 		try {
@@ -198,7 +219,8 @@ export async function runBridgeCommand(
 }
 
 export function formatAccessibilityTree(tree: unknown[]): string {
-	return JSON.stringify(tree, null, 2);
+	// 紧凑序列化：缩进对模型没有价值，但在大快照上是几万字符的纯开销。
+	return JSON.stringify(tree);
 }
 
 export function bridgeOptionsFromParams(params: {

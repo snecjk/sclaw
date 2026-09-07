@@ -58,8 +58,18 @@ export interface EngineSendWithMediaParams extends EngineSendParams {
   media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
 }
 
+export type EngineAbortOutcome = 'aborted' | 'idle' | 'stale-run';
+
 export interface EngineAbortParams {
   sessionKey: string;
+  /** 发起 abort 的那一轮；不传表示关掉当前任意 owner（兼容旧调用方）。 */
+  runId?: string;
+}
+
+export interface EngineAbortResult {
+  success: boolean;
+  error?: string;
+  outcome?: EngineAbortOutcome;
 }
 
 export interface EngineAdapterContext {
@@ -93,7 +103,7 @@ export interface EngineAdapter {
     phase?: string;
   }): 'completed' | 'awaiting_transcript' | 'progress';
   prepareMemoryInjection(params: EngineSendParams, memory: AgentMemoryContextBlocks): EngineSendParams;
-  abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{ success: boolean; error?: string }>;
+  abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<EngineAbortResult>;
   getHistory(
     ctx: EngineAdapterContext,
     params: { sessionKey: string; limit: number; beforeId?: string },

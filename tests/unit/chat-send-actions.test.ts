@@ -127,6 +127,7 @@ describe('chat send action acceptance state', () => {
     expect(stopped).toBe(false);
     expect(rpc).toHaveBeenCalledWith('chat.abort', expect.objectContaining({
       sessionKey: 'agent:main:main',
+      runId: 'run-active',
     }));
     expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:main:main']?.runtime?.runId).toBe('run-active');
     rpc.mockRestore();

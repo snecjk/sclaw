@@ -341,13 +341,14 @@ export const BROWSER_AUTOMATION_SESSION_IDLE_MS = 30 * 60 * 1000;
 export const BROWSER_AUTOMATION_NETWORK_IDLE_MS = 800;
 export const BROWSER_AUTOMATION_MAX_ELEMENTS = 120;
 
+import { PERCEPTION_CHAR_BUDGET } from '../browser-bridge/perception-budget';
+
 /**
  * AX 观察预算（B6）：按序列化后的元素清单字符数计量（ref/role/name/value/bbox 摘要），
  * 超预算触发三轮降级（子树折叠 → 尾部弹出 → 字段长度减半）。
- * 注：常量名沿计划文档 §四 A1 的 NODE_BUDGET 命名，计量口径为字符（与 §四 B6 的
- * "60k 节点预算"语义对齐——单节点摘要均摊 ~1kB 字符量级）。
+ * 值的唯一事实源是 shared/browser-bridge/perception-budget.ts。
  */
-export const BROWSER_AUTOMATION_AX_NODE_BUDGET = 60_000;
+export const BROWSER_AUTOMATION_AX_NODE_BUDGET = PERCEPTION_CHAR_BUDGET;
 /** AX bbox 补齐：DOM.getContentQuads 每批并发的 backendNodeId 数。 */
 export const BROWSER_AUTOMATION_AX_QUADS_BATCH = 100;
 /** 动作后自动快照的等待时长。 */

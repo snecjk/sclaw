@@ -9,6 +9,23 @@ export type BrowserAutomationPluginConfig = {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3210;
 
+/**
+ * BAP 调用此前完全没有超时：commandTimeoutMs 只在类型里声明，fetch 从不读它，
+ * 挂住的调用一路等到 claude-agent-sdk 的流关闭窗口（300s）——模型看到的是
+ * "流断了"而不是"工具超时了"，没有可归因的错误。
+ * 现在 config 的值只当天花板，且严格小于流关闭窗口。
+ */
+const TIMEOUT_CEILING_MS = 240_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+function resolveTimeoutMs(cfg: BrowserAutomationPluginConfig): number {
+	const configured =
+		typeof cfg.commandTimeoutMs === "number" && Number.isFinite(cfg.commandTimeoutMs) && cfg.commandTimeoutMs > 0
+			? cfg.commandTimeoutMs
+			: DEFAULT_TIMEOUT_MS;
+	return Math.min(configured, TIMEOUT_CEILING_MS);
+}
+
 function baseUrl(cfg: BrowserAutomationPluginConfig): string {
 	const host = cfg.hostApiHost ?? DEFAULT_HOST;
 	const port = cfg.hostApiPort ?? DEFAULT_PORT;
@@ -25,10 +42,20 @@ function buildHeaders(cfg: BrowserAutomationPluginConfig, base?: Record<string, 
 }
 
 async function fetchJson<T>(cfg: BrowserAutomationPluginConfig, url: string, init?: RequestInit): Promise<T> {
-	const response = await fetch(url, {
-		...init,
-		headers: buildHeaders(cfg, (init?.headers as Record<string, string> | undefined) ?? undefined),
-	});
+	const timeoutMs = resolveTimeoutMs(cfg);
+	let response: Response;
+	try {
+		response = await fetch(url, {
+			...init,
+			headers: buildHeaders(cfg, (init?.headers as Record<string, string> | undefined) ?? undefined),
+			signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+		});
+	} catch (error) {
+		if (error instanceof Error && error.name === "TimeoutError") {
+			throw new Error(`浏览器自动化调用超时（${Math.round(timeoutMs / 1000)}s）：${url}`);
+		}
+		throw error;
+	}
 	const payload = await response.json() as T & { success?: boolean; error?: unknown };
 	if (!response.ok) {
 		if (response.status === 401) {

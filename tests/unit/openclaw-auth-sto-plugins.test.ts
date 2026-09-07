@@ -121,10 +121,12 @@ describe('syncStoPluginsToOpenClaw', () => {
     });
     expect(writtenConfig.plugins.entries['sto-browser-bridge']).toEqual({
       enabled: true,
+      // 不注入 commandTimeoutMs：超时预算归客户端按动作决定
+      // （shared/browser-bridge/command-budget.ts），注入固定 30s 会盖过
+      // snapshot 的 45s 预算。
       config: {
         hostApiHost: '127.0.0.1',
         hostApiPort: 3210,
-        commandTimeoutMs: 30_000,
       },
     });
   });

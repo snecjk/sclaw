@@ -27,9 +27,19 @@ describe('buildClaudeResumeInterruptAppend', () => {
       isResume: true,
       isContinue: true,
       lastError: 'stream closed',
+      cause: 'stream_closed',
     });
     expect(append).toContain('tool_result');
-    expect(append).toContain('list_sessions');
-    expect(append).toContain('stream closed');
+    expect(append).toContain('流被关闭');
+    expect(append).toContain('不是权限错误');
+  });
+
+  it('user_abort tells the model not to continue on its own', () => {
+    const append = buildClaudeResumeInterruptAppend({
+      isResume: true,
+      isContinue: true,
+      cause: 'user_abort',
+    });
+    expect(append).toContain('不要自行接着干');
   });
 });

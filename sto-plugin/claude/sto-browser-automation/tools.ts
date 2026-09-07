@@ -17,8 +17,9 @@ export const BROWSER_AUTOMATION_MCP_SERVER_NAME = "sto-browser-automation";
 export { BA_SYSTEM_PROMPT };
 
 function textResult(value: unknown, isError = false): CallToolResult {
+	// 紧凑序列化：缩进对模型没有价值，但在大快照上是几万字符的纯开销。
 	return {
-		content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+		content: [{ type: "text", text: JSON.stringify(value) }],
 		isError,
 	};
 }

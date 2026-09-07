@@ -71,6 +71,8 @@ export function buildClaudeLoopGuardHooks(
       toolName: input.tool_name,
       count: decision.count,
     });
+    const { rememberRunInterrupt } = await import('./run-interrupt-store');
+    rememberRunInterrupt(sessionKey, 'loop_guard_blocked');
     return deny(buildToolRepeatBlockReason({
       toolName: input.tool_name,
       count: decision.count,

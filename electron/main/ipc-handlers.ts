@@ -1100,6 +1100,7 @@ function registerGatewayHandlers(
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           engineType?: AgentEngineType;
+          runId?: string;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
         await chatRuntimeSupervisor.aborting(body.sessionKey ?? '');
@@ -1107,11 +1108,15 @@ function registerGatewayHandlers(
         try {
           result = await adapter.abortRun(
             { gatewayManager },
-            { sessionKey: body.sessionKey ?? '' },
+            { sessionKey: body.sessionKey ?? '', runId: body.runId },
           );
         } catch (error) {
           await chatRuntimeSupervisor.abortFailed(body.sessionKey ?? '', String(error));
           throw error;
+        }
+        if (result.outcome === 'stale-run') {
+          await chatRuntimeSupervisor.abortFailed(body.sessionKey ?? '', 'stale-run');
+          return { success: true, aborted: false, outcome: 'stale-run' };
         }
         if (!result.success) {
           await chatRuntimeSupervisor.abortFailed(body.sessionKey ?? '', result.error || 'chat.abort failed');
@@ -1120,7 +1125,7 @@ function registerGatewayHandlers(
         const { getMemoryTurnCoordinator } = await import('../services/memory-turn-coordinator');
         await getMemoryTurnCoordinator(gatewayManager).aborted(body.sessionKey ?? '', null);
         await chatRuntimeSupervisor.aborted(body.sessionKey ?? '', null);
-        return { success: true };
+        return { success: true, aborted: result.outcome !== 'idle', outcome: result.outcome };
       }
 
       const result = await gatewayManager.rpc(method, rpcParams, timeoutMs);

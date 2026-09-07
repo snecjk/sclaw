@@ -18,5 +18,8 @@ describe('bundled browser-bridge extension', () => {
       'http://localhost/*',
     ]);
     expect(existsSync(join(root, 'dist', `stoclaw-browser-bridge-${manifest.version}.zip`))).toBe(true);
+    expect(existsSync(join(root, 'background.js'))).toBe(true);
+    expect(existsSync(join(root, 'page-agent.js'))).toBe(true);
+    expect(existsSync(join(root, 'scripts', 'pack.mjs'))).toBe(true);
   });
 });

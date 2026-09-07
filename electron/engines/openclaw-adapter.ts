@@ -418,7 +418,10 @@ export const openClawAdapter: EngineAdapter = {
 
   async abortRun(ctx: EngineAdapterContext, params) {
     try {
-      await ctx.gatewayManager.rpc('chat.abort', { sessionKey: params.sessionKey });
+      await ctx.gatewayManager.rpc('chat.abort', {
+        sessionKey: params.sessionKey,
+        ...(params.runId ? { runId: params.runId } : {}),
+      });
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };

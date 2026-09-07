@@ -9,6 +9,11 @@
  *
  * 键顺序即写入 openclaw.json 的顺序：writeOpenClawJson 靠"内容不变就不写"
  * 避免触发 OpenClaw 文件监听硬重启，改动顺序会多出一次无谓重启。
+ *
+ * 不注入 commandTimeoutMs：超时预算归客户端按动作决定
+ * （见 shared/browser-bridge/command-budget.ts），注入固定值会盖过它——
+ * 注入的 30s 曾让 snapshot 拿不到自己的 45s 预算。该键仍在 schema 里声明，
+ * 供用户手动设置，语义是天花板而非生效值。
  */
 
 export const OPENCLAW_SSO_AUTH_PATH = '~/.stoclaw/openclaw/sso-auth.json';
@@ -36,7 +41,6 @@ export function buildStoBrowserBridgePluginConfig(
   return {
     hostApiHost: input.hostApiHost ?? '127.0.0.1',
     hostApiPort: input.hostApiPort,
-    commandTimeoutMs: 30_000,
   };
 }
 
@@ -46,7 +50,6 @@ export function buildStoBrowserAutomationPluginConfig(
   return {
     hostApiHost: input.hostApiHost ?? '127.0.0.1',
     hostApiPort: input.hostApiPort,
-    commandTimeoutMs: 120_000,
     ...(input.authToken ? { authToken: input.authToken } : {}),
   };
 }

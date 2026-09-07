@@ -1,4 +1,6 @@
 /** Claude Agent SDK transcript control lines — not user-facing replies. */
+import type { ChatRunInterruptCause } from './chat-run-interrupt';
+
 export function isClaudeRuntimeControlText(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -24,15 +26,38 @@ export function buildClaudeResumeInterruptAppend(input: {
   isResume: boolean;
   isContinue: boolean;
   lastError?: string;
+  cause?: ChatRunInterruptCause | null;
 }): string | undefined {
   if (!input.isResume) return undefined;
-  if (!input.isContinue && !input.lastError) return undefined;
+  if (!input.isContinue && !input.lastError && !input.cause) return undefined;
   const lines = [
-    '【上一轮中断或用户要求继续】resume 会开新的 SDK query；历史里的 tool_result 是 transcript 行，不是空的用户消息。',
-    '根据已有 snapshot/正文/点击结果直接写结论或执行下一步；禁止再 list_sessions / ba_create_session / 空转「检查会话」。',
+    '【上一轮中断】resume 会开新的 SDK query；历史里的 tool_result 是 transcript 行，不是空的用户消息。根据已有结果继续，不要把页面重新探测一遍。',
   ];
-  if (input.lastError) {
-    lines.push(`上一轮中断原因：${input.lastError}`);
+  switch (input.cause) {
+    case 'user_abort':
+      lines.push('用户已停止上一轮。不要自行接着干未完成的操作，等待这条消息里的新指令。');
+      break;
+    case 'stream_closed':
+      lines.push('上一轮是流被关闭，不是权限错误。用已有 snapshot/正文续写或执行下一步。');
+      break;
+    case 'tool_timeout':
+      lines.push('上一轮是工具超时。缩小范围或换手段，不要用同一组参数原样重试。');
+      break;
+    case 'loop_guard_blocked':
+      lines.push('上一轮因连续同名同参调用被拦下。必须换工具或改参数，不要再点同一个目标。');
+      break;
+    case 'hard_deadline':
+      lines.push('上一轮到达时限。先给出目前能确定的结论，不要开新的长任务。');
+      break;
+    case 'process_restart':
+      lines.push('应用刚从中断中恢复。根据已有 transcript 继续，不要当成全新任务重新检查会话。');
+      break;
+    case 'unknown':
+    default:
+      if (input.lastError) {
+        lines.push(`上一轮中断原因：${input.lastError}`);
+      }
+      break;
   }
   return lines.join('\n');
 }

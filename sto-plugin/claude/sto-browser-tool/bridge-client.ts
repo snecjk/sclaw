@@ -1,5 +1,6 @@
 import { pickBridgeSession } from "../../../shared/browser-bridge/pick-session.js";
 import { annotateHealedSession } from "../../../shared/browser-bridge/failed-payload.js";
+import { resolveCommandTimeoutMs } from "../../../shared/browser-bridge/command-budget.js";
 
 export type BrowserBridgePluginConfig = {
 	hostApiHost?: string;
@@ -110,8 +111,7 @@ export async function runBridgeCommand(
 		sessionId = target.sessionId;
 	}
 
-	const timeoutMs = cfg.commandTimeoutMs
-		?? (action === "read_page" || action === "screenshot" || action === "snapshot" ? 45_000 : 25_000);
+	const timeoutMs = resolveCommandTimeoutMs(action, cfg.commandTimeoutMs);
 
 	const postOrHeal = async (id: string): Promise<{ commandId: string; sessionId: string }> => {
 		try {

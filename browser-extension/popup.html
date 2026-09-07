@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>StoClaw Browser Bridge</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main>
+    <h1>StoClaw Browser Bridge</h1>
+    <p class="hint">操作页面会短暂显示 Chrome「由扩展程序调试」提示，这是预期行为。</p>
+    <section id="mismatch" hidden>
+      <p class="error">扩展 major 版本与 StoClaw 内置包不一致，请下载新 zip 后重新加载。不能继续连接。</p>
+      <p id="mismatch-versions"></p>
+    </section>
+    <section id="disconnected">
+      <label>配对码
+        <input id="pairing-code" type="text" autocomplete="off" placeholder="在 StoClaw 设置页获取" />
+      </label>
+      <div class="row">
+        <button id="auto-connect" type="button">自动连接</button>
+        <button id="pair" type="button">用配对码连接</button>
+      </div>
+      <p class="muted">Host 仅 loopback，默认 http://127.0.0.1:3210</p>
+    </section>
+    <section id="connected" hidden>
+      <p id="tab-url" class="url"></p>
+      <p id="restricted" class="error" hidden>当前是 chrome:// 页面，不能驱动。请先打开百度等 http/https 网页，再点「驱动当前标签」。</p>
+      <p id="versions" class="muted"></p>
+      <p id="update" class="warn" hidden>有新版本可升级，功能可继续使用。</p>
+      <div class="row">
+        <button id="drive-tab" type="button">驱动当前标签</button>
+        <button id="disconnect" type="button" class="secondary">断开</button>
+      </div>
+    </section>
+    <p id="status" class="status"></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

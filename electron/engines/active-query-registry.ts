@@ -65,16 +65,25 @@ export class ActiveQueryRegistry {
     return true;
   }
 
-  /** close 并释放当前 owner（停止按钮 / abortRun）。 */
-  abort(sessionKey: string): boolean {
+  /**
+   * close 并释放当前 owner。runId 传入时只杀匹配的那一轮，避免停止按钮
+   * 在 RPC 在途期间杀掉已经接班的下一轮。
+   */
+  abortIfCurrent(sessionKey: string, runId?: string): 'aborted' | 'idle' | 'stale-run' {
     const current = this.entries.get(sessionKey);
-    if (!current) return false;
+    if (!current) return 'idle';
+    if (runId && current.runId !== runId) return 'stale-run';
     this.entries.delete(sessionKey);
     try {
       current.close();
     } catch (error) {
       this.hooks.onCloseError?.(current, error);
     }
-    return true;
+    return 'aborted';
+  }
+
+  /** 不校验 runId 的 abort（兼容旧调用方）。 */
+  abort(sessionKey: string): boolean {
+    return this.abortIfCurrent(sessionKey) === 'aborted';
   }
 }

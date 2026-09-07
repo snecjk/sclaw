@@ -32,6 +32,9 @@ import { logUserSend } from '../../shared/user-send-log';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
 import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend } from '../../shared/claude-runtime-control-text';
+import { resolveClaudeResumePlan } from '../../shared/claude-resume-plan';
+import { classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
+import { consumeRunInterrupt, peekRunInterrupt, rememberRunInterrupt } from './run-interrupt-store';
 import { ActiveQueryRegistry } from './active-query-registry';
 import {
   applyClaudeStreamEvent,
@@ -303,6 +306,7 @@ const lastClaudeInterruptBySession = new Map<string, string>();
 
 function rememberClaudeInterrupt(sessionKey: string, error: unknown): void {
   lastClaudeInterruptBySession.set(sessionKey, formatClaudeError(error));
+  rememberRunInterrupt(sessionKey, classifyChatRunInterrupt(error));
 }
 
 function consumeClaudeInterrupt(sessionKey: string): string | undefined {
@@ -1254,13 +1258,18 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
-    const queryMode = existing?.sessionId ? 'resume' as const : 'new' as const;
+    const resumePlan = resolveClaudeResumePlan({
+      registryEntry: existing,
+      interruptCause: peekRunInterrupt(sessionKey),
+      userPrompt: options?.userPrompt,
+    });
+    const queryMode = resumePlan.mode === 'new' ? 'new' as const : 'resume' as const;
     logClaudeQueryTiming('launch_prepared', {
       sessionKey,
       runId,
       launchStartedAt,
       mode: queryMode,
-      details: { hasExistingSession: Boolean(existing?.sessionId) },
+      details: { hasExistingSession: Boolean(existing?.sessionId), resumePlan: resumePlan.mode },
     });
     const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
     const pluginPaths = await listClaudeBridgePluginPaths();
@@ -1269,8 +1278,9 @@ async function startClaudeQuery(
     const lastInterrupt = queryMode === 'resume' ? consumeClaudeInterrupt(sessionKey) : undefined;
     const resumeInterruptAppend = buildClaudeResumeInterruptAppend({
       isResume: queryMode === 'resume',
-      isContinue: isContinueUserPrompt(options?.userPrompt),
+      isContinue: resumePlan.mode === 'resume' ? resumePlan.isContinuePrompt : isContinueUserPrompt(options?.userPrompt),
       lastError: lastInterrupt,
+      cause: resumePlan.mode === 'resume' ? resumePlan.interruptCause : null,
     });
     // 默认将 cwd 工作区/工作空间写入提示词：用户未指定特殊路径时，模型以该路径作为默认工作目录。
     // 走 systemPromptAppend（与 historyBridge 一致），避免污染用户消息与侧栏标题。
@@ -1372,6 +1382,7 @@ async function startClaudeQuery(
       sessionId,
       sessionKey,
     });
+    consumeRunInterrupt(sessionKey);
     logClaudeQueryTiming('active_query_registered', {
       sessionKey,
       runId,
@@ -1746,7 +1757,10 @@ export const claudeAdapter: EngineAdapter = {
   },
 
   async abortRun(_ctx, params) {
-    activeClaudeQueries.abort(params.sessionKey);
-    return { success: true };
+    const outcome = activeClaudeQueries.abortIfCurrent(params.sessionKey, params.runId);
+    if (outcome === 'aborted') {
+      rememberRunInterrupt(params.sessionKey, 'user_abort');
+    }
+    return { success: true, outcome };
   },
 };

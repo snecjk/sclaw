@@ -247,6 +247,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         };
         this.snapshots.set(recovered.sessionKey, recovered);
         await this.persist(recovered, true);
+        const { rememberRunInterrupt } = await import('../engines/run-interrupt-store');
+        rememberRunInterrupt(recovered.sessionKey, 'process_restart');
         this.touchRunActivity(recovered.sessionKey, recovered.lastEventAt);
         this.scheduleRecovery(recovered.sessionKey);
         this.scheduleHardDeadline(recovered.sessionKey, recovered.epoch);
@@ -985,6 +987,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       ...current,
       error: 'The run exceeded its configured deadline.',
     }, 'run.interrupted', { reason, ...(abortError ? { abortError } : {}) }, true);
+    const { rememberRunInterrupt } = await import('../engines/run-interrupt-store');
+    rememberRunInterrupt(snapshot.sessionKey, 'hard_deadline');
   }
 
   private clearHardDeadline(sessionKey: string): void {

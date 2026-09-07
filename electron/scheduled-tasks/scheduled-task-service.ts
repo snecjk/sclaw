@@ -369,11 +369,14 @@ export class ScheduledTaskService {
           const supervisor = getChatRuntimeSupervisor(gatewayManager);
           await supervisor.aborting(active.sessionKey);
           const { getAdapter } = await import('../engines/manager');
+          const snapshot = supervisor.get(active.sessionKey);
           const result = await getAdapter(task.engineType).abortRun(
             { gatewayManager },
-            { sessionKey: active.sessionKey },
+            { sessionKey: active.sessionKey, runId: snapshot?.runId ?? undefined },
           );
-          if (!result.success) {
+          if (result.outcome === 'stale-run') {
+            await supervisor.abortFailed(active.sessionKey, 'stale-run');
+          } else if (!result.success) {
             await supervisor.abortFailed(active.sessionKey, result.error || 'scheduled-task abort failed');
           } else {
             await supervisor.aborted(active.sessionKey, null);

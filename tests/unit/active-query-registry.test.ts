@@ -53,6 +53,21 @@ describe('ActiveQueryRegistry', () => {
     expect(registry.has('s1')).toBe(false);
   });
 
+  it('abortIfCurrent only kills the matching run', () => {
+    const registry = new ActiveQueryRegistry();
+    const first = handle('s1', 'run-1');
+    registry.register(first);
+    registry.register(handle('s1', 'run-2'));
+
+    expect(registry.abortIfCurrent('s1', 'run-1')).toBe('stale-run');
+    expect(first.close).toHaveBeenCalledTimes(1); // closed when run-2 registered, not by abort
+    expect(registry.get('s1')?.runId).toBe('run-2');
+
+    expect(registry.abortIfCurrent('s1', 'run-2')).toBe('aborted');
+    expect(registry.has('s1')).toBe(false);
+    expect(registry.abortIfCurrent('s1', 'run-3')).toBe('idle');
+  });
+
   it('abort closes and clears the current owner, and is a no-op when idle', () => {
     const registry = new ActiveQueryRegistry();
     const only = handle('s1', 'run-1');
