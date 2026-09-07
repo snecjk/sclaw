@@ -238,9 +238,9 @@ describe('BrowserBridgeService', () => {
     expect(service.beginChromeConsent()).toBe('allowed');
 
     const pending = service.waitForControl(5_000);
-    const command = service.enqueueControlAttach('https://meoo.com/');
+    const command = service.enqueueControlAttach('https://example.com/');
     expect(command.action).toBe('attach');
-    expect(command.url).toBe('https://meoo.com/');
+    expect(command.url).toBe('https://example.com/');
     await expect(pending).resolves.toEqual([command]);
     expect(service.pollControl()).toEqual([]);
   });

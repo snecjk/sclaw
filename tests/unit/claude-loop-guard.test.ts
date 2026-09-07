@@ -67,7 +67,7 @@ describe('createToolRepeatTracker', () => {
     }
   });
 
-  it('blocks the meoo click storm: same ref, a new fabricated session each time', () => {
+  it('blocks a click storm: same ref, a new fabricated session each time', () => {
     const tracker = createToolRepeatTracker(3);
     const fabricated = ['ext-1892768778', 'ext-1986330396', 'ext-1689887467', 'ext-1943403531', 'ext-1988813766'];
     const decisions = fabricated.map((sessionId) => tracker.record(

@@ -1,7 +1,7 @@
 /**
  * embed 注入脚本的感知预算（步 2）：jsdom 真跑 buildSnapshot。
  *
- * 回归的是妙悟建站那次崩坏的第一环：isInteractive 里带着 li/span/div，name 取
+ * 回归的是一次真实建站任务崩坏的第一环：isInteractive 里带着 li/span/div，name 取
  * 整棵后代 textContent，于是页面上每个 div 都产出一条完整记录，单次快照 13.9
  * 万字符——模型丢掉页面模型后开始用 shell 刨 transcript、对同一个 ref 连点。
  */
