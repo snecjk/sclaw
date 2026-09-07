@@ -8,10 +8,16 @@ export const AGENT_MEMORY_CONTEXT_MARKER = '<!-- StoClaw-Agent-Memory -->';
 export const AGENT_EXECUTION_MEMORY_CONTEXT_MARKER = '<!-- StoClaw-Agent-Execution-Memory -->';
 
 export type InjectedExecutionMemory = { memoryId: string; memory: string };
+export type DisplayAgentMemory = {
+  kind: 'preference' | 'execution';
+  memory: string;
+};
 export type AgentMemoryContextBlocks = {
   preference?: string;
   execution?: string;
   injectedExecutionMemories: InjectedExecutionMemory[];
+  /** Renderer-safe memory text only; excludes prompt markers and guardrails. */
+  displayMemories?: DisplayAgentMemory[];
 };
 
 const PREF_MAX_ITEMS = 5;
@@ -90,16 +96,28 @@ export function buildAgentMemoryContextBlocks(payload: unknown): AgentMemoryCont
     .slice(0, PREF_MAX_ITEMS)
     .map((item) => ({ ...item, memory: truncate(item.memory, PREF_MAX_TEXT) }));
 
+  const displayMemories: DisplayAgentMemory[] = [
+    ...preferenceItems.map((item) => ({
+      kind: 'preference' as const,
+      memory: item.memory,
+    })),
+    ...executionItems.map((item) => ({
+      kind: 'execution' as const,
+      memory: item.memory,
+    })),
+  ];
+
   return {
-    preference: preferenceItems.length > 0
-      ? buildPreferenceMemoryContextText(preferenceItems)
-      : undefined,
-    execution: executionItems.length > 0
-      ? buildExecutionMemoryContextText(executionItems, preferenceItems.length === 0)
-      : undefined,
+    ...(preferenceItems.length > 0
+      ? { preference: buildPreferenceMemoryContextText(preferenceItems) }
+      : {}),
+    ...(executionItems.length > 0
+      ? { execution: buildExecutionMemoryContextText(executionItems, preferenceItems.length === 0) }
+      : {}),
     injectedExecutionMemories: executionItems
       .filter((item): item is typeof item & { id: string } => typeof item.id === 'string' && item.id.length > 0)
       .map((item) => ({ memoryId: item.id, memory: item.memory })),
+    ...(displayMemories.length > 0 ? { displayMemories } : {}),
   };
 }
 

@@ -2,38 +2,16 @@ import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { buildWorkspaceArtifactOutputRule } from '../../shared/workspace-paths';
 import {
-  buildStoBrowserToolClaudeRuntimeOptions,
-} from '../../sto-plugin/claude/sto-browser-tool/sdk';
-import {
-  buildStoDingTalkSendGuardClaudeRuntimeOptions,
-} from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
-import {
-  buildWorkflowHooks,
-  WORKFLOW_SYSTEM_PROMPT,
-} from '../../sto-plugin/claude/sto-workflow-tool/hooks';
-import { createWorkflowMcpServer } from '../../sto-plugin/claude/sto-workflow-tool/tools';
-import { buildScheduledTaskHooks } from '../../sto-plugin/claude/claude-scheduled-task-tool/hooks';
-import {
-  CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
-  createClaudeScheduledTaskMcpServer,
-} from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
-import {
-  createUserSkillMcpServer,
-  USER_SKILL_SYSTEM_PROMPT,
-} from '../../sto-plugin/claude/sto-user-skill-tool/tools';
-import { buildUserSkillHooks } from '../../sto-plugin/claude/sto-user-skill-tool/hooks';
-import {
   isScheduledTaskExecutionSessionKey,
-  SCHEDULED_TASK_CORE_PROMPT,
 } from '../../shared/scheduled-task-instruction';
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
-import { getAuthState, getStoToken } from '../utils/auth-store';
+import { getAuthState } from '../utils/auth-store';
 import { logger } from '../utils/logger';
-import { PORTS } from '../utils/config';
 import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
 import { buildConnectorBashGateHooks } from '../connectors/claude-binary-gate';
+import { buildClaudeAgentExtensions } from '../agent-extensions/adapters/claude';
 
 export interface ClaudeRuntimeOptions {
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -43,6 +21,9 @@ export interface ClaudeRuntimeOptions {
 
 interface ClaudeRuntimeExtensionContext {
   sessionKey: string;
+  runId?: string;
+  agentId?: string;
+  cwd?: string;
   /** 本轮用户原文；用于口头「发给某人」等按需注入启发式。 */
   userPrompt?: string;
 }
@@ -50,10 +31,6 @@ interface ClaudeRuntimeExtensionContext {
 interface ClaudeRuntimeExtension {
   id: string;
   build(context: ClaudeRuntimeExtensionContext): Promise<ClaudeRuntimeOptions> | ClaudeRuntimeOptions;
-}
-
-function isAppDevSessionKey(sessionKey: string): boolean {
-  return /^agent:[^:]+:appdev:/.test(sessionKey);
 }
 
 function mergeHooks(
@@ -88,89 +65,6 @@ function mergeRuntimeOptions(target: ClaudeRuntimeOptions, source: ClaudeRuntime
   }
 }
 
-const browserToolExtension: ClaudeRuntimeExtension = {
-  id: 'sto-browser-tool',
-  build({ sessionKey }) {
-    if (isAppDevSessionKey(sessionKey)) return {};
-    return buildStoBrowserToolClaudeRuntimeOptions({
-      sessionKey,
-      hostApiPort: PORTS.CLAWX_HOST_API,
-    });
-  },
-};
-
-const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
-  id: 'sto-dingtalk-send-guard',
-  build: ({ sessionKey, userPrompt }) =>
-    buildStoDingTalkSendGuardClaudeRuntimeOptions(sessionKey, userPrompt),
-};
-
-const workflowToolExtension: ClaudeRuntimeExtension = {
-  id: 'sto-workflow-tool',
-  async build({ sessionKey }) {
-    if (isAppDevSessionKey(sessionKey)) return {};
-    const stoToken = await getStoToken();
-    if (!stoToken) {
-      logger.warn('[claude-workflow] STO token is unavailable; workflow tools will not be registered');
-      return {};
-    }
-
-    const baseUrl = `http://127.0.0.1:${PORTS.CLAWX_HOST_API}`;
-    logger.info(`[claude-workflow] registering workflow tools baseUrl=${baseUrl}`);
-
-    return {
-      hooks: buildWorkflowHooks(),
-      systemPromptAppend: WORKFLOW_SYSTEM_PROMPT,
-      mcpServers: {
-        'sto-workflow-tool': createWorkflowMcpServer({
-          baseUrl,
-          stoToken,
-          sessionKey,
-        }),
-      },
-    };
-  },
-};
-
-const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
-  id: 'claude-scheduled-task-tool',
-  async build({ sessionKey }) {
-    if (isAppDevSessionKey(sessionKey)) return {};
-    const isExecutionContext = isScheduledTaskExecutionSessionKey(sessionKey);
-    if (isExecutionContext) {
-      return {
-        hooks: buildScheduledTaskHooks(sessionKey),
-        // 模块 B：纯执行语义。钉钉格式/必发由执行器 systemPromptAppend 条件注入。
-        systemPromptAppend: SCHEDULED_TASK_CORE_PROMPT,
-      };
-    }
-
-    return {
-      hooks: buildScheduledTaskHooks(sessionKey),
-      systemPromptAppend: CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
-      mcpServers: {
-        'claude-scheduled-task-tool': createClaudeScheduledTaskMcpServer({
-          sessionKey,
-        }),
-      },
-    };
-  },
-};
-
-const userSkillToolExtension: ClaudeRuntimeExtension = {
-  id: 'sto-user-skill-tool',
-  build() {
-    logger.info('[claude-user-skill] registering save_user_skill MCP + write guard');
-    return {
-      hooks: buildUserSkillHooks(),
-      systemPromptAppend: USER_SKILL_SYSTEM_PROMPT,
-      mcpServers: {
-        'sto-user-skill-tool': createUserSkillMcpServer(),
-      },
-    };
-  },
-};
-
 const agentTelemetryExtension: ClaudeRuntimeExtension = {
   id: 'sto-agent-telemetry',
   build: ({ sessionKey }) => buildStoAgentTelemetryClaudeRuntimeOptions(sessionKey),
@@ -186,7 +80,7 @@ const ssoUserContextExtension: ClaudeRuntimeExtension = {
       const { resolveSessionToolCwd } = await import('../services/session-catalog-service');
       const { extractAgentIdFromSessionKey } = await import('../../shared/session-agent-id');
       const agentId = extractAgentIdFromSessionKey(sessionKey) ?? undefined;
-      workspaceAbsolutePath = await resolveSessionToolCwd(sessionKey, agentId);
+      workspaceAbsolutePath = await resolveSessionToolCwd(sessionKey, agentId, 'claude');
     } catch (err) {
       logger.warn(`[claude-sso-context] failed to resolve workspace cwd (${String(err)})`);
     }
@@ -242,11 +136,6 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
 
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   connectorBashGateExtension,
-  browserToolExtension,
-  dingTalkSendGuardExtension,
-  workflowToolExtension,
-  scheduledTaskToolExtension,
-  userSkillToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,
   connectorsContextExtension,
@@ -255,11 +144,12 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
 export async function buildClaudeRuntimeOptions(
   sessionKey: string,
   userPrompt?: string,
+  turn?: { runId?: string; agentId?: string; cwd?: string },
 ): Promise<ClaudeRuntimeOptions> {
   logger.info(`[claude-runtime] building runtime options, sessionKey=${sessionKey}, extensions=${claudeRuntimeExtensions.length} [${claudeRuntimeExtensions.map(e => e.id).join(', ')}]`);
 
   const options: ClaudeRuntimeOptions = {};
-  const context: ClaudeRuntimeExtensionContext = { sessionKey, userPrompt };
+  const context: ClaudeRuntimeExtensionContext = { sessionKey, userPrompt, ...turn };
 
   for (const extension of claudeRuntimeExtensions) {
     const start = Date.now();
@@ -271,6 +161,19 @@ export async function buildClaudeRuntimeOptions(
     } catch (error) {
       logger.warn(`[claude-runtime] extension ${extension.id} failed to build after ${Date.now() - start}ms`, error);
     }
+  }
+
+  const unified = await buildClaudeAgentExtensions({
+    sessionKey,
+    userPrompt,
+    runId: turn?.runId,
+    agentId: turn?.agentId,
+    cwd: turn?.cwd,
+    mode: isScheduledTaskExecutionSessionKey(sessionKey) ? 'scheduled' : 'interactive',
+  });
+  mergeRuntimeOptions(options, unified.options);
+  for (const diagnostic of unified.diagnostics) {
+    logger.warn('[claude-runtime] unified extension diagnostic', diagnostic);
   }
 
   const result: ClaudeRuntimeOptions = {

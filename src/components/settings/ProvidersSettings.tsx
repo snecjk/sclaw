@@ -54,7 +54,7 @@ import {
 import { getWorkspaceDefaultModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { syncWorkspaceDefaultModelToChat } from '@/lib/sync-workspace-default-to-chat';
 import { cn } from '@/lib/utils';
-import { glassNestedCard } from '@/lib/surfaces';
+import { glassNestedCard, settingsPrimaryActionButtonClass } from '@/lib/surfaces';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -390,7 +390,7 @@ export function ProvidersSettings() {
           {t('aiProviders.title', 'AI Providers')}
         </h2>
         {!isSite && (
-          <Button onClick={() => setShowAddDialog(true)} className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none">
+          <Button onClick={() => setShowAddDialog(true)} className={settingsPrimaryActionButtonClass}>
             <Plus className="mr-2 h-4 w-4" />
             {t('aiProviders.add')}
           </Button>

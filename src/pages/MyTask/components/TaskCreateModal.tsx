@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, ChevronDown, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
+import { X, Loader2, ChevronDown, Check, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { AiBeautifyButton } from '@/components/ai-beautify/AiBeautifyButton';
-import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
+import {
+  SchedulePicker,
+  useDropdownDirection,
+  dropdownPositionClass,
+  type ScheduleValue,
+} from './SchedulePicker';
 import {
   scheduleValueToCron,
   tryCronToScheduleValue,
@@ -19,9 +24,12 @@ import {
 import { useMyTaskStore } from '../store';
 import { cn } from '@/lib/utils';
 import {
-  formFieldFocusClass,
+  dropdownOptionClass,
+  formFieldOpenClass,
   invertedPrimarySurfaceClass,
   modalPrimarySubmitButtonClass,
+  schedulePickerDropdownPanelClass,
+  schedulePickerTriggerClass,
   taskCreateFormControlClass,
   taskCreateFormLabelClass,
 } from '@/lib/surfaces';
@@ -37,7 +45,6 @@ import { IconCheckbox } from '@/components/icon-checkbox';
 import { TaskInstructionComposer, type TaskComposerSnapshot, type TaskInstructionComposerHandle } from './TaskInstructionComposer';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
-import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 import { extractDingTalkMentionsFromComposerSegments } from '../../../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 import {
   composerSegmentsHaveBogusSkills,
@@ -46,8 +53,94 @@ import {
   reconstructComposerSegmentsFromPrompt,
 } from '../../../../shared/scheduled-task-composer-segments';
 import { unescapeLiteralNewlines } from '../../../../shared/text-escape';
+import {
+  getAgentEnginePolicyOptionLabel,
+  useAgentEnginePolicyStore,
+  type AgentEnginePolicyOption,
+} from '@/stores/agent-engine-policy';
 
-type TaskEngineType = 'openclaw' | 'claude';
+type TaskEngineType = 'openclaw' | 'claude' | 'pi';
+
+export const DEFAULT_TASK_ENGINE_TYPE: TaskEngineType = 'pi';
+
+function fallbackEngineLabel(code: TaskEngineType): string {
+  return code === 'claude' ? 'Claude Agent' : code === 'pi' ? 'SAgent' : 'OpenClaw';
+}
+
+/** 执行引擎选择器：自定义下拉，样式与 SchedulePicker（计划时间）保持一致 */
+function EnginePicker({
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  value: TaskEngineType;
+  onChange: (v: TaskEngineType) => void;
+  options: AgentEnginePolicyOption[];
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const dir = useDropdownDirection(ref, open);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [open]);
+
+  const current = options.find((item) => item.code === value);
+  const displayLabel = current ? getAgentEnginePolicyOptionLabel(current) : fallbackEngineLabel(value);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((prev) => !prev)}
+        className={cn(
+          schedulePickerTriggerClass,
+          open && formFieldOpenClass,
+          disabled && 'cursor-not-allowed opacity-60',
+        )}
+      >
+        <span className="truncate">{displayLabel}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+      </button>
+      {open && !disabled && (
+        <div className={cn(dropdownPositionClass(dir), 'w-full min-w-[140px]')}>
+          <div className={cn(schedulePickerDropdownPanelClass, 'flex max-h-[280px] flex-col gap-0.5 overflow-y-auto p-1.5')}>
+            {options.map((engine) => {
+              const selected = value === engine.code;
+              return (
+                <button
+                  key={engine.code}
+                  type="button"
+                  onClick={() => { onChange(engine.code); setOpen(false); }}
+                  className={cn(
+                    'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[12px]',
+                    dropdownOptionClass(selected),
+                  )}
+                >
+                  <span>{getAgentEnginePolicyOptionLabel(engine)}</span>
+                  <span className={cn('flex h-4 w-4 shrink-0 text-primary', !selected && 'opacity-0')}>
+                    <Check className="h-4 w-4" />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export type TaskCreateInputWithRun = CronJobCreateInput & {
   engineType: TaskEngineType;
@@ -99,7 +192,7 @@ function seedWorkflowSegment(
   }];
 }
 
-function computeInitialValues(
+export function computeInitialValues(
   job: ManagedLocalTask | null | undefined,
   initialValues: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string } | undefined,
   workflowLabelResolver?: (code: string) => string | undefined,
@@ -250,7 +343,7 @@ function computeInitialValues(
       originalCronExpr: scheduleLocked ? initialValues.schedule ?? null : null,
       recipients: [] as DingTalkMention[],
       composerSegments: seededWorkflow,
-      engineType: 'claude' as TaskEngineType,
+      engineType: DEFAULT_TASK_ENGINE_TYPE,
       createdViaNl: false,
       saveToMyArtifact: false,
       saveToSharedArtifact: false,
@@ -267,7 +360,7 @@ function computeInitialValues(
     originalCronExpr: null as string | null,
     recipients: [] as DingTalkMention[],
     composerSegments: null as PersistedComposerSegment[] | null,
-    engineType: 'claude' as TaskEngineType,
+    engineType: DEFAULT_TASK_ENGINE_TYPE,
     createdViaNl: false,
     saveToMyArtifact: false,
     saveToSharedArtifact: false,
@@ -804,6 +897,22 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     fetchWorkflows().catch(() => {});
   }, [fetchWorkflows]);
 
+  // 引擎选项与会话侧保持一致：同一份 agent-engine-policy（可被服务端按用户/部门裁剪）
+  const authUserKey = authUser?.code || authUser?.empCode || authUser?.id || '';
+  const policyEngines = useAgentEnginePolicyStore((s) => s.engines);
+  const policyDefaultEngine = useAgentEnginePolicyStore((s) => s.defaultEngine);
+  const policyLoading = useAgentEnginePolicyStore((s) => s.loading);
+  const policyLoaded = useAgentEnginePolicyStore((s) => s.loaded);
+  const policyOwnerCode = useAgentEnginePolicyStore((s) => s.ownerCode);
+  const fetchEnginePolicy = useAgentEnginePolicyStore((s) => s.fetchPolicy);
+
+  useEffect(() => {
+    if (!authUserKey) return;
+    void fetchEnginePolicy(authUserKey);
+  }, [authUserKey, fetchEnginePolicy]);
+
+  const effectivePolicyLoaded = policyLoaded && policyOwnerCode === (authUserKey.trim() || 'current-user');
+
   const init = computeInitialValues(job, initialValues, (code) =>
     workflowOptions.find((o) => o.value === code)?.label,
   );
@@ -820,7 +929,19 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const initialComposerSegments = init.composerSegments;
   const initialCreatedViaNl = init.createdViaNl;
   const [errors, setErrors] = useState<{ name?: string; instructions?: string; schedule?: string }>({});
-  const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
+  const [engineType, setEngineType] = useState<TaskEngineType>(() => {
+    if (job) return init.engineType;
+    const { engines, defaultEngine } = useAgentEnginePolicyStore.getState();
+    return engines.some((item) => item.code === init.engineType) ? init.engineType : defaultEngine;
+  });
+
+  // 策略异步到位后，若当前引擎不在可会话引擎集合内（新建场景），自动纠偏到策略默认引擎
+  useEffect(() => {
+    if (job || !effectivePolicyLoaded || policyLoading) return;
+    if (!policyEngines.some((item) => item.code === engineType)) {
+      setEngineType(policyDefaultEngine);
+    }
+  }, [job, effectivePolicyLoaded, policyLoading, policyEngines, policyDefaultEngine, engineType]);
   const [saveToMyArtifact, setSaveToMyArtifact] = useState(init.saveToMyArtifact);
   const [saveToSharedArtifact, setSaveToSharedArtifact] = useState(init.saveToSharedArtifact);
   const [myArtifactFolderPath, setMyArtifactFolderPath] = useState<string | null>(init.myArtifactFolderPath);
@@ -923,7 +1044,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         segments: snapshot?.segments ?? [],
         plainText: snapshot?.plainText ?? instructions,
         attachments: readyAttachments,
-        resolveSkillPrompt,
       });
 
       const composerAttachments = readyAttachments.map((att) => ({
@@ -1023,7 +1143,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               className={cn(
                 taskCreateFormControlClass,
                 'placeholder:text-muted-foreground',
-                formFieldFocusClass,
                 errors.name && 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]',
               )}
               autoComplete="off"
@@ -1134,7 +1253,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                   if (next) setMyArtifactPathLabel('我的产物 / 根目录');
                 }}
               >
-                <IconCheckbox checked={saveToMyArtifact} />
+                <IconCheckbox checked={saveToMyArtifact} variant="primary" />
                 {t('myTask.createModal.myArtifactLabel')}
               </button>
               {isSite ? (
@@ -1147,7 +1266,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                     if (!next) setSharedArtifactFolderPath(null);
                   }}
                 >
-                  <IconCheckbox checked={saveToSharedArtifact} />
+                  <IconCheckbox checked={saveToSharedArtifact} variant="primary" />
                   {t('myTask.createModal.sharedArtifactLabel')}
                 </button>
               ) : null}
@@ -1200,20 +1319,21 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
           <div className="flex flex-col gap-2">
             <label className={taskCreateFormLabelClass}>{t('myTask.createModal.engineLabel')}</label>
-            <select
+            <EnginePicker
               value={engineType}
+              onChange={setEngineType}
+              options={policyEngines}
               disabled={isEditing}
-              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
-              className={cn(
-                taskCreateFormControlClass,
-                formFieldFocusClass,
-                'dark:[color-scheme:dark]',
-                isEditing && 'cursor-not-allowed opacity-60',
-              )}
-            >
-              <option value="openclaw">OpenClaw</option>
-              <option value="claude">Claude Agent</option>
-            </select>
+            />
+            <p className="text-[11.5px] text-muted-foreground">
+              {isEditing
+                ? t('myTask.createModal.engineEditHint')
+                : engineType === 'claude'
+                  ? t('myTask.createModal.engineClaudeHint')
+                  : engineType === 'pi'
+                    ? 'SAgent 定时任务可访问工作空间、已配置的产物目录与工作流。'
+                    : t('myTask.createModal.engineOpenclawHint')}
+            </p>
           </div>
           </div>
         </div>

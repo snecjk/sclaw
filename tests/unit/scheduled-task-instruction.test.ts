@@ -16,13 +16,14 @@ import { SCHEDULED_TASK_CORE_PROMPT as VENDORED_CORE } from '../../sto-plugin/op
 import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
 
 describe('scheduled-task-instruction', () => {
-  it('detects cron and claude task execution session keys', () => {
+  it('detects cron, Claude, and PI task execution session keys', () => {
     expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1:2026-06-25')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1:run:abc')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('claude-task-run:task-1:run-1')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('claude-task:task-1:2026-06-25')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('claude-task:task-1')).toBe(true);
+    expect(isScheduledTaskExecutionSessionKey('agent:main:scheduled-task:task-1:2026-06-25')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('agent:main:main')).toBe(false);
     expect(isScheduledTaskExecutionSessionKey('agent:main:chat:abc')).toBe(false);
   });
@@ -39,6 +40,10 @@ describe('scheduled-task-instruction', () => {
     expect(evaluateScheduledTaskCreationBlock({
       sessionKey: 'claude-task:task-1:2026-06-25',
       toolName: 'create_claude_scheduled_task',
+    }).blocked).toBe(true);
+    expect(evaluateScheduledTaskCreationBlock({
+      sessionKey: 'agent:main:scheduled-task:task-1:2026-06-25',
+      toolName: 'create_sto_scheduled_task',
     }).blocked).toBe(true);
     expect(evaluateScheduledTaskCreationBlock({
       sessionKey: 'agent:main:main',

@@ -10,7 +10,7 @@ export interface AgentSummary {
   mainSessionKey: string;
   channelTypes: string[];
   fileTransformByOSS?: boolean;
-  engineType?: 'openclaw' | 'claude';
+  engineType?: AgentEngineType;
 }
 
 export interface AgentsSnapshot {
@@ -20,3 +20,4 @@ export interface AgentsSnapshot {
   channelOwners: Record<string, string>;
   channelAccountOwners: Record<string, string>;
 }
+import type { AgentEngineType } from '../../shared/agent-engine';

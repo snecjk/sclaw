@@ -88,6 +88,8 @@ The wizard preselects your system language when it is supported, and falls back 
 
 **HQ account-switch demo:** HQ users with branch-switch permission can impersonate a site account from the bottom-right FAB. The UI and session token reflect the site user, but AI resources (SK, model list, inference gateway, and Models-page quota) stay on the HQ account via `DemoSkStrategy`. Native site login and native HQ login are unchanged.
 
+**Token balance:** opening the account menu lazily loads the latest quota and shows a compact, explicitly labeled remaining-percentage badge beside Token Balance. Selecting the row opens the Models page for full balance and quota details.
+
 Main shell routes include the dashboard home (`/`), prototype STO task reports under `/tasks/:taskId` (overview) and per-day chat subitems at `/tasks/:taskId/YYYY-MM-DD` (navigable key: `hq-reconciliation`; subitems are listed under the sidebar “任务列表”, and the first home overview card ensures today’s subitem if needed then opens the **latest** persisted subitem by date so that row is selected by default), and main-agent chat on the home route (`/`; legacy `/chat` redirects to home). Main-agent chat now includes an inline in-session search bar that scans the currently rendered transcript and jumps between matching message records. Each task subitem uses its own persisted OpenClaw session key (`agent:main:session-sto-*`, stored locally per day) so its transcript stays isolated from the main agent chat; those sessions do not appear as separate rows in the chat session list. Deleting a dated subitem from the sidebar (trash on hover, same as history sessions) soft-deletes that transcript and removes the subitem from the persisted task list. The CRM home may still show three data-overview cards; only the first links into `/tasks/*` while the other two stay behind a “coming soon” overlay until their task entries are re-enabled in the sidebar list. **CRM week-report surface:** after SSO login, the app loads a policy whitelist from the STO policy service; the policy API host is chosen from **`VITE_APP_ENV`** only (`development`/`test` → `zc-test.sto.cn`, `staging` → `pre-zc.sto.cn`, `production` → `zc.sto.cn`). Only users whose SSO `userName` matches a whitelist `userCode` see the home task summary cards and can stay on `/tasks/*`; otherwise the home shows the legacy layout and `/tasks/*` redirects to `/`. Failed or timed-out policy requests are treated as **not** whitelisted (fail-closed).
 
 **Learning Center:** the sidebar's 学习中心 entry is shown only when memory-center returns at least one learning domain visible to the current account. It opens `/learning-center`, which lists the permitted domains, categories, tutorials, and practice cases (visibility is decided entirely by memory-center; the Electron host proxies the seven `POST /api/learning-center/*` client routes, so the renderer never calls the backend or OSS directly). Tutorials open as a resizable right-side overlay without changing the learning-center layout; the overlay can cover the full content workspace and then restore its previous width, while tutorial text and media reflow with it (the existing deep link `/learning-center/tutorial/:tutorialId` still works). Cases offer a detail dialog plus a confirm-gated “立即使用” action that opens the matching skill, connector, app, workflow, external URL, or chat entry. Case prompts only seed the chat composer draft (`REPLACE` or `APPEND`) — nothing is ever auto-sent.
@@ -135,6 +137,8 @@ Notes:
 ## Architecture
 
 StoClaw employs a **dual-process architecture** with a unified host API layer. The renderer talks to a single client abstraction, while Electron Main owns protocol selection and process lifecycle:
+
+Internal business tools shared by Claude Agent and Pi Agent use the static, common-first [Agent Extension Architecture](docs/agent-extension-architecture.md). Common tools and prompts can opt into engine-neutral turn/session activation so inactive tool schemas stay out of ordinary requests while safety policies remain active. Adapters provide mandatory shell/tool-kind runtime semantics and scheduled-task capabilities, keeping engine branches out of common business code. The migrated STO workflow tools use the same common contracts and typed Host API capability in both Claude and PI sessions; PI workflow nodes run in isolated `pi:workflow:*` worker sessions while preserving the originating account and model. The DingTalk send guard is now a shared Claude/PI extension: its prompt activates on DingTalk/send intent or pending mention context and stays active for session follow-ups, while its safety policy is always installed; one-shot mention context and rate-limit/dedup state remain owned by Main. Skill runtime and user-skill creation are consolidated in the shared `sto-skill-runtime` extension: `search_skills` remains always available, while `save_user_skill` and its guidance activate on skill authoring intent and direct skill-directory write protection remains always active. Browser Bridge exposes six `bridge_*` tools for the existing Main-owned embed/Chrome bridge, with automatic embed activation and strict embed session targeting. App Plaza Pi sessions use this bridge and do not load `pi-browser-use`; other interactive Pi sessions load the reviewed `@amaster.ai/pi-browser-use` extension. Scheduled Pi sessions do not load browser automation. Engine-native contributions remain available as an explicit escape hatch; arbitrary project extensions are not auto-loaded.
 
 ```┌─────────────────────────────────────────────────────────────────┐
 │                        StoClaw Desktop App                         │
@@ -230,7 +234,9 @@ For an unchanged published workflow, trial run skips draft persistence and start
 
 Chat run lifecycle is authoritative in Electron Main. `ChatRuntimeSupervisor` applies an irreversible per-session state machine, serializes competing lifecycle inputs, and persists only monotonically newer `(epoch, sequence)` snapshots. Engine adapters expose runtime inspection and history-projection capabilities, so OpenClaw/Claude completion differences no longer leak into the supervisor or Renderer. Engine completion first enters `awaiting_transcript`; a bounded transcript-settle pass projects the final reasoning/tool chronology before the canonical completed event, and a late stable revision emits `transcript.updated` so the Renderer refreshes without user intervention. Renderer hydration retries with bounded backoff, buffers startup/gap events, and rejects stale or terminal-regressing snapshots.
 
-Renderer chat content is session-scoped: immutable engine transcript, optimistic/streaming overlay, and display-only decorations are stored separately. UI messages are built from that model instead of a second top-level message array. A terminal runtime event immediately ends active-response UI state (including generating indicators and message-action locks), while the completed overlay remains mounted until refreshed transcript history actually contains the current turn; this avoids coupling interaction readiness to transcript-settle backoff without introducing a blank frame. If a follow-up starts before that takeover, the completed overlay is first materialized into the display-only projection so the previous turn remains visible while the new run gets its own overlay. History failures retain the last successful transcript, forced refreshes trail an in-flight request, and background sessions can hydrate without mutating foreground UI. A send idempotency key is single-use: retries inside ten minutes replay the original outcome, while expired keys are rejected instead of silently dispatching the engine again. If persisted idempotency state is unavailable, Main fails closed before memory preparation or engine dispatch.
+Native task-result notifications are owned by Electron Main and shared by workflow and chat runtimes. StoClaw suppresses them whenever any application window is visible, unminimized, and focused. Background workflow completion/failure and sidebar-visible chat completion/failure/interruption produce a deduplicated system notification; user-aborted chat runs and internal or sidebar-hidden sessions remain silent. Clicking a chat notification restores the main window, refreshes the session list, selects the originating sidebar conversation, clears its unread state, loads its history, and scrolls to the originating assistant message when its ID is available.
+
+Renderer chat content is session-scoped: immutable engine transcript, optimistic/streaming overlay, and display-only decorations are stored separately. UI messages are built from that model instead of a second top-level message array. A terminal runtime event immediately ends active-response UI state (including generating indicators and message-action locks), while the completed overlay remains mounted until refreshed transcript history actually contains the current turn; this avoids coupling interaction readiness to transcript-settle backoff without introducing a blank frame. Agent preparation progress (memory retrieval and skill matching) is rendered only from the live turn overlay and is excluded from transcript/display materialization, so it disappears when the question-answer run finishes and is not available in history. Users can disable remote memory retrieval with the Personalized Memory toggle in Preferences; answers continue without injected memory or memory-retrieval progress. Preparation rows stay expanded while running, collapse automatically when completed, and can then be reopened while the live turn remains visible. If a follow-up starts before that takeover, the completed overlay is first materialized into the display-only projection so the previous turn remains visible while the new run gets its own overlay. History failures retain the last successful transcript, forced refreshes trail an in-flight request, and background sessions can hydrate without mutating foreground UI. A send idempotency key is single-use: retries inside ten minutes replay the original outcome, while expired keys are rejected instead of silently dispatching the engine again. If persisted idempotency state is unavailable, Main fails closed before memory preparation or engine dispatch.
 
 Scheduled chat runs register their task-run owner and optional task deadline with `ChatRuntimeSupervisor`. Schedule status is finalized only from canonical chat terminal events; startup recovery reconciles persisted runtime/history without resending an uncertain message, while the scheduler's stale-run reaper remains an orphan-lease fallback. Workflow start acceptance is returned only after the minimal `wf_run` identity and chat-card metadata are durable; duplicate identities replay, while conflicts are rejected. Renderer no longer performs a second workflow-card registration after durable acceptance; it only repairs a missing message anchor after persisted history supplies one. Workflow parameter-form state is session-scoped, tool-result dedupe is revision-aware, and target-session agent/model selection never falls back to the visible conversation. `WorkflowCard` retains its compact three-second snapshot polling behavior.
 
@@ -314,6 +320,84 @@ pnpm run comms:compare
 ```
 
 `comms-regression` in CI enforces required scenarios and threshold checks.
+
+### Pi Agent engine (phase 1)
+
+SClaw can run `@earendil-works/pi-coding-agent@0.84.4` in a persistent Electron
+`utilityProcess` without opening a network port. Pi chat sessions use the selected
+workspace as their default working directory and otherwise inherit the desktop
+user's operating-system permissions, including access to files outside the
+workspace when requested. On Windows, Pi uses its native PowerShell tool instead
+of resolving `bash.exe` through WSL; macOS and Linux continue to use Bash.
+Ordinary interactive Pi browser automation uses the pinned
+`@amaster.ai/pi-browser-use@0.1.12` extension, which starts
+`chrome-devtools-mcp`; Pi directly activates every tool registered by the reviewed
+extension factory, without a tool-name prefix allowlist. The SClaw Browser Bridge
+`bridge_*` tools are used instead for App Plaza Pi sessions, where `pi-browser-use`
+is not loaded. Scheduled Pi runs do not load browser automation. Package/project
+extension scanning remains disabled; SClaw loads the selected browser extension
+explicitly. On Windows, the MCP subprocess uses the bundled
+Node runtime first and a system `node.exe` second, avoiding Electron application
+output on the MCP stdio channel. Its profile and configuration resolve under the
+SClaw-managed `~/.stoclaw/pi` directory through `PI_AGENT_HOME` and
+`PI_CODING_AGENT_DIR`. Project-local Pi settings remain untrusted and are ignored.
+
+Chat, queued sends, and scheduled tasks use a versioned, engine-neutral message
+composition for ordered text, files, images, Skills, workflows, and DingTalk
+mentions. Main validates attachment paths and content signatures before dispatch,
+then renders the same composition into each engine's native format. New turns do
+not expose UI placeholders, Skill default-prompt prefixes, or `SClaw-Skill` HTML
+markers to the model. Accepted compositions are persisted separately and projected
+back into history so original filenames and mixed ordering survive reloads; legacy
+transcripts keep their existing placeholder/marker recovery path.
+
+Pi chat and scheduled-task prompts support mixed text, image, and file attachments.
+The worker validates every attachment before accepting the turn, detects images
+from file contents, and uses Pi's native image conversion/resizing pipeline before
+sending official `{ type: "image", data, mimeType }` image inputs. Every attachment
+also keeps its ordered absolute-path `<file>` anchor and original display name in
+the prompt. Non-image files
+are never base64-inlined into model input; Pi can open them through its native file
+tools. A model without image input support rejects image attachments explicitly.
+
+Pi scheduled tasks reuse the canonical scheduler and chat runtime. Their file and
+shell tools follow the same path-access behavior as ordinary Pi conversations: the
+workspace is the default working directory, not an application-level allowlist.
+Pi does not support workflows in phase 1. It loads only SClaw-managed enabled
+global and agent-scoped skills projected from the engine-neutral skills store into
+Pi-owned `~/.stoclaw/pi/skills` and `~/.stoclaw/pi/agents/{agentId}/skills`
+directories. Each conversation keeps a bounded, persistent local Skill lease set
+(6 for interactive sessions, 4 for scheduled runs). The shared, always-active
+`search_skills` lets Claude and Pi search the complete enabled catalog and returns
+locally validated `skillMdPath` values. The engines use their native `Read/read`
+tools to load the selected `SKILL.md` and referenced files inside the current loop.
+Runtime reads are recorded in the same lease state.
+The pre-turn set still follows each engine's native behavior: Claude receives the
+bounded slug set through the SDK and Pi receives the exact selected paths through
+its native resource loader. `search_skills` plus native file reading is only the
+runtime fallback for a miss.
+Reviewed foundational Skills can be declared in the shared default-engine list and
+are pinned into both engines' normal start-of-turn set. Used or runtime-loaded Skills are retained for three following
+turns, unused selections for one, and agent-scoped Skills remain pinned. Hybrid remote routing uses
+dedicated memory-center Skill routing collection/index with keyword and embedding
+recall plus reciprocal-rank fusion, and degrades to local metadata matching.
+Users can disable pre-turn Skill discovery from the chat Skill picker; both engines
+then use every enabled Skill through their native mechanism, while runtime catalog
+tools remain available and automatic remote routing stays disabled.
+See [Session Skill routing](docs/session-skill-routing.md).
+
+Pi does not read OpenClaw or Claude skill directories. Project `.pi`
+packages, project-local skill discovery,
+extensions, MCP, prompt templates, and subagents remain disabled. Provider credentials
+are not persisted in Pi auth files. Set
+`STO_PI_ENGINE_ENABLED=false` to reject new Pi runs without deleting Pi sessions.
+On worker startup SClaw syncs its Pi-specific `resources/context/PI.md` into the
+managed `~/.stoclaw/pi/AGENTS.md`; Pi loads only this managed context and does not
+discover project or parent-directory context files.
+Stopping a Pi run signals the official session abort immediately, publishes the
+canonical aborted state without waiting for tool cleanup, and keeps that session
+serialized until the underlying model/tool operation is fully idle.
+
 ### Tech Stack
 
 | Layer | Technology |

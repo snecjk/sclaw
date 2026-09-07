@@ -61,6 +61,8 @@ export interface ChatProcessBlockProps {
   isComplete?: boolean;
   /** 流式且未完成时自动展开 */
   autoExpand?: boolean;
+  /** 可折叠块首次渲染时是否展开；默认未完成时展开 */
+  defaultExpanded?: boolean;
   /** 当前活跃段：标题 shimmer（§6.1） */
   isActive?: boolean;
   /** 左竖线内容区；省略则仅标题行（连接/等待态） */
@@ -75,6 +77,7 @@ export const ChatProcessBlock = memo(function ChatProcessBlock({
   collapsible = false,
   isComplete = false,
   autoExpand = false,
+  defaultExpanded,
   isActive = false,
   children,
   className,
@@ -89,6 +92,7 @@ export const ChatProcessBlock = memo(function ChatProcessBlock({
     collapsible,
     isComplete,
     autoExpand,
+    defaultExpanded,
   });
 
   const titleWithChevron = collapsible ? (

@@ -11,6 +11,11 @@ import {
 import type { ChatWorkflowCardRef } from '@/types/workflow';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
+import {
+  getAgentPreparationStatus,
+  isAgentPreparationProgressMessage,
+} from '@/lib/agent-preparation-progress';
+import type { ContextCompactionActivity } from '../../../shared/chat-runtime-protocol';
 
 type StreamingTool = ActiveTurnStream['streamingTools'][number];
 
@@ -77,6 +82,7 @@ export function useChatDisplay(params: {
   streamingToolResults: RawMessage[];
   streamingTools: StreamingTool[];
   turnAnchorAt: number | null;
+  runtimeActivity?: ContextCompactionActivity | null;
   workflowCards?: ChatWorkflowCardRef[];
 }) {
   const {
@@ -93,12 +99,13 @@ export function useChatDisplay(params: {
     streamingTools = [],
     workflowCards = [],
     turnAnchorAt,
+    runtimeActivity = null,
   } = params;
 
-  const [, staleTick] = useState(0);
+  const [staleCheckAt, setStaleCheckAt] = useState(0);
   useEffect(() => {
     if (!sending) return;
-    const id = setInterval(() => staleTick((n) => n + 1), STALE_EXECUTION_TICK_MS);
+    const id = setInterval(() => setStaleCheckAt(Date.now()), STALE_EXECUTION_TICK_MS);
     return () => clearInterval(id);
   }, [sending]);
 
@@ -112,10 +119,33 @@ export function useChatDisplay(params: {
     streamingTools,
     showThinking,
   );
+  const streamMessageIsPreparation = isAgentPreparationProgressMessage(
+    streamMsg as RawMessage | null,
+  );
+  const modelStreamMessage = streamMessageIsPreparation ? null : streamMsg;
+  const modelStreamText = streamMessageIsPreparation ? '' : streamText;
+  const modelStreamingMessages = streamingMessages.filter(
+    (message) => !isAgentPreparationProgressMessage(message),
+  );
+  const preparationMessages = [
+    ...streamingMessages,
+    streamMessageIsPreparation ? streamMsg as RawMessage : null,
+  ].filter((message): message is RawMessage => isAgentPreparationProgressMessage(message));
+  const hasRunningPreparation = preparationMessages.some(
+    (message) => getAgentPreparationStatus(message) === 'running',
+  );
+  const hasModelStreamContent = hasStreamPayload(
+    modelStreamMessage,
+    modelStreamText,
+    modelStreamingMessages,
+    streamingToolResults,
+    streamingTools,
+    showThinking,
+  );
   const hasLiveStreamContent = hasActiveStreamContent(
-    streamMsg,
-    streamText,
-    streamingMessages,
+    modelStreamMessage,
+    modelStreamText,
+    modelStreamingMessages,
     streamingTools,
     showThinking,
   );
@@ -127,10 +157,10 @@ export function useChatDisplay(params: {
 
   const isStillExecuting = useMemo(() => {
     if (!sending || pendingFinal) return false;
-    if (hasAnyStreamContent) return false;
+    if (hasModelStreamContent || hasRunningPreparation || runtimeActivity?.type === 'context_compaction') return false;
     if (lastChatEventAt <= 0) return false;
-    return Date.now() - lastChatEventAt > STALE_EXECUTION_SILENCE_MS;
-  }, [sending, pendingFinal, hasAnyStreamContent, lastChatEventAt, staleTick]);
+    return staleCheckAt - lastChatEventAt > STALE_EXECUTION_SILENCE_MS;
+  }, [sending, pendingFinal, hasModelStreamContent, hasRunningPreparation, runtimeActivity, lastChatEventAt, staleCheckAt]);
 
   const { staticItems, activeTurn } = useMemo(() => {
     if (!displayActive) {
@@ -162,9 +192,15 @@ export function useChatDisplay(params: {
       streamingMessages,
       streamingToolResults,
       isRunActive: sending,
-      isConnecting: !pendingFinal && !hasAnyStreamContent && !isStillExecuting,
+      isConnecting:
+        !pendingFinal
+        && !hasModelStreamContent
+        && !hasRunningPreparation
+        && !isStillExecuting,
       isProcessing: pendingFinal && sending && !hasLiveStreamContent,
       isStillExecuting,
+      isCompacting: runtimeActivity?.type === 'context_compaction' && runtimeActivity.status === 'running',
+      isCompactionRetrying: runtimeActivity?.type === 'context_compaction' && runtimeActivity.status === 'retrying',
     };
 
     // Only promote the last assistant turn/message into activeTurn when the
@@ -243,14 +279,17 @@ export function useChatDisplay(params: {
     displayActive,
     sending,
     pendingFinal,
-    transcriptPending,
-    showThinking,
     streamMsg,
     streamText,
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    messages,
+    hasModelStreamContent,
+    hasLiveStreamContent,
+    hasRunningPreparation,
     isStillExecuting,
+    runtimeActivity,
     turnAnchorAt,
   ]);
 

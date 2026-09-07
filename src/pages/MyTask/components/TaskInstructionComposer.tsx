@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { formFieldFocusWithinClass, formFieldHoverBorderClass } from '@/lib/surfaces';
+import { formFieldHoverBorderClass } from '@/lib/surfaces';
 import { DingTalkMentionEditor } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import {
@@ -324,10 +324,9 @@ export const TaskInstructionComposer = forwardRef<
         onDragLeave={enableAttachments ? handleDragLeave : undefined}
         onDrop={enableAttachments ? handleDrop : undefined}
         className={cn(
-          'flex h-[276px] flex-col rounded-[8px] border shadow-none ring-0',
+          'sto-control--task-create-focus flex h-[276px] flex-col rounded-[8px] border shadow-none ring-0',
           'hover:shadow-none dark:hover:shadow-none',
           formFieldHoverBorderClass,
-          formFieldFocusWithinClass,
           invalid
             ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)] hover:border-destructive focus-within:border-destructive'
             : null,

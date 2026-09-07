@@ -18,6 +18,7 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getStoTokenQuotaService } from '../sto-token-quota-service';
 import { invokeAgent as agentRunnerInvokeAgent } from './agent-runner-claude';
 import { invokeOpenClawWorkflowAgent, releaseOpenClawWorkflowAgentSession } from './agent-runner-openclaw';
+import { invokePiWorkflowAgent, releasePiWorkflowAgentSession } from './agent-runner-pi';
 import type { GatewayManager } from '../../gateway/manager';
 import { getWorkflowRuntimeRepository } from '../../db';
 import { ScheduleTaskRunRepository } from '../../db/repositories/schedule-task-run-repository';
@@ -63,7 +64,10 @@ export async function workflowV2BackendFetch(
   return res.json();
 }
 
-export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager): EngineDeps {
+export function createWorkflowRuntimeEngineDeps(
+  gatewayManager?: GatewayManager,
+  getMainWindow?: () => BrowserWindow | null,
+): EngineDeps {
   const scheduleTaskRunRepo = new ScheduleTaskRunRepository();
   configureWorkflowIdPool(async (count) => {
     const response = await workflowV2BackendFetch('/agent/v2/ids/allocate', { method: 'POST', body: { count } });
@@ -81,7 +85,9 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
       if (!effectiveModel) {
         throw new Error('Workflow execution model is missing');
       }
-      const execEngine = run?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
+      const execEngine = run?.engine_type === 'openclaw'
+        ? 'openclaw'
+        : run?.engine_type === 'claude' ? 'claude' : 'pi';
       const persistActualModel = async (model: string): Promise<void> => {
         await getWorkflowRuntimeRepository().updateRunIfActive(args.ctx.runId, { engine_model: model });
         workflowExecLog('info', 'agent-model-selected', 'workflow agent model resolved', {
@@ -99,6 +105,21 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
           attempt: args.attempt, model: effectiveModel,
           agentSessionId: args.agentSessionId, resumeSession: args.resumeSession,
           noProgressMs: (args as any).noProgressMs, deadlineMs: (args as any).deadlineMs, onStreamEvent: args.onStreamEvent });
+      }
+      if (run?.engine_type === 'pi') {
+        if (!args.agentSessionId) throw new Error('SAgent workflow node session is required');
+        await persistActualModel(effectiveModel);
+        return invokePiWorkflowAgent({
+          ctx: { ...args.ctx, nodeId: args.nodeId },
+          prompt: args.prompt,
+          model: effectiveModel,
+          agentSessionId: args.agentSessionId,
+          originSessionKey: run.session_key ?? '',
+          cwd: workspacePath(args.ctx.runId, args.nodeId),
+          noProgressMs: (args as any).noProgressMs,
+          deadlineMs: (args as any).deadlineMs,
+          onStreamEvent: args.onStreamEvent,
+        });
       }
       const sdk = await getSdk();
       return agentRunnerInvokeAgent({
@@ -144,6 +165,10 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
       const run = await getWorkflowRuntimeRepository().getRun(runId);
       if (run?.engine_type === 'openclaw') {
         await releaseOpenClawWorkflowAgentSession(nodeSessionId);
+        return;
+      }
+      if (run?.engine_type === 'pi') {
+        await releasePiWorkflowAgentSession(nodeSessionId);
         return;
       }
       const sdk = await getSdk();
@@ -209,14 +234,17 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
         for (const w of BrowserWindow.getAllWindows()) {
           w.webContents.send('workflow:status-update', payload);
         }
-        notifyWorkflowCompletion(BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null, {
-          runId,
-          sessionKey,
-          status,
-          workflowName: runRow?.workflow_id,
-          summary: typeof runRow?.last_agent_raw_text === 'string' ? runRow.last_agent_raw_text.slice(0, 120) : undefined,
-          error: extra?.error,
-        });
+        notifyWorkflowCompletion(
+          getMainWindow?.() ?? BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null,
+          {
+            runId,
+            sessionKey,
+            status,
+            workflowName: runRow?.workflow_id,
+            summary: typeof runRow?.last_agent_raw_text === 'string' ? runRow.last_agent_raw_text.slice(0, 120) : undefined,
+            error: extra?.error,
+          },
+        );
       })();
     },
     onTokenExpired: () => {
@@ -231,9 +259,12 @@ import { registerWorkflowRuntimeHandlers, type RuntimeHandlers } from './index';
 let _handlers: RuntimeHandlers | null = null;
 
 /** 在 registerIpcHandlers 中调用：注册 workflow-runtime IPC 通道。 */
-export function installWorkflowRuntime(gatewayManager?: GatewayManager): RuntimeHandlers {
+export function installWorkflowRuntime(
+  gatewayManager?: GatewayManager,
+  getMainWindow?: () => BrowserWindow | null,
+): RuntimeHandlers {
   if (_handlers) return _handlers;
-  _handlers = registerWorkflowRuntimeHandlers(createWorkflowRuntimeEngineDeps(gatewayManager));
+  _handlers = registerWorkflowRuntimeHandlers(createWorkflowRuntimeEngineDeps(gatewayManager, getMainWindow));
   return _handlers;
 }
 

@@ -29,6 +29,13 @@ import {
   sortConversationsByLastMsg,
   type RecentMentionRow,
 } from '../../../shared/dingtalk-send/dingtalk-recent-mentions';
+import {
+  completeDingTalkSend,
+  consumeDingTalkPendingContext,
+  hasDingTalkPendingContext,
+  reserveDingTalkSend,
+} from '../../utils/dingtalk-send-guard-state';
+import type { DingTalkSendReservationInput } from '../../agent-extensions/extensions/sto-dingtalk-send-guard/capability';
 interface MentionSearchRequest {
   query?: string;
   limit?: number;
@@ -466,6 +473,75 @@ export async function handleDingTalkRoutes(
       return true;
     }
     return false;
+  }
+
+  if (
+    url.pathname === '/api/agent-extensions/dingtalk-send-guard/pending/has'
+    && req.method === 'POST'
+  ) {
+    const body = await parseJsonBody<{ sessionKey?: string }>(req);
+    const sessionKey = body.sessionKey?.trim();
+    if (!sessionKey) {
+      sendJson(res, 400, { error: 'sessionKey is required' });
+      return true;
+    }
+    sendJson(res, 200, { pending: await hasDingTalkPendingContext(sessionKey) });
+    return true;
+  }
+
+  if (
+    url.pathname === '/api/agent-extensions/dingtalk-send-guard/pending/consume'
+    && req.method === 'POST'
+  ) {
+    const body = await parseJsonBody<{ sessionKey?: string }>(req);
+    const sessionKey = body.sessionKey?.trim();
+    if (!sessionKey) {
+      sendJson(res, 400, { error: 'sessionKey is required' });
+      return true;
+    }
+    sendJson(res, 200, await consumeDingTalkPendingContext(sessionKey));
+    return true;
+  }
+
+  if (
+    url.pathname === '/api/agent-extensions/dingtalk-send-guard/send/reserve'
+    && req.method === 'POST'
+  ) {
+    const body = await parseJsonBody<DingTalkSendReservationInput>(req);
+    if (!body.sessionKey?.trim() || !body.toolCallId?.trim()) {
+      sendJson(res, 400, { error: 'sessionKey and toolCallId are required' });
+      return true;
+    }
+    if (body.category !== 'text' && body.category !== 'image') {
+      sendJson(res, 400, { error: 'category must be text or image' });
+      return true;
+    }
+    sendJson(res, 200, reserveDingTalkSend(body));
+    return true;
+  }
+
+  if (
+    url.pathname === '/api/agent-extensions/dingtalk-send-guard/send/complete'
+    && req.method === 'POST'
+  ) {
+    const body = await parseJsonBody<{
+      sessionKey?: string;
+      toolCallId?: string;
+      success?: boolean;
+      now?: number;
+    }>(req);
+    if (!body.sessionKey?.trim() || !body.toolCallId?.trim()) {
+      sendJson(res, 400, { error: 'sessionKey and toolCallId are required' });
+      return true;
+    }
+    completeDingTalkSend({
+      sessionKey: body.sessionKey,
+      toolCallId: body.toolCallId,
+      success: body.success === true,
+      now: body.now,
+    });
+    sendJson(res, 200, { success: true });
+    return true;
   }
 
   if (url.pathname === '/api/dingtalk/auth/login' && req.method === 'POST') {

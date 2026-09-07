@@ -2,7 +2,7 @@ import type { RawMessage } from '@/stores/chat';
 import { extractText } from '@/pages/Chat/message-utils';
 
 /** OpenClaw / Claude 在思考过程解析上的结构差异（仅影响 parse，不碰 UI） */
-export type EngineProfileName = 'openclaw' | 'claude';
+export type EngineProfileName = 'openclaw' | 'claude' | 'pi';
 
 export type EngineProfile = {
   name: EngineProfileName;
@@ -28,9 +28,17 @@ export const CLAUDE_ENGINE_PROFILE: EngineProfile = {
   preBatchTextStrategy: 'interleave',
 };
 
+export const PI_ENGINE_PROFILE: EngineProfile = {
+  name: 'pi',
+  flushOnIntraSnapshotText: true,
+  useStreamingToolSupplement: true,
+  preBatchTextStrategy: 'interleave',
+};
+
 const ENGINE_PROFILES: Record<EngineProfileName, EngineProfile> = {
   openclaw: OPENCLAW_ENGINE_PROFILE,
   claude: CLAUDE_ENGINE_PROFILE,
+  pi: PI_ENGINE_PROFILE,
 };
 
 /**

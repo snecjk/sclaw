@@ -127,6 +127,34 @@ export function isClaudeScheduledTaskRunSessionKey(sessionKey: string): boolean 
   return parseClaudeScheduledTaskRunSessionKey(sessionKey) != null;
 }
 
+// ---------------------------------------------------------------------------
+// PI Scheduled Task Session Keys
+// ---------------------------------------------------------------------------
+
+export interface PiScheduledTaskSessionKeyParts {
+  taskId: string;
+  date?: string;
+}
+
+/** PI scheduled-task key: `pi-task:{taskId}` or `pi-task:{taskId}:{YYYY-MM-DD}`. */
+export function parsePiScheduledTaskSessionKey(
+  sessionKey: string,
+): PiScheduledTaskSessionKeyParts | null {
+  const trimmed = sessionKey.trim();
+  if (!trimmed.startsWith('pi-task:')) return null;
+  const parts = trimmed.split(':');
+  if (parts.length !== 2 && parts.length !== 3) return null;
+  const taskId = parts[1]?.trim();
+  if (!taskId) return null;
+  if (parts.length === 2) return { taskId };
+  const date = parts[2]?.trim();
+  return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? { taskId, date } : null;
+}
+
+export function isPiScheduledTaskDatedSessionKey(sessionKey: string): boolean {
+  return parsePiScheduledTaskSessionKey(sessionKey)?.date != null;
+}
+
 /**
  * True for "virtual" task/cron session keys that loadHistory resolves by key
  * prefix — they may be absent from the backend sessions list right after a task
@@ -136,10 +164,12 @@ export function isClaudeScheduledTaskRunSessionKey(sessionKey: string): boolean 
  * task's engine.
  */
 export function isVirtualTaskSessionKey(sessionKey: string): boolean {
+  const trimmed = sessionKey.trim();
   return (
-    isAnyCronSessionKey(sessionKey)
-    || isClaudeScheduledTaskSessionKey(sessionKey)
-    || isClaudeScheduledTaskRunSessionKey(sessionKey)
+    isAnyCronSessionKey(trimmed)
+    || isClaudeScheduledTaskSessionKey(trimmed)
+    || isClaudeScheduledTaskRunSessionKey(trimmed)
+    || parsePiScheduledTaskSessionKey(trimmed) != null
   );
 }
 

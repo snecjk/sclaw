@@ -43,6 +43,8 @@ import { logger } from '../utils/logger';
 import { getAuthSessionSnapshot, getAuthState, isAuthSessionCurrent } from '../utils/auth-store';
 import { getChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
+import { parseAgentEngineType } from '../../shared/agent-engine';
+import { getAdapter } from '../engines/manager';
 import {
   persistScheduledTaskAttachments,
   prepareScheduledTaskAttachmentsForSave,
@@ -247,6 +249,13 @@ export class ScheduledTaskService {
     updatePayload.actor = await resolveScheduleTaskActor(input.actor);
     const existing = await this.taskRepo.getById(id);
     if (!existing) return null;
+    const engineCapabilities = getAdapter(existing.engineType).scheduledTaskCapabilities;
+    if (!engineCapabilities.supportsWorkflow && input.workflowCode?.trim()) {
+      throw new Error(`UNSUPPORTED_ENGINE: ${existing.engineType} does not support workflows`);
+    }
+    if (engineCapabilities.requiresWorkspacePath && input.workspacePath !== undefined && !input.workspacePath?.trim()) {
+      throw new Error(`${existing.engineType} scheduled tasks require workspacePath`);
+    }
     if (!options?.allowCrossOwner) {
       if (!isTaskOwnedBy(existing, updatePayload.actor ?? null)) {
         throw new Error('无权修改他人定时任务');
@@ -272,6 +281,9 @@ export class ScheduledTaskService {
       if (input.extra !== undefined || (input.prompt !== undefined && prepared.extra)) {
         updatePayload.extra = prepared.extra;
       }
+    }
+    if (engineCapabilities.enforcedPermissionProfile) {
+      updatePayload.permissionProfile = engineCapabilities.enforcedPermissionProfile;
     }
     // 5. 落库
     const updated = await this.taskRepo.update(id, updatePayload);
@@ -871,11 +883,21 @@ export class ScheduledTaskService {
   // ---- 内部：校验 / 默认值 / session key ----
 
   private validateTaskInput(input: CreateScheduleTaskInput): void {
+    if (!parseAgentEngineType(input.engineType)) {
+      throw new Error(`UNSUPPORTED_ENGINE: ${String(input.engineType)}`);
+    }
     this.assertRequired(input.name, 'name');
     this.assertRequired(input.prompt, 'prompt');
     this.assertRequired(input.agentId, 'agentId');
     this.assertRequired(input.cronExpr, 'cronExpr');
     validateCronExpr(input.cronExpr);
+    const engineCapabilities = getAdapter(input.engineType).scheduledTaskCapabilities;
+    if (!engineCapabilities.supportsWorkflow && input.workflowCode?.trim()) {
+      throw new Error(`UNSUPPORTED_ENGINE: ${input.engineType} does not support workflows`);
+    }
+    if (engineCapabilities.requiresWorkspacePath && !input.workspacePath?.trim()) {
+      throw new Error(`${input.engineType} scheduled tasks require workspacePath`);
+    }
     if (input.permissionProfile != null) {
       this.assertPermissionProfile(input.permissionProfile);
     }
@@ -891,8 +913,12 @@ export class ScheduledTaskService {
   }
 
   private normalizeDefaults(input: CreateScheduleTaskInput): CreateScheduleTaskInput {
+    const engineCapabilities = getAdapter(input.engineType).scheduledTaskCapabilities;
     return {
       ...input,
+      permissionProfile: engineCapabilities.enforcedPermissionProfile
+        ?? input.permissionProfile
+        ?? engineCapabilities.defaultPermissionProfile,
       retryPolicy: input.retryPolicy ?? { maxAttempts: 1, backoffSec: 30 },
       failurePolicy: input.failurePolicy ?? { pauseAfterConsecutiveFailures: 3 },
     };
@@ -927,9 +953,9 @@ export class ScheduledTaskService {
 
   private buildDatedSessionKey(task: ScheduleTask, date: Date): string {
     const ymd = this.formatLocalYmd(date);
-    return task.engineType === 'claude'
-      ? `claude-task:${task.id}:${ymd}`
-      : `agent:${task.agentId}:cron:${task.id}:${ymd}`;
+    if (task.engineType === 'claude') return `claude-task:${task.id}:${ymd}`;
+    if (task.engineType === 'pi') return `pi-task:${task.id}:${ymd}`;
+    return `agent:${task.agentId}:cron:${task.id}:${ymd}`;
   }
 
   /** 本地时区 YYYY-MM-DD（内联，避免额外 util 依赖）。 */

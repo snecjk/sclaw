@@ -44,6 +44,7 @@ describe('ScheduledTaskService', () => {
       expect(task.id).toBeTruthy();
       expect(task.retryPolicy).toEqual({ maxAttempts: 1, backoffSec: 30 });
       expect(task.failurePolicy).toEqual({ pauseAfterConsecutiveFailures: 3 });
+      expect(task.permissionProfile).toBe('dangerous-bypass');
       expect(task.cronExprSnapshot).toBe('0 9 * * *');
       expect(task.nextRunAt).toBeTruthy();
       expect(new Date(task.nextRunAt!).getTime()).toBeGreaterThan(Date.now() - 60_000);
@@ -81,6 +82,26 @@ describe('ScheduledTaskService', () => {
       ).rejects.toThrow(/Invalid permissionProfile/);
     });
 
+    it('fixes Pi permissions, requires a workspace, and accepts workflows', async () => {
+      await expect(svc.createTask({ ...baseCreateInput, engineType: 'pi' }))
+        .rejects.toThrow(/workspacePath/);
+      const workflowTask = await svc.createTask({
+        ...baseCreateInput,
+        engineType: 'pi',
+        workspacePath: '/workspace',
+        workflowCode: 'wf-1',
+      });
+      expect(JSON.stringify(workflowTask.extra)).toContain('wf-1');
+      expect(workflowTask.permissionProfile).toBe('workspace-write');
+      const task = await svc.createTask({
+        ...baseCreateInput,
+        engineType: 'pi',
+        workspacePath: '/workspace',
+        permissionProfile: 'dangerous-bypass',
+      });
+      expect(task.permissionProfile).toBe('workspace-write');
+    });
+
     it('rejects invalid retry/failure/timeout policies', async () => {
       await expect(
         svc.createTask({ ...baseCreateInput, retryPolicy: { maxAttempts: 0, backoffSec: 30 } }),
@@ -111,6 +132,17 @@ describe('ScheduledTaskService', () => {
       expect(claudeSession.sessionType).toBe('claude_task');
       expect(claudeSession.taskId).toBe(claudeTask.id);
       expect(claudeSession.sessionKey).toMatch(/^claude-task:[^:]+:/);
+
+      const piTask = await svc.createTask({
+        ...baseCreateInput,
+        name: 'Pi Task',
+        engineType: 'pi',
+        workspacePath: '/workspace',
+      });
+      const piSession = await svc.ensureDatedSessionPlaceholder(piTask, date);
+      expect(piSession.sessionType).toBe('scheduled_task');
+      expect(piSession.taskId).toBe(piTask.id);
+      expect(piSession.sessionKey).toMatch(/^pi-task:[^:]+:/);
     });
 
     it('is idempotent: re-upserting the same date reuses the same session row', async () => {

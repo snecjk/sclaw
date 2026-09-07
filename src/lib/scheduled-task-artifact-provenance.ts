@@ -3,6 +3,7 @@ import {
   parseClaudeScheduledTaskRunSessionKey,
   parseClaudeScheduledTaskSessionKey,
   parseCronSessionKey,
+  parsePiScheduledTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { useCronStore } from '@/stores/cron';
 import type { DataCenterArtifactProvenance } from '@/types/data-center';
@@ -17,6 +18,9 @@ export function getScheduledTaskIdFromSessionKey(sessionKey: string): string | n
 
   const claudeRun = parseClaudeScheduledTaskRunSessionKey(sessionKey);
   if (claudeRun?.taskId) return claudeRun.taskId;
+
+  const piTask = parsePiScheduledTaskSessionKey(sessionKey);
+  if (piTask?.taskId) return piTask.taskId;
 
   return null;
 }

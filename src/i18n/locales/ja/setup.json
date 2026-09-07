@@ -5,56 +5,49 @@
             "description": "AIアシスタントの設定準備が整いました"
         },
         "runtime": {
-            "title": "環境チェック",
-            "description": "システム要件を確認中"
+            "title": "デバイス情報",
+            "description": "現在のデバイスの概要を表示します"
         },
         "channel": {
             "title": "チャンネル接続",
             "description": "メッセージングプラットフォームを接続（オプション）"
         },
-        "installing": {
-            "title": "セットアップ中",
-            "description": "必須コンポーネントをインストール中"
-        },
         "complete": {
-            "title": "完了！",
-            "description": "SClawを使用する準備が整いました"
+            "title": "セットアップを完了",
+            "description": "必須コンポーネントをインストールして設定を完了します"
         }
     },
     "welcome": {
         "title": "SClawへようこそ",
-        "description": "SClawはOpenClawのグラフィカルインターフェースで、お気に入りのメッセージングプラットフォームでAIアシスタントを簡単に使用できます。",
+        "description": "SClawはSTOが独自開発したデスクトップAI業務アシスタントで、効率的な仕事を支援します。",
         "features": {
-            "noCommand": "コマンドライン不要",
-            "modernUI": "モダンで美しいインターフェース",
-            "bundles": "プリインストールされたスキルバンドル",
+            "noCommand": "シンプルな操作",
+            "modernUI": "STO業務を理解",
+            "bundles": "STOスキルバンドル",
             "crossPlatform": "クロスプラットフォーム対応"
         }
     },
     "runtime": {
-        "title": "環境をチェック中",
+        "title": "このデバイス",
         "viewLogs": "ログを表示",
-        "recheck": "再チェック",
+        "refresh": "更新",
         "nodejs": "Node.js ランタイム",
-        "openclaw": "OpenClaw パッケージ",
-        "gateway": "ゲートウェイサービス",
-        "startGateway": "ゲートウェイを起動",
-        "status": {
-            "checking": "確認中...",
-            "success": "Node.js は利用可能です",
-            "error": "失敗",
-            "gatewayRunning": "ポート {{port}} で実行中",
-            "packageReady": "OpenClaw パッケージ準備完了"
-        },
-        "issue": {
-            "title": "環境の問題が検出されました",
-            "desc": "OpenClawが正しくインストールされていることを確認してください。詳細はログを確認してください。"
-        },
+        "nodeReady": "Node.js 利用可能",
+        "bundledRuntime": "アプリ内蔵ランタイム",
+        "system": "システム",
+        "processor": "{{count}} 個の論理プロセッサ",
+        "memory": "利用可能なメモリ",
+        "disk": "利用可能なディスク",
+        "capacityMeta": "合計 {{total}}、空き {{percentage}}%",
+        "unavailable": "利用できません",
+        "loading": "デバイス情報を読み込み中",
+        "loadError": "一部のデバイス情報を読み取れませんでした。セットアップは続行できます。",
+        "hint": "デバイス情報は参考表示であり、セットアップを妨げません。",
         "logs": {
             "title": "アプリケーションログ",
             "openFolder": "ログフォルダを開く",
-            "close": "閉じる",
-            "noLogs": "（ログはまだありません）"
+            "noLogs": "（ログはまだありません）",
+            "loadFailed": "（ログの読み込みに失敗しました）"
         }
     },
     "provider": {
@@ -103,17 +96,19 @@
             "failed": "失敗"
         },
         "error": "セットアップエラー：",
-        "restart": "アプリを再起動してください",
+        "unknownError": "インストール中に不明なエラーが発生しました",
+        "failedToast": "コンポーネントのインストールに失敗しました",
+        "retry": "再インストール",
         "wait": "これには少し時間がかかる場合があります...",
-        "skip": "この手順をスキップ"
+        "skip": "コンポーネントのインストールをスキップ"
     },
     "complete": {
         "title": "セットアップ完了！",
         "subtitle": "SClawの構成が完了し、使用準備が整いました。AIアシスタントとのチャットを開始できます。",
+        "skippedSubtitle": "基本設定は完了しました。必須コンポーネントは後でインストールできます。",
         "components": "コンポーネント",
         "envReady": "環境準備完了",
-        "gateway": "ゲートウェイ",
-        "running": "実行中",
+        "skipped": "スキップ済み",
         "footer": "設定でスキルをカスタマイズしたり、チャンネルを接続したりできます"
     },
     "nav": {

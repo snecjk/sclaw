@@ -7,6 +7,8 @@ import {
   upsertEngineBinding,
 } from '../services/session-catalog-service';
 import type { EngineSessionRegistryEntry } from './session-registry-types';
+import { deleteSessionSkillState } from '../services/skills/session-skill-state-service';
+import { getChatUserTurnCompositionRepository } from '../db/repositories/chat-user-turn-composition-repository';
 
 export type { EngineSessionRegistryEntry } from './session-registry-types';
 
@@ -62,5 +64,10 @@ export async function patchEngineSessionRegistryEntry(
 export async function deleteEngineSessionRegistryEntry(
   sessionKey: string,
 ): Promise<EngineSessionRegistryEntry | null> {
-  return runRegistryMutation(async () => deleteEngineBinding(sessionKey));
+  return runRegistryMutation(async () => {
+    const removed = await deleteEngineBinding(sessionKey);
+    await deleteSessionSkillState(sessionKey);
+    await getChatUserTurnCompositionRepository().deleteSession(sessionKey);
+    return removed;
+  });
 }

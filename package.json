@@ -1,6 +1,6 @@
 {
   "name": "stoclaw",
-  "version": "2026.9.2-GA.1",
+  "version": "2026.9.6-GA.1",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@discordjs/opus",
@@ -88,6 +88,7 @@
     "templates:init": "node scripts/publish-builtin-app-templates.mjs"
   },
   "dependencies": {
+    "@amaster.ai/pi-browser-use": "0.1.12",
     "@anthropic-ai/claude-agent-sdk": "^0.3.168",
     "@anthropic-ai/sdk": "^0.105.0",
     "@azure/identity": "^4.13.1",
@@ -95,6 +96,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@earendil-works/pi-coding-agent": "0.84.4",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.2",
     "@mistralai/mistralai": "^1.14.1",
@@ -128,6 +130,7 @@
     "posthog-node": "^5.28.0",
     "pptx-preview": "^1.0.7",
     "redis": "^5.12.1",
+    "typebox": "1.3.7",
     "uri-js": "^4.4.1",
     "ws": "^8.19.0",
     "xlsx": "^0.18.5",

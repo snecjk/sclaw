@@ -292,7 +292,9 @@ export const formFieldFocusClass = cn(
 /** 表单字段 focus-within（焦点在内部编辑器时画在外壳上） */
 export const formFieldFocusWithinClass = cn(
   'focus-within:outline-none focus-within:ring-0',
-  'focus-within:border-[var(--sto-form-interactive-border)] focus-within:shadow-[var(--sto-form-interactive-shadow)]',
+  // 与 dialog-field 控件保持一致：亮色主题也使用品牌描边和紧凑的 2px 光晕。
+  'focus-within:border-[var(--sto-brand-primary)]',
+  'focus-within:shadow-[0_0_0_2px_color-mix(in_srgb,var(--sto-brand-primary)_12%,transparent)]',
 );
 
 /** 表单触发器 focus-visible（button 类下拉） */
@@ -316,7 +318,7 @@ export const taskCreateFormLabelClass = cn(
 
 /** 定时任务弹窗：单行输入框 / 选择框 */
 export const taskCreateFormControlClass = cn(
-  'sto-control sto-control--dialog-field box-border flex h-[42px] w-full items-center',
+  'sto-control sto-control--dialog-field sto-control--task-create-focus box-border flex h-[42px] w-full items-center',
   'rounded-[8px] border px-3 py-2',
   'text-[12px] text-foreground',
 );
@@ -867,7 +869,7 @@ export const stoMainCardBodyClass = cn(
 export const stoMainCardBodyHomeClass = cn(
   'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain',
   // Conversation Header bottom → Body Surface = 0px；正文 8px 由 scroll viewport 持有。
-  'pt-[var(--sto-conversation-header-to-surface-gap,0px)] pb-5',
+  'pt-[var(--sto-conversation-header-to-surface-gap,0px)] pb-2',
 );
 
 /**
@@ -1583,6 +1585,10 @@ export const sidebarTooltipContentClass = cn(
 export const sidebarTooltipArrowClass =
   'fill-[#1D2129] dark:fill-[var(--sto-surface-elevated)]';
 
+/** 设置页卡片右上角主操作，与“添加供应商”按钮保持一致。 */
+export const settingsPrimaryActionButtonClass =
+  'h-9 rounded-md px-4 text-[13px] font-medium shadow-none';
+
 /** 品牌头版本号 — Grey-8，MCP font_8:49208（SF Pro 11px）；相对 logo 基线下移 6px */
 export const sidebarBrandVersionClass = cn(
   'mt-1.5 text-[11px] leading-[13px]',
@@ -1706,6 +1712,13 @@ export const sidebarAccountHelpTriggerClass =
 /** 侧栏底部设置图标 — Grey-9（收起态紧凑入口仍用） */
 export const sidebarFooterSettingsIconClass = cn('h-5 w-5 shrink-0', sidebarTextIconClass);
 
+/** 侧栏底部“移动端 / 帮助群”浮层，共用相同宽度、圆角与阴影。 */
+export const sidebarFooterPopoverContentClass =
+  'z-[60000] w-[260px] overflow-hidden rounded-[12px] p-0 shadow-[var(--sto-shadow-dropdown-strong)]';
+
+/** 侧栏底部浮层统一 12px 内容边距。 */
+export const sidebarFooterPopoverBodyClass = 'flex flex-col gap-3 p-3';
+
 /** 最近会话运行中 spinner — MasterGo #5F9274 */
 export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinner)]';
 
@@ -1723,9 +1736,9 @@ export const sidebarSingleActionRowPaddingClass = 'pr-7';
 export const sidebarSingleActionTrailingSlotClass =
   'absolute right-0 top-1/2 w-7 -translate-y-1/2';
 
-/** 最近会话/分组下拉 — MCP 140px 菜单容器 */
+/** 最近会话/分组下拉 — MCP 140px 菜单容器；无品牌色 focus 描边 */
 export const sidebarRecentMenuContentClass =
-  'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)]';
+  'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)] outline-none';
 
 /** 最近会话/分组下拉项 — MCP 132×34；hover 走 muted，light/dark 自适应 */
 export const sidebarRecentMenuItemClass = cn(

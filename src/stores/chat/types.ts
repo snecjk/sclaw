@@ -2,6 +2,9 @@ import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { SkillMeta } from '@/types/skill-meta';
+import type { AgentEngineType } from '../../../shared/agent-engine';
+import type { ModelMessageCompositionV1 } from '../../../shared/model-message-composition';
+import type { FileProvenance } from '@/components/attachments/types';
 
 export interface SendMessageOptions {
   text: string;
@@ -13,6 +16,7 @@ export interface SendMessageOptions {
     fileSize: number;
     stagedPath: string;
     preview: string | null;
+    provenance?: FileProvenance;
   }>;
   targetAgentId?: string | null;
   dingTalkMentions?: DingTalkMention[];
@@ -30,6 +34,8 @@ export interface SendMessageOptions {
   workflows?: Array<{ id: string; name: string; source?: string }>;
   /** 预烘焙的 Gateway 消息正文（技能 prompt + 工作流执行句已应用） */
   gatewayText?: string;
+  /** Main 侧模型消息规范化的结构化真源。 */
+  composition?: ModelMessageCompositionV1;
   /** 本地乐观 / 编辑往返用的 segments */
   composerSegments?: PersistedComposerSegment[];
 }
@@ -63,12 +69,16 @@ export interface AttachedFileMeta {
   downloadUrl?: string;
   /** Data Center provenance used by the artifact-preview "保存产物" action. */
   artifactProvenance?: DataCenterArtifactProvenance;
+  /** Original upload source, used to re-stage edited user attachments. */
+  provenance?: FileProvenance;
 }
 
 /** Raw message from OpenClaw chat.history */
 export interface RawMessage {
   role: 'user' | 'assistant' | 'system' | 'toolresult';
   content: unknown; // string | ContentBlock[]
+  /** Structured runtime metadata attached to transient engine messages. */
+  metadata?: Record<string, unknown>;
   timestamp?: number;
   id?: string;
   toolCallId?: string;
@@ -140,7 +150,7 @@ export interface ChatSession {
   thinkingLevel?: string;
   model?: string;
   updatedAt?: number;
-  engineType?: 'openclaw' | 'claude';
+  engineType?: AgentEngineType;
   /**
    * Owning agent for this session. Required for `claude-task:*` keys which do not
    * embed agentId in the session key (key-derived fallback would wrongly be `main`).
@@ -231,7 +241,12 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: (options?: { projectId?: string; materialize?: boolean }) => void;
+  newSession: (options?: {
+    projectId?: string;
+    materialize?: boolean;
+    /** Explicit engine for preconfigured flows such as workflow "run now". */
+    engineType?: AgentEngineType;
+  }) => void;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];

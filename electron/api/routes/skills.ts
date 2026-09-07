@@ -7,6 +7,23 @@ import {
 } from '../../services/skills/create-user-skill';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import {
+  recordRuntimeSkillRead,
+  searchRuntimeSkills,
+  SkillRuntimeError,
+} from '../../services/skills/skill-runtime-service';
+
+function statusForSkillRuntimeError(code: SkillRuntimeError['code']): number {
+  switch (code) {
+    case 'INVALID_REQUEST':
+      return 400;
+    case 'SKILL_NOT_FOUND':
+    case 'RESOURCE_NOT_FOUND':
+      return 404;
+    default:
+      return 500;
+  }
+}
 
 function statusForSaveUserSkillError(code: SaveUserSkillError['code']): number {
   switch (code) {
@@ -30,6 +47,34 @@ export async function handleSkillRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  if (url.pathname === '/api/skills/runtime/search' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<Parameters<typeof searchRuntimeSkills>[0]>(req);
+      sendJson(res, 200, { success: true, data: await searchRuntimeSkills(body) });
+    } catch (error) {
+      sendJson(res, error instanceof SkillRuntimeError ? statusForSkillRuntimeError(error.code) : 500, {
+        success: false,
+        code: error instanceof SkillRuntimeError ? error.code : 'SKILL_SEARCH_FAILED',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/skills/runtime/read' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<Parameters<typeof recordRuntimeSkillRead>[0]>(req);
+      sendJson(res, 200, { success: true, data: await recordRuntimeSkillRead(body) });
+    } catch (error) {
+      sendJson(res, error instanceof SkillRuntimeError ? statusForSkillRuntimeError(error.code) : 500, {
+        success: false,
+        code: error instanceof SkillRuntimeError ? error.code : 'SKILL_READ_RECORD_FAILED',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/skills/save-user' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<SaveUserSkillInput>(req);

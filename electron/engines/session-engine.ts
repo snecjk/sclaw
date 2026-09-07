@@ -1,5 +1,6 @@
 import { getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from './session-registry';
 import type { AgentEngineType } from './types';
+import { parseAgentEngineType } from '../../shared/agent-engine';
 import { listAgentsSnapshot } from '../utils/agent-config';
 import { getBaseAgentIdFromProjectAgentId } from '../../shared/project-agent';
 import {
@@ -48,6 +49,9 @@ export async function resolveSessionEngineType(
   if (parseClaudeTaskIdFromSessionKey(sessionKey)) {
     return 'claude';
   }
+  if (sessionKey.startsWith('pi:') || sessionKey.startsWith('pi-task:')) {
+    return 'pi';
+  }
 
   return resolveAgentEngineType(await resolveAgentIdForSessionKey(sessionKey));
 }
@@ -69,10 +73,11 @@ export async function rememberSessionEngineType(
     sessionId: engineChanged ? undefined : existing?.sessionId,
     cwd: engineChanged ? undefined : existing?.cwd,
     updatedAt: Date.now(),
-    title: existing?.title,
+    title: engineChanged ? undefined : existing?.title,
     model: existing?.model,
     provider: existing?.provider,
     accountId: existing?.accountId,
+    piSessionFile: engineChanged ? undefined : existing?.piSessionFile,
     ...(engineChanged && engineType === 'openclaw'
       ? { archivedClaudeSessionIds: undefined, pendingHistoryBridge: undefined }
       : {}),
@@ -84,7 +89,7 @@ async function resolveAgentEngineType(agentId: string): Promise<AgentEngineType>
   const normalizedAgentId = agentId.trim().toLowerCase();
   const match = snapshot.agents.find((agent) => agent.id.trim().toLowerCase() === normalizedAgentId);
   if (match?.engineType) {
-    return match.engineType === 'claude' ? 'claude' : 'openclaw';
+    return parseAgentEngineType(match.engineType) ?? 'openclaw';
   }
 
   // For project agents that have not yet been persisted, fall back to the
@@ -93,7 +98,7 @@ async function resolveAgentEngineType(agentId: string): Promise<AgentEngineType>
   if (baseAgentId) {
     const baseMatch = snapshot.agents.find((agent) => agent.id.trim().toLowerCase() === baseAgentId.trim().toLowerCase());
     if (baseMatch?.engineType) {
-      return baseMatch.engineType === 'claude' ? 'claude' : 'openclaw';
+      return parseAgentEngineType(baseMatch.engineType) ?? 'openclaw';
     }
   }
 

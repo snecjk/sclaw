@@ -14,6 +14,8 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { getAgentIdFromSessionKey } from './chat/session-identity';
 import { useChatRuntimeV2Store } from './chat/runtime-v2-store';
 import { buildChatSessionRuntimeView } from './chat/runtime-selectors';
+import type { ModelMessageCompositionV1 } from '../../shared/model-message-composition';
+import { buildModelCompositionFromPersistedSegments } from '../../shared/model-message-composition';
 
 const QUEUE_MAX_PER_SESSION = 10;
 
@@ -32,6 +34,7 @@ export interface QueuedMessage {
   workflows?: Array<{ id: string; name: string; source?: string }>;
   composerSegments?: PersistedComposerSegment[];
   gatewayText?: string;
+  composition?: ModelMessageCompositionV1;
   queuedAt: number;
 }
 
@@ -54,6 +57,7 @@ interface MessageQueueState {
       workflows?: Array<{ id: string; name: string; source?: string }>;
       composerSegments?: PersistedComposerSegment[];
       gatewayText?: string;
+      composition?: ModelMessageCompositionV1;
     },
   ) => void;
   remove: (sessionKey: string, id: string) => void;
@@ -162,6 +166,18 @@ function filterQueueItemMentionsByText(
   return kept.length === mentions.length ? mentions : kept;
 }
 
+function rebuildQueueComposition(
+  segments: QueuedMessage['composerSegments'],
+  attachments: QueuedMessage['attachments'],
+): ModelMessageCompositionV1 | undefined {
+  if (!segments?.length) return undefined;
+  return buildModelCompositionFromPersistedSegments({
+    segments,
+    media: attachments ?? [],
+    appendUnmatchedMedia: true,
+  });
+}
+
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
@@ -181,6 +197,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       workflows: extras?.workflows,
       composerSegments: extras?.composerSegments,
       gatewayText: extras?.gatewayText,
+      composition: extras?.composition,
       queuedAt: Date.now(),
     };
     // Immutable update: new array + new session object so `getQueue` selectors
@@ -206,13 +223,15 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     queues.set(sessionKey, {
       queue: session.queue.map((item) => {
         if (item.id !== id || item.text === trimmed) return item;
+        const composerSegments = replaceQueueItemTextSegments(item.composerSegments, trimmed);
         return {
           ...item,
           text: trimmed,
           // 文本已改：入队时的预烘焙 gateway 文本随之过期，置空后
           // 投递时走 sendMessage 的现烘焙路径（技能前缀/工作流句按新文本重建）。
           gatewayText: undefined,
-          composerSegments: replaceQueueItemTextSegments(item.composerSegments, trimmed),
+          composerSegments,
+          composition: rebuildQueueComposition(composerSegments, item.attachments),
           dingTalkMentions: filterQueueItemMentionsByText(item.dingTalkMentions, trimmed),
         };
       }),
@@ -410,6 +429,7 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
               text: textToSend,
               sessionKey,
               gatewayText: msg.gatewayText,
+              composition: msg.composition,
               attachments: mapQueuedAttachments(msg.attachments),
               targetAgentId: msg.targetAgentId,
               dingTalkMentions: msg.dingTalkMentions,
@@ -431,6 +451,7 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
           text: msg.text,
           sessionKey,
           gatewayText: msg.gatewayText,
+          composition: msg.composition,
           attachments: mapQueuedAttachments(msg.attachments),
           targetAgentId: msg.targetAgentId,
           dingTalkMentions: msg.dingTalkMentions,
@@ -447,6 +468,7 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
     text: msg.text,
     sessionKey,
     gatewayText: msg.gatewayText,
+    composition: msg.composition,
     attachments: mapQueuedAttachments(msg.attachments),
     targetAgentId: msg.targetAgentId,
     dingTalkMentions: msg.dingTalkMentions,

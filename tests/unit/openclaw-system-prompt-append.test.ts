@@ -67,4 +67,30 @@ describe('prependSystemPromptAppend / mergeOpenClawSystemPromptAppend', () => {
       runtimePolicy: { origin: 'interactive', deadlineAt: null },
     })).toBe('普通上下文\n\n普通会话');
   });
+
+  it('routes explicitly selected skills without legacy skill markers or default prompts', () => {
+    const message = resolveOpenClawSendMessage({
+      message: '这个技能是干嘛的',
+      normalizedTurn: {
+        composition: {
+          version: 1,
+          segments: [{ type: 'skill', slug: 'quote-assistant', title: '报价助手' }],
+        },
+        modelSegments: [{
+          type: 'text',
+          text: '<skill slug="quote-assistant" name="报价助手"></skill>',
+        }],
+        displayText: '这个技能是干嘛的',
+        sourceText: '这个技能是干嘛的',
+        modelText: '这个技能是干嘛的',
+        attachments: [],
+        selectedSkillSlugs: ['quote-assistant'],
+        workflows: [],
+        legacy: false,
+      },
+    });
+    expect(message).toBe('这个技能是干嘛的');
+    expect(message).not.toContain('[技能:');
+    expect(message).not.toContain('SClaw-Skill');
+  });
 });

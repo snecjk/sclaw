@@ -12,6 +12,8 @@ import {
 import * as logger from './logger';
 import { OPENCLAW_WECHAT_CHANNEL_TYPE, toUiChannelType } from './channel-alias';
 import { applyWeChatChannelAccountEnabled } from './channel-config';
+import { parseAgentEngineType, type AgentEngineType } from '../../shared/agent-engine';
+export type { AgentEngineType } from '../../shared/agent-engine';
 
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main Agent';
@@ -152,8 +154,6 @@ export interface AgentsSnapshot {
 
 // ── Agent Features (stored outside openclaw.json to avoid schema violations) ──
 
-export type AgentEngineType = 'openclaw' | 'claude';
-
 interface AgentFeatures {
   fileTransformByOSS?: Record<string, boolean>;
   engineType?: Record<string, AgentEngineType>;
@@ -165,9 +165,12 @@ function getDefaultAgentEngineType(): AgentEngineType {
   return 'claude';
 }
 
+function resolveNewAgentDefaultEngineType(defaultEngine: unknown): AgentEngineType {
+  return parseAgentEngineType(defaultEngine) ?? getDefaultAgentEngineType();
+}
+
 function normalizeAgentEngineType(value: unknown, fallback: AgentEngineType = getDefaultAgentEngineType()): AgentEngineType {
-  if (value === 'claude' || value === 'openclaw') return value;
-  return fallback;
+  return parseAgentEngineType(value) ?? fallback;
 }
 
 interface AgentPreferredModel {
@@ -747,8 +750,9 @@ export async function listConfiguredAgentIds(): Promise<string[]> {
 
 export async function createAgent(
   name: string,
-  options?: { inheritWorkspace?: boolean },
+  options?: { inheritWorkspace?: boolean; defaultEngine?: unknown },
 ): Promise<AgentsSnapshot> {
+  const defaultEngineType = resolveNewAgentDefaultEngineType(options?.defaultEngine);
   return withConfigLock(async () => {
     const config = await readOpenClawConfig() as AgentConfigDocument;
     const { agentsConfig, entries, syntheticMain } = normalizeAgentsConfig(config);
@@ -785,7 +789,7 @@ export async function createAgent(
     await writeOpenClawConfig(config);
     const features = await readAgentFeatures();
     features.engineType = features.engineType || {};
-    features.engineType[nextId] = getDefaultAgentEngineType();
+    features.engineType[nextId] = defaultEngineType;
     await writeAgentFeatures(features);
     logger.info('Created agent config entry', { agentId: nextId, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);
@@ -794,8 +798,8 @@ export async function createAgent(
 
 /**
  * Create an agent with an explicit ID (instead of auto-generating from name).
- * Used by the biz-agent sync service to create agents whose ID matches the
- * remote `code` field, enabling dedup-by-code on subsequent syncs.
+ * Used by internal runtimes and project-agent provisioning when the caller
+ * needs a stable, explicit agent ID.
  *
  * Idempotent for project-agent ensure: if the ID is already in config, returns
  * the current snapshot. If only the on-disk agent dir exists (orphan after a
@@ -804,7 +808,12 @@ export async function createAgent(
 export async function createAgentWithId(
   id: string,
   name: string,
-  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean; workspace?: string },
+  options?: {
+    inheritWorkspace?: boolean;
+    fileTransformByOSS?: boolean;
+    workspace?: string;
+    defaultEngine?: unknown;
+  },
 ): Promise<AgentsSnapshot> {
   if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
   if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
@@ -840,6 +849,8 @@ export async function createAgentWithId(
       logger.warn('createAgentWithId: healing disk orphan into config', { agentId: id });
     }
 
+    const defaultEngineType = resolveNewAgentDefaultEngineType(options?.defaultEngine);
+
     const normalizedName = normalizeAgentName(name);
     const nextEntries = syntheticMain ? [createImplicitMainEntry(config), ...entries.filter((_, index) => index > 0)] : [...entries];
     const newAgent: AgentListEntry = {
@@ -866,7 +877,7 @@ export async function createAgentWithId(
 
     const features = await readAgentFeatures();
     features.engineType = features.engineType || {};
-    features.engineType[id] = getDefaultAgentEngineType();
+    features.engineType[id] = defaultEngineType;
 
     if (options?.fileTransformByOSS === true) {
       features.fileTransformByOSS = features.fileTransformByOSS || {};

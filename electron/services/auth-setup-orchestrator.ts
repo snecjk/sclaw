@@ -1,10 +1,10 @@
 /**
- * Serializes post-authentication setup (SSO files, OpenClaw plugins, STO model/biz-agent sync).
+ * Serializes post-authentication setup (SSO files, OpenClaw plugins, STO model sync).
  *
  * Startup (already logged in): run with skipGatewayRefresh BEFORE Gateway first boot so
  * OpenClaw starts once with final config — avoids post-start debouncedRestart.
  *
- * Login: write config to disk; reload only when models/biz-agents actually changed and Gateway
+ * Login: write config to disk; reload only when models actually changed and Gateway
  * has been stable. Never restart during startup (prelaunch already wrote config).
  */
 
@@ -16,17 +16,12 @@ import { syncStoPluginsToOpenClaw } from '../utils/openclaw-auth';
 import { cleanupRetiredSkillsAndPlugins } from '../utils/retired-skills-cleanup';
 import { logger } from '../utils/logger';
 import { getStoModelSyncService, type StoSyncResult } from './providers/sto-model-sync';
-import {
-  getStoBizAgentSyncService,
-  type StoBizAgentSyncResult,
-} from './sto-biz-agent-sync';
 import { syncClaudeDefaultContext } from './claude-context-sync';
 
 export type AuthenticatedSetupSource = 'login' | 'startup' | 'account-switch';
 
 export interface AuthenticatedSetupResult {
   stoSync: StoSyncResult;
-  bizAgentSync: StoBizAgentSyncResult;
 }
 
 export type AuthenticatedSetupOptions = {
@@ -63,10 +58,8 @@ export function resolvePostAuthGatewayRefresh(params: {
   needsGatewayRefresh: boolean;
   gatewayManager: GatewayManager;
   stoResult: StoSyncResult;
-  bizResult: StoBizAgentSyncResult;
 }): PostAuthGatewayRefreshMode {
-  const { source, skipGatewayRefresh, needsGatewayRefresh, stoResult, bizResult } =
-    params;
+  const { source, skipGatewayRefresh, needsGatewayRefresh, stoResult } = params;
 
   if (!needsGatewayRefresh || skipGatewayRefresh) {
     return 'none';
@@ -75,8 +68,7 @@ export function resolvePostAuthGatewayRefresh(params: {
   const forceRefresh = stoResult.needsForcedGatewayRefresh === true;
   if (source === 'login' || source === 'account-switch') {
     const modelsChanged = stoSyncChangedConfig(stoResult);
-    const bizCreated = bizResult.created.length > 0;
-    if (!forceRefresh && !modelsChanged && !bizCreated) {
+    if (!forceRefresh && !modelsChanged) {
       return 'none';
     }
     return 'reload';
@@ -95,7 +87,6 @@ let refreshDelayTimer: ReturnType<typeof setTimeout> | null = null;
 function emptySetupResult(): AuthenticatedSetupResult {
   return {
     stoSync: { created: [], deleted: [], updated: [], defaultSet: null },
-    bizAgentSync: { created: [], skipped: [] },
   };
 }
 
@@ -336,16 +327,6 @@ async function runSetup(
     needsGatewayRefresh = true;
   }
 
-  const bizAgentSync = getStoBizAgentSyncService();
-  if (gatewayManager) {
-    bizAgentSync.setGatewayManager(gatewayManager);
-  }
-
-  const bizResult = await bizAgentSync.syncAgents({ deferGatewayRefresh: true });
-  if (bizResult.created.length > 0) {
-    needsGatewayRefresh = true;
-  }
-
   const refreshMode =
     gatewayManager && generation === setupGeneration
       ? resolvePostAuthGatewayRefresh({
@@ -354,7 +335,6 @@ async function runSetup(
         needsGatewayRefresh,
         gatewayManager,
         stoResult,
-        bizResult,
       })
       : 'none';
 
@@ -389,10 +369,10 @@ async function runSetup(
 
   logger.info(
     `${logPrefix} Completed: sto created=${stoResult.created.length} updated=${stoResult.updated.length} `
-    + `biz created=${bizResult.created.length} gatewayRefresh=${refreshMode}`,
+    + `gatewayRefresh=${refreshMode}`,
   );
 
-  return { stoSync: stoResult, bizAgentSync: bizResult };
+  return { stoSync: stoResult };
 }
 
 /**

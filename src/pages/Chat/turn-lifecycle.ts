@@ -17,7 +17,7 @@ export type TurnLifecycleStatus =
   | 'completed'
   | 'failed';
 
-export type TurnEngineType = 'openclaw' | 'claude';
+export type TurnEngineType = AgentEngineType;
 
 export interface TurnLifecycle {
   /** 轮次稳定 key（可选，供 debug / 埋点） */
@@ -159,3 +159,4 @@ export function resolveCurrentTurnLifecycleForMeta(options: {
     isInterrupted: options.isInterrupted,
   });
 }
+import type { AgentEngineType } from '../../../shared/agent-engine';

@@ -8,8 +8,7 @@ import { useGatewayStore } from '../gateway';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions } from './types';
 import { AppError, normalizeAppError } from '@/lib/error-model';
-import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
-import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
+import type { ModelMessageCompositionV1 } from '../../../shared/model-message-composition';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 import { releaseSendAttempt, tryAcquireSendAttempt } from './send-attempt-lock';
 import { getAgentIdFromSessionKey } from './session-identity';
@@ -66,6 +65,7 @@ export function createSendActions(
         skillMetas,
         workflows,
         gatewayText: preBakedGatewayText,
+        composition: requestedComposition,
         composerSegments,
       } = options;
       const userDisplayText = text.trim();
@@ -158,33 +158,47 @@ export function createSendActions(
         return;
       }
 
-      let gatewayText = preBakedGatewayText?.trim();
-      if (!gatewayText) {
-        if (resolvedSkillMetas.length > 0) {
-          // 与 buildComposerGatewayPayload 的多技能烘焙保持一致：全部技能 prompt
-          // 前置并逐个追加 transcript marker。队列编辑后预烘焙 gatewayText 失效
-          // 走这里，只烘焙首个技能会让模型收不到技能 2..n 的指令。
-          const skillPrompts: string[] = [];
-          for (const meta of resolvedSkillMetas) {
-            const { defaultPrompt } = await resolveSkillPrompt(meta.slug);
-            const prompt = defaultPrompt.trim();
-            // slug 本身不是 prompt，不得前置（与 buildComposerGatewayPayload 一致）
-            if (prompt && prompt !== meta.slug) skillPrompts.push(prompt);
-          }
-          gatewayText = skillPrompts.length > 0
-            ? [skillPrompts.join('\n\n'), userDisplayText].filter(Boolean).join('\n\n')
-            : userDisplayText;
-          for (let i = 0; i < resolvedSkillMetas.length; i += 1) {
-            gatewayText = appendSkillTranscriptMarker(
-              gatewayText,
-              resolvedSkillMetas[i]!,
-              i === 0 ? userDisplayText : undefined,
-            );
-          }
-        } else {
-          gatewayText = userDisplayText;
-        }
-      }
+      const gatewayText = preBakedGatewayText?.trim() || userDisplayText;
+      const baseComposition: ModelMessageCompositionV1 = requestedComposition ?? {
+        version: 1,
+        segments: [
+          ...(userDisplayText ? [{ type: 'text' as const, text: userDisplayText }] : []),
+          ...((attachments ?? []).map((attachment, mediaIndex) => ({
+            type: 'attachment' as const,
+            mediaIndex,
+            displayName: attachment.fileName,
+          }))),
+          ...resolvedSkillMetas.map((meta) => ({
+            type: 'skill' as const,
+            slug: meta.slug,
+            title: meta.title,
+          })),
+          ...((workflows ?? []).map((workflow) => ({
+            type: 'workflow' as const,
+            id: workflow.id,
+            name: workflow.name,
+            source: workflow.source,
+          }))),
+        ],
+      };
+      const composedSkillSlugs = new Set(
+        baseComposition.segments
+          .filter((segment) => segment.type === 'skill')
+          .map((segment) => segment.slug.toLowerCase()),
+      );
+      const composition: ModelMessageCompositionV1 = {
+        ...baseComposition,
+        segments: [
+          ...baseComposition.segments,
+          ...resolvedSkillMetas
+            .filter((meta) => !composedSkillSlugs.has(meta.slug.toLowerCase()))
+            .map((meta) => ({
+              type: 'skill' as const,
+              slug: meta.slug,
+              title: meta.title,
+            })),
+        ],
+      };
 
       const preparedContext = await prepareSendContext({
         trimmedText: gatewayText,
@@ -259,6 +273,7 @@ export function createSendActions(
           idempotencyKey,
           engineType: currentSessionEngineType,
           attachments: hasMedia ? attachments : undefined,
+          composition,
           extras: dingTalkRpcExtras,
           // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
           // because the Gateway schema does not accept them. Workflow state

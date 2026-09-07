@@ -14,12 +14,13 @@ describe('Task composer bake payload', () => {
       ],
       plainText: '@李峥 请生成本周周报',
       attachments: [],
-      resolveSkillPrompt: async () => ({ defaultPrompt: '你是周报助手', title: '周报技能' }),
     });
 
     expect(payload.gatewayText).not.toContain('STOCLAW:DINGTALK_RECIPIENTS');
     expect(payload.gatewayText).toContain('@李峥');
     expect(payload.gatewayText).toContain('请生成本周周报');
+    expect(payload.gatewayText).not.toContain('你是周报助手');
+    expect(payload.gatewayText).not.toContain('SClaw-Skill');
     expect(payload.skillMetas[0]?.slug).toBe('weekly-report');
     expect(payload.persistedSegments.some((s) => s.type === 'mention')).toBe(true);
     const mention = payload.persistedSegments.find((s) => s.type === 'mention');
@@ -44,7 +45,6 @@ describe('Task composer bake payload', () => {
           status: 'ready',
         },
       ],
-      resolveSkillPrompt: async () => ({ defaultPrompt: '', title: '' }),
     });
 
     expect(payload.attachments).toHaveLength(1);
@@ -53,6 +53,9 @@ describe('Task composer bake payload', () => {
       fileName: 'sales.xlsx',
       stagedPath: '/tmp/sales.xlsx',
     });
-    expect(payload.gatewayText).toContain('[文件: sales.xlsx]');
+    expect(payload.gatewayText).not.toContain('[文件: sales.xlsx]');
+    expect(payload.composition.segments[0]).toEqual({
+      type: 'attachment', mediaIndex: 0, displayName: 'sales.xlsx',
+    });
   });
 });

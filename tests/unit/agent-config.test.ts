@@ -72,6 +72,26 @@ describe('agent config lifecycle', () => {
     await expect(listConfiguredAgentIds()).resolves.toEqual(['main']);
   });
 
+  it('uses the cloud default engine when creating an Agent', async () => {
+    await writeOpenClawJson({});
+
+    const { createAgent } = await import('@electron/utils/agent-config');
+    const snapshot = await createAgent('Cloud Default', { defaultEngine: 'pi' });
+
+    expect(snapshot.agents.find((agent) => agent.id === 'cloud-default')?.engineType).toBe('pi');
+  });
+
+  it('uses the local default engine when no valid cloud default is supplied', async () => {
+    await writeOpenClawJson({});
+
+    const { createAgentWithId } = await import('@electron/utils/agent-config');
+    const snapshot = await createAgentWithId('local-fallback', 'Local Fallback', {
+      defaultEngine: 'unsupported-engine',
+    });
+
+    expect(snapshot.agents.find((agent) => agent.id === 'local-fallback')?.engineType).toBe('claude');
+  });
+
   it('includes canonical per-agent main session keys in the snapshot', async () => {
     await writeOpenClawJson({
       session: {

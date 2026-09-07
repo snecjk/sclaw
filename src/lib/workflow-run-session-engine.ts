@@ -5,6 +5,7 @@ import {
 } from '@/lib/sync-workspace-default-to-chat';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 import { useChatStore } from '@/stores/chat';
+import type { WorkflowExecutionEngine } from '@/lib/workflow-session';
 
 /**
  * The selected workflow engine is persisted onto the navigation-created chat
@@ -13,7 +14,7 @@ import { useChatStore } from '@/stores/chat';
 export async function configureWorkflowRunSession(input: {
   sessionKey: string;
   agentId: string;
-  engineType: 'claude' | 'openclaw';
+  engineType: WorkflowExecutionEngine;
 }): Promise<string> {
   const sessionKey = input.sessionKey.trim();
   if (!sessionKey) throw new Error('缺少会话标识，无法启动工作流');
@@ -29,10 +30,10 @@ export async function configureWorkflowRunSession(input: {
     agentId: input.agentId,
     engineType: input.engineType,
     // `newSession()` can inherit the previous conversation's model before this
-    // selected engine is applied. For OpenClaw that value may be a Claude model
-    // (for example Sonnet), so use the chat workspace default instead.
-    preferSessionModel: input.engineType !== 'openclaw',
-    preferPendingModel: input.engineType !== 'openclaw',
+    // selected engine is applied. OpenClaw and PI may inherit a model id from a
+    // different runtime, so resolve their configured workspace model instead.
+    preferSessionModel: input.engineType === 'claude',
+    preferPendingModel: input.engineType === 'claude',
   });
   if (!fallback) throw new Error('未找到可用模型，无法启动工作流');
 

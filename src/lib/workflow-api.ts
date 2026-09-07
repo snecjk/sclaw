@@ -302,7 +302,7 @@ export interface StartWorkflowLocalParams {
   runMode?: 'trial' | 'production';
   workflowVersionId?: string | number;
   /** Fixed for the entire local run and persisted before dispatch. */
-  engineType: 'claude' | 'openclaw';
+  engineType: import('../../shared/agent-engine').AgentEngineType;
   /** Explicit chat model to pin for this run, when the caller has one. */
   engineModel?: string;
   chatCard?: {
@@ -347,7 +347,8 @@ export function resolveWorkflowRunEngineModel(params: {
     preferPendingModel: false,
   });
   if (!resolved) {
-    throw new Error(`未找到 ${params.engineType === 'openclaw' ? 'OpenClaw' : 'Claude'} 目标会话模型，无法启动工作流`);
+    const engineLabel = params.engineType === 'openclaw' ? 'OpenClaw' : params.engineType === 'pi' ? 'SAgent' : 'Claude';
+    throw new Error(`未找到 ${engineLabel} 目标会话模型，无法启动工作流`);
   }
   return resolved.modelId;
 }

@@ -5,56 +5,49 @@
             "description": "您的 AI 助手已准备好进行配置"
         },
         "runtime": {
-            "title": "环境检查",
-            "description": "验证系统要求"
+            "title": "设备信息",
+            "description": "查看当前设备概况"
         },
         "channel": {
             "title": "连接渠道",
             "description": "连接消息平台（可选）"
         },
-        "installing": {
-            "title": "设置中",
-            "description": "安装必要组件"
-        },
         "complete": {
-            "title": "准备就绪！",
-            "description": "SClaw 已准备好使用"
+            "title": "完成设置",
+            "description": "安装必要组件并完成配置"
         }
     },
     "welcome": {
         "title": "欢迎使用 SClaw",
-        "description": "SClaw 是 OpenClaw 的图形界面，让您可以在喜爱的消息平台上轻松使用 AI 助手。",
+        "description": "SClaw 是STO自研的桌面AI办公助手，可以协助你高效办公",
         "features": {
-            "noCommand": "无需命令行",
-            "modernUI": "现代美观的界面",
-            "bundles": "预装技能包",
+            "noCommand": "简洁使用",
+            "modernUI": "懂申通业务",
+            "bundles": "STO技能包",
             "crossPlatform": "跨平台支持"
         }
     },
     "runtime": {
-        "title": "检查环境",
+        "title": "当前设备",
         "viewLogs": "查看日志",
-        "recheck": "重新检查",
+        "refresh": "刷新",
         "nodejs": "Node.js 运行时",
-        "openclaw": "OpenClaw 包",
-        "gateway": "网关服务",
-        "startGateway": "启动网关",
-        "status": {
-            "checking": "检查中...",
-            "success": "Node.js 可用",
-            "error": "失败",
-            "gatewayRunning": "运行在端口 {{port}}",
-            "packageReady": "OpenClaw 包已就绪"
-        },
-        "issue": {
-            "title": "检测到环境问题",
-            "desc": "请确保 OpenClaw 已正确安装。查看日志以获取详情。"
-        },
+        "nodeReady": "Node.js 可用",
+        "bundledRuntime": "应用内置运行时",
+        "system": "系统",
+        "processor": "{{count}} 个逻辑处理器",
+        "memory": "可用内存",
+        "disk": "可用磁盘",
+        "capacityMeta": "总容量 {{total}}，剩余 {{percentage}}%",
+        "unavailable": "暂不可用",
+        "loading": "正在读取设备信息",
+        "loadError": "暂时无法读取完整设备信息，不影响继续设置。",
+        "hint": "设备信息仅供参考，不会阻止后续设置。",
         "logs": {
             "title": "应用程序日志",
             "openFolder": "打开日志文件夹",
-            "close": "关闭",
-            "noLogs": "（暂无日志）"
+            "noLogs": "（暂无日志）",
+            "loadFailed": "（日志加载失败）"
         }
     },
     "provider": {
@@ -103,17 +96,19 @@
             "failed": "失败"
         },
         "error": "设置错误：",
-        "restart": "尝试重启应用",
+        "unknownError": "安装过程中发生未知错误",
+        "failedToast": "组件安装失败",
+        "retry": "重新安装",
         "wait": "这可能需要一点时间...",
-        "skip": "跳过此步骤"
+        "skip": "跳过组件安装"
     },
     "complete": {
         "title": "设置完成！",
         "subtitle": "SClaw 已配置并准备就绪。您现在可以开始与您的 AI 助手聊天了。",
+        "skippedSubtitle": "基础设置已完成，您可以稍后安装必要组件。",
         "components": "组件",
         "envReady": "环境已就绪",
-        "gateway": "网关",
-        "running": "运行中",
+        "skipped": "已跳过",
         "footer": "您可以在设置中自定义技能并连接渠道"
     },
     "nav": {

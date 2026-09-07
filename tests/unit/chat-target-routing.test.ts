@@ -160,7 +160,7 @@ describe('chat target routing', () => {
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
-    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000, engineType: 'openclaw' });
+    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', engineType: 'openclaw' });
 
     const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
     expect(sendCall?.[1]).toMatchObject({
@@ -216,6 +216,70 @@ describe('chat target routing', () => {
     )).toBe(false);
   });
 
+  it('loads older history from any adapter that declares before-id pagination', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    const { useChatRuntimeV2Store } = await import('@/stores/chat/runtime-v2-store');
+    const { createClientSessionState } = await import('@/stores/chat/client-session-reducer');
+    const sessionKey = 'pi:main:paged-history';
+    const latest = Array.from({ length: 50 }, (_, index) => ({
+      id: `m${index + 10}`,
+      role: 'assistant' as const,
+      content: String(index + 10),
+      timestamp: index + 10,
+    }));
+    useChatRuntimeV2Store.setState((state) => ({
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...createClientSessionState(),
+          transcript: latest,
+          historyTotalCount: 60,
+          historyCapabilities: { paginationMode: 'before-id', defaultPageSize: 50 },
+        },
+      },
+    }));
+    useChatStore.setState({
+      currentSessionKey: sessionKey,
+      currentAgentId: 'main',
+      sessions: [{ key: sessionKey, engineType: 'pi' }],
+      loading: false,
+    });
+    invokeIpcMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel !== 'gateway:rpc' || args[0] !== 'chat.history') {
+        throw new Error(`Unexpected invokeIpc call: ${channel}`);
+      }
+      return {
+        success: true,
+        result: {
+          messages: Array.from({ length: 10 }, (_, index) => ({
+            id: `m${index}`,
+            role: index === 0 ? 'user' : 'assistant',
+            content: String(index),
+            timestamp: index,
+          })),
+          totalCount: 60,
+          hasMore: false,
+          historyCapabilities: { paginationMode: 'before-id', defaultPageSize: 50 },
+        },
+      };
+    });
+
+    await useChatStore.getState().loadOlderHistory(sessionKey);
+
+    const historyCall = invokeIpcMock.mock.calls.find(
+      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
+    );
+    expect(historyCall?.[2]).toEqual({
+      sessionKey,
+      limit: 50,
+      beforeId: 'm10',
+      engineType: 'pi',
+    });
+    const transcript = useChatRuntimeV2Store.getState().sessionsByKey[sessionKey]?.transcript ?? [];
+    expect(transcript).toHaveLength(60);
+    expect(transcript[0]?.id).toBe('m0');
+  });
+
   it('materializes and binds a project draft before its first dispatch', async () => {
     const { useChatStore } = await import('@/stores/chat');
     let bindingCompleted = false;
@@ -247,7 +311,7 @@ describe('chat target routing', () => {
     const materializedKey = useChatStore.getState().currentSessionKey;
     expect(materializedKey).toMatch(/^agent:proj-project-a--main:session-/);
     expect(useChatStore.getState().pendingProjectId).toBeNull();
-    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a');
+    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a', 'openclaw');
     expect(bindingCompleted).toBe(true);
 
     const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
@@ -256,6 +320,57 @@ describe('chat target routing', () => {
       sessionKey: materializedKey,
       message: 'Project first message',
     });
+  });
+
+  it('materializes a project workflow session once with its explicit engine', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      pendingProjectId: 'project-a',
+      sessions: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      loading: false,
+    });
+
+    useChatStore.getState().newSession({ materialize: true, engineType: 'claude' });
+
+    const state = useChatStore.getState();
+    expect(state.currentSessionKey).not.toBe('agent:main:main');
+    expect(state.pendingProjectId).toBeNull();
+    expect(state.sessions).toEqual([
+      expect.objectContaining({ key: state.currentSessionKey, engineType: 'claude' }),
+    ]);
+    await vi.waitFor(() => expect(bindSessionMock).toHaveBeenCalledWith(
+      state.currentSessionKey,
+      'project-a',
+      'claude',
+    ));
+  });
+
+  it('does not provision an OpenClaw project agent for a Pi project draft', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    agentsState.agents[0] = { ...agentsState.agents[0], engineType: 'pi' };
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      pendingProjectId: null,
+      sessions: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      loading: false,
+    });
+
+    useChatStore.getState().newSession({ projectId: 'project-a' });
+    await useChatStore.getState().sendMessage({ text: 'Pi project first message' });
+
+    const materializedKey = useChatStore.getState().currentSessionKey;
+    expect(materializedKey).toMatch(/^pi:proj-project-a--main:/);
+    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a', 'pi');
+    expect(invokeIpcMock.mock.calls.some(([, request]) => (
+      (request as { action?: string } | undefined)?.action === 'ensureProjectAgent'
+    ))).toBe(false);
   });
 
   it('uses the selected agent main session for attachment sends', async () => {

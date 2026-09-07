@@ -29,21 +29,13 @@ export function isConcreteModelId(raw: string | undefined | null): boolean {
   return Boolean(normalized) && normalized.toLowerCase() !== 'not configured';
 }
 
-/** Home / default session: session override, else Claude agent-scoped model from toolbar switch. */
+/** Home carryover only preserves an explicit session model; engine defaults are resolved elsewhere. */
 export function resolveHomePageCarryoverModel(input: {
   sessionKey: string;
   sessions: ChatSession[];
-  agentEngineType?: ChatSession['engineType'];
-  agentModelDisplay?: string;
 }): string | undefined {
   const fromSession = input.sessions.find((session) => session.key === input.sessionKey)?.model;
   if (fromSession?.trim()) return normalizeModelIdForChat(fromSession);
-  if (
-    input.agentEngineType === 'claude'
-    && isConcreteModelId(input.agentModelDisplay)
-  ) {
-    return normalizeModelIdForChat(input.agentModelDisplay);
-  }
   return undefined;
 }
 
@@ -346,6 +338,18 @@ export function resolveChatSelectedModelId(
   }
 
   return trimmed;
+}
+
+/** New-chat selection is engine-independent: explicit pending choice, then workspace default. */
+export function resolveNewChatSelectedModelId(
+  options: ChatModelOption[],
+  pendingModel: string | undefined | null,
+  workspaceDefaultModel: string | undefined | null,
+): string {
+  const pending = sanitizeChatModelHint(pendingModel, options);
+  const workspace = normalizeModelIdForChat(workspaceDefaultModel);
+  const hint = pending || workspace;
+  return resolveChatSelectedModelId(options, hint) || hint;
 }
 
 /** True when hint resolves to an entry still present in the chat model dropdown. */

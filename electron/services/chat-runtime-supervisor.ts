@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { GatewayManager } from '../gateway/manager';
 import type { NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { getAdapterForSession } from '../engines/manager';
@@ -76,6 +76,7 @@ type SupervisorEventMap = {
 };
 
 function inferEngineType(sessionKey: string): AgentEngineType {
+  if (sessionKey.startsWith('pi:') || sessionKey.startsWith('pi-task:')) return 'pi';
   return sessionKey.startsWith('claude:') || sessionKey.startsWith('claude-task:')
     ? 'claude'
     : 'openclaw';
@@ -85,6 +86,15 @@ function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function engineEventSourceIdentity(event: NormalizedEngineEvent): string {
+  if (event.seq != null) return String(event.seq);
+  const serialized = JSON.stringify('message' in event ? event.message : event) ?? '';
+  // Engines such as Pi do not supply a sequence number. Hash the complete
+  // snapshot: truncating the JSON makes every delta after a long thinking
+  // prefix look identical and silently drops the rest of the live turn.
+  return createHash('sha256').update(serialized).digest('base64url');
 }
 
 function messageOccurredAt(message: Record<string, unknown> | null): number {
@@ -160,9 +170,14 @@ function eventTypeForEngineEvent(event: NormalizedEngineEvent): CanonicalChatEve
     case 'message.delta': return 'message.delta';
     case 'message.final': return 'message.final';
     case 'tool.result': return 'tool.updated';
+    case 'context.compaction.started': return 'context.compaction.started';
+    case 'context.compaction.completed': return 'context.compaction.completed';
+    case 'context.compaction.failed': return 'context.compaction.failed';
+    case 'context.usage.updated': return 'context.usage.updated';
     case 'turn.completed': return 'run.completed';
     case 'turn.failed': return 'run.failed';
     case 'turn.aborted': return 'run.aborted';
+    case 'turn.interrupted': return 'run.interrupted';
   }
 }
 
@@ -373,6 +388,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       lastEventAt: now,
       terminalAt: null,
       error: null,
+      contextUsage: prior?.contextUsage ?? null,
       acceptanceResult: null,
       updatedAt: now,
     };
@@ -406,7 +422,6 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     };
     await this.publish(snapshot, 'run.dispatching', dispatchPayload, true);
     this.scheduleHardDeadline(input.sessionKey, snapshot.epoch);
-    this.scheduleHistoryPoll(input.sessionKey);
     return { kind: 'created', snapshot: this.snapshots.get(input.sessionKey) as ChatRuntimeSnapshot };
   }
 
@@ -450,6 +465,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       acceptanceResult: input.result ?? null,
       error: null,
     }, 'run.accepted', input.result, true);
+    const accepted = this.snapshots.get(input.sessionKey);
+    if (accepted && !isTerminalChatRunPhase(accepted.phase)) {
+      // Do not inspect history while the send is still dispatching. A slow
+      // pre-dispatch step (notably Memory injection) otherwise lets the poll
+      // observe the previous completed engine turn and terminate the new epoch
+      // before the engine has even accepted its prompt.
+      this.scheduleHistoryPoll(input.sessionKey);
+    }
     this.touchRunActivity(input.sessionKey);
   }
 
@@ -482,6 +505,11 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.snapshots.set(input.sessionKey, uncertain);
       await this.persist(uncertain, true);
       this.scheduleRecovery(input.sessionKey);
+      // An uncertain transport may mean the engine accepted the prompt even
+      // though no acceptance response reached us. Start projection here so
+      // transcript progress can keep recovery alive without polling during
+      // the normal pre-dispatch window.
+      this.scheduleHistoryPoll(input.sessionKey);
       return;
     }
     await this.publish({ ...current, error: input.error }, 'run.failed', { error: input.error }, true);
@@ -541,17 +569,17 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (!sessionKey) return;
     if (isWorkflowOpenClawSessionKey(sessionKey)) return;
     const eventType = eventTypeForEngineEvent(event);
-    const sourceIdentity = event.seq != null
-      ? String(event.seq)
-      : String(JSON.stringify('message' in event ? event.message : event) ?? '').slice(0, 2_000);
+    const sourceIdentity = engineEventSourceIdentity(event);
     const dedupeKey = `${sessionKey}\u0000${event.runId ?? ''}\u0000${sourceIdentity}\u0000${eventType}`;
     if (this.seenEvents.has(dedupeKey)) return;
     this.seenEvents.add(dedupeKey);
     if (this.seenEvents.size > 2_000) this.seenEvents.delete(this.seenEvents.values().next().value as string);
 
     let current = this.snapshots.get(sessionKey) ?? await this.getHydrated(sessionKey);
-    if (current && isTerminalChatRunPhase(current.phase) && eventType !== 'run.started') return;
-    if (current?.runId && event.runId && current.runId !== event.runId) return;
+    const isContextEvent = eventType.startsWith('context.');
+    if (current && isTerminalChatRunPhase(current.phase) && eventType !== 'run.started' && !isContextEvent) return;
+    if (!isContextEvent && current?.runId && event.runId && current.runId !== event.runId) return;
+    if (!current && isContextEvent) return;
     if (!current) {
       const now = Date.now();
       current = {
@@ -575,12 +603,49 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.scheduleHistoryPoll(sessionKey);
     }
     if (event.type === 'turn.failed') {
+      if ((engineType ?? current.engineType) === 'pi') {
+        await this.publish({
+          ...current,
+          runId: event.runId ?? current.runId,
+          engineType: 'pi',
+          error: event.errorMessage,
+        }, 'run.failed', { error: event.errorMessage }, true);
+        return;
+      }
       this.scheduleErrorFinalization(sessionKey, event.runId ?? current.runId, event.errorMessage);
+      return;
+    }
+    if (event.type === 'turn.interrupted') {
+      this.clearErrorFinalization(sessionKey);
+    }
+    if (
+      (event.type === 'context.compaction.completed' || event.type === 'context.compaction.failed')
+      && current.activity?.type === 'context_compaction'
+      && current.activity.attemptId !== event.attemptId
+    ) {
+      logger.debug('[chat-runtime] ignored stale compaction event', {
+        sessionKey,
+        attemptId: event.attemptId,
+        activeAttemptId: current.activity.attemptId,
+      });
       return;
     }
     this.clearErrorFinalization(sessionKey);
     this.touchRunActivity(sessionKey);
-    const payload = 'message' in event ? event.message : getRecord(event)?.runtimeResult;
+    const isCompactionEvent = 'attemptId' in event;
+    const payload = event.type === 'context.usage.updated'
+      ? { usage: event.usage }
+      : isCompactionEvent
+      ? {
+          attemptId: event.attemptId,
+          reason: event.reason,
+          ...('tokensBefore' in event && event.tokensBefore != null ? { tokensBefore: event.tokensBefore } : {}),
+          ...('tokensAfter' in event && event.tokensAfter != null ? { tokensAfter: event.tokensAfter } : {}),
+          ...('durationMs' in event && event.durationMs != null ? { durationMs: event.durationMs } : {}),
+          ...('willRetry' in event && event.willRetry != null ? { willRetry: event.willRetry } : {}),
+          ...('errorMessage' in event && event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+        }
+      : 'message' in event ? event.message : getRecord(event)?.runtimeResult;
     const liveMessage = getRecord(payload);
     if (liveMessage && (event.type === 'message.delta' || event.type === 'message.final' || event.type === 'tool.result')) {
       // Reliable live progress lets history projection back off until a persisted
@@ -602,11 +667,34 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     const canonicalType = engineCompleted || finalClassification === 'awaiting_transcript'
       ? 'run.awaiting_transcript'
       : eventType;
+    const activity = event.type === 'context.compaction.started'
+      ? {
+          type: 'context_compaction' as const,
+          attemptId: event.attemptId,
+          status: 'running' as const,
+          reason: event.reason,
+          startedAt: Date.now(),
+        }
+      : event.type === 'context.compaction.failed' && event.willRetry
+        ? {
+            type: 'context_compaction' as const,
+            attemptId: event.attemptId,
+            status: 'retrying' as const,
+            reason: event.reason,
+            startedAt: current.activity?.type === 'context_compaction'
+              ? current.activity.startedAt
+              : Date.now(),
+          }
+        : isCompactionEvent
+          ? null
+          : current.activity;
     await this.publish({
       ...current,
-      runId: event.runId ?? current.runId,
+      runId: isContextEvent ? current.runId : event.runId ?? current.runId,
       engineType: engineType ?? current.engineType,
       error: current.error,
+      activity,
+      contextUsage: event.type === 'context.usage.updated' ? event.usage : current.contextUsage ?? null,
     }, canonicalType, payload, canonicalType.startsWith('run.'));
 
     const latest = this.snapshots.get(sessionKey);
@@ -630,7 +718,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       });
       return;
     }
-    const snapshot = transition.snapshot;
+    const transitionedSnapshot = transition.snapshot;
+    const isRunTerminalEvent = type === 'run.completed'
+      || type === 'run.failed'
+      || type === 'run.aborted'
+      || type === 'run.interrupted';
+    const snapshot = isRunTerminalEvent
+      ? { ...transitionedSnapshot, activity: null }
+      : transitionedSnapshot;
     const phase = snapshot.phase;
     this.snapshots.set(snapshot.sessionKey, snapshot);
     const event: CanonicalChatEvent = {
@@ -651,7 +746,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (diagnostics) diagnostics.canonicalEvents += 1;
     this.emit('event', event);
     await this.persist(snapshot, forcePersist || isTerminalChatRunPhase(phase));
-    if (type === 'message.delta' || type === 'tool.updated') {
+    if (type === 'message.delta' || type === 'tool.updated' || (
+      type.startsWith('context.compaction.') && !isTerminalChatRunPhase(snapshot.phase)
+    )) {
       this.touchRunActivity(snapshot.sessionKey, now);
     }
     if (isTerminalChatRunPhase(phase)) {
@@ -862,6 +959,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         if (awaiting && !isTerminalChatRunPhase(awaiting.phase)) {
           this.startTranscriptSettle(awaiting, 'reconcile');
         }
+      } else if (inspection?.status === 'failed') {
+        const error = inspection.reason?.trim() || 'Engine run failed';
+        await this.publish({ ...latest, error }, 'run.failed', { error }, true);
       } else if (inspection?.status === 'not_started') {
         await this.publish({ ...latest, error: 'The engine did not start this run.' }, 'run.interrupted', {
           reason: 'engine-not-started',
@@ -1071,6 +1171,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
             if (!latest || latest.epoch !== epoch || isTerminalChatRunPhase(latest.phase)) return;
             await this.projectCurrentTranscript(latest, inspection.currentTurnMessages ?? []);
           });
+        }
+        if (inspection.status === 'failed') {
+          const error = inspection.reason?.trim() || 'Engine run failed';
+          await this.enqueueSession(sessionKey, async () => {
+            const latest = this.snapshots.get(sessionKey);
+            if (!latest || latest.epoch !== epoch || isTerminalChatRunPhase(latest.phase)) return;
+            await this.publish({ ...latest, error }, 'run.failed', { error }, true);
+          });
+          return;
         }
         if (inspection.status === 'completed' && inspection.transcriptRevision) {
           if (previousRevision === inspection.transcriptRevision) {

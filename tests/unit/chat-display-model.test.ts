@@ -49,6 +49,23 @@ describe('chat display model', () => {
     expect(displayed[0]?._skillMeta?.title).toBe('客户异常监控');
   });
 
+  it('does not materialize live preparation progress into completed chat display', () => {
+    const transcript = [{ id: 'user-1', role: 'user' as const, content: '你好' }];
+    const overlay = {
+      ...createClientSessionState().overlay,
+      streamingMessages: [{
+        id: 'agent-preparation-memory-message-1',
+        role: 'assistant' as const,
+        content: '已检索到相关记忆',
+        metadata: { kind: 'agent-preparation-progress', stage: 'memory', status: 'completed' },
+      }],
+      streamingMessage: { id: 'assistant-1', role: 'assistant' as const, content: '你好' },
+    };
+
+    expect(materializeCompletedOverlay(transcript, overlay).map((message) => message.id))
+      .toEqual(['user-1', 'assistant-1']);
+  });
+
   it('merges a plain history echo into the optimistic skill chip instead of showing two bubbles', () => {
     const overlay = {
       ...createClientSessionState().overlay,

@@ -1,5 +1,5 @@
 import { useGatewayStore } from '../gateway';
-import { CHAT_HISTORY_LENGTH_MAX_LIMIT, CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
+import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   applyLoadedHistorySnapshot,
   prepareHistoryToolEffects,
@@ -17,6 +17,7 @@ import type { ChatSession, RawMessage } from './types';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
 import { isChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
 import { mergeHistoryTail, prependHistoryPage } from '../../../shared/chat-history-page';
+import { readChatHistoryCapabilities } from '../../../shared/chat-history-capabilities';
 
 const HISTORY_LOAD_MIN_INTERVAL_MS = 800;
 const _historyLoadInFlight = new Map<string, Promise<void>>();
@@ -29,10 +30,12 @@ export function shouldSkipQuietHistoryRpc(input: {
   quiet: boolean;
   force: boolean;
   cachedTranscriptCount: number;
+  cachedHistoryCapabilitiesKnown?: boolean;
 }): boolean {
   return input.quiet
     && !input.force
-    && input.cachedTranscriptCount > 0;
+    && input.cachedTranscriptCount > 0
+    && input.cachedHistoryCapabilitiesKnown !== false;
 }
 
 const _olderHistoryLoadInFlight = new Map<string, Promise<void>>();
@@ -40,11 +43,8 @@ const _olderHistoryLoadInFlight = new Map<string, Promise<void>>();
 export function sessionHasOlderHistory(sessionKey: string): boolean {
   const session = useChatRuntimeV2Store.getState().sessionsByKey[sessionKey];
   if (!session) return false;
-  return session.historyTotalCount > session.transcript.length;
-}
-
-function historyPageLimit(engineType: ChatSession['engineType'] | undefined): number {
-  return engineType === 'claude' ? CHAT_HISTORY_LIMIT : CHAT_HISTORY_LENGTH_MAX_LIMIT;
+  return session.historyCapabilities?.paginationMode === 'before-id'
+    && session.historyTotalCount > session.transcript.length;
 }
 
 function readHistoryTotalCount(value: unknown, messageCount: number): number {
@@ -103,6 +103,7 @@ export function createHistoryLoadActions(
       );
       const sessionState = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey];
       const cachedTranscriptCount = sessionState?.transcript.length ?? 0;
+      const cachedHistoryCapabilitiesKnown = Boolean(sessionState?.historyCapabilities);
       const cachedFingerprint = cachedTranscriptCount > 0
         ? sessionState?.historyFingerprint ?? null
         : null;
@@ -111,12 +112,14 @@ export function createHistoryLoadActions(
         quiet,
         force,
         cachedTranscriptCount,
+        cachedHistoryCapabilitiesKnown,
       })) {
         markHistoryLoadPerf(targetSessionKey, 'load.skipped', {
           reason: 'local-cache',
           quiet,
           force,
           cachedTranscriptCount,
+          cachedHistoryCapabilitiesKnown,
           engineType,
         });
         return;
@@ -173,18 +176,23 @@ export function createHistoryLoadActions(
           // 任务会话与普通聊天同一路径：仅 chat.history（旧 /api/*/session-history 已 404，不再 fallback）。
           let thinkingLevel: string | null = null;
           const rpcStartedAt = performance.now();
-          const pageLimit = historyPageLimit(engineType);
           const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
             'chat.history',
             {
               sessionKey: targetSessionKey,
-              limit: pageLimit,
               engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
               ...(cachedFingerprint ? { clientFingerprint: cachedFingerprint } : {}),
             },
           );
           const rpcMs = Math.round(performance.now() - rpcStartedAt);
           const nextFingerprint = isChatHistoryFingerprint(data.fingerprint) ? data.fingerprint : null;
+          const nextHistoryCapabilities = readChatHistoryCapabilities(data.historyCapabilities);
+          if (nextHistoryCapabilities) {
+            useChatRuntimeV2Store.getState().setHistoryCapabilities(
+              targetSessionKey,
+              nextHistoryCapabilities,
+            );
+          }
 
           if (data.unchanged === true) {
             const cachedLength = useChatRuntimeV2Store.getState()
@@ -225,7 +233,10 @@ export function createHistoryLoadActions(
             : [];
           const existingTranscript = useChatRuntimeV2Store.getState()
             .sessionsByKey[targetSessionKey]?.transcript ?? [];
-          const allMessages = engineType === 'claude'
+          const paginationMode = nextHistoryCapabilities?.paginationMode
+            ?? useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey]
+              ?.historyCapabilities?.paginationMode;
+          const allMessages = paginationMode === 'before-id'
             ? mergeHistoryTail(existingTranscript, pageMessages)
             : pageMessages;
           const totalCount = readHistoryTotalCount(data.totalCount, allMessages.length);
@@ -242,7 +253,9 @@ export function createHistoryLoadActions(
             return;
           }
           if (get().currentSessionKey !== targetSessionKey) {
-            useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, allMessages);
+            useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, allMessages, {
+              invalidateDisplayProjection: true,
+            });
             useChatRuntimeV2Store.getState().setHistoryFingerprint(targetSessionKey, nextFingerprint);
             useChatRuntimeV2Store.getState().setHistoryTotalCount(targetSessionKey, totalCount);
             finishHistoryLoadPerf(targetSessionKey, { path: 'background-transcript-only' });
@@ -260,6 +273,7 @@ export function createHistoryLoadActions(
             rpcMs,
             ...payloadDetail,
             engineType,
+            historyPaginationMode: paginationMode ?? null,
           });
 
           if (get().currentSessionKey !== targetSessionKey) {
@@ -341,9 +355,12 @@ export function createHistoryLoadActions(
         targetSessionKey,
         get().currentAgentId,
       );
-      if (engineType !== 'claude' || !sessionHasOlderHistory(targetSessionKey)) return;
+      if (!sessionHasOlderHistory(targetSessionKey)) return;
 
       const existing = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey]?.transcript ?? [];
+      const historyCapabilities = useChatRuntimeV2Store.getState()
+        .sessionsByKey[targetSessionKey]?.historyCapabilities;
+      if (historyCapabilities?.paginationMode !== 'before-id') return;
       const beforeId = existing.find((message) => typeof message.id === 'string' && message.id)?.id;
       if (!beforeId) return;
 
@@ -357,11 +374,20 @@ export function createHistoryLoadActions(
           'chat.history',
           {
             sessionKey: targetSessionKey,
-            limit: options?.drain ? CHAT_HISTORY_LENGTH_MAX_LIMIT : CHAT_HISTORY_LIMIT,
+            limit: options?.drain
+              ? CHAT_HISTORY_LENGTH_MAX_LIMIT
+              : historyCapabilities.defaultPageSize,
             beforeId,
             engineType,
           },
         );
+        const nextHistoryCapabilities = readChatHistoryCapabilities(data.historyCapabilities);
+        if (nextHistoryCapabilities) {
+          useChatRuntimeV2Store.getState().setHistoryCapabilities(
+            targetSessionKey,
+            nextHistoryCapabilities,
+          );
+        }
         const olderMessages: RawMessage[] = Array.isArray(data.messages)
           ? data.messages as RawMessage[]
           : [];
