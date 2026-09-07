@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useAppShellLayoutOptional } from '@/components/layout/app-shell-layout-context';
 import type { AttachedFileMeta, RawMessage } from '@/stores/chat';
 import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
@@ -13,7 +13,13 @@ import {
 /** Stable empty snapshot — never allocate `[]` inside a zustand selector. */
 const EMPTY_BROWSER_TABS: ChatBrowserPreviewTab[] = [];
 
-/** Workbench 预览布局：closed 双栏 / split 三栏 / expanded 预览占满 Workspace（非 DOM Fullscreen） */
+const subscribeWindowWidth = (onChange: () => void) => {
+  window.addEventListener('resize', onChange);
+  return () => window.removeEventListener('resize', onChange);
+};
+const isNarrowWindow = () => window.innerWidth <= 1080;
+
+/** Workbench 预览布局：closed 双栏 / split 三栏或窄屏浮层 / expanded 预览占满 Workspace。 */
 export type PreviewMode = 'closed' | 'split' | 'expanded';
 
 /** 统一预览 tab：文件产物与业务网页混排在同一条标签栏（对齐 Kimi Work 预览面板模型） */
@@ -30,6 +36,8 @@ export function browserPreviewTabId(tabId: string): string {
 }
 
 export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: string) {
+  const isNarrow = useSyncExternalStore(subscribeWindowWidth, isNarrowWindow, () => false);
+  const dismissedOverlayRef = useRef(false);
   const [previewMode, setPreviewMode] = useState<PreviewMode>('closed');
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   /** 活跃 tab 类型：文件产物 or 业务网页（统一 tab 模型的选中态） */
@@ -52,6 +60,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   const activeBrowserTabId = useChatBrowserPreviewStore(
     (s) => s.activeTabIdBySession[sessionKey] ?? null,
   );
+  const browserOpenRevision = useChatBrowserPreviewStore((s) => s.openRevisionBySession?.[sessionKey] ?? 0);
   const hasBrowserPreview = browserTabs.length > 0;
 
   const previewFiles = useMemo(() => {
@@ -108,6 +117,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   const canShowPreviewPanel = visiblePreviewFiles.length > 0 || hasBrowserPreview;
   const showPreviewPanel = previewMode !== 'closed';
   const isPreviewSplit = previewMode === 'split';
+  const isPreviewOverlay = isNarrow && canShowPreviewPanel && isPreviewSplit;
   const isPreviewExpanded = previewMode === 'expanded';
   const appShellLayout = useAppShellLayoutOptional();
   const setPreviewContextCollapsed = appShellLayout?.setPreviewContextCollapsed;
@@ -123,6 +133,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   useEffect(() => {
     if (prevSessionKeyRef.current === sessionKey) return;
     prevSessionKeyRef.current = sessionKey;
+    dismissedOverlayRef.current = false;
     setPreviewMode('closed');
     setActivePreviewFilePath(null);
     setActiveTabKind('file');
@@ -132,16 +143,21 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
 
   // 新网页 tab 打开（如报价/建站工作流跳转）→ 自动展开并激活该 tab（Kimi 新 tab 语义）
   const prevBrowserTabCountRef = useRef(browserTabs.length);
+  const prevBrowserOpenRef = useRef(browserOpenRevision);
   useEffect(() => {
     const grew = browserTabs.length > prevBrowserTabCountRef.current;
+    const explicitlyOpened = browserOpenRevision !== prevBrowserOpenRef.current;
+    prevBrowserOpenRef.current = browserOpenRevision;
     prevBrowserTabCountRef.current = browserTabs.length;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- activate newly opened browser tab
-    if (grew) setActiveTabKind('browser');
-    if (browserTabs.length > 0 && previewMode === 'closed') {
+    if (grew || explicitlyOpened) {
+      dismissedOverlayRef.current = false;
+      setActiveTabKind('browser');
+    }
+    if (browserTabs.length > 0 && previewMode === 'closed' && !dismissedOverlayRef.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-open panel when first browser tab arrives
       setPreviewMode('split');
     }
-  }, [browserTabs.length, previewMode]);
+  }, [browserTabs.length, browserOpenRevision, previewMode]);
 
   // 活跃 tab 类型与底层列表 reconciliation：
   // - browser 全关 → 回落到文件 tab / 关闭面板
@@ -187,6 +203,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   }, [previewMode, activeTabKind, browserTabs.length, activePreviewFilePath, visiblePreviewFiles]);
 
   const openPreviewPanel = useCallback(() => {
+    dismissedOverlayRef.current = false;
     if (hasBrowserPreview && visiblePreviewFiles.length === 0) {
       setActiveTabKind('browser');
       setPreviewMode('split');
@@ -201,6 +218,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
 
   const openArtifactPreview = useCallback((file: AttachedFileMeta) => {
     if (!file.filePath) return;
+    dismissedOverlayRef.current = false;
     logFilePreview('open-artifact-preview', {
       filePath: file.filePath,
       fileName: file.fileName,
@@ -221,8 +239,10 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   }, []);
 
   const closePreviewPanel = useCallback(() => {
+    // Browser tabs remain available, but must not immediately reopen a dismissed overlay.
+    if (isPreviewOverlay) dismissedOverlayRef.current = true;
     setPreviewMode('closed');
-  }, []);
+  }, [isPreviewOverlay]);
 
   /** split → expanded；不改写 previewSplitPercent */
   const expandPreview = useCallback(() => {
@@ -282,6 +302,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
 
   return {
     previewMode,
+    isPreviewOverlay,
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,

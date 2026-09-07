@@ -6,9 +6,11 @@ import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 function Harness({
   percent,
   onPersist,
+  overlay = false,
 }: {
   percent: number;
   onPersist: (p: number) => void;
+  overlay?: boolean;
 }) {
   const {
     splitRowRef,
@@ -16,7 +18,7 @@ function Harness({
     startResize,
     adjustPreviewPercent,
     isResizing,
-  } = useSplitPanelResize(percent, onPersist);
+  } = useSplitPanelResize(percent, onPersist, { overlay });
 
   useEffect(() => {
     (window as unknown as { __splitHarness?: unknown }).__splitHarness = {
@@ -46,6 +48,45 @@ function Harness({
 }
 
 describe('useSplitPanelResize', () => {
+  it('clamps overlay dragging against the viewport and cancels a drag when returning to split', () => {
+    const onPersist = vi.fn();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1080 });
+    const view = render(<Harness percent={40} onPersist={onPersist} overlay />);
+    Object.defineProperty(view.getByTestId('preview-panel'), 'offsetWidth', { configurable: true, value: 432 });
+    const handle = view.getByTestId('resize-handle');
+    fireEvent.pointerDown(handle, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 648 });
+    act(() => {
+      window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 0 }));
+      flushRaf();
+    });
+    expect(document.querySelector('main')!.style.getPropertyValue('--sto-preview-overlay-width')).toBe('756px');
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    expect(onPersist).toHaveBeenLastCalledWith(70);
+    onPersist.mockClear();
+    fireEvent.pointerDown(handle, { pointerId: 2, pointerType: 'mouse', button: 0, clientX: 648 });
+    act(() => {
+      window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 2, clientX: 1080 }));
+      flushRaf();
+    });
+    expect(document.querySelector('main')!.style.getPropertyValue('--sto-preview-overlay-width')).toBe('432px');
+    view.rerender(<Harness percent={57} onPersist={onPersist} />);
+    fireEvent.pointerUp(window, { pointerId: 2 });
+    expect(onPersist).not.toHaveBeenCalled();
+    expect(getHarness().getCol()).toBe('57%');
+    expect(document.body.style.cursor).toBe('');
+  });
+  it('uses viewport widths for overlay and restores the independent split width', () => {
+    const onPersist = vi.fn();
+    const view = render(<Harness percent={40} onPersist={onPersist} overlay />);
+    const main = document.querySelector('main')!;
+    expect(main.style.getPropertyValue('--sto-preview-overlay-width')).toBe('40vw');
+    act(() => getHarness().adjustPreviewPercent(-20));
+    expect(onPersist).toHaveBeenLastCalledWith(40);
+    act(() => getHarness().adjustPreviewPercent(90));
+    expect(onPersist).toHaveBeenLastCalledWith(70);
+    view.rerender(<Harness percent={57} onPersist={onPersist} />);
+    expect(main.style.getPropertyValue('--sto-split-preview-col')).toBe('57%');
+  });
   let rafQueue: FrameRequestCallback[];
   let setPointerCapture: ReturnType<typeof vi.fn>;
   let releasePointerCapture: ReturnType<typeof vi.fn>;

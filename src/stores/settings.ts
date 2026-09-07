@@ -45,6 +45,7 @@ interface SettingsState {
   devModeUnlocked: boolean;
   /** 三栏预览区宽度占比（30–70），持久化记忆用户拖拽结果 */
   previewSplitPercent: number;
+  previewOverlayPercent: number;
 
   // Setup
   setupComplete: boolean;
@@ -74,6 +75,7 @@ interface SettingsState {
   setSidebarPreferredWidth: (width: number) => void;
   setDevModeUnlocked: (value: boolean) => void;
   setPreviewSplitPercent: (percent: number) => void;
+  setPreviewOverlayPercent: (percent: number) => void;
   markSetupComplete: () => void;
   resetSettings: () => void;
 }
@@ -104,6 +106,7 @@ const defaultSettings = {
   sidebarPreferredWidth: SIDEBAR_DEFAULT_WIDTH,
   devModeUnlocked: false,
   previewSplitPercent: 50,
+  previewOverlayPercent: 40,
   setupComplete: false,
 };
 
@@ -244,6 +247,9 @@ export const useSettingsStore = create<SettingsState>()(
           body: JSON.stringify({ value: sidebarPreferredWidth }),
         }).catch(() => { });
       },
+      setPreviewOverlayPercent: (percent) => set({
+        previewOverlayPercent: Number.isFinite(percent) ? Math.max(40, Math.min(70, percent)) : 40,
+      }),
       setPreviewSplitPercent: (previewSplitPercent) => set({
         previewSplitPercent: Math.max(30, Math.min(70, previewSplitPercent)),
       }),

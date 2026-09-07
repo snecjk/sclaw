@@ -44,9 +44,9 @@ import {
   stoPreviewExpandedBodyClass,
   stoSplitRowContentsClass,
 } from '@/lib/surfaces';
-import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
+import { usePreviewLayoutResize } from '@/hooks/use-preview-layout-resize';
+import { PreviewOverlayBackdrop } from '@/components/layout/preview-overlay-backdrop';
 import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
-import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
@@ -116,12 +116,6 @@ export function Chat() {
   const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
-  const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
-  const { splitRowRef, previewPanelRef, startResize, adjustPreviewPercent, isResizing } = useSplitPanelResize(
-    previewPanelPercent,
-    setPreviewSplitPercent,
-  );
   const [editDraft, setEditDraft] = useState<{
     text: string;
     skill?: import('@/types/skill-meta').SkillMeta;
@@ -488,6 +482,7 @@ export function Chat() {
 
   const {
     previewMode,
+    isPreviewOverlay,
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,
@@ -504,6 +499,7 @@ export function Chat() {
     selectPreviewTab,
     dismissPreviewTab,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
+  const { previewPanelPercent, splitRowRef, previewPanelRef, startResize, adjustPreviewPercent, isResizing } = usePreviewLayoutResize(isPreviewOverlay);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
     navigate(`/workflow/${encodeURIComponent(workflowId)}`);
@@ -628,10 +624,10 @@ export function Chat() {
         ? 'conversation'
         : previewMode === 'expanded'
           ? 'preview-expanded'
-          : 'split',
+          : isPreviewOverlay ? 'preview-overlay' : 'split',
   });
 
-  const isSplitChatLayout = isPreviewSplit;
+  const isSplitChatLayout = isPreviewSplit && !isPreviewOverlay;
   const showPreviewSurface = canShowPreviewPanel && showPreviewPanel;
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
@@ -824,24 +820,33 @@ export function Chat() {
         </div>
       )}
       </ChatConversationColumn>
-      {/* Preview — Handle 仅 split；expanded 保持 Conversation 挂载 */}
+      {/* Preview — Handle 用于 split / overlay；expanded 保持 Conversation 挂载 */}
       {showPreviewSurface ? (
         <div
           ref={previewPanelRef}
+          data-preview-overlay-panel={isPreviewOverlay || undefined}
+          role={isPreviewOverlay ? 'dialog' : undefined}
+          aria-modal={isPreviewOverlay || undefined}
+          aria-label={t('chat:artifact.preview')}
+          aria-owns={isPreviewOverlay ? 'sto-preview-overlay-header' : undefined}
+          tabIndex={isPreviewOverlay ? -1 : undefined}
           className={cn(
             isSplitChatLayout && stoSplitGridBodyPreviewClass,
             isPreviewExpanded && stoPreviewExpandedBodyClass,
+            isPreviewOverlay && 'sto-preview-overlay-panel',
           )}
         >
-          {isSplitChatLayout ? (
+          {isSplitChatLayout || isPreviewOverlay ? (
             <SplitPanelResizeHandle
               valuePercent={previewPanelPercent}
+              minPercent={isPreviewOverlay ? 40 : 30}
               isResizing={isResizing}
               onResizeStart={startResize}
               onKeyboardAdjust={adjustPreviewPercent}
             />
           ) : null}
           <ChatPreviewPanel
+            isPreviewOverlay={isPreviewOverlay}
             tabs={previewTabs}
             activeTabId={activePreviewTabId}
             sessionKey={currentSessionKey}
@@ -853,6 +858,7 @@ export function Chat() {
         </div>
       ) : null}
     </div>
+    <PreviewOverlayBackdrop active={isPreviewOverlay} panelRef={previewPanelRef} onClose={closePreviewPanel} />
     <TaskCreateModal
       open={workflowCronModalOpen}
       onClose={closeWorkflowCronTaskModal}

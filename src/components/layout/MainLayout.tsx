@@ -106,6 +106,7 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
 
   return (
     <main
+      data-preview-overlay={layoutMode === 'preview-overlay' || undefined}
       className={cn(
         stoMainCardShellClass,
         'relative',

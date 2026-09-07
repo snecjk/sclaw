@@ -9,6 +9,7 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
+import { forwardPreviewFrameEscape } from './preview-frame-escape';
 import { app, BrowserWindow, dialog, nativeTheme, session, shell } from 'electron';
 import type { Server } from 'node:http';
 import { basename, dirname, join, resolve } from 'path';
@@ -396,6 +397,7 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
     backgroundColor: resolveWindowBackgroundColor(nativeTheme.shouldUseDarkColors),
   });
   attachAppearanceReplay(win);
+  forwardPreviewFrameEscape(win.webContents);
 
   // Show the window IMMEDIATELY — before loading content.
   // On first run, ready-to-show can take 5-10s because the renderer process
