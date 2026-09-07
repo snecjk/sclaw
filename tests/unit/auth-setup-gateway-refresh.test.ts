@@ -20,7 +20,6 @@ function mockGateway(overrides: {
 }
 
 const emptySto = { created: [], deleted: [], updated: [], defaultSet: null };
-const emptyBiz = { created: [], skipped: [] };
 
 describe('resolvePostAuthGatewayRefresh', () => {
   it('returns none on login when only plugins/sso would refresh', () => {
@@ -30,7 +29,6 @@ describe('resolvePostAuthGatewayRefresh', () => {
         needsGatewayRefresh: true,
         gatewayManager: mockGateway({}),
         stoResult: emptySto,
-        bizResult: emptyBiz,
       }),
     ).toBe('none');
   });
@@ -42,7 +40,6 @@ describe('resolvePostAuthGatewayRefresh', () => {
         needsGatewayRefresh: true,
         gatewayManager: mockGateway({ state: 'running' }),
         stoResult: { ...emptySto, created: ['m1'] },
-        bizResult: emptyBiz,
       }),
     ).toBe('reload');
   });
@@ -54,7 +51,6 @@ describe('resolvePostAuthGatewayRefresh', () => {
         needsGatewayRefresh: true,
         gatewayManager: mockGateway({ settling: true }),
         stoResult: { ...emptySto, updated: ['m1'] },
-        bizResult: emptyBiz,
       }),
     ).toBe('reload');
   });
@@ -68,7 +64,6 @@ describe('resolvePostAuthGatewayRefresh', () => {
           connectedAt: Date.now() - 1_000,
         }),
         stoResult: { ...emptySto, created: ['m1'] },
-        bizResult: emptyBiz,
       }),
     ).toBe('reload');
   });
@@ -80,7 +75,6 @@ describe('resolvePostAuthGatewayRefresh', () => {
         needsGatewayRefresh: true,
         gatewayManager: mockGateway({ state: 'running' }),
         stoResult: { ...emptySto, updated: ['sto-key'] },
-        bizResult: emptyBiz,
       }),
     ).toBe('reload');
   });
@@ -92,7 +86,6 @@ describe('resolvePostAuthGatewayRefresh', () => {
         needsGatewayRefresh: true,
         gatewayManager: mockGateway({ state: 'running' }),
         stoResult: emptySto,
-        bizResult: emptyBiz,
       }),
     ).toBe('none');
   });

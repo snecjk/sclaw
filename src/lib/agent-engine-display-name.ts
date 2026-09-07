@@ -1,8 +1,9 @@
-export type AgentEngineType = 'claude' | 'openclaw';
+export type AgentEngineType = 'claude' | 'openclaw' | 'pi';
 
 const AGENT_ENGINE_DISPLAY_NAMES: Record<AgentEngineType, string> = {
   claude: 'Claude Agent',
   openclaw: 'OpenClaw',
+  pi: 'SAgent',
 };
 
 export function getAgentEngineDisplayName(engineType: AgentEngineType): string {

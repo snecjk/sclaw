@@ -17,5 +17,8 @@ export function isClaudeTaskExecutionSessionKey(sessionKey: string): boolean {
 export function isSessionModelSwitchKey(sessionKey: string): boolean {
   const trimmed = sessionKey.trim();
   if (!trimmed) return false;
-  return trimmed.startsWith('agent:') || isClaudeTaskExecutionSessionKey(trimmed);
+  return trimmed.startsWith('agent:')
+    || trimmed.startsWith('pi:')
+    || trimmed.startsWith('pi-task:')
+    || isClaudeTaskExecutionSessionKey(trimmed);
 }

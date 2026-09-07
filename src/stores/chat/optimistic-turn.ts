@@ -19,6 +19,7 @@ function attachedFilesFromComposerSegments(
       fileSize: seg.fileSize,
       preview: seg.preview,
       filePath: seg.stagedPath ?? seg.filePath,
+      provenance: seg.provenance,
     }));
 }
 
@@ -77,6 +78,7 @@ export function insertOptimisticUserTurn(input: {
       fileSize: a.fileSize,
       preview: a.preview,
       filePath: a.stagedPath,
+      provenance: a.provenance,
     }));
 
   const userMsg: RawMessage = {

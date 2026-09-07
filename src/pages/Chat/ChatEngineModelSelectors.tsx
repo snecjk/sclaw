@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, Bot, Check, ChevronDown, ChevronRight, Cpu } from 'lucide-react';
+import { AlertCircle, Bot, Check, ChevronDown, Cpu, Loader2, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
+import {
+  getAgentEnginePolicyOptionLabel,
+  useAgentEnginePolicyStore,
+} from '@/stores/agent-engine-policy';
+import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useCurrentChatDisplayMessageCount, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
@@ -15,10 +20,12 @@ import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
 import {
   buildChatModelOptions,
+  catalogModelIdsMatch,
   getWorkspaceDefaultModelId,
   getWorkspaceDefaultRawModelId,
   isConcreteModelId,
   normalizeModelIdForChat,
+  resolveNewChatSelectedModelId,
   resolveChatSelectedModelId,
   resolveChatToolbarModelId,
   sanitizeChatModelHint,
@@ -27,8 +34,9 @@ import {
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import {
-  applyClaudeSessionModel,
+  applySessionModel,
   applyOpenClawSessionModel,
+  syncWorkspaceDefaultModelToChat,
 } from '@/lib/sync-workspace-default-to-chat';
 import { isMainChatHomePath } from '@/lib/main-chat-navigation';
 import { isTaskExecutionSessionKey } from '../../../shared/session-agent-id';
@@ -37,6 +45,8 @@ import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-sess
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
+import type { AgentEngineType } from '../../../shared/agent-engine';
+import { InputComposerToolbarIconTooltip } from '@/components/input-composer/input-composer-toolbar-icon-tooltip';
 
 /** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
 const remappedDelistedSessionKeys = new Set<string>();
@@ -208,10 +218,24 @@ function isStoBuiltinModelOption(option: ChatModelOption | undefined): boolean {
   return option?.isBuiltin === true && option.accountId === 'sto';
 }
 
+function applySessionModelForEngine(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+  engineType: 'openclaw' | 'claude' | 'pi';
+}): Promise<string> {
+  return applySessionModel({
+    ...params,
+    engineType: params.engineType,
+  });
+}
+
 /** Sync catalog then remap session to workspace default (delisted STO models). */
 async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   currentSessionKey: string;
   currentAgentId: string;
+  engineType: 'openclaw' | 'claude' | 'pi';
 }): Promise<string> {
   await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
   await useProviderStore.getState().refreshProviderSnapshot();
@@ -230,11 +254,12 @@ async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   const options = buildChatModelOptions(providerItems);
   const option = options.find((item) => item.modelId === fallbackModelId)
     ?? options.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackModelId));
-  return applyOpenClawSessionModel({
+  return applySessionModelForEngine({
     currentSessionKey: params.currentSessionKey,
     modelId: option?.modelId ?? fallbackModelId,
     accountId: option?.accountId,
     currentAgentId: params.currentAgentId,
+    engineType: params.engineType,
   });
 }
 
@@ -288,6 +313,19 @@ function useChatEngineSelection(allowSessionSwitch = false) {
   const sessions = useChatStore((s) => s.sessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+  const authUserKey = useAuthStore((s) => s.user?.code || s.user?.empCode || s.user?.id || '');
+  const policyEngines = useAgentEnginePolicyStore((s) => s.engines);
+  const policyDefaultEngine = useAgentEnginePolicyStore((s) => s.defaultEngine);
+  const policyLoading = useAgentEnginePolicyStore((s) => s.loading);
+  const policyLoaded = useAgentEnginePolicyStore((s) => s.loaded);
+  const policyOwnerCode = useAgentEnginePolicyStore((s) => s.ownerCode);
+  const policyConfigVersion = useAgentEnginePolicyStore((s) => s.configVersion);
+  const fetchEnginePolicy = useAgentEnginePolicyStore((s) => s.fetchPolicy);
+
+  useEffect(() => {
+    if (!authUserKey) return;
+    void fetchEnginePolicy(authUserKey);
+  }, [authUserKey, fetchEnginePolicy]);
 
   const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
@@ -310,8 +348,8 @@ function useChatEngineSelection(allowSessionSwitch = false) {
     currentSessionKey,
     { messageCount: messages.length },
   );
-  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : agentDefaultEngineType === 'pi' ? 'SAgent' : 'OpenClaw';
+  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : currentEngineType === 'pi' ? 'SAgent' : 'OpenClaw';
   const displayEngineLabel = canSwitchEngine
     ? agentDefaultEngineLabel
     : currentSessionEngineLabel;
@@ -321,8 +359,8 @@ function useChatEngineSelection(allowSessionSwitch = false) {
 
   const [engineSaving, setEngineSaving] = useState(false);
 
-  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude'): Promise<boolean> => {
-    if (!canSwitchEngine || engineType === agentDefaultEngineType) return false;
+  const handleEngineSwitch = useCallback(async (engineType: AgentEngineType, notify = true) => {
+    if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
       const baseAgentId = resolveBaseAgentId(currentAgentId);
@@ -348,17 +386,60 @@ function useChatEngineSelection(allowSessionSwitch = false) {
           )),
         }));
       }
-      toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
-      return true;
+      if (notify) {
+        toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'SAgent' : 'OpenClaw'} 引擎`);
+      }
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
-      return false;
     } finally {
       setEngineSaving(false);
     }
-  };
+  }, [agentDefaultEngineType, allowSessionSwitch, canSwitchEngine, currentAgentId, currentSessionKey, fetchAgents]);
 
-  const engineSelectDisabled = sending || !currentAgentId;
+  const effectivePolicyLoaded = policyLoaded && policyOwnerCode === (authUserKey.trim() || 'current-user');
+  const allowedEngineTypes = useMemo(
+    () => new Set(policyEngines.map((item) => item.code)),
+    [policyEngines],
+  );
+  const autoEngineReconcileKeyRef = useRef('');
+
+  useEffect(() => {
+    if (
+      !effectivePolicyLoaded
+      || policyLoading
+      || engineSaving
+      || !canSwitchEngine
+      || !currentAgentId
+      || allowedEngineTypes.has(agentDefaultEngineType)
+    ) return;
+    const reconcileKey = [
+      policyOwnerCode,
+      policyConfigVersion,
+      currentAgentId,
+      agentDefaultEngineType,
+      policyDefaultEngine,
+    ].join(':');
+    if (autoEngineReconcileKeyRef.current === reconcileKey) return;
+    autoEngineReconcileKeyRef.current = reconcileKey;
+    const timer = window.setTimeout(() => {
+      void handleEngineSwitch(policyDefaultEngine, false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    agentDefaultEngineType,
+    allowedEngineTypes,
+    canSwitchEngine,
+    currentAgentId,
+    effectivePolicyLoaded,
+    engineSaving,
+    handleEngineSwitch,
+    policyConfigVersion,
+    policyDefaultEngine,
+    policyLoading,
+    policyOwnerCode,
+  ]);
+
+  const engineSelectDisabled = sending || !currentAgentId || policyLoading || !effectivePolicyLoaded;
   const engineTriggerTitle = allowSessionSwitch
     ? '切换当前建站会话执行引擎'
     : canSwitchEngine
@@ -366,10 +447,11 @@ function useChatEngineSelection(allowSessionSwitch = false) {
     : isSclawBrowserEmbedChatSessionKey(currentSessionKey) && messages.length > 0
       ? '历史会话不可切换引擎（可切换模型）'
       : '当前会话不可切换引擎';
-  const engineOptions: SelectorMenuOption<'openclaw' | 'claude'>[] = [
-    { key: 'openclaw', value: 'openclaw', label: 'OpenClaw' },
-    { key: 'claude', value: 'claude', label: 'Claude Agent' },
-  ];
+  const engineOptions: SelectorMenuOption<AgentEngineType>[] = policyEngines.map((engine) => ({
+    key: engine.code,
+    value: engine.code,
+    label: getAgentEnginePolicyOptionLabel(engine),
+  }));
 
   return {
     agentDefaultEngineType,
@@ -496,13 +578,23 @@ function useChatModelSelection() {
   const isGatewayRunning = gatewayStatus.state === 'running';
   const { t } = useTranslation('chat');
 
-  const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
+  const {
+    accounts,
+    statuses,
+    vendors,
+    defaultAccountId,
+    init,
+    refreshProviderSnapshot,
+    setDefaultAccount,
+    updateAccount,
+  } = useProviderStore();
   const pendingNewSessionModel = useChatStore((s) => s.pendingNewSessionModel);
   const [selectionOverride, setSelectionOverride] = useState<{
     sessionKey: string;
     modelId: string;
   } | null>(null);
   const [modelSaving, setModelSaving] = useState(false);
+  const [defaultModelSavingKey, setDefaultModelSavingKey] = useState<string | null>(null);
   const delistRemapInFlight = useRef(false);
 
   useEffect(() => { void init(); }, [init]);
@@ -524,6 +616,10 @@ function useChatModelSelection() {
   const modelOptions = useMemo(() => buildChatModelOptions(providerItems), [providerItems]);
   const workspaceDefaultModelId = useMemo(
     () => getWorkspaceDefaultModelId(accounts, defaultAccountId),
+    [accounts, defaultAccountId],
+  );
+  const workspaceDefaultRawModelId = useMemo(
+    () => getWorkspaceDefaultRawModelId(accounts, defaultAccountId),
     [accounts, defaultAccountId],
   );
   const stoCatalogModelIds = useMemo(() => {
@@ -560,10 +656,11 @@ function useChatModelSelection() {
     });
   let resolvedSelectedModelId: string;
   if (currentSessionKey === DEFAULT_SESSION_KEY) {
-    const hint = currentEngineType === 'claude'
-      ? safePending || toolbarHint
-      : safePending || workspaceDefaultModelId || '';
-    resolvedSelectedModelId = resolveChatSelectedModelId(modelOptions, hint) || hint || '';
+    resolvedSelectedModelId = resolveNewChatSelectedModelId(
+      modelOptions,
+      safePending,
+      workspaceDefaultModelId,
+    );
   } else if (isTaskExecutionSessionKey(currentSessionKey) && sessionHint) {
     resolvedSelectedModelId = resolveChatSelectedModelId(modelOptions, sessionHint) || sessionHint;
   } else {
@@ -592,7 +689,7 @@ function useChatModelSelection() {
       && !isTaskExecutionSessionKey(currentSessionKey)
       && !delistRemapInFlight.current
       && !remappedDelistedSessionKeys.has(currentSessionKey)
-      && (currentEngineType === 'claude' ? Boolean(currentAgentId) : isGatewayRunning)
+      && (currentEngineType === 'openclaw' ? isGatewayRunning : Boolean(currentAgentId))
     ) {
       const fallbackRaw = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
       if (!fallbackRaw) return;
@@ -600,19 +697,13 @@ function useChatModelSelection() {
       delistRemapInFlight.current = true;
       const option = modelOptions.find((item) => item.modelId === fallbackRaw)
         ?? modelOptions.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackRaw));
-      const persist = currentEngineType === 'claude'
-        ? applyClaudeSessionModel({
-          currentSessionKey,
-          modelId: option?.modelId ?? fallbackRaw,
-          accountId: option?.accountId,
-          currentAgentId,
-        })
-        : applyOpenClawSessionModel({
-          currentSessionKey,
-          modelId: option?.modelId ?? fallbackRaw,
-          accountId: option?.accountId,
-          currentAgentId,
-        });
+      const persist = applySessionModelForEngine({
+        currentSessionKey,
+        modelId: option?.modelId ?? fallbackRaw,
+        accountId: option?.accountId,
+        currentAgentId,
+        engineType: currentEngineType,
+      });
       void persist
         .then((persisted) => {
           useChatStore.setState((state) => ({
@@ -726,12 +817,13 @@ function useChatModelSelection() {
 
     setModelSaving(true);
     try {
-      if (currentEngineType === 'claude' && currentAgentId) {
-        const persisted = await applyClaudeSessionModel({
+      if ((currentEngineType === 'claude' || currentEngineType === 'pi') && currentAgentId) {
+        const persisted = await applySessionModelForEngine({
           currentSessionKey,
           modelId: rawModelId,
           accountId: option?.accountId,
           currentAgentId,
+          engineType: currentEngineType,
         });
         await fetchAgents();
         useChatStore.setState((state) => ({
@@ -758,6 +850,7 @@ function useChatModelSelection() {
           appliedModelId = await repairStoCatalogAndRemapToWorkspaceDefault({
             currentSessionKey,
             currentAgentId,
+            engineType: currentEngineType,
           });
           toast.message(t('toolbar.modelRemappedToDefault', {
             model: normalizeModelIdForChat(appliedModelId) || appliedModelId,
@@ -818,6 +911,40 @@ function useChatModelSelection() {
       </span>
     ),
   }));
+  const defaultModelOptionKey = modelOptions.find((option) => (
+    option.accountId === defaultAccountId
+    && catalogModelIdsMatch(workspaceDefaultRawModelId, option.modelId)
+  ))?.key ?? null;
+
+  const handleSetDefaultModel = async (optionKey: string) => {
+    const option = modelOptions.find((item) => item.key === optionKey);
+    if (!option || option.key === defaultModelOptionKey || defaultModelSavingKey) return;
+
+    const account = accounts.find((item) => item.id === option.accountId);
+    if (!account) return;
+
+    setDefaultModelSavingKey(option.key);
+    try {
+      if (defaultAccountId !== option.accountId) {
+        await setDefaultAccount(option.accountId);
+      }
+      if (account.model !== option.modelId) {
+        await updateAccount(option.accountId, { model: option.modelId });
+      } else {
+        await refreshProviderSnapshot();
+      }
+      await syncWorkspaceDefaultModelToChat({
+        modelId: option.modelId,
+        accountId: option.accountId,
+        previousWorkspaceModel: workspaceDefaultModelId,
+      });
+      toast.success(t('toolbar.defaultModelUpdated'));
+    } catch (err) {
+      toast.error(t('toolbar.defaultModelUpdateFailed', { message: String(err) }));
+    } finally {
+      setDefaultModelSavingKey(null);
+    }
+  };
 
   return {
     selectedModelId,
@@ -826,7 +953,10 @@ function useChatModelSelection() {
     selectorModelOptions,
     modelSelectDisabled,
     modelSaving,
+    defaultModelOptionKey,
+    defaultModelSavingKey,
     handleModelSwitch,
+    handleSetDefaultModel,
     switchTitle: t('toolbar.switchModelTitle'),
     builtinTag: t('toolbar.modelTagBuiltin'),
     customTag: t('toolbar.modelTagCustom'),
@@ -907,15 +1037,16 @@ export function ChatModelSelector({
   );
 }
 
-/* ── Combined cascade (engine → model) ───────────────────────── */
+/* ── Combined independent engine/model picker ────────────────── */
 
-export function ChatEngineModelCascade({
+export function ChatEngineModelPicker({
   className,
   allowSessionSwitch = false,
 }: {
   className?: string;
   allowSessionSwitch?: boolean;
 }) {
+  const { t } = useTranslation('chat');
   const {
     agentDefaultEngineType,
     currentEngineType,
@@ -933,26 +1064,24 @@ export function ChatEngineModelCascade({
     selectorModelOptions,
     modelSelectDisabled,
     modelSaving,
+    defaultModelOptionKey,
+    defaultModelSavingKey,
     handleModelSwitch,
+    handleSetDefaultModel,
     switchTitle,
   } = useChatModelSelection();
 
   const [open, setOpen] = useState(false);
-  const [pickedEngine, setPickedEngine] = useState<'openclaw' | 'claude' | null>(null);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({ visibility: 'hidden' });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const committedEngine = canSwitchEngine ? agentDefaultEngineType : currentEngineType;
-  const activeEngine = pickedEngine ?? committedEngine;
-  const busy = engineSaving || modelSaving;
+  const selectedEngine = canSwitchEngine ? agentDefaultEngineType : currentEngineType;
+  const busy = engineSaving || modelSaving || defaultModelSavingKey !== null;
   const triggerDisabled = engineSelectDisabled && modelSelectDisabled;
 
   useEffect(() => {
-    if (!open) {
-      setPickedEngine(null);
-      return;
-    }
+    if (!open) return;
 
     const updatePosition = () => {
       const trigger = triggerRef.current;
@@ -998,14 +1127,9 @@ export function ChatEngineModelCascade({
     };
   }, [open]);
 
-  const pickEngine = (engineType: 'openclaw' | 'claude') => {
+  const pickEngine = (engineType: 'openclaw' | 'claude' | 'pi') => {
     if (!canSwitchEngine || engineSelectDisabled || busy) return;
-    const previous = committedEngine;
-    setPickedEngine(engineType);
-    if (engineType === committedEngine) return;
-    void handleEngineSwitch(engineType).then((ok) => {
-      if (!ok) setPickedEngine(previous);
-    });
+    void handleEngineSwitch(engineType);
   };
 
   const pickModel = (modelId: string) => {
@@ -1016,10 +1140,11 @@ export function ChatEngineModelCascade({
 
   return (
     <>
+      <InputComposerToolbarIconTooltip label={`${engineTriggerTitle} · ${switchTitle}`}>
+      <span className="inline-flex min-w-0 max-w-full">
       <button
         ref={triggerRef}
         type="button"
-        title={`${engineTriggerTitle} · ${switchTitle}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={triggerDisabled || busy}
@@ -1032,12 +1157,18 @@ export function ChatEngineModelCascade({
         onClick={() => setOpen((current) => !current)}
       >
         <span className="min-w-0 truncate">
-          <span className="text-muted-foreground">{displayEngineLabel}</span>
+          <span className={cn(
+            canSwitchEngine && !engineSelectDisabled ? 'text-foreground' : 'text-muted-foreground',
+          )}>
+            {displayEngineLabel}
+          </span>
           <span className="mx-1 text-muted-foreground/50">·</span>
           <span>{modelDisplayText}</span>
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
       </button>
+      </span>
+      </InputComposerToolbarIconTooltip>
       {open && typeof document !== 'undefined' ? createPortal(
         <div
           ref={menuRef}
@@ -1049,71 +1180,83 @@ export function ChatEngineModelCascade({
             'border border-glass-border bg-popover text-popover-foreground shadow-lg',
           )}
         >
-          <div
-            className="flex w-[168px] shrink-0 flex-col border-r border-border/70 p-1"
-            role="listbox"
-            aria-label="引擎"
-          >
+          <div className="flex w-[168px] shrink-0 flex-col border-r border-border/70 p-1">
             <p className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">引擎</p>
             {engineOptions.map((option) => {
-              const selected = option.value === activeEngine;
+              const selected = option.value === selectedEngine;
               const lockedOut = !canSwitchEngine && option.value !== currentEngineType;
               return (
                 <button
                   key={option.key}
                   type="button"
-                  role="option"
-                  aria-selected={selected}
                   disabled={engineSelectDisabled || busy || lockedOut}
                   className={cn(
-                    'relative flex h-9 w-full select-none items-center gap-1.5 rounded-md px-2 text-left text-[13px] outline-none',
-                    'transition-colors focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
-                    selected
-                      ? 'bg-primary/12 font-medium text-primary'
-                      : 'text-foreground hover:bg-[var(--sto-content-hover-background)]',
+                    'relative flex h-9 w-full select-none items-center gap-1 rounded-md px-2 text-left text-[13px] outline-none',
+                    'transition-colors hover:bg-accent hover:text-accent-foreground',
+                    selected && 'bg-primary/8 font-medium',
                     lockedOut && 'opacity-40',
                   )}
                   onClick={() => pickEngine(option.value)}
                 >
                   <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                  {selected ? (
-                    <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-                  ) : (
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  )}
+                  {selected ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden /> : null}
                 </button>
               );
             })}
           </div>
           <div className="flex min-w-0 flex-1 flex-col p-1">
             <p className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-              模型 · {activeEngine === 'claude' ? 'Claude Agent' : 'OpenClaw'}
+              模型
             </p>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {selectorModelOptions.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">暂无可用模型</p>
               ) : selectorModelOptions.map((option) => {
-                const selected = option.value === selectedModelId && activeEngine === committedEngine;
+                const selected = option.value === selectedModelId;
+                const isDefault = option.key === defaultModelOptionKey;
+                const savingDefault = option.key === defaultModelSavingKey;
                 return (
-                  <button
+                  <div
                     key={option.key}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    disabled={modelSelectDisabled || busy}
                     className={cn(
                       'relative flex h-9 w-full select-none items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none',
-                      'transition-colors focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
-                      selected
-                        ? 'bg-primary/12 font-medium text-primary'
-                        : 'hover:bg-[var(--sto-content-hover-background)]',
+                      'transition-colors hover:bg-accent hover:text-accent-foreground',
+                      selected && 'bg-primary/8 font-medium',
                     )}
-                    onClick={() => pickModel(option.value)}
                   >
-                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      disabled={modelSelectDisabled || busy}
+                      className="min-w-0 flex-1 truncate text-left outline-none disabled:pointer-events-none disabled:opacity-60"
+                      onClick={() => pickModel(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDefault || busy}
+                      aria-label={t(isDefault ? 'toolbar.defaultModel' : 'toolbar.setDefaultModel')}
+                      title={t(isDefault ? 'toolbar.defaultModel' : 'toolbar.setDefaultModel')}
+                      className={cn(
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-md outline-none transition-colors',
+                        isDefault
+                          ? 'text-amber-500'
+                          : 'text-muted-foreground/45 hover:bg-amber-500/10 hover:text-amber-500',
+                        'focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:pointer-events-none',
+                      )}
+                      onClick={() => void handleSetDefaultModel(option.key)}
+                    >
+                      {savingDefault ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <Star className="h-3.5 w-3.5" fill={isDefault ? 'currentColor' : 'none'} aria-hidden />
+                      )}
+                    </button>
                     {option.decoration}
                     {selected ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden /> : null}
-                  </button>
+                  </div>
                 );
               })}
             </div>

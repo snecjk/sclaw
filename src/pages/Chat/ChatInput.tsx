@@ -38,7 +38,6 @@ import { AppDevInterfaceCatalogPicker } from '@/components/app-dev/AppDevInterfa
 import { DataCenterFilePickerModal } from '@/components/data-center-file-picker';
 import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
 import { EMPTY_MENTION_COMPOSER_SNAPSHOT } from '@/lib/dingtalk-mention-composer';
-import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import { isSingleTemplateWorkflowSend } from '@/lib/workflow-template-send';
 import { FlyToTargetLayer } from '@/components/fly-to-target';
@@ -68,6 +67,7 @@ import { VoiceComposerPanel, VoiceTopCrawlWave } from '@/components/chat/VoiceCo
 import { resolveTrimmedSkillOffset } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import type { ModelMessageCompositionV1 } from '../../../shared/model-message-composition';
 import {
   clearMainChatComposerDraft,
   publishMainChatComposerDraft,
@@ -75,6 +75,8 @@ import {
 import { ComposerScenarioPills } from '@/components/flow-card/ComposerScenarioPills';
 import { useComposerFlowStore } from '@/stores/composer-flow';
 import type { EmbedComposerAction } from '../../../shared/embed-composer-actions';
+import type { AgentEngineType } from '../../../shared/agent-engine';
+import { ContextUsageControl } from './context-usage/ContextUsageControl';
 
 export { CHAT_EDIT_DRAFT_EVENT };
 export type { FileAttachment } from '@/components/attachments';
@@ -96,6 +98,9 @@ export type ChatSendExtras = {
   workflows?: Array<{ id: string; name: string; source?: string }>;
   composerSegments?: PersistedComposerSegment[];
   gatewayText?: string;
+  composition?: ModelMessageCompositionV1;
+  /** One-shot engine selected by the workflow "run now" dialog. */
+  workflowExecutionEngine?: AgentEngineType;
 };
 
 /** Chat 装配层 props：发送胶水 + 场景 chrome（底栏/项目选择器/内联选择器） */
@@ -338,11 +343,11 @@ export function ChatInput({
         segments: picked.map((file) => ({ type: 'file' as const, attachmentId: file.id })),
         plainText: sendText,
         attachments: picked,
-        resolveSkillPrompt,
       });
       const extras: ChatSendExtras = {
         composerSegments: payload.persistedSegments.length ? payload.persistedSegments : undefined,
         gatewayText: payload.gatewayText,
+        composition: payload.composition,
       };
 
       if (sending && onQueue) {
@@ -460,7 +465,6 @@ export function ChatInput({
         segments: snapshot.segments ?? [],
         plainText: snapshot.plainText,
         attachments: readyAttachments,
-        resolveSkillPrompt,
       });
 
       const displayText = payload.displayText;
@@ -494,6 +498,7 @@ export function ChatInput({
         workflows: payload.workflows.length ? payload.workflows : undefined,
         composerSegments: payload.persistedSegments.length ? payload.persistedSegments : undefined,
         gatewayText: payload.gatewayText,
+        composition: payload.composition,
       };
 
       logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
@@ -799,6 +804,9 @@ export function ChatInput({
       )}
       toolbarRight={(
         <>
+          {isHomeLayout && !voicePanelOpen && engineType === 'pi'
+            ? <ContextUsageControl engineType={engineType} />
+            : null}
           {isHomeLayout && !voicePanelOpen ? toolbarInlineSelectors : null}
           {voiceConfirming ? (
             <Button
@@ -815,6 +823,8 @@ export function ChatInput({
               {t('composer.voiceConfirmCancel')}
             </Button>
           ) : null}
+          <InputComposerToolbarIconTooltip label={voiceButtonTitle}>
+          <span className="inline-flex shrink-0">
           <Button
             variant="ghost"
             type="button"
@@ -837,7 +847,6 @@ export function ChatInput({
             )}
             onClick={handleMicClick}
             disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
-            title={voiceButtonTitle}
             aria-pressed={voicePanelOpen}
           >
             {voiceStatus === 'connecting' ? (
@@ -846,6 +855,8 @@ export function ChatInput({
               <Mic className="h-4 w-4" aria-hidden />
             )}
           </Button>
+          </span>
+          </InputComposerToolbarIconTooltip>
           <InputComposerSendButton
             layout={layout}
             sending={sending}

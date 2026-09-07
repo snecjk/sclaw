@@ -2,6 +2,7 @@ import { useChatStore } from './store';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
 import type { ClientRunState, ClientSessionState } from './client-session-reducer';
 import type { RawMessage, ToolStatus } from './types';
+import type { ChatContextUsage, ContextCompactionActivity } from '../../../shared/chat-runtime-protocol';
 import { formatChatRuntimeErrorForDisplay } from './runtime-error-message';
 
 const ACTIVE_PHASES = new Set<ClientRunState['phase']>([
@@ -32,6 +33,8 @@ export interface ChatSessionRuntimeView {
   streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
   toolEventCount: number;
+  activity: ContextCompactionActivity | null;
+  contextUsage: ChatContextUsage | null;
 }
 
 export interface ChatRuntimeIndicator {
@@ -82,6 +85,8 @@ const EMPTY_RUNTIME_VIEW: ChatSessionRuntimeView = {
   streamingToolResults: [],
   streamingTools: [],
   toolEventCount: 0,
+  activity: null,
+  contextUsage: null,
 };
 const runtimeViewCache = new WeakMap<ClientSessionState, ChatSessionRuntimeView>();
 
@@ -131,6 +136,8 @@ export function buildChatSessionRuntimeView(
     streamingToolResults: session?.overlay.streamingToolResults ?? [],
     streamingTools: session?.overlay.streamingTools ?? [],
     toolEventCount: session?.overlay.toolEventCount ?? 0,
+    activity: runtime?.activity ?? null,
+    contextUsage: runtime?.contextUsage ?? null,
   };
   return view;
 }

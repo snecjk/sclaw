@@ -200,9 +200,7 @@ describe('chat send action acceptance state', () => {
     expect(dispatchChatRequest).not.toHaveBeenCalled();
   });
 
-  it('re-bakes every skill prompt and marker when the pre-baked gateway text is gone', async () => {
-    // 队列编辑后 gatewayText 被置空，投递走现烘焙路径：技能 2..n 的 prompt
-    // 与 transcript marker 不得丢失，否则模型收不到这些技能的指令。
+  it('sends explicit skill composition without prompt prefixes or transcript markers', async () => {
     vi.mocked(dispatchChatRequest).mockResolvedValue({ success: true, result: { runId: 'run-1' } });
     const { actions } = createHarness();
 
@@ -216,10 +214,18 @@ describe('chat send action acceptance state', () => {
 
     expect(prepareSendContext).toHaveBeenCalledTimes(1);
     const baked = vi.mocked(prepareSendContext).mock.calls[0]![0].trimmedText;
-    expect(baked).toContain('Prompt for skill-a');
-    expect(baked).toContain('Prompt for skill-b');
-    expect(baked).toContain('分析财报');
-    expect(baked).toContain('<!-- SClaw-Skill {"slug":"skill-a","title":"技能A","userText":"分析财报"} -->');
-    expect(baked).toContain('<!-- SClaw-Skill {"slug":"skill-b","title":"技能B"} -->');
+    expect(baked).toBe('分析财报');
+    expect(baked).not.toContain('Prompt for');
+    expect(baked).not.toContain('SClaw-Skill');
+    expect(dispatchChatRequest).toHaveBeenCalledWith(expect.objectContaining({
+      composition: {
+        version: 1,
+        segments: [
+          { type: 'text', text: '分析财报' },
+          { type: 'skill', slug: 'skill-a', title: '技能A' },
+          { type: 'skill', slug: 'skill-b', title: '技能B' },
+        ],
+      },
+    }));
   });
 });

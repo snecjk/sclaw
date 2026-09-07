@@ -8,6 +8,10 @@ export function claudeTaskGroupKey(taskId: string): string {
   return `claude-task:${taskId}`;
 }
 
+export function piTaskGroupKey(taskId: string): string {
+  return `pi-task:${taskId}`;
+}
+
 export function stoBuiltinTaskGroupKey(taskId: string): string {
   return `sto:${taskId}`;
 }
@@ -42,6 +46,9 @@ export function resolveTaskGroupKeyFromSessionKey(sessionKey: string): string | 
 
   const claudeDated = trimmed.match(/^claude-task:([^:]+):(\d{4}-\d{2}-\d{2})$/);
   if (claudeDated) return claudeTaskGroupKey(claudeDated[1] ?? '');
+
+  const piDated = trimmed.match(/^pi-task:([^:]+):(\d{4}-\d{2}-\d{2})$/);
+  if (piDated) return piTaskGroupKey(piDated[1] ?? '');
 
   return null;
 }

@@ -420,7 +420,8 @@ export function prepareGatewayTextForComposerSynth(raw: string, skillMeta?: Skil
 
 /**
  * history 加载后、把 skill content 收缩成 displayText 之前：
- * 从仍含 bake 的 gateway 原文重建 `_composerSegments`，避免切会话后 chip 前置 / 工作流丢失。
+ * 新消息优先使用 Main sidecar 投影的 `_composerSegments`；仅对旧历史从仍含 bake 的
+ * gateway 原文重建，避免切会话后 chip 前置 / 工作流丢失。
  */
 export function hydrateComposerSegmentsOnMessages(messages: RawMessage[]): RawMessage[] {
   return messages.map((message) => {

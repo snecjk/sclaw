@@ -12,6 +12,8 @@ import { Switch } from '@/components/ui/switch';
 import { UpdateDownloadProgress } from './update/UpdateDownloadProgress';
 import { updateDividerInsetLineClass } from './update/updateDivider';
 import type { UpdateStatus } from '@/stores/update';
+import { Button } from '@/components/ui/button';
+import { settingsPrimaryActionButtonClass } from '@/lib/surfaces';
 
 /** 有待处理更新时显示橙色标签 */
 const UPDATE_PENDING_BADGE_STATUSES: UpdateStatus[] = [
@@ -38,15 +40,7 @@ const updateLatestBadgeClass = cn(
   'whitespace-nowrap',
 );
 
-/** MasterGo：主操作按钮 — 深色实心、无图标、胶囊形 */
-const updatePrimaryBtnClass = cn(
-  'inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] px-5',
-  'text-[14px] font-medium leading-none whitespace-nowrap',
-  'bg-[#1D2129] text-white hover:bg-[#1D2129]/90',
-  'disabled:cursor-not-allowed disabled:bg-[#F2F3F5] disabled:text-[#86909C] disabled:hover:bg-[#F2F3F5]',
-  'dark:bg-foreground dark:text-background dark:hover:bg-foreground/90',
-  'dark:disabled:bg-muted dark:disabled:text-muted-foreground',
-);
+const updatePrimaryBtnClass = cn(settingsPrimaryActionButtonClass, 'shrink-0 whitespace-nowrap');
 
 /** MasterGo：禁用态（检查中）— 浅灰底 */
 const updateDisabledBtnClass = cn(
@@ -117,9 +111,9 @@ export function UpdateSettings() {
         );
       case 'available':
         return (
-          <button type="button" className={updatePrimaryBtnClass} onClick={() => void downloadUpdate()}>
+          <Button type="button" className={updatePrimaryBtnClass} onClick={() => void downloadUpdate()}>
             {t('updates.action.downloadNewVersion')}
-          </button>
+          </Button>
         );
       case 'downloaded':
         if (autoInstallCountdown != null && autoInstallCountdown >= 0) {
@@ -128,16 +122,16 @@ export function UpdateSettings() {
               <button type="button" className={updateDisabledBtnClass} onClick={() => void cancelAutoInstall()}>
                 {t('updates.action.cancelAutoInstall')}
               </button>
-              <button type="button" className={updatePrimaryBtnClass} onClick={() => void installUpdate()}>
+              <Button type="button" className={updatePrimaryBtnClass} onClick={() => void installUpdate()}>
                 {t('updates.action.install')}
-              </button>
+              </Button>
             </div>
           );
         }
         return (
-          <button type="button" className={updatePrimaryBtnClass} onClick={() => void installUpdate()}>
+          <Button type="button" className={updatePrimaryBtnClass} onClick={() => void installUpdate()}>
             {t('updates.action.install')}
-          </button>
+          </Button>
         );
       case 'installing':
         return (
@@ -152,28 +146,28 @@ export function UpdateSettings() {
               <button type="button" className={updateDisabledBtnClass} onClick={() => cancelRestartCountdown()}>
                 {t('updates.action.cancelRestart')}
               </button>
-              <button type="button" className={updatePrimaryBtnClass} onClick={() => restartApp()}>
+              <Button type="button" className={updatePrimaryBtnClass} onClick={() => restartApp()}>
                 {t('updates.action.restartNow')}
-              </button>
+              </Button>
             </div>
           );
         }
         return (
-          <button type="button" className={updatePrimaryBtnClass} onClick={() => restartApp()}>
+          <Button type="button" className={updatePrimaryBtnClass} onClick={() => restartApp()}>
             {t('updates.action.restart')}
-          </button>
+          </Button>
         );
       case 'error':
         return (
-          <button type="button" className={updatePrimaryBtnClass} onClick={() => void handleCheckForUpdates()}>
+          <Button type="button" className={updatePrimaryBtnClass} onClick={() => void handleCheckForUpdates()}>
             {t('updates.action.retry')}
-          </button>
+          </Button>
         );
       default:
         return (
-          <button type="button" className={updatePrimaryBtnClass} onClick={() => void handleCheckForUpdates()}>
+          <Button type="button" className={updatePrimaryBtnClass} onClick={() => void handleCheckForUpdates()}>
             {t('updates.action.check')}
-          </button>
+          </Button>
         );
     }
   };

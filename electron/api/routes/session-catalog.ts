@@ -23,6 +23,7 @@ import {
 } from '../../services/session-catalog-service';
 import { getSessionGroupRepository } from '../../db/repositories/session-group-repository';
 import { DEFAULT_WORKSPACE_ID } from '../../db/models/domain/session-catalog';
+import type { AgentEngineType } from '../../engines/types';
 
 export async function handleSessionCatalogRoutes(
   req: IncomingMessage,
@@ -138,8 +139,16 @@ export async function handleSessionCatalogRoutes(
 
   if (url.pathname === '/api/session-catalog/sessions/bind' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ sessionKey: string; workspaceId: string }>(req);
-      await bindSessionToWorkspace(body.sessionKey ?? '', body.workspaceId ?? DEFAULT_WORKSPACE_ID, _ctx.gatewayManager);
+      const body = await parseJsonBody<{ sessionKey: string; workspaceId: string; engineType?: unknown }>(req);
+      const engineType = body.engineType === 'claude' || body.engineType === 'pi' || body.engineType === 'openclaw'
+        ? body.engineType as AgentEngineType
+        : undefined;
+      await bindSessionToWorkspace(
+        body.sessionKey ?? '',
+        body.workspaceId ?? DEFAULT_WORKSPACE_ID,
+        _ctx.gatewayManager,
+        engineType,
+      );
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
@@ -149,11 +158,15 @@ export async function handleSessionCatalogRoutes(
 
   if (url.pathname === '/api/session-catalog/sessions/move' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ sessionKey: string; workspaceId: string }>(req);
+      const body = await parseJsonBody<{ sessionKey: string; workspaceId: string; engineType?: unknown }>(req);
+      const engineType = body.engineType === 'claude' || body.engineType === 'pi' || body.engineType === 'openclaw'
+        ? body.engineType as AgentEngineType
+        : undefined;
       const session = await moveSessionToWorkspace(
         body.sessionKey ?? '',
         body.workspaceId ?? DEFAULT_WORKSPACE_ID,
         _ctx.gatewayManager,
+        engineType,
       );
       sendJson(res, 200, { session });
     } catch (error) {

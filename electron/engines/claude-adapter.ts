@@ -2,8 +2,21 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
+import { routeSessionSkills } from '../services/skills/session-skill-router';
+import { emitSkillRoutingProgress } from '../services/skills/skill-routing-progress';
+import { extractClaudeSkillSlugs } from '../services/skills/session-skill-usage';
+import {
+  completeSkillTurn,
+  failSkillTurn,
+  markSkillUsed,
+} from '../services/skills/session-skill-state-service';
 import { logger } from '../utils/logger';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
+import { sclawAgentExtensionState } from '../agent-extensions/runtime';
+import {
+  beginRuntimeSkillAccessTurn,
+  clearRuntimeSkillAccess,
+} from '../agent-extensions/extensions/sto-skill-runtime/access';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
@@ -14,6 +27,7 @@ import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEn
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
+import type { NormalizedModelTurn } from '../services/model-message-normalizer';
 import {
   createClaudeQuery,
   deleteClaudeSdkSession,
@@ -28,10 +42,18 @@ import {
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
-import { logUserSend } from '../../shared/user-send-log';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
-import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend, buildClaudeResumeContinueUserPrompt, inspectClaudeAssistantPayload, isClaudeTurnContentless, shouldAutoResumeContentlessTurn } from '../../shared/claude-runtime-control-text';
+import { CHAT_HISTORY_LIMIT } from '../../shared/chat-config';
+import {
+  isClaudeRuntimeControlText,
+  isContinueUserPrompt,
+  buildClaudeResumeInterruptAppend,
+  buildClaudeResumeContinueUserPrompt,
+  inspectClaudeAssistantPayload,
+  isClaudeTurnContentless,
+  shouldAutoResumeContentlessTurn,
+} from '../../shared/claude-runtime-control-text';
 import { resolveClaudeResumePlan } from '../../shared/claude-resume-plan';
 import { classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
 import { assembleSystemPromptAppend } from '../../shared/system-prompt-sections';
@@ -39,6 +61,7 @@ import { consumeRunInterrupt, peekRunInterrupt, rememberRunInterrupt } from './r
 import { bindClaudeLoopGuardAbort, unbindClaudeLoopGuardAbort } from './claude-loop-guard';
 import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
 import { ActiveQueryRegistry } from './active-query-registry';
+import { logUserSend } from '../../shared/user-send-log';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -75,6 +98,10 @@ const activeClaudeQueries = new ActiveQueryRegistry({
     });
   },
 });
+type ClaudeQuery = AsyncIterable<Record<string, unknown>> & {
+  close(): void;
+};
+
 type ClaudeConsumeTiming = {
   launchStartedAt: number;
   queryCreatedAt: number;
@@ -282,6 +309,48 @@ async function buildClaudeUserMessage(
   return buildClaudeUserMessageFromContent(content);
 }
 
+function appendClaudeText(content: Array<ImageBlockParam | TextBlockParam>, text: string): void {
+  if (!text) return;
+  const previous = content[content.length - 1];
+  if (previous?.type === 'text') {
+    previous.text += text;
+  } else {
+    content.push({ type: 'text', text });
+  }
+}
+
+async function buildClaudeUserMessageFromTurn(turn: NormalizedModelTurn): Promise<SDKUserMessage> {
+  const content: Array<ImageBlockParam | TextBlockParam> = [];
+  for (const part of turn.modelContent) {
+    switch (part.type) {
+      case 'text':
+        appendClaudeText(content, part.text);
+        break;
+      case 'attachment': {
+        const attachment = turn.attachments[part.attachmentIndex];
+        if (!attachment) break;
+        appendClaudeText(content, part.reference);
+        if (CLAUDE_VISION_MIME_TYPES.has(attachment.mimeType)) {
+          const fileBuffer = await readFile(attachment.filePath);
+          content.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: attachment.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+              data: fileBuffer.toString('base64'),
+            },
+          });
+        }
+        break;
+      }
+    }
+  }
+  if (content.length === 0) {
+    content.push({ type: 'text', text: turn.modelText || '请处理本次请求。' });
+  }
+  return buildClaudeUserMessageFromContent(content);
+}
+
 function stringifyClaudeContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
@@ -476,6 +545,9 @@ function shouldHideClaudeUserMessage(
   messagePayload: unknown,
 ): boolean {
   if (entryRecord.isSynthetic === true) return true;
+  if (entryRecord.isMeta === true) return true;
+  if (entryRecord.isVisibleInTranscriptOnly === true) return true;
+  if (entryRecord.isCompactSummary === true) return true;
   if (entryRecord.shouldQuery === false) return true;
   if (typeof entryRecord.parent_tool_use_id === 'string' && entryRecord.parent_tool_use_id.length > 0) {
     return true;
@@ -504,6 +576,19 @@ function shouldHideClaudeUserMessage(
   }
 
   return false;
+}
+
+function filterClaudeTranscriptControlEntries(
+  entries: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return entries.filter((entry) => {
+    if (entry.type === 'assistant') {
+      return !isClaudeRuntimeControlAssistantEntry(entry.message);
+    }
+    if (entry.type !== 'user') return true;
+    return shouldKeepClaudeWorkflowToolResult(entry.message)
+      || !shouldHideClaudeUserMessage(entry, entry.message);
+  });
 }
 
 type ClaudeDisplayMessage = {
@@ -767,7 +852,7 @@ async function buildClaudeExecutionSnapshot(
     const batch = await getClaudeSessionMessages(sessionId, entry.cwd ?? '');
     batches.push({
       sessionId,
-      entries: batch as unknown as Record<string, unknown>[],
+      entries: filterClaudeTranscriptControlEntries(batch as unknown as Record<string, unknown>[]),
     });
   }
 
@@ -789,13 +874,14 @@ export async function consumeClaudeQuery(
   sessionKey: string,
   sessionId: string,
   cwd: string,
-  query: AsyncIterable<Record<string, unknown>> & { close(): void },
+  query: ClaudeQuery,
   eventSink: ClaudeEventSink | null,
   runId: string,
   onMessage?: (message: Record<string, unknown>) => void | Promise<void>,
   recoveryOptions?: {
     suppressMissingConversationFailure?: boolean;
     suppressStartedEvent?: boolean;
+    compactionReason?: 'manual' | 'auto' | 'unknown';
     initialSeq?: number;
     timing?: ClaudeConsumeTiming;
   },
@@ -809,10 +895,10 @@ export async function consumeClaudeQuery(
   let title: string | undefined;
   let seq = recoveryOptions?.initialSeq ?? 0;
   let seenResult = false;
+  let resultFailed = false;
   let completionEmitted = false;
   let completionDeferred = false;
   let errorThrown = false;
-  let autoResume = false;
   // Claude can finish the current main-agent turn while background subagents
   // are still running. Their task notifications can then trigger another main
   // turn on the same query. A `result` therefore is terminal for the app run
@@ -834,6 +920,7 @@ export async function consumeClaudeQuery(
   let pendingToolInputDelta = false;
   let lastToolInputDeltaAt = 0;
   let firstSdkMessageSeen = false;
+  let autoResume = false;
   let turnHadAssistant = false;
   let turnHadToolUse = false;
   let turnHadVisibleAssistant = false;
@@ -844,6 +931,14 @@ export async function consumeClaudeQuery(
     if (inspected.hasToolUse) turnHadToolUse = true;
     if (inspected.hasVisibleText) turnHadVisibleAssistant = true;
   };
+
+  let activeCompaction: {
+    attemptId: string;
+    startedAt: number;
+    reason: 'manual' | 'auto' | 'unknown';
+    tokensBefore?: number;
+  } | null = null;
+  let lastCompactionCompletedAt = 0;
 
   const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
@@ -936,10 +1031,87 @@ export async function consumeClaudeQuery(
       if (message.type === 'system') {
         const taskMessage = message as {
           subtype?: string;
+          status?: string | null;
+          compact_result?: 'success' | 'failed';
+          compact_error?: string;
+          compact_metadata?: {
+            trigger?: 'manual' | 'auto';
+            pre_tokens?: number;
+            post_tokens?: number;
+            duration_ms?: number;
+          };
           task_id?: string;
           skip_transcript?: boolean;
           patch?: { status?: string };
         };
+        if (taskMessage.subtype === 'status' && taskMessage.status === 'compacting' && !activeCompaction) {
+          activeCompaction = {
+            attemptId: randomUUID(),
+            startedAt: Date.now(),
+            reason: recoveryOptions?.compactionReason ?? 'unknown',
+          };
+          emitEngineEvent({
+            type: 'context.compaction.started',
+            attemptId: activeCompaction.attemptId,
+            reason: activeCompaction.reason,
+          });
+        }
+        if (
+          taskMessage.subtype === 'compact_boundary'
+          && (activeCompaction || Date.now() - lastCompactionCompletedAt >= 2_000)
+        ) {
+          const metadata = taskMessage.compact_metadata;
+          const attempt = activeCompaction ?? {
+            attemptId: randomUUID(),
+            startedAt: Date.now(),
+            reason: metadata?.trigger ?? 'unknown',
+            tokensBefore: metadata?.pre_tokens,
+          };
+          if (!activeCompaction) {
+            emitEngineEvent({
+              type: 'context.compaction.started',
+              attemptId: attempt.attemptId,
+              reason: attempt.reason,
+              tokensBefore: attempt.tokensBefore,
+            });
+          }
+          emitEngineEvent({
+            type: 'context.compaction.completed',
+            attemptId: attempt.attemptId,
+            reason: metadata?.trigger ?? attempt.reason,
+            tokensBefore: metadata?.pre_tokens ?? attempt.tokensBefore,
+            tokensAfter: metadata?.post_tokens,
+            durationMs: metadata?.duration_ms ?? Date.now() - attempt.startedAt,
+          });
+          lastCompactionCompletedAt = Date.now();
+          activeCompaction = null;
+        } else if (taskMessage.subtype === 'status' && taskMessage.compact_result === 'failed') {
+          const attempt = activeCompaction ?? {
+            attemptId: randomUUID(),
+            startedAt: Date.now(),
+            reason: 'unknown' as const,
+          };
+          emitEngineEvent({
+            type: 'context.compaction.failed',
+            attemptId: attempt.attemptId,
+            reason: attempt.reason,
+            willRetry: false,
+            errorMessage: taskMessage.compact_error,
+            durationMs: Date.now() - attempt.startedAt,
+          });
+          lastCompactionCompletedAt = Date.now();
+          activeCompaction = null;
+        } else if (taskMessage.subtype === 'status' && taskMessage.compact_result === 'success' && activeCompaction) {
+          emitEngineEvent({
+            type: 'context.compaction.completed',
+            attemptId: activeCompaction.attemptId,
+            reason: activeCompaction.reason,
+            tokensBefore: activeCompaction.tokensBefore,
+            durationMs: Date.now() - activeCompaction.startedAt,
+          });
+          lastCompactionCompletedAt = Date.now();
+          activeCompaction = null;
+        }
         const taskId = typeof taskMessage.task_id === 'string' ? taskMessage.task_id : '';
         if (taskId && taskMessage.subtype === 'task_started') {
           if (taskMessage.skip_transcript) {
@@ -1038,6 +1210,8 @@ export async function consumeClaudeQuery(
         flushPendingToolInputDelta();
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
+        resultFailed = typeof (message as { subtype?: unknown }).subtype === 'string'
+          && (message as { subtype: string }).subtype.startsWith('error_');
         seenResult = true;
         markAssistantPayload({ content: streamContent.buildContentArray() });
         if (streamThinking) turnHadAssistant = true;
@@ -1079,14 +1253,17 @@ export async function consumeClaudeQuery(
           // Hidden user messages carry tool_result blocks. The `continue` below
           // skips the tail onMessage path, so surface the message to observers
           // first (UI / history / workflow tool_result indexing).
-          await onMessage?.(message);
-          for (const toolResult of extractClaudeToolResultMessages(
+          const toolResults = extractClaudeToolResultMessages(
             (message as { message?: unknown }).message,
             toolNamesById,
-          )) {
+          );
+          const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
+          if (toolResults.length > 0 || workflowToolResult) {
+            await onMessage?.(message);
+          }
+          for (const toolResult of toolResults) {
             emitEngineEvent({ type: 'tool.result', message: toolResult });
           }
-          const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
           if (workflowToolResult) {
             const nextEntry = {
               id: typeof message.uuid === 'string' ? message.uuid : randomUUID(),
@@ -1136,6 +1313,16 @@ export async function consumeClaudeQuery(
         if (liveMessage.type === 'assistant') {
           turnHadAssistant = true;
           markAssistantPayload(liveMessage.message);
+          for (const slug of extractClaudeSkillSlugs(nextEntry.content)) {
+            await markSkillUsed(sessionKey, runId, slug).catch((error) => {
+              logger.warn('[skill-router] failed to persist Claude skill usage', {
+                sessionKey,
+                runId,
+                slug,
+                error: String(error),
+              });
+            });
+          }
           clearPendingToolInputDelta();
           streamContent.reset();
           streamThinking = '';
@@ -1180,20 +1367,30 @@ export async function consumeClaudeQuery(
       mode: timing.mode,
       details: { seenResult, completionEmitted, pendingTaskCount: pendingTaskIds.size },
     });
+    const finishSkillTurn = resultFailed ? failSkillTurn(sessionKey, runId) : completeSkillTurn(sessionKey, runId);
+    await finishSkillTurn.catch((error) => {
+      logger.warn('[skill-router] failed to complete Claude skill turn', {
+        sessionKey,
+        runId,
+        error: String(error),
+      });
+    });
   } catch (error) {
     errorThrown = true;
-    if (!(
+    const isSuppressedMissingConversation = Boolean(
       recoveryOptions?.suppressMissingConversationFailure
       && isMissingClaudeConversationError(error)
-    )) {
+    );
+    if (!isSuppressedMissingConversation) {
+      await failSkillTurn(sessionKey, runId).catch(() => {});
       emitEngineEvent({ type: 'turn.failed', errorMessage: String(error) });
       rememberClaudeInterrupt(sessionKey, error);
     }
     throw error;
   } finally {
+    clearRuntimeSkillAccess(sessionKey);
     flushPendingToolInputDelta();
     clearPendingToolInputDelta();
-    // 只释放自己那一格：若已有更新的 run 接管，抹掉它会让停止按钮失去句柄。
     const contentless = isClaudeTurnContentless({
       hadAssistant: turnHadAssistant,
       hadToolUse: turnHadToolUse,
@@ -1243,7 +1440,7 @@ async function ensureClaudeRegistryEntry(
 ): Promise<EngineSessionRegistryEntry | null> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
   const agentId = extractAgentId(sessionKey);
-  const cwd = await resolveSessionToolCwd(sessionKey, agentId);
+  const cwd = await resolveSessionToolCwd(sessionKey, agentId, 'claude');
   if (!cwd) return existing;
   if (existing?.cwd === cwd) return existing;
 
@@ -1278,12 +1475,16 @@ async function startClaudeQuery(
     systemPromptAppend?: string;
     /** 定时任务执行时由 executor 透传；交互式 chat 不设（→ 保留默认 bypass）。 */
     permissionProfile?: EnginePermissionProfile;
+    explicitSkillSlugs?: string[];
+    /** Internal slash command: do not expose a synthetic chat run. */
     suppressStartedEvent?: boolean;
+    compactionReason?: 'manual' | 'auto' | 'unknown';
     initialSeq?: number;
     contentlessAutoResume?: boolean;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   const launchStartedAt = Date.now();
+  let trackingRunId: string | undefined;
   try {
     const existing = await ensureClaudeRegistryEntry(sessionKey);
     logger.info('[claude-adapter] ensureClaudeRegistryEntry', existing);
@@ -1310,6 +1511,8 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
+    trackingRunId = runId;
+    beginRuntimeSkillAccessTurn(sessionKey, runId);
     const storedCause = (await getChatRuntimeRepository().getLatestForSession(sessionKey).catch(() => null))
       ?.interruptCause ?? null;
     const interruptCause = peekRunInterrupt(sessionKey) ?? storedCause ?? null;
@@ -1333,7 +1536,24 @@ async function startClaudeQuery(
       mode: queryMode,
       details: { hasExistingSession: Boolean(existing?.sessionId), resumePlan: resumePlan.mode },
     });
-    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
+    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt, {
+      runId,
+      agentId,
+      cwd,
+    });
+    const skillRoute = await routeSessionSkills({
+      sessionKey,
+      runId,
+      agentId,
+      engine: 'claude',
+      mode: options?.permissionProfile === undefined ? 'interactive' : 'scheduled',
+      query: options?.userPrompt ?? (typeof prompt === 'string' ? prompt : ''),
+      rawMessage: typeof prompt === 'string' ? prompt : options?.userPrompt,
+      explicitSlugs: options?.explicitSkillSlugs,
+      onProgress: options?.permissionProfile === undefined
+        ? (message) => emitSkillRoutingProgress(options?.eventSink, sessionKey, runId, message)
+        : undefined,
+    });
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
@@ -1362,11 +1582,6 @@ async function startClaudeQuery(
       sessionKey,
       systemPromptAppendChars: systemPromptAppend.length,
     });
-    logger.info('[claude-adapter][prompt] user message', {
-      sessionKey,
-      userPromptChars: typeof queryPrompt === 'string' ? queryPrompt.length : null,
-      replacedContinuePrompt: Boolean(resumeContinuePrompt),
-    });
     const userMessageForLog = typeof queryPrompt === 'string'
       ? queryPrompt
       : (options?.userPrompt ?? '(stream/non-string prompt)');
@@ -1394,7 +1609,7 @@ async function startClaudeQuery(
       permissionMode,
       allowDangerouslySkipPermissions,
       settingSources: ['user' as const],
-      skills: 'all' as const,
+      skills: skillRoute.selected.map((skill) => skill.slug),
       // Enable token-level streaming events (SDKPartialAssistantMessage) so the
       // consumer loop can forward text deltas to the renderer in real time.
       includePartialMessages: true,
@@ -1500,6 +1715,7 @@ async function startClaudeQuery(
           {
             suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof queryPrompt === 'string',
             suppressStartedEvent: options?.suppressStartedEvent,
+            compactionReason: options?.compactionReason,
             initialSeq: options?.initialSeq,
             timing: { launchStartedAt, queryCreatedAt, mode: queryMode },
           },
@@ -1513,6 +1729,7 @@ async function startClaudeQuery(
             userPrompt: '',
             systemPromptAppend: options?.systemPromptAppend,
             permissionProfile: options?.permissionProfile,
+            explicitSkillSlugs: options?.explicitSkillSlugs,
             suppressStartedEvent: true,
             initialSeq: 1,
             contentlessAutoResume: true,
@@ -1625,25 +1842,22 @@ async function startClaudeQuery(
       stageStartedAt: queryCreatedAt,
       mode: queryMode,
     });
-    if (options?.contentlessAutoResume) {
-      await consumeWithMissingSessionRecovery();
-    } else {
-      void consumeWithMissingSessionRecovery().catch((error) => {
-        logger.error('Claude query failed:', error);
-        cacheClaudeErrorMessage(sessionKey, error);
-        rememberClaudeInterrupt(sessionKey, error);
-        void patchEngineSessionRegistryEntry(sessionKey, {
-          updatedAt: Date.now(),
-          model: launchSelection.model,
-          provider: launchSelection.provider,
-          accountId: launchSelection.accountId,
-        }).catch((registryError) => {
-          logger.warn('Failed to persist Claude session metadata after query error:', registryError);
-        });
+    void consumeWithMissingSessionRecovery().catch((error) => {
+      void failSkillTurn(sessionKey, runId).catch(() => {});
+      logger.error('Claude query failed:', error);
+      cacheClaudeErrorMessage(sessionKey, error);
+      void patchEngineSessionRegistryEntry(sessionKey, {
+        updatedAt: Date.now(),
+        model: launchSelection.model,
+        provider: launchSelection.provider,
+        accountId: launchSelection.accountId,
+      }).catch((registryError) => {
+        logger.warn('Failed to persist Claude session metadata after query error:', registryError);
       });
-    }
+    });
     return { success: true, result: { runId } };
   } catch (error) {
+    if (trackingRunId) void failSkillTurn(sessionKey, trackingRunId).catch(() => {});
     return { success: false, error: String(error) };
   }
 }
@@ -1660,6 +1874,8 @@ function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
 }
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
+  clearRuntimeSkillAccess(sessionKey);
+  sclawAgentExtensionState.clearSession(sessionKey);
   await ensureClaudeRuntimeReady();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   liveClaudeMessages.delete(sessionKey);
@@ -1685,12 +1901,23 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
 }
 
 export const claudeAdapter: EngineAdapter = {
+  historyCapabilities: {
+    paginationMode: 'before-id',
+    defaultPageSize: CHAT_HISTORY_LIMIT,
+  },
   type: 'claude',
+  scheduledTaskCapabilities: {
+    defaultPermissionProfile: 'dangerous-bypass',
+    requiresWorkspacePath: false,
+    supportsWorkflow: true,
+  },
   chatCapabilities: {
     hasReliableRuntimeStatus: true,
     hasStructuredReasoningEvents: true,
     hasStructuredToolEvents: true,
     requiresHistoryProjection: false,
+    supportsContextUsage: false,
+    supportsManualCompaction: false,
   },
 
   classifyFinalMessage({ message, phase }) {
@@ -1835,10 +2062,13 @@ export const claudeAdapter: EngineAdapter = {
 
   async sendMessage(ctx: EngineAdapterContext, params) {
     return startClaudeQuery(params.sessionKey, params.message, {
-      eventSink: ctx.gatewayManager,
+      eventSink: ctx.eventSink
+        ? { emit: (event, payload) => Boolean(ctx.eventSink?.emit(event, payload)) }
+        : ctx.gatewayManager ?? null,
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
       permissionProfile: params.permissionProfile,
+      explicitSkillSlugs: params.normalizedTurn?.selectedSkillSlugs,
     });
   },
 
@@ -1849,13 +2079,18 @@ export const claudeAdapter: EngineAdapter = {
       return { success: false, error: `Claude session ${params.sessionKey} is missing workspace cwd` };
     }
     const additionalDirectories = getAdditionalDirectories(cwd, params.media ?? []);
-    const prompt = await buildClaudeUserMessage(params.message, params.media ?? []);
+    const prompt = params.normalizedTurn && !params.normalizedTurn.legacy
+      ? await buildClaudeUserMessageFromTurn(params.normalizedTurn)
+      : await buildClaudeUserMessage(params.message, params.media ?? []);
     return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), {
       additionalDirectories,
-      eventSink: ctx.gatewayManager,
+      eventSink: ctx.eventSink
+        ? { emit: (event, payload) => Boolean(ctx.eventSink?.emit(event, payload)) }
+        : ctx.gatewayManager ?? null,
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
       permissionProfile: params.permissionProfile,
+      explicitSkillSlugs: params.normalizedTurn?.selectedSkillSlugs,
     });
   },
 
@@ -1864,6 +2099,13 @@ export const claudeAdapter: EngineAdapter = {
     if (outcome === 'aborted') {
       rememberRunInterrupt(params.sessionKey, 'user_abort');
     }
-    return { success: true, outcome };
+    return {
+      success: true,
+      outcome,
+      result: {
+        aborted: outcome === 'aborted',
+        runIds: outcome === 'aborted' ? [params.runId ?? params.sessionKey] : [],
+      },
+    };
   },
 };

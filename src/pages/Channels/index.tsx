@@ -28,6 +28,12 @@ import {
 } from '@/types/channel';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import {
+  getAgentEnginePolicyOptionLabel,
+  useAgentEnginePolicyStore,
+} from '@/stores/agent-engine-policy';
+import { useAuthStore } from '@/stores/auth';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 import { isProjectAgentId } from '../../../shared/project-agent';
 
 import telegramIcon from '@/assets/channels/telegram.svg?raw';
@@ -92,7 +98,7 @@ interface ChannelGroupItem {
 interface AgentItem {
   id: string;
   name: string;
-  engineType?: 'claude' | 'openclaw';
+  engineType?: 'claude' | 'openclaw' | 'pi';
 }
 
 interface DeleteTarget {
@@ -234,7 +240,7 @@ export function Channels() {
   const [channelGroups, setChannelGroups] = useState<ChannelGroupItem[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [dingTalkBinding, setDingTalkBinding] = useState<{
-    engineType?: 'claude' | 'openclaw' | null;
+    engineType?: 'claude' | 'openclaw' | 'pi' | null;
     agentId?: string | null;
     /** Hub 本机绑定状态 */
     bindStatus?: string | null;
@@ -245,7 +251,7 @@ export function Channels() {
     enabled: boolean;
     /** 是否已完成过绑定确认（关闭开关后仍为 true，用于展示「配置」） */
     configured: boolean;
-    engineType: 'claude' | 'openclaw';
+    engineType: AgentEngineType;
     agentId: string | null;
     wsConnected: boolean;
     canConnectWs: boolean;
@@ -254,6 +260,10 @@ export function Channels() {
   const [sessionIdleEnabled, setSessionIdleEnabled] = useState(true);
   const [sessionIdleHours, setSessionIdleHours] = useState(24);
   const [sessionIdleBusy, setSessionIdleBusy] = useState(false);
+  /** 切换引擎后若当前 Agent 不兼容，先本地记下引擎，等用户显式选 Agent 再保存 */
+  const [, setPendingDingTalkEngine] = useState<AgentEngineType | null>(
+    null,
+  );
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showDingTalkHubModal, setShowDingTalkHubModal] = useState(false);
   const [showMobileConfigModal, setShowMobileConfigModal] = useState(false);
@@ -264,6 +274,18 @@ export function Channels() {
   const [existingAccountIdsForModal, setExistingAccountIdsForModal] = useState<string[]>([]);
   const [initialConfigValuesForModal, setInitialConfigValuesForModal] = useState<Record<string, string> | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const authUserKey = useAuthStore((state) => (
+    state.user?.code || state.user?.empCode || state.user?.id || ''
+  ));
+  const policyEngines = useAgentEnginePolicyStore((state) => state.engines);
+  const fetchEnginePolicy = useAgentEnginePolicyStore((state) => state.fetchPolicy);
+  const channelEngineOptions = useMemo(
+    () => policyEngines.map((engine) => ({
+      value: engine.code,
+      label: getAgentEnginePolicyOptionLabel(engine),
+    })),
+    [policyEngines],
+  );
 
   const fetchPageData = useCallback(() => {
     void Promise.all([
@@ -323,7 +345,7 @@ export function Channels() {
       const remote = dingTalkStatusRes?.success ? dingTalkStatusRes.remote : null;
       const localDeviceId = dingTalkStatusRes?.success ? dingTalkStatusRes.deviceId : undefined;
       const engineType =
-        local?.engineType === 'openclaw' || local?.engineType === 'claude'
+        local?.engineType === 'openclaw' || local?.engineType === 'claude' || local?.engineType === 'pi'
           ? local.engineType
           : null;
       let replaceHint: 'other_device' | 'unbound' | null = null;
@@ -350,6 +372,7 @@ export function Channels() {
             }
           : null,
       );
+      setPendingDingTalkEngine(null);
       const mobileLocal = mobileStatusRes?.success ? mobileStatusRes.local : null;
       const mobileBound = mobileLocal?.bindStatus === 'bound';
       const mobileEnabled = Boolean(
@@ -365,7 +388,10 @@ export function Channels() {
       setMobileBinding({
         enabled: mobileEnabled,
         configured: mobileConfigured,
-        engineType: mobileLocal?.engineType === 'openclaw' ? 'openclaw' : 'claude',
+        engineType:
+          mobileLocal?.engineType === 'openclaw' || mobileLocal?.engineType === 'pi'
+            ? mobileLocal.engineType
+            : 'claude',
         agentId: mobileLocal?.agentId ?? 'main',
         wsConnected: Boolean(mobileStatusRes?.ws?.connected),
         canConnectWs: Boolean(mobileStatusRes?.canConnectWs),
@@ -380,6 +406,11 @@ export function Channels() {
   useEffect(() => {
     void fetchPageData();
   }, [fetchPageData]);
+
+  useEffect(() => {
+    if (!authUserKey) return;
+    void fetchEnginePolicy(authUserKey);
+  }, [authUserKey, fetchEnginePolicy]);
 
   useEffect(() => {
     const unsubscribe = subscribeHostEvent('gateway:channel-status', () => {
@@ -478,7 +509,7 @@ export function Channels() {
   };
 
   const handleDingTalkBindingChange = async (next: {
-    engineType: 'claude' | 'openclaw';
+    engineType: 'claude' | 'openclaw' | 'pi';
     agentId: string;
   }) => {
     if (!next.agentId) {
@@ -528,7 +559,7 @@ export function Channels() {
   };
 
   const handleMobileBindingChange = async (next: {
-    engineType: 'claude' | 'openclaw';
+    engineType: AgentEngineType;
     agentId: string;
   }) => {
     if (!next.agentId) {
@@ -551,7 +582,9 @@ export function Channels() {
     try {
       if (channelType === 'dingtalk') {
         const agent = agents.find((item) => item.id === agentId);
-        const engineType = agent?.engineType === 'openclaw' ? 'openclaw' : 'claude';
+        const engineType = agent?.engineType === 'openclaw' || agent?.engineType === 'pi'
+          ? agent.engineType
+          : 'claude';
         await handleDingTalkBindingChange({ engineType, agentId });
         return;
       } else if (!agentId) {
@@ -700,9 +733,9 @@ export function Channels() {
           </h2>
           <section className={stoSettingsSectionCardClass}>
             {(() => {
-              const resolveAgentEngine = (agent: AgentItem): 'claude' | 'openclaw' =>
-                agent.engineType === 'claude' ? 'claude' : 'openclaw';
-              const mobileEngine = mobileBinding?.engineType === 'openclaw' ? 'openclaw' : 'claude';
+              const resolveAgentEngine = (agent: AgentItem): AgentEngineType =>
+                agent.engineType === 'claude' || agent.engineType === 'pi' ? agent.engineType : 'openclaw';
+              const mobileEngine = mobileBinding?.engineType ?? 'claude';
               const mainAgent = agents.find((agent) => agent.id === 'main');
               const engineMatched = agents.filter(
                 (agent) => resolveAgentEngine(agent) === mobileEngine,
@@ -774,12 +807,9 @@ export function Channels() {
                           className="w-[120px]"
                           value={mobileEngine}
                           ariaLabel={t('hub.mobile.engineLabel')}
-                          options={[
-                            { value: 'claude', label: 'Claude' },
-                            { value: 'openclaw', label: 'OpenClaw' },
-                          ]}
+                          options={channelEngineOptions}
                           onChange={(nextValue) => {
-                            const nextEngine = nextValue === 'openclaw' ? 'openclaw' : 'claude';
+                            const nextEngine = nextValue as AgentEngineType;
                             const matched = agents.filter(
                               (agent) => resolveAgentEngine(agent) === nextEngine,
                             );
@@ -879,10 +909,10 @@ export function Channels() {
                           : (isDingTalk ? dingTalkBinding?.engineType : null) ||
                             boundAgent?.engineType ||
                             null;
-                        const resolveAgentEngine = (agent: AgentItem): 'claude' | 'openclaw' =>
-                          agent.engineType === 'claude' ? 'claude' : 'openclaw';
-                        const dingTalkEngine: 'claude' | 'openclaw' =
-                          boundEngineType === 'openclaw' ? 'openclaw' : 'claude';
+                        const resolveAgentEngine = (agent: AgentItem): AgentEngineType =>
+                          agent.engineType === 'claude' || agent.engineType === 'pi' ? agent.engineType : 'openclaw';
+                        const dingTalkEngine: AgentEngineType =
+                          boundEngineType === 'openclaw' || boundEngineType === 'pi' ? boundEngineType : 'claude';
                         const mainAgent = agents.find((agent) => agent.id === 'main');
                         const engineMatchedAgents = agents.filter(
                           (agent) => resolveAgentEngine(agent) === dingTalkEngine,
@@ -1029,13 +1059,9 @@ export function Channels() {
                                       className="w-[120px]"
                                       value={dingTalkEngine}
                                       ariaLabel={t('hub.dingtalk.engineLabel')}
-                                      options={[
-                                        { value: 'claude', label: 'Claude' },
-                                        { value: 'openclaw', label: 'OpenClaw' },
-                                      ]}
+                                      options={channelEngineOptions}
                                       onChange={(nextValue) => {
-                                        const nextEngine =
-                                          nextValue === 'openclaw' ? 'openclaw' : 'claude';
+                                        const nextEngine = nextValue as AgentEngineType;
                                         const matched = agents.filter(
                                           (agent) => resolveAgentEngine(agent) === nextEngine,
                                         );

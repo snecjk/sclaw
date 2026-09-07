@@ -84,7 +84,10 @@ function prepareSessionForPrompt(options: NavigateToSessionWithPromptOptions): v
   const workflowSession = options.workflowSession;
   if (workflowSession?.workflowId.trim()) {
     if (createIfMissing) {
-      newSession();
+      // A workflow run must own one concrete chat session before navigation.
+      // Project "new chat" normally stays on DEFAULT_SESSION_KEY until the
+      // first send, which would create a second session and lose this engine.
+      newSession({ materialize: true, engineType: workflowSession.engineType });
       const createdSessionKey = useChatStore.getState().currentSessionKey;
       renameSession(createdSessionKey, workflowSession.sessionTitle.trim());
       return;

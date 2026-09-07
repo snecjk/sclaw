@@ -258,6 +258,39 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   }
 }
 
+/* Sidebar session titles: reveal overflow in place without changing row geometry. */
+@keyframes sto-sidebar-session-title-marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(calc(-1 * var(--sto-sidebar-title-distance)), 0, 0);
+  }
+}
+
+.sto-sidebar-session-title-trigger:hover
+  .sto-sidebar-session-title[data-overflow='true']
+  .sto-sidebar-session-title__track,
+.sto-sidebar-session-title-trigger:focus-visible
+  .sto-sidebar-session-title[data-overflow='true']
+  .sto-sidebar-session-title__track {
+  animation: sto-sidebar-session-title-marquee
+    var(--sto-sidebar-title-duration)
+    cubic-bezier(0.19, 1, 0.22, 1)
+    1
+    forwards;
+  animation-delay: 180ms;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sto-sidebar-session-title-trigger:hover .sto-sidebar-session-title__track,
+  .sto-sidebar-session-title-trigger:focus-visible .sto-sidebar-session-title__track {
+    animation: none;
+  }
+}
+
 /* ── Chat thinking / tool content scrollbar ── */
 .sto-chat-content-scrollbar {
   scrollbar-color: rgba(0, 0, 0, 0.12) transparent;

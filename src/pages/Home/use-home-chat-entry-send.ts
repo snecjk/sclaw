@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useMessageQueueStore } from '@/stores/message-queue';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { chatEngineRequiresGateway } from '@/hooks/use-chat-input-bindings';
 
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
@@ -45,7 +46,7 @@ export function useHomeChatEntrySend() {
       const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
       const messages = getCurrentChatDisplayMessages();
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
-      const agentEngineType = (agents ?? []).find((agent) => agent.id === (targetAgentId || currentAgentId))?.engineType
+      const agentEngineType = resolveAgentById(agents ?? [], targetAgentId || currentAgentId)?.engineType
         ?? 'openclaw';
       const targetEngineType = targetAgentId
         ? agentEngineType
@@ -55,7 +56,7 @@ export function useHomeChatEntrySend() {
           currentSessionKey,
           { messageCount: messages.length },
         );
-      if (targetEngineType !== 'claude' && !isGatewayRunning) {
+      if (chatEngineRequiresGateway(targetEngineType) && !isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }
@@ -74,6 +75,8 @@ export function useHomeChatEntrySend() {
         workflows: extras?.workflows,
         composerSegments: extras?.composerSegments,
         gatewayText: extras?.gatewayText,
+        composition: extras?.composition,
+        workflowExecutionEngine: extras?.workflowExecutionEngine,
       });
     },
     [agents, isGatewayRunning, t],

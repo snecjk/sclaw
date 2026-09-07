@@ -3,6 +3,7 @@ import type {
   WorkflowRunArtifact,
   WorkflowRunResponse,
 } from '@/types/workflow';
+import type { WorkflowExecutionEngine } from '@/lib/workflow-session';
 
 export type TrialRunView = 'running' | 'completed' | 'failed' | 'cancelled';
 export type TrialRunTimelineTone = 'default' | 'running' | 'success' | 'danger' | 'tool' | 'artifact';
@@ -16,7 +17,7 @@ export type TrialRunTimelineItem = {
 export type TrialRunDisplayArtifact = WorkflowRunArtifact & { source: 'final' | 'process' };
 export type TrialRunLaunchConfirmation = {
   inputs: Record<string, unknown>;
-  engineType: 'claude' | 'openclaw';
+  engineType: WorkflowExecutionEngine;
 };
 
 export function resolveTrialRunView(input: {

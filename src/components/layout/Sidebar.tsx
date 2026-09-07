@@ -20,6 +20,13 @@ import {
   LayoutGrid,
   Database,
   BookOpen,
+  RefreshCw,
+  Languages,
+  Palette,
+  Gauge,
+  LogOut,
+  CircleCheck,
+  Download,
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg?raw';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg?raw';
@@ -58,6 +65,8 @@ import { AccountSwitchMenuItems } from '@/components/layout/AccountSwitchMenuIte
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
+import { SidebarSessionTitle } from '@/components/layout/sidebar-session-title';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
 import {
   isSessionInActiveWorkspace,
@@ -81,9 +90,11 @@ import {
   parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
   parseCronSessionKey,
+  parsePiScheduledTaskSessionKey,
   isAnyCronSessionKey,
   isVirtualTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
+import { isTemporaryAgentSessionKey } from '@/stores/chat/session-identity';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
 import {
@@ -125,6 +136,9 @@ import {
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
 import { resolveSidebarPrimaryNavActiveOverride } from '@/lib/sidebar-primary-nav-active';
 import { pageLearningDomains } from '@/lib/learning-center-api';
+import { hostApiFetch } from '@/lib/host-api';
+import { calculateTokenBalanceUsage } from '@/lib/token-balance-usage';
+import { useUpdateStore } from '@/stores/update';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -163,6 +177,10 @@ type SessionBucketKey =
   | 'older'
   | 'cronTasks';
 
+type SidebarTokenBalanceState =
+  | { status: 'idle' | 'loading' | 'error' }
+  | { status: 'done'; spend: number; maxBudget: number };
+
 
 const INITIAL_NOW_MS = Date.now();
 
@@ -172,9 +190,15 @@ const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
 const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS =
   'min-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-1 shadow-lg dark:border-border dark:bg-card';
 const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] leading-[18px] text-[#1D2129] dark:text-foreground';
+  'flex h-[34px] w-full min-w-0 items-center gap-2 rounded-[6px] px-3 py-2 text-[13px] leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
+  'flex h-[34px] w-full min-w-0 items-center gap-2 rounded-[6px] px-3 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
+const SIDEBAR_ACCOUNT_MENU_ICON_CLASS = 'h-4 w-4 shrink-0 sto-icon--neutral';
+const SIDEBAR_ACCOUNT_MENU_UPDATE_ICON_BUTTON_CLASS = cn(
+  'ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+  'text-[var(--sto-brand-6)] transition-colors hover:bg-[var(--sto-brand-6)]/[0.10]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sto-brand-6)]/40',
+);
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'sto-navigation-item--account-menu hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
@@ -234,10 +258,6 @@ function collapsedEntryLabel(full: string): string {
   if (!s) return '…';
   const first = [...s][0];
   return `${first}…`;
-}
-
-function isTemporaryAgentSessionKey(key: string): boolean {
-  return /^agent:[^:]+:session-\d+/.test(key);
 }
 
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
@@ -448,18 +468,25 @@ function SidebarTaskGroup({
 
   return (
     <div className="rounded-lg">
+      <SidebarTooltip
+        label={label}
+        contentClassName="max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words text-left leading-snug"
+      >
       <button
         type="button"
         id={`sto-sidebar-task-${taskId}-toggle`}
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={onToggle}
-        className={cn('group/sto-task-row', SIDEBAR_TASK_GROUP_ROW_CLASS)}
+        className={cn(
+          'group/sto-task-row sto-sidebar-session-title-trigger',
+          SIDEBAR_TASK_GROUP_ROW_CLASS,
+        )}
       >
-        {/* 去掉 flex-1：短标题不占满整行，长标题靠 min-w-0 + shrink 截断 */}
+        {/* 短标题不占满整行，长标题在图标与状态区之间滚动展示。 */}
         <span className="flex min-w-0 items-center gap-2">
           <ClipboardList className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)} aria-hidden />
-          <span className={cn('min-w-0 truncate', sidebarListItemTextClass)}>{label}</span>
+          <SidebarSessionTitle label={label} className={sidebarListItemTextClass} />
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           {hasUnreadSubitem ? (
@@ -485,6 +512,7 @@ function SidebarTaskGroup({
           ) : null}
         </span>
       </button>
+      </SidebarTooltip>
       {isOpen && visibleEntries.length > 0 ? (
         <div
           id={panelId}
@@ -540,43 +568,54 @@ function SidebarScheduledTaskGroup({
 
   return (
     <div className="rounded-lg">
+      <SidebarTooltip
+        label={displayName}
+        contentClassName="max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words text-left leading-snug"
+      >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={isOpen}
-        className={cn('group/sto-task-row', SIDEBAR_TASK_GROUP_ROW_CLASS)}
+        className={cn(
+          'group/sto-task-row sto-sidebar-session-title-trigger',
+          SIDEBAR_TASK_GROUP_ROW_CLASS,
+        )}
       >
-        {/* 与普通任务组一致：标题区不 flex-1，Chevron 紧跟标题/未读点 */}
+        {/* 与普通任务组一致：短标题收紧，长标题滚动到末尾后停止。 */}
         <span className="flex min-w-0 items-center gap-2">
           <ClipboardList className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)} aria-hidden />
-          <span className={cn('min-w-0 truncate', sidebarListItemTextClass)}>{displayName}</span>
+          <SidebarSessionTitle label={displayName} className={sidebarListItemTextClass} />
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
           {hasCollapsedGroupUnread ? (
             <span className={sidebarUnreadDotClass} aria-hidden />
           ) : null}
+          {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
+            isOpen ? (
+              <ChevronDown
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            ) : (
+              <ChevronRight
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            )
+          ) : null}
         </span>
-        {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
-          isOpen ? (
-            <ChevronDown
-              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
-              aria-hidden
-              strokeWidth={2}
-            />
-          ) : (
-            <ChevronRight
-              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
-              aria-hidden
-              strokeWidth={2}
-            />
-          )
-        ) : null}
       </button>
+      </SidebarTooltip>
       {isOpen && visibleSessions.length > 0 ? (
         <div className={SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS}>
           {visibleSessions.map((s) => {
             // 按天聚合：标签用 dated key 的 YYYY-MM-DD（历史多行已在数据源滤掉）。
             const dated =
               parseCronSessionKey(s.key)?.date
-              ?? parseClaudeScheduledTaskSessionKey(s.key)?.date;
+              ?? parseClaudeScheduledTaskSessionKey(s.key)?.date
+              ?? parsePiScheduledTaskSessionKey(s.key)?.date;
             let label: string;
             if (dated) {
               const [ys, ms, ds] = dated.split('-');
@@ -600,13 +639,13 @@ function SidebarScheduledTaskGroup({
             const showUnreadDot = !active && !isRunning && !hasError && readSessionUnread(unreadKeys, s.key);
             return (
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
+                <SidebarTooltip label={label}>
                 <button
                   type="button"
                   data-sidebar-task-session={s.key}
                   onClick={() => {
                     navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                   }}
-                  title={label}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
                     'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
@@ -616,6 +655,7 @@ function SidebarScheduledTaskGroup({
                 >
                   <span className="min-w-0 truncate">{label}</span>
                 </button>
+                </SidebarTooltip>
                 <SidebarTaskSubitemDeleteTrailing
                   isActive={active}
                   sessionKey={s.key}
@@ -771,6 +811,10 @@ export function Sidebar() {
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const updateStatus = useUpdateStore((s) => s.status);
+  const checkForUpdates = useUpdateStore((s) => s.checkForUpdates);
+  const downloadUpdate = useUpdateStore((s) => s.downloadUpdate);
+  const installUpdate = useUpdateStore((s) => s.installUpdate);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -1025,7 +1069,9 @@ export function Sidebar() {
 
       const state = useChatStore.getState();
       const currentSession = state.sessions.find((session) => session.key === state.currentSessionKey);
-      const shouldLoadHistory = isGatewayRunning || currentSession?.engineType === 'claude';
+      const shouldLoadHistory = isGatewayRunning
+        || currentSession?.engineType === 'claude'
+        || currentSession?.engineType === 'pi';
       if (!shouldLoadHistory) {
         return;
       }
@@ -1052,6 +1098,31 @@ export function Sidebar() {
   const [editingValue, setEditingValue] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [sidebarTokenBalance, setSidebarTokenBalance] = useState<SidebarTokenBalanceState>({ status: 'idle' });
+  const tokenBalanceFetchGenerationRef = useRef(0);
+
+  const loadSidebarTokenBalance = async () => {
+    const generation = tokenBalanceFetchGenerationRef.current + 1;
+    tokenBalanceFetchGenerationRef.current = generation;
+    setSidebarTokenBalance({ status: 'loading' });
+    try {
+      const result = await hostApiFetch<{ spend?: number; maxBudget?: number }>('/api/token-balance');
+      if (tokenBalanceFetchGenerationRef.current !== generation) return;
+      setSidebarTokenBalance({
+        status: 'done',
+        spend: result.spend ?? 0,
+        maxBudget: result.maxBudget ?? 0,
+      });
+    } catch {
+      if (tokenBalanceFetchGenerationRef.current === generation) {
+        setSidebarTokenBalance({ status: 'error' });
+      }
+    }
+  };
+
+  const sidebarBalanceUsage = sidebarTokenBalance.status === 'done'
+    ? calculateTokenBalanceUsage(sidebarTokenBalance.spend, sidebarTokenBalance.maxBudget)
+    : null;
   const [supportQrOpen, setSupportQrOpen] = useState(false);
   const [mobileConnectOpen, setMobileConnectOpen] = useState(false);
 
@@ -1146,7 +1217,7 @@ export function Sidebar() {
     [sessions],
   );
 
-  // 「任务」：catalog dated cron/claude_task（历史 run/base 已在 store 侧滤掉）。
+  // 「任务」：catalog dated cron/claude_task/PI scheduled_task（历史 run/base 已在 store 侧滤掉）。
   // 行标题在渲染层回落：catalog 标题 → 引擎 label/displayName → 任务定义名；
   // 三者都无人读标题的才是真正的空壳行，在此过滤（存量无标题真实会话不受影响）。
   const taskListScheduledSessions = useMemo(() => {
@@ -1168,7 +1239,11 @@ export function Sidebar() {
         updatedAt: existing?.updatedAt
           ?? (typeof activityMs === 'number' && Number.isFinite(activityMs) ? activityMs : undefined),
         engineType: existing?.engineType
-          ?? (row.sessionType === 'claude_task' ? 'claude' as const : 'openclaw' as const),
+          ?? (row.sessionType === 'claude_task'
+            ? 'claude' as const
+            : row.sessionKey.startsWith('pi-task:')
+              ? 'pi' as const
+              : 'openclaw' as const),
         model: existing?.model,
         thinkingLevel: existing?.thinkingLevel,
         spawnedBy: existing?.spawnedBy,
@@ -1180,6 +1255,7 @@ export function Sidebar() {
   const normalSessions = useMemo(
     () => visibleSessions.filter((s) => (
       !isAnyCronSessionKey(s.key)
+      && !s.key.startsWith('pi-task:')
       && !parseClaudeScheduledTaskRunSessionKey(s.key)
       && !parseClaudeScheduledTaskSessionKey(s.key)  // excludes base & dated
     )),
@@ -1224,7 +1300,7 @@ export function Sidebar() {
   const scheduledTaskGroups = useMemo(() => {
     type GroupDraft = {
       key: string;
-      kind: 'st' | 'cron' | 'claude';
+      kind: 'st' | 'cron' | 'claude' | 'pi';
       taskId: number | string;
       sessions: typeof taskListScheduledSessions;
     };
@@ -1241,6 +1317,13 @@ export function Sidebar() {
         draft = {
           key: `claude-task:${catalogRow.taskId}`,
           kind: 'claude',
+          taskId: catalogRow.taskId,
+          sessions: [],
+        };
+      } else if (catalogRow?.sessionType === 'scheduled_task' && catalogRow.taskId && parsePiScheduledTaskSessionKey(session.key)) {
+        draft = {
+          key: `pi-task:${catalogRow.taskId}`,
+          kind: 'pi',
           taskId: catalogRow.taskId,
           sessions: [],
         };
@@ -1265,6 +1348,11 @@ export function Sidebar() {
             taskId: claudeTaskRunParsed.taskId,
             sessions: [],
           };
+        } else {
+          const taskId = parsePiScheduledTaskSessionKey(session.key)?.taskId;
+          if (taskId) {
+            draft = { key: `pi-task:${taskId}`, kind: 'pi', taskId, sessions: [] };
+          }
         }
       }
 
@@ -1781,17 +1869,18 @@ export function Sidebar() {
         <>
       {sidebarCollapsed ? (
         <div className="flex shrink-0 flex-col items-center border-b border-transparent px-2 pb-2 pt-3">
+          <SidebarTooltip label={t('common:sidebar.toggleSidebarExpand')} sideOffset={8}>
           <button
             type="button"
             aria-expanded={false}
             aria-label={t('common:sidebar.toggleSidebarExpand')}
-            title={t('common:sidebar.toggleSidebarExpand')}
             data-sclaw-browser-sidebar-preserve="true"
             onClick={() => setSidebarCollapsed(false)}
             className={SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS}
           >
             <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </button>
+          </SidebarTooltip>
         </div>
       ) : (
         <SidebarBrandHeader
@@ -2166,25 +2255,28 @@ export function Sidebar() {
             open={accountMenuOpen}
             onOpenChange={(open) => {
               setAccountMenuOpen(open);
+              if (!open) {
+                tokenBalanceFetchGenerationRef.current += 1;
+              }
               if (open) {
                 setSupportQrOpen(false);
                 setMobileConnectOpen(false);
+                void loadSidebarTokenBalance();
               }
             }}
           >
             {accountFooterMode === 'expanded-hotzone' ? (
               <div className="flex w-full min-w-0 items-center gap-3">
                 {/* 展开态：整块账号信息为菜单热区，无齿轮；PC/手机联通与问号独立 */}
+                <SidebarTooltip
+                  label={isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}
+                  sideOffset={8}
+                >
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     className={sidebarAccountHotzoneTriggerClass}
                     aria-label={t('common:sidebar.compactAccountMenu')}
-                    title={
-                      isGatewayRunning
-                        ? t('common:status.connected')
-                        : t('common:status.disconnected')
-                    }
                     onPointerEnter={() => {
                       setSupportQrOpen(false);
                       setMobileConnectOpen(false);
@@ -2204,6 +2296,7 @@ export function Sidebar() {
                     ) : null}
                   </button>
                 </DropdownMenuTrigger>
+                </SidebarTooltip>
                 <SidebarMobileConnectTooltip
                   className={sidebarAccountHelpTriggerClass}
                   open={mobileConnectOpen}
@@ -2228,6 +2321,16 @@ export function Sidebar() {
                 />
               </div>
             ) : (
+              <SidebarTooltip
+                label={
+                  accountFooterMode === 'collapsed-avatar'
+                    ? isGatewayRunning
+                      ? t('common:status.connected')
+                      : t('common:status.disconnected')
+                    : `${t('common:sidebar.compactAccountMenu')} · ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
+                }
+                sideOffset={8}
+              >
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
@@ -2248,13 +2351,6 @@ export function Sidebar() {
                     setSupportQrOpen(false);
                     setMobileConnectOpen(false);
                   }}
-                  title={
-                    accountFooterMode === 'collapsed-avatar'
-                      ? isGatewayRunning
-                        ? t('common:status.connected')
-                        : t('common:status.disconnected')
-                      : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
-                  }
                   aria-label={
                     accountFooterMode === 'collapsed-avatar'
                       ? undefined
@@ -2270,6 +2366,7 @@ export function Sidebar() {
                   ) : null}
                 </button>
               </DropdownMenuTrigger>
+              </SidebarTooltip>
             )}
             <DropdownMenuContent
               side="top"
@@ -2310,20 +2407,60 @@ export function Sidebar() {
                 onClick={() => navigate('/settings')}
                 className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                {t('common:sidebar.settings')}
+                <SettingsIcon className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{t('common:sidebar.settings')}</span>
               </DropdownMenuItem>
 
               <DropdownMenuItem
-                onClick={() => navigate('/settings/updates')}
                 className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  if (event.target instanceof Element && event.target.closest('[data-update-action]')) return;
+                  void checkForUpdates();
+                }}
               >
-                {t('common:sidebar.checkUpdates')}
+                <RefreshCw
+                  className={cn(SIDEBAR_ACCOUNT_MENU_ICON_CLASS, updateStatus === 'checking' && 'animate-spin')}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">{t('common:sidebar.checkUpdates')}</span>
+                {updateStatus === 'available' || updateStatus === 'downloaded' ? (
+                  <button
+                    type="button"
+                    data-update-action
+                    aria-label={updateStatus === 'downloaded'
+                      ? t('settings:updates.action.install')
+                      : t('settings:updates.sidebar.updateNow')}
+                    title={updateStatus === 'downloaded'
+                      ? t('settings:updates.action.install')
+                      : t('settings:updates.sidebar.updateNow')}
+                    className={SIDEBAR_ACCOUNT_MENU_UPDATE_ICON_BUTTON_CLASS}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (updateStatus === 'downloaded') {
+                        void installUpdate();
+                      } else {
+                        void downloadUpdate();
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  </button>
+                ) : updateStatus === 'not-available' ? (
+                  <CircleCheck
+                    className="ml-auto h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                    strokeWidth={2}
+                    aria-label={t('settings:updates.status.latest')}
+                  />
+                ) : null}
               </DropdownMenuItem>
 
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
+                  <Languages className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
                   <span className="flex-1">{t('settings:appearance.language')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
@@ -2349,6 +2486,7 @@ export function Sidebar() {
                 <DropdownMenuSubTrigger
                   className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                 >
+                  <Palette className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
@@ -2372,9 +2510,27 @@ export function Sidebar() {
 
               <DropdownMenuItem
                 onClick={() => navigate('/settings/models')}
-                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
               >
-                {t('common:sidebar.tokenBalance')}
+                <Gauge className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{t('common:sidebar.tokenBalance')}</span>
+                <span
+                  className={cn(
+                    'shrink-0 rounded px-1.5 py-0.5 tabular-nums text-[11px] leading-4',
+                    sidebarBalanceUsage
+                      ? 'bg-primary/[0.08] font-medium text-primary'
+                      : 'bg-muted/60 text-muted-foreground',
+                  )}
+                  aria-label={sidebarBalanceUsage
+                    ? t('common:sidebar.tokenBalanceRemainingPercent', { percent: sidebarBalanceUsage.remainingPercent })
+                    : undefined}
+                >
+                  {sidebarTokenBalance.status === 'loading'
+                    ? t('common:sidebar.tokenBalanceLoadingShort')
+                    : sidebarBalanceUsage
+                      ? t('common:sidebar.tokenBalanceRemainingPercent', { percent: sidebarBalanceUsage.remainingPercent })
+                      : t('common:sidebar.tokenBalanceUnavailableShort')}
+                </span>
               </DropdownMenuItem>
 
               <AccountSwitchMenuItems
@@ -2389,7 +2545,8 @@ export function Sidebar() {
                 onClick={() => setShowLogoutConfirm(true)}
                 className={cn(SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                {t('auth:logout.button')}
+                <LogOut className={SIDEBAR_ACCOUNT_MENU_ICON_CLASS} strokeWidth={1.75} aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{t('auth:logout.button')}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -10,13 +10,10 @@ import {
   isPlaceholderSessionLabel,
   type DeriveSessionLabelOptions,
 } from '@/lib/workflow-session-hint';
+import { isTemporaryAgentSessionKey } from '@/stores/chat/session-identity';
 
 /** Zustand persist bucket for `useChatStore` sessionLabels (see chat.ts persist name). */
 export const SESSION_LABELS_STORAGE_KEY = 'stoclaw-chat-session-labels';
-
-function isTemporaryAgentSessionKey(key: string): boolean {
-  return /^agent:[^:]+:session-\d+/.test(key);
-}
 
 export interface ResolveSessionLabelInput {
   /** 会话 key */

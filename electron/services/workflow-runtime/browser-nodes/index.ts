@@ -4,11 +4,12 @@ import { isBrowserWorkflowNodeType } from '../../../../shared/browser-automation
 import { executeBrowserValidateNode, executeBrowserHumanGateNode } from './browser-validate';
 import { executeBrowserTaskNode } from './browser-task';
 import type { InvokeAgentFn } from '../agent-retry';
+import type { AgentEngineType } from '../../../../shared/agent-engine';
 
 export interface BrowserNodeDeps {
   invokeAgent: InvokeAgentFn;
   quota?: () => Promise<boolean>;
-  execEngine?: 'claude' | 'openclaw';
+  execEngine?: AgentEngineType;
   versionId?: unknown;
 }
 

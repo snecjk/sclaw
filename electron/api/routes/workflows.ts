@@ -81,7 +81,7 @@ export function resolveWorkflowStartEngine(engineType: unknown): {
   engineType: AgentEngineType;
   source: 'request' | 'legacy-default';
 } {
-  if (engineType === 'openclaw' || engineType === 'claude') {
+  if (engineType === 'openclaw' || engineType === 'claude' || engineType === 'pi') {
     return { engineType, source: 'request' };
   }
   if (engineType === undefined) {
@@ -265,14 +265,15 @@ export async function resolveWorkflowStartModel(
   engineType: AgentEngineType,
   sessionKey?: string,
 ): Promise<string> {
-  if (engineType === 'claude') {
+  if (engineType === 'claude' || engineType === 'pi') {
     const normalizedSessionKey = sessionKey?.trim();
     const session = normalizedSessionKey
       ? await getEngineSessionRegistryEntry(normalizedSessionKey)
       : null;
-    const sessionModel = session?.engineType === 'claude' ? session.model?.trim() : undefined;
+    const sessionModel = session?.engineType === engineType ? session.model?.trim() : undefined;
     if (!sessionModel) {
-      throw new Error('Claude 聊天会话执行模型未配置，无法启动工作流');
+      const engineLabel = engineType === 'pi' ? 'SAgent' : 'Claude';
+      throw new Error(`${engineLabel} 聊天会话执行模型未配置，无法启动工作流`);
     }
     return sessionModel;
   }

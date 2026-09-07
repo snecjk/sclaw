@@ -2,6 +2,7 @@ import type { RawMessage } from './types';
 import type { ChatMessageDecorations, ChatTurnOverlay } from './client-session-reducer';
 import { findHistoryUserEcho, isSameUserMessage } from './user-message-merge';
 import { toMs } from './helpers';
+import { isAgentPreparationProgressMessage } from '@/lib/agent-preparation-progress';
 
 /**
  * Pure projection from authoritative transcript plus local, replaceable UI overlay.
@@ -89,7 +90,9 @@ export function materializeCompletedOverlay(
   const overlayMessages = [
     ...overlay.streamingMessages,
     ...overlay.streamingToolResults,
-  ].map((message, index) => ({ message, index }));
+  ]
+    .filter((message) => !isAgentPreparationProgressMessage(message))
+    .map((message, index) => ({ message, index }));
 
   overlayMessages.sort((left, right) => {
     const leftAt = typeof left.message.timestamp === 'number' ? toMs(left.message.timestamp) : null;

@@ -9,6 +9,7 @@ import { ArrowUp, SendHorizontal, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { InputComposerShellLayout } from './input-composer-shell';
+import { InputComposerToolbarIconTooltip } from './input-composer-toolbar-icon-tooltip';
 
 /** 发送按钮 UI 与交互状态 */
 export interface InputComposerSendButtonProps {
@@ -48,6 +49,8 @@ export function InputComposerSendButton({
 
   if (sending && canSend) {
     return (
+      <InputComposerToolbarIconTooltip label={sendTitle}>
+      <span className="inline-flex shrink-0">
       <Button
         onClick={onSend}
         size="icon"
@@ -56,14 +59,17 @@ export function InputComposerSendButton({
           'sto-control--composer-send-action border',
         )}
         variant="ghost"
-        title={sendTitle}
       >
         <SendIcon className="h-4 w-4" strokeWidth={2.1} aria-hidden />
       </Button>
+      </span>
+      </InputComposerToolbarIconTooltip>
     );
   }
 
   return (
+    <InputComposerToolbarIconTooltip label={sending ? stopTitle : sendTitle}>
+    <span className="inline-flex shrink-0">
     <Button
       onClick={sending ? onStop : onSend}
       disabled={sending ? !canStop : !canSend}
@@ -78,7 +84,6 @@ export function InputComposerSendButton({
             : 'sto-control--composer-unavailable',
       )}
       variant="ghost"
-      title={sending ? stopTitle : sendTitle}
     >
       {sending ? (
         <Square className="h-3.5 w-3.5" fill="currentColor" aria-hidden />
@@ -86,5 +91,7 @@ export function InputComposerSendButton({
         <SendIcon className="h-4 w-4" strokeWidth={2.1} aria-hidden />
       )}
     </Button>
+    </span>
+    </InputComposerToolbarIconTooltip>
   );
 }

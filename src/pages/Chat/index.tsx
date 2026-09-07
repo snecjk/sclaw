@@ -20,7 +20,7 @@ import { ChatStaticItemsList, type ChatStaticItemsListHandle } from '@/component
 import { useChatDisplay } from './use-chat-display';
 import { resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
-import { ChatEngineModelCascade } from './ChatEngineModelSelectors';
+import { ChatEngineModelPicker } from './ChatEngineModelSelectors';
 import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
@@ -34,6 +34,7 @@ import { useTranslation } from 'react-i18next';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import { ChatTurnNavigator } from '@/components/chat/ChatTurnNavigator';
 import {
   stoParameterFormDockLayout,
   stoSplitChatScrollClass,
@@ -90,8 +91,9 @@ export function Chat() {
     streamingMessages,
     streamingToolResults,
     streamingTools,
-    error,
+    activity: runtimeActivity,
     phase,
+    error,
   } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
@@ -216,6 +218,7 @@ export function Chat() {
     streamingToolResults,
     streamingTools,
     turnAnchorAt,
+    runtimeActivity,
     phase,
   });
 
@@ -346,6 +349,11 @@ export function Chat() {
     container.scrollBy({ top: delta, behavior });
   }, [contentRef, scrollRef, stopScroll]);
 
+  const scrollToDisplayItem = useCallback((itemKey: string) => {
+    stopScroll();
+    staticItemsListRef.current?.scrollToDisplayItemKey(itemKey, 'smooth');
+  }, [stopScroll]);
+
   useEffect(() => {
     if (!activeSearchMatch || !deferredSearchQuery) return;
     scrollToMessageMatch(activeSearchMatch.key, 'smooth');
@@ -396,6 +404,7 @@ export function Chat() {
       workflows: extras?.workflows,
       composerSegments: extras?.composerSegments,
       gatewayText: extras?.gatewayText,
+      composition: extras?.composition,
     });
   }, [beginSendScroll]);
 
@@ -666,17 +675,18 @@ export function Chat() {
       </div>
 
       {/* Messages Area */}
-      <div
-        ref={scrollRef}
-        className={cn(
-          'relative z-10 min-h-0 flex-1',
-          'pt-[var(--sto-workbench-body-content-inset-y,8px)] pb-4',
-          isSplitChatLayout
-            ? stoSplitChatScrollClass
-            : 'sto-thin-scrollbar overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
-        )}
-      >
-        <div ref={contentRef} className={stoChatScrollContentClass}>
+      <div className="relative z-10 min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          className={cn(
+            'h-full min-h-0',
+            'pt-[var(--sto-workbench-body-content-inset-y,8px)] pb-4',
+            isSplitChatLayout
+              ? stoSplitChatScrollClass
+              : 'sto-thin-scrollbar overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+          )}
+        >
+          <div ref={contentRef} className={stoChatScrollContentClass}>
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
@@ -720,7 +730,15 @@ export function Chat() {
               ) : null}
             </>
           )}
+          </div>
         </div>
+        <ChatTurnNavigator
+          key={currentSessionKey}
+          items={staticItems}
+          scrollRef={scrollRef}
+          sessionKey={currentSessionKey}
+          onNavigate={scrollToDisplayItem}
+        />
       </div>
 
       {/* Error bar */}
@@ -795,7 +813,7 @@ export function Chat() {
         onEditDraftApplied={handleEditDraftApplied}
         composerLayout="home"
         toolbarInlineSelectors={(
-          <ChatEngineModelCascade className="min-w-0 max-w-full" />
+          <ChatEngineModelPicker className="min-w-0 max-w-full" />
         )}
       />
 

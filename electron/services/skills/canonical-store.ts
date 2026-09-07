@@ -14,6 +14,7 @@ import {
   getSkillsStoreUserSkillsDir,
 } from '../../utils/paths';
 import { logger } from '../../utils/logger';
+import { readSkillMdFrontmatter } from '../../utils/skill-frontmatter';
 
 export type SkillScope = 'global' | 'user' | 'agent';
 
@@ -236,6 +237,15 @@ export async function listDesiredPackages(ctx: {
       // Consumers that only want enabled can filter.
     }
     const sourceDir = resolvePackageDir(entry);
+    const frontmatter = readSkillMdFrontmatter(sourceDir);
+    const name = entry.name?.trim()
+      || entry.title?.trim()
+      || frontmatter?.title?.trim()
+      || frontmatter?.name?.trim()
+      || entry.slug;
+    const description = entry.description?.trim()
+      || frontmatter?.description?.trim()
+      || '';
     bySlug.set(entry.slug, {
       slug: entry.slug,
       sourceDir,
@@ -245,9 +255,9 @@ export async function listDesiredPackages(ctx: {
       userCode: entry.userCode,
       agentId: entry.agentId,
       config: entry.config,
-      name: entry.name,
-      description: entry.description,
-      author: entry.author,
+      name,
+      description,
+      author: entry.author?.trim() || frontmatter?.author?.trim() || undefined,
       source: entry.source,
     });
   };

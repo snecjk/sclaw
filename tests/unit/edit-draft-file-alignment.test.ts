@@ -65,12 +65,14 @@ describe('edit draft file id alignment', () => {
       segments: converted.segments,
       plainText: '根据  和  生成一份 md 文件',
       attachments: converted.attachments,
-      resolveSkillPrompt: async () => ({ defaultPrompt: '', title: '' }),
     });
 
     expect(payload.attachments).toHaveLength(2);
-    expect(payload.gatewayText).toContain('[文件: 客户流向.xlsx]');
-    expect(payload.gatewayText).toContain('[文件: output_song.md]');
+    expect(payload.gatewayText).not.toContain('[文件:');
+    expect(payload.composition.segments.filter((segment) => segment.type === 'attachment')).toEqual([
+      { type: 'attachment', mediaIndex: 0, displayName: '客户流向.xlsx' },
+      { type: 'attachment', mediaIndex: 1, displayName: 'output_song.md' },
+    ]);
     expect(payload.displayText).toBe('根据  和  生成一份 md 文件');
     expect(payload.persistedSegments.filter((seg) => seg.type === 'file')).toHaveLength(2);
   });
@@ -123,7 +125,6 @@ describe('edit draft file id alignment', () => {
       segments: converted.segments,
       plainText: '根据  生成',
       attachments: mismatchedRegistry,
-      resolveSkillPrompt: async () => ({ defaultPrompt: '', title: '' }),
     });
 
     // id 分叉 → 文件被跳过（原 bug）。若有人再引入分裂 id，此守卫应失败。

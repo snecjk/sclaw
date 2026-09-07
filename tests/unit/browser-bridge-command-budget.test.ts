@@ -86,7 +86,6 @@ describe('手抄副本不漂移', () => {
 
   it('没有任何客户端还在用 `cfg.commandTimeoutMs ??` 直接兜底', () => {
     const clients = [
-      'sto-plugin/claude/sto-browser-tool/bridge-client.ts',
       ...VENDORED,
     ];
     for (const path of clients) {

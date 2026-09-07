@@ -263,6 +263,13 @@
   .sto-control--brand-solid:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-brand-hover-background); border-color: var(--sto-control-brand-hover-background); }
   .sto-control--dialog-field { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-segment-plain-selected-foreground); }
   .sto-control.sto-control--dialog-field:is(:focus, :focus-visible, [data-sto-state='focus']) { border-color: var(--sto-brand-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 12%, transparent); outline: none; }
+  /* 定时任务表单：input 和复合编辑器与计划时间使用同一紧凑焦点光晕，避免默认控件规则叠加出额外间距。 */
+  .sto-control.sto-control--task-create-focus:is(:focus, :focus-visible, :focus-within, [data-sto-state='focus']) {
+    border-color: var(--sto-brand-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 12%, transparent);
+    outline: none;
+    outline-offset: 0;
+  }
   .sto-control--dialog-secondary { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-segment-plain-selected-foreground); }
   .sto-control--dialog-secondary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-disabled-background); }
   .sto-control--dialog-primary { background-color: var(--sto-dialog-action-background); border-color: transparent; color: var(--sto-dialog-action-foreground); }
@@ -562,10 +569,11 @@
 
   /* Overlay states remain color-stable; containers gain no new focus outline. */
   .sto-overlay,
-  .sto-overlay:where(:hover, :active, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
+  .sto-overlay:where(:hover, :active, :focus, :focus-visible, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
     background-color: var(--sto-overlay-background);
     border-color: var(--sto-overlay-border);
     color: var(--sto-overlay-foreground);
+    outline: none;
   }
 
   .sto-overlay--glass-border { border-color: var(--sto-control-field-border); }
@@ -585,6 +593,13 @@
   :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control--primary { background-color: var(--sto-dialog-action-background); border-color: transparent; color: var(--sto-dialog-action-foreground); }
   :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control--primary:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-dialog-action-hover-background); border-color: transparent; }
   :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control:is(:focus-visible, [data-sto-state='focus']) { box-shadow: var(--sto-dialog-action-focus-shadow); }
+  /* 任务名称与任务内容共用紧凑焦点光晕，不能被弹窗通用的双层键盘焦点环覆盖。 */
+  :is(.sto-overlay--dialog, .sto-dialog-footer) .sto-control.sto-control--task-create-focus:is(:focus, :focus-visible, :focus-within, [data-sto-state='focus']) {
+    border-color: var(--sto-brand-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 12%, transparent);
+    outline: none;
+    outline-offset: 0;
+  }
   .sto-icon--neutral { color: var(--sto-icon-secondary); }
   .sto-icon--neutral-strong { color: var(--sto-icon-primary); }
   .sto-icon--neutral-quiet { color: var(--sto-icon-tertiary); }
@@ -593,7 +608,10 @@
 
   /* Checkbox visuals: keep the frozen light assets/native controls and own dark contrast here. */
   .sto-checkbox-dark-visual { display: none; }
+  .sto-checkbox-primary-light-visual { display: flex; background-color: transparent; border-color: var(--sto-border-default); }
+  .sto-checkbox-primary-light-visual[data-state='checked'] { background-color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
   :is(html.dark, html[data-sto-theme='dark']) .sto-checkbox-light-visual { display: none; }
+  :is(html.dark, html[data-sto-theme='dark']) .sto-checkbox-primary-light-visual { display: none; }
   :is(html.dark, html[data-sto-theme='dark']) .sto-checkbox-dark-visual {
     display: flex;
     border-color: var(--sto-icon-secondary);

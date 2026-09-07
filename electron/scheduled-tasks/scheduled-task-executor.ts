@@ -7,17 +7,17 @@ import type {
   ScheduleTaskRuntimeResult,
   ScheduleTaskRun,
 } from '../db/models/domain/schedule-task';
-import type { EngineAdapterContext } from '../engines/types';
 import { getAdapter } from '../engines/manager';
-import { runMainChatSend, type MainChatSendInput } from '../services/chat-send-service';
+import { submitModelTurn } from '../services/submit-model-turn';
 import { logger } from '../utils/logger';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../shared/chat-runtime-protocol';
 import { isTerminalChatRunPhase } from '../../shared/chat-runtime-protocol';
 import type { ChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import { resolveScheduledTaskDingTalkRecipients } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 import { buildMediaFromComposerAttachments } from './scheduled-task-attachments';
-import { access } from 'node:fs/promises';
 import { collectArtifactsFromAssistantMessages } from '../services/data-center-artifact-sync/artifact-collector';
+import type { ModelMessageCompositionV1 } from '../../shared/model-message-composition';
+import { buildModelCompositionFromPersistedSegments } from '../../shared/model-message-composition';
 import {
   resolveDataCenterTargetsFromUris,
   syncArtifactsToDataCenter,
@@ -76,6 +76,24 @@ export interface EngineScheduledTaskDispatcherDeps {
   getEventSink: () => ScheduledTaskEventSink;
 }
 
+function buildScheduledTaskComposition(
+  task: ScheduleTask,
+  media: Array<{ filePath: string; mimeType: string; fileName: string }>,
+): ModelMessageCompositionV1 | undefined {
+  const extra = task.extra && typeof task.extra === 'object'
+    ? task.extra as Record<string, unknown>
+    : null;
+  const rawSegments = Array.isArray(extra?.composerSegments) ? extra.composerSegments : null;
+  if (!rawSegments) return undefined;
+  return buildModelCompositionFromPersistedSegments({
+    segments: rawSegments.filter((segment): segment is Record<string, unknown> => (
+      Boolean(segment) && typeof segment === 'object'
+    )),
+    media,
+    appendUnmatchedMedia: true,
+  });
+}
+
 export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
   constructor(private readonly deps: EngineScheduledTaskDispatcherDeps) {}
 
@@ -129,24 +147,12 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     }
 
     const adapter = getAdapter(task.engineType);
-    const ctx: EngineAdapterContext = { gatewayManager };
+    const scheduledCapabilities = adapter.scheduledTaskCapabilities;
     const systemPromptAppend = this.deps.buildSystemPromptAppend(task) ?? undefined;
     // executor 只传递定时任务语义；system prompt 的实际承载方式由各引擎 adapter 决定。
     const recipients = resolveScheduledTaskDingTalkRecipients(task);
     const message = task.prompt;
-    const mediaCandidates = buildMediaFromComposerAttachments(task.extra);
-    const media: Array<{ filePath: string; mimeType: string; fileName: string }> = [];
-    for (const item of mediaCandidates) {
-      try {
-        await access(item.filePath);
-        media.push(item);
-      } catch {
-        logger.warn('[scheduled-task] skip missing attachment', {
-          taskId: task.id,
-          filePath: item.filePath,
-        });
-      }
-    }
+    const media = buildMediaFromComposerAttachments(task.extra);
 
     logger.info('[scheduled-task] dingtalk message assembled', {
       taskId: task.id,
@@ -162,43 +168,31 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
         userId: r.userId,
         openConversationId: r.openConversationId,
       })),
-      prompt: task.prompt,
-      message,
-      systemPromptAppend: systemPromptAppend ?? null,
+      hasSystemPromptAppend: Boolean(systemPromptAppend),
     });
 
-    const input: MainChatSendInput = {
-      sessionKey,
-      message,
-      sourceText: task.prompt,
-      deliver: true,
-      idempotencyKey: run.idempotencyKey,
-      systemPromptAppend,
-      permissionProfile: task.permissionProfile ?? undefined,
-      engineType: adapter.type,
-      media: media.length ? media : undefined,
-      runtimePolicy: {
-        origin: 'scheduled_task',
-        ownerId: run.runId,
-        deadlineAt: task.timeoutSec == null ? null : startedAtMs + task.timeoutSec * 1_000,
-      },
-    };
-
+    const composition = buildScheduledTaskComposition(task, media);
     try {
-      const result = await runMainChatSend(
-        gatewayManager,
-        input,
-        (params, memory) => adapter.prepareMemoryInjection(params, memory),
-        (prepared) => {
-          if (input.media && input.media.length > 0) {
-            return adapter.sendMessageWithMedia(ctx, {
-              ...prepared,
-              media: input.media,
-            });
-          }
-          return adapter.sendMessage(ctx, prepared);
+      const result = await submitModelTurn(gatewayManager, {
+        sessionKey,
+        message,
+        sourceText: task.prompt,
+        deliver: true,
+        idempotencyKey: run.idempotencyKey,
+        systemPromptAppend,
+        permissionProfile: scheduledCapabilities.enforcedPermissionProfile
+          ?? task.permissionProfile
+          ?? scheduledCapabilities.defaultPermissionProfile,
+        engineType: adapter.type,
+        media: media.length ? media : undefined,
+        composition,
+        dingTalkMentions: recipients ?? undefined,
+        runtimePolicy: {
+          origin: 'scheduled_task',
+          ownerId: run.runId,
+          deadlineAt: task.timeoutSec == null ? null : startedAtMs + task.timeoutSec * 1_000,
         },
-      );
+      });
 
       if (!result.success) {
         const error = result.error ?? 'send returned non-success';

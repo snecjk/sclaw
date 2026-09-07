@@ -16,11 +16,14 @@ import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { CHAT_EDIT_DRAFT_EVENT, type ChatEditDraftEventDetail } from '@/pages/Chat/ChatInput';
+import { resolveWorkflowEngineSelection, useWorkflowEnginePolicy } from '@/hooks/use-workflow-engine-policy';
+import { parseAgentEngineType } from '../../../shared/agent-engine';
 
 /**
  * 首页：所有用户统一走 HomeAgentHubSurface，由后端推荐位 API 动态返回不同内容。
  */
 export function Home() {
+  const workflowEnginePolicy = useWorkflowEnginePolicy();
   // 开预览时外层须 display:contents，否则对话/预览列进不了 main 的三栏 grid（白屏）
   const showConversation = useHomeConversationActive();
   const { splitGridPassthroughClass } =
@@ -47,7 +50,11 @@ export function Home() {
   const querySeedText = searchParams.get('q')?.trim() || undefined;
   const seedWorkflowId = searchParams.get('workflowId')?.trim() || undefined;
   const isWorkflowRun = searchParams.get('workflowRun') === '1';
-  const workflowEngine = searchParams.get('workflowEngine') === 'openclaw' ? 'openclaw' : 'claude';
+  const workflowEngine = resolveWorkflowEngineSelection(
+    parseAgentEngineType(searchParams.get('workflowEngine')),
+    workflowEnginePolicy.options,
+    workflowEnginePolicy.defaultEngine,
+  );
 
   // 连接器「去试试」经 router state 携带的一次性输入草稿（刻意不走 ?q=：
   // q 会被自动发送，草稿只允许预填输入框由用户手动发送）。消费后立即
@@ -114,6 +121,7 @@ export function Home() {
     }
     if (hasAutoSentRef.current) return;
     if (gatewayStatus.state !== 'running' && !isWorkflowRun) return;
+    if (isWorkflowRun && (!workflowEnginePolicy.loaded || workflowEnginePolicy.loading)) return;
 
     hasAutoSentRef.current = true;
     // Clear q and workflow metadata from URL so refresh doesn't re-trigger
@@ -133,9 +141,23 @@ export function Home() {
           return;
         }
       }
-      await handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
+      if (isWorkflowRun) {
+        await handleHubSend(
+          querySeedText,
+          undefined,
+          undefined,
+          undefined,
+          seedWorkflowId,
+          undefined,
+          undefined,
+          undefined,
+          { workflowExecutionEngine: workflowEngine },
+        );
+      } else {
+        await handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
+      }
     })();
-  }, [querySeedText, seedWorkflowId, isWorkflowRun, workflowEngine, gatewayStatus.state, handleHubSend, setSearchParams]);
+  }, [querySeedText, seedWorkflowId, isWorkflowRun, workflowEngine, workflowEnginePolicy.loaded, workflowEnginePolicy.loading, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   // Wait for gateway before auto-sending workflowId prompt.
   // if (gatewayStatus.state !== 'running' && querySeedText && seedWorkflowId && !hasAutoSentRef.current) {

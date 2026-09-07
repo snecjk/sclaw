@@ -17,7 +17,7 @@ export interface ResolveChatSessionEngineTypeOptions {
 }
 
 function normalizeAgentEngineType(agentEngineType?: ChatEngineType | string | null): ChatEngineType {
-  return agentEngineType === 'claude' ? 'claude' : 'openclaw';
+  return agentEngineType === 'claude' || agentEngineType === 'pi' ? agentEngineType : 'openclaw';
 }
 
 /** Resolve engine for Host API calls; never infer from stale registry on the client. */
@@ -27,6 +27,7 @@ export function resolveChatSessionEngineType(
   sessionKey?: string,
   options?: ResolveChatSessionEngineTypeOptions,
 ): ChatEngineType {
+  if (sessionKey?.startsWith('pi:') || sessionKey?.startsWith('pi-task:')) return 'pi';
   // Infer from the session key prefix so task/cron sessions resolve correctly
   // even before the run's transcript is materialized on disk — e.g. the race
   // window right after "立即运行", where the dated aggregate session is not
@@ -59,7 +60,7 @@ export function resolveChatSessionEngineType(
     return normalizeAgentEngineType(agentEngineType);
   }
 
-  if (session?.engineType === 'claude' || session?.engineType === 'openclaw') {
+  if (session?.engineType === 'claude' || session?.engineType === 'openclaw' || session?.engineType === 'pi') {
     return session.engineType;
   }
   return normalizeAgentEngineType(agentEngineType);

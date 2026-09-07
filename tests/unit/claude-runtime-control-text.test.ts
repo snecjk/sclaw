@@ -71,6 +71,14 @@ describe('contentless turn + auto-resume mutex', () => {
     expect(isClaudeRuntimeControlText('No response requested.')).toBe(true);
   });
 
+  it('recognizes Claude compact control text', () => {
+    expect(isClaudeRuntimeControlText('<local-command-caveat>Local command</local-command-caveat>')).toBe(true);
+    expect(isClaudeRuntimeControlText('<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args></command-args>')).toBe(true);
+    expect(isClaudeRuntimeControlText('<local-command-stdout>Compacted</local-command-stdout>')).toBe(true);
+    expect(isClaudeRuntimeControlText('This session is being continued from a previous conversation that ran out of context.\n\nSummary:')).toBe(true);
+    expect(isClaudeRuntimeControlText('请帮我压缩这段普通文本')).toBe(false);
+  });
+
   it('thinking-only / control-line is contentless; result Done. without assistant is not', () => {
     expect(inspectClaudeAssistantPayload({ content: [{ type: 'thinking', thinking: '...' }] })).toEqual({
       hasToolUse: false,

@@ -23,6 +23,7 @@ describe('trimSessionHistoryTail', () => {
           ...createClientSessionState(),
           transcript,
           historyTotalCount: 0,
+          historyCapabilities: { paginationMode: 'before-id', defaultPageSize: 50 },
         },
       },
     }));
@@ -44,6 +45,7 @@ describe('trimSessionHistoryTail', () => {
             role: 'user',
             content: String(index),
           })),
+          historyCapabilities: { paginationMode: 'before-id', defaultPageSize: 50 },
           runtime: {
             phase: 'running',
             runId: 'run-1',
@@ -59,5 +61,26 @@ describe('trimSessionHistoryTail', () => {
     }));
     useChatRuntimeV2Store.getState().trimSessionHistoryTail(SESSION_KEY);
     expect(useChatRuntimeV2Store.getState().sessionsByKey[SESSION_KEY]?.transcript).toHaveLength(60);
+  });
+
+  it('does not trim an engine that cannot load older pages', () => {
+    const transcript = Array.from({ length: 80 }, (_, index) => ({
+      id: `m${index}`,
+      role: 'assistant',
+      content: String(index),
+    })) as ReturnType<typeof createClientSessionState>['transcript'];
+    useChatRuntimeV2Store.setState((state) => ({
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [SESSION_KEY]: {
+          ...createClientSessionState(),
+          transcript,
+          historyCapabilities: { paginationMode: 'none', defaultPageSize: 1000 },
+        },
+      },
+    }));
+
+    useChatRuntimeV2Store.getState().trimSessionHistoryTail(SESSION_KEY);
+    expect(useChatRuntimeV2Store.getState().sessionsByKey[SESSION_KEY]?.transcript).toHaveLength(80);
   });
 });

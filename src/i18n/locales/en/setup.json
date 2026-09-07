@@ -5,56 +5,49 @@
             "description": "Your AI assistant is ready to be configured"
         },
         "runtime": {
-            "title": "Environment Check",
-            "description": "Verifying system requirements"
+            "title": "Device Information",
+            "description": "A quick overview of this device"
         },
         "channel": {
             "title": "Connect a Channel",
             "description": "Connect a messaging platform (optional)"
         },
-        "installing": {
-            "title": "Setting Up",
-            "description": "Installing essential components"
-        },
         "complete": {
-            "title": "All Set!",
-            "description": "SClaw is ready to use"
+            "title": "Finish Setup",
+            "description": "Install essential components and finish configuration"
         }
     },
     "welcome": {
         "title": "Welcome to SClaw",
-        "description": "SClaw is a graphical interface for OpenClaw, making it easy to use AI assistants across your favorite messaging platforms.",
+        "description": "SClaw is STO's in-house desktop AI assistant, built to help you work more efficiently.",
         "features": {
-            "noCommand": "Zero command-line required",
-            "modernUI": "Modern, beautiful interface",
-            "bundles": "Pre-installed skill bundles",
+            "noCommand": "Simple to use",
+            "modernUI": "Understands STO operations",
+            "bundles": "STO skill bundles",
             "crossPlatform": "Cross-platform support"
         }
     },
     "runtime": {
-        "title": "Checking Environment",
+        "title": "This Device",
         "viewLogs": "View Logs",
-        "recheck": "Re-check",
+        "refresh": "Refresh",
         "nodejs": "Node.js Runtime",
-        "openclaw": "OpenClaw Package",
-        "gateway": "Gateway Service",
-        "startGateway": "Start Gateway",
-        "status": {
-            "checking": "Checking...",
-            "success": "Node.js is available",
-            "error": "Failed",
-            "gatewayRunning": "Running on port {{port}}",
-            "packageReady": "OpenClaw package ready"
-        },
-        "issue": {
-            "title": "Environment issue detected",
-            "desc": "Please ensure OpenClaw is properly installed. Check the logs for details."
-        },
+        "nodeReady": "Node.js available",
+        "bundledRuntime": "Bundled application runtime",
+        "system": "System",
+        "processor": "{{count}} logical processors",
+        "memory": "Available Memory",
+        "disk": "Available Disk",
+        "capacityMeta": "{{total}} total, {{percentage}}% available",
+        "unavailable": "Unavailable",
+        "loading": "Reading device information",
+        "loadError": "Some device information could not be read. You can still continue setup.",
+        "hint": "Device information is shown for reference and will not block setup.",
         "logs": {
             "title": "Application Logs",
             "openFolder": "Open Log Folder",
-            "close": "Close",
-            "noLogs": "(No logs available yet)"
+            "noLogs": "(No logs available yet)",
+            "loadFailed": "(Failed to load logs)"
         }
     },
     "provider": {
@@ -103,17 +96,19 @@
             "failed": "Failed"
         },
         "error": "Setup Error:",
-        "restart": "Try restarting the app",
+        "unknownError": "An unknown error occurred during installation",
+        "failedToast": "Component installation failed",
+        "retry": "Retry Installation",
         "wait": "This may take a few moments...",
-        "skip": "Skip this step"
+        "skip": "Skip Component Installation"
     },
     "complete": {
         "title": "Setup Complete!",
         "subtitle": "SClaw is configured and ready to use. You can now start chatting with your AI assistant.",
+        "skippedSubtitle": "Basic setup is complete. You can install the required components later.",
         "components": "Components",
         "envReady": "Environment ready",
-        "gateway": "Gateway",
-        "running": "Running",
+        "skipped": "Skipped",
         "footer": "You can customize skills and connect channels in Settings"
     },
     "nav": {

@@ -16,6 +16,7 @@ import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { WorkflowComposerInput } from '@/pages/Workflow/components/workflow-composer-input';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { chatEngineRequiresGateway } from '@/hooks/use-chat-input-bindings';
 
 export interface WorkflowComposerProps {
   /** 快捷 chip 或外部填入的一次性种子文案 */
@@ -47,7 +48,7 @@ export function WorkflowComposer({ seedText, onGenerate, className }: WorkflowCo
     currentSessionKey === DEFAULT_SESSION_KEY
       ? currentAgent?.engineType
       : currentSession?.engineType ?? currentAgent?.engineType;
-  const requiresGateway = resolvedEngineType !== 'claude';
+  const requiresGateway = chatEngineRequiresGateway(resolvedEngineType);
 
   const handleGenerateSend = useCallback(
     (text: string) => {

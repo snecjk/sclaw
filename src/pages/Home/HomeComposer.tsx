@@ -9,7 +9,7 @@
 import { useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selectors';
 import { useMessageQueueStore } from '@/stores/message-queue';
@@ -22,7 +22,7 @@ import {
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
-import { ChatEngineModelCascade } from '@/pages/Chat/ChatEngineModelSelectors';
+import { ChatEngineModelPicker } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
@@ -116,7 +116,7 @@ export function HomeComposer({
   const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
 
   const currentAgent = useMemo(
-    () => agents.find((agent) => agent.id === currentAgentId),
+    () => resolveAgentById(agents, currentAgentId),
     [agents, currentAgentId],
   );
   const currentSession = useMemo(
@@ -131,7 +131,7 @@ export function HomeComposer({
   );
 
   const inlineToolbarSelectors = toolbarSelectors ?? (
-    <ChatEngineModelCascade className="min-w-0 max-w-full" />
+    <ChatEngineModelPicker className="min-w-0 max-w-full" />
   );
 
   const sendMessage = onSend ?? handleHubSend;
@@ -190,7 +190,7 @@ export function HomeComposer({
       {showDisclaimer ? (
         <p
           className={cn(
-            'mt-4',
+            'mt-2',
             homeHubFooterDisclaimerClass,
             footerAlign === 'right' ? 'text-right' : 'text-center',
           )}

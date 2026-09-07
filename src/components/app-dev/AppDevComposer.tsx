@@ -1,4 +1,4 @@
-import { ChatEngineModelCascade } from '@/pages/Chat/ChatEngineModelSelectors';
+import { ChatEngineModelPicker } from '@/pages/Chat/ChatEngineModelSelectors';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 
 export interface AppDevComposerProps {
@@ -23,7 +23,7 @@ export function AppDevComposer({
       showInterfaceCatalog
       toolbarToolsLayout="dropdown"
       toolbarSelectors={(
-        <ChatEngineModelCascade
+        <ChatEngineModelPicker
           className="min-w-0 max-w-full"
           allowSessionSwitch
         />

@@ -12,6 +12,7 @@ export function bindingToRegistryEntry(binding: SessionEngineBinding): EngineSes
     model: binding.model ?? undefined,
     provider: binding.provider ?? undefined,
     accountId: binding.accountId ?? undefined,
+    piSessionFile: typeof extra.piSessionFile === 'string' ? extra.piSessionFile : undefined,
     updatedAt: Date.parse(binding.updatedAt),
     title: typeof extra.title === 'string' ? extra.title : undefined,
     archivedClaudeSessionIds: Array.isArray(extra.archivedClaudeSessionIds)

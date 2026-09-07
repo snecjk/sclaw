@@ -1,13 +1,14 @@
 import type { AgentRunSpec, RunCtx } from './types';
 import { WORKFLOW_PACKET_VERSION } from './workflow-packet';
 import { WORKFLOW_PACKET_ARTIFACTS_KEY, type UpstreamWorkflowArtifact } from './input-resolver';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 
 /** Builds the client-owned prompt. Cloud compiled prompts are deliberately ignored. */
 export function buildWorkflowNodePrompt(
   spec: AgentRunSpec,
   node: any,
   ctx: RunCtx,
-  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number } = {},
+  options: { execEngine?: AgentEngineType; attempt?: number } = {},
 ): string {
   if (node?.type === 'agent_data_fetch') {
     return buildDataFetchPrompt(spec, node, ctx, options);
@@ -65,7 +66,7 @@ function buildDataFetchPrompt(
   spec: AgentRunSpec,
   node: any,
   ctx: RunCtx,
-  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number },
+  options: { execEngine?: AgentEngineType; attempt?: number },
 ): string {
   const schema = spec.completionContract?.dataJsonSchema
     ?? node?.config?.outputContract?.schema
@@ -103,7 +104,7 @@ function buildBrowserTaskPrompt(
   spec: AgentRunSpec,
   node: any,
   ctx: RunCtx,
-  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number },
+  options: { execEngine?: AgentEngineType; attempt?: number },
 ): string {
   const schema = spec.completionContract?.dataJsonSchema
     ?? node?.config?.outputContract?.schema
@@ -195,7 +196,7 @@ function artifactFirstRule(nodeType?: string): string {
   return `产物格式由任务要求和内容决定，可生成零个、一个或多个任意格式文件。先在节点工作区写文件，再在 artifacts 中声明 {resourceId, kind?, name?, contentType?}；resourceId 必须是相对路径，kind 默认 ${defaultKind}。不要填写 artifactId、uri、size、checksum，不要把文件正文或绝对路径放入 payload、diagnostics 或最终文本。`;
 }
 
-function outputProtocolInstruction(execEngine: 'claude' | 'openclaw' | undefined, node: any, ctx: RunCtx, attempt?: number): string {
+function outputProtocolInstruction(execEngine: AgentEngineType | undefined, node: any, ctx: RunCtx, attempt?: number): string {
   const producer = { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: Math.max(1, Math.floor(attempt ?? 1)) };
   const successTemplate = JSON.stringify({
     protocolVersion: WORKFLOW_PACKET_VERSION,
@@ -206,8 +207,9 @@ function outputProtocolInstruction(execEngine: 'claude' | 'openclaw' | undefined
     control: { selectedPort: node?.type === 'agent_condition' ? '<允许端口>' : null },
     diagnostics: { warnings: [], errors: [] },
   });
-  if (execEngine === 'openclaw') {
-    return `OpenClaw 最终文本只能是一个完整 WorkflowPacket JSON，不要附加 Markdown 或解释。成功结构：${successTemplate}`;
+  if (execEngine === 'openclaw' || execEngine === 'pi') {
+    const engineLabel = execEngine === 'pi' ? 'SAgent' : 'OpenClaw';
+    return `${engineLabel} 最终文本只能是一个完整 WorkflowPacket JSON，不要附加 Markdown 或解释。成功结构：${successTemplate}`;
   }
   return `调用 StructuredOutput，唯一参数 payload 是紧凑 JSON 字符串，其完整值必须是 WorkflowPacket；不要输出额外文本。成功结构：${successTemplate}`;
 }

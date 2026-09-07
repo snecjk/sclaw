@@ -41,6 +41,7 @@ import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { isAuxiliaryWindowPath } from './lib/auxiliary-window-route';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
+import { ChatResultNotificationNavigator } from './components/chat/ChatResultNotificationNavigator';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
 import { ChromeAttachConsentDialog } from './components/browser-bridge/ChromeAttachConsentDialog';
 import { ThemeController } from './components/theme/ThemeController';
@@ -156,7 +157,8 @@ function App() {
 
   // Initialize agents data on mount
   useEffect(() => {
-    fetchAgents().catch(() => {});
+    fetchAgents().catch(() => {
+    });
   }, [fetchAgents]);
 
   // Auth guard: redirect to login if not authenticated, then to setup if not complete
@@ -270,7 +272,7 @@ function App() {
 
     const unsubscribe = window.electron.ipcRenderer.on(
       'sai:cli-install-failed',
-      handleSaiCliInstallFailed
+      handleSaiCliInstallFailed,
     );
 
     return () => {
@@ -301,41 +303,42 @@ function App() {
       <ThemeController>
         <TooltipProvider delayDuration={300}>
           <AppShellLayoutProvider>
+            <ChatResultNotificationNavigator />
             <WorkflowCompletionNotifier />
             <Routes>
-            {/* SSO Login page */}
-            <Route path="/login" element={<Login />} />
+              {/* SSO Login page */}
+              <Route path="/login" element={<Login />} />
 
-            {/* Setup wizard (shown on first launch) */}
-            <Route path="/setup/*" element={<Setup />} />
+              {/* Setup wizard (shown on first launch) */}
+              <Route path="/setup/*" element={<Setup />} />
 
-            {/* Desktop sprite (floating assistant window) */}
-            <Route path="/sprite" element={<Sprite />} />
+              {/* Desktop sprite (floating assistant window) */}
+              <Route path="/sprite" element={<Sprite />} />
 
-            {/* Desktop float icon (floating launcher) */}
-            <Route path="/float-icon" element={<FloatIcon />} />
-            <Route path="/app-dev-ide/:workspaceId" element={<AppDevIdePage />} />
+              {/* Desktop float icon (floating launcher) */}
+              <Route path="/float-icon" element={<FloatIcon />} />
+              <Route path="/app-dev-ide/:workspaceId" element={<AppDevIdePage />} />
 
-            {/* Main application routes */}
-            <Route element={<MainLayout />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
-              <Route path="/tasks/:taskId" element={<TaskDetail />} />
-              <Route path="/chat" element={<Navigate to="/" replace />} />
-              <Route path="/models" element={<Models />} />
-              <Route path="/agents" element={<Agents />} />
-              <Route path="/channels" element={<Channels />} />
-              <Route path="/skills" element={<SkillPlazaPage />} />
-              <Route path="/more-apps" element={<AppPlazaRouteSlot />} />
-              <Route path="/subscriptions" element={<Subscriptions />} />
-              <Route path="/my-tasks" element={<MyTask />} />
-              <Route path="/data-center" element={<DataCenter />} />
-              <Route path="/data-center/reports/history" element={<ReportHistoryPage />} />
-              <Route path="/learning-center" element={<LearningCenterPage />} />
-              <Route path="/learning-center/tutorial/:tutorialId" element={<TutorialDetailPage />} />
-              <Route path="/workflow/*" element={<WorkflowTestPage />} />
-              <Route path="/settings/*" element={<Settings />} />
-            </Route>
+              {/* Main application routes */}
+              <Route element={<MainLayout />}>
+                <Route path="/" element={<Home />} />
+                <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
+                <Route path="/tasks/:taskId" element={<TaskDetail />} />
+                <Route path="/chat" element={<Navigate to="/" replace />} />
+                <Route path="/models" element={<Models />} />
+                <Route path="/agents" element={<Agents />} />
+                <Route path="/channels" element={<Channels />} />
+                <Route path="/skills" element={<SkillPlazaPage />} />
+                <Route path="/more-apps" element={<AppPlazaRouteSlot />} />
+                <Route path="/subscriptions" element={<Subscriptions />} />
+                <Route path="/my-tasks" element={<MyTask />} />
+                <Route path="/data-center" element={<DataCenter />} />
+                <Route path="/data-center/reports/history" element={<ReportHistoryPage />} />
+                <Route path="/learning-center" element={<LearningCenterPage />} />
+                <Route path="/learning-center/tutorial/:tutorialId" element={<TutorialDetailPage />} />
+                <Route path="/workflow/*" element={<WorkflowTestPage />} />
+                <Route path="/settings/*" element={<Settings />} />
+              </Route>
             </Routes>
 
             {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}

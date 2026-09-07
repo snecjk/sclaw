@@ -97,6 +97,27 @@ export default defineConfig(({ mode }) => {
             },
           },
         },
+        {
+          // Pi coding runtime: isolated Electron utilityProcess entry (no port).
+          entry: 'electron/pi-runtime/worker-entry.ts',
+          vite: {
+            define: envDefine,
+            build: {
+              outDir: 'dist-electron/pi-runtime',
+              rollupOptions: {
+                external: [
+                  'electron',
+                  /^@earendil-works\/pi-/,
+                  /^node:/,
+                ],
+                output: {
+                  entryFileNames: 'worker-entry.js',
+                  inlineDynamicImports: true,
+                },
+              },
+            },
+          },
+        },
       ]),
       renderer(),
     ],

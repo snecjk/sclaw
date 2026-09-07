@@ -146,18 +146,32 @@ export async function persistSessionModelToGateway(opts: {
   return persisted;
 }
 
-/** Shared helpers for toolbar model switch (OpenClaw / Claude). */
-export async function applyClaudeSessionModel(params: {
+/** Shared entry point for session-scoped model switches across all engines. */
+export async function applySessionModel(params: {
   currentSessionKey: string;
   modelId: string;
   accountId?: string;
   currentAgentId: string;
+  engineType: ChatEngineType;
 }): Promise<string> {
   return persistSessionModelToGateway({
     sessionKey: params.currentSessionKey,
     model: params.modelId,
     accountId: params.accountId?.trim() || '',
     agentId: params.currentAgentId,
+    engineType: params.engineType,
+  });
+}
+
+/** Compatibility helpers for existing engine-specific callers. */
+export async function applyClaudeSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+}): Promise<string> {
+  return applySessionModel({
+    ...params,
     engineType: 'claude',
   });
 }
@@ -168,18 +182,27 @@ export async function applyOpenClawSessionModel(params: {
   accountId?: string;
   currentAgentId: string;
 }): Promise<string> {
-  return persistSessionModelToGateway({
-    sessionKey: params.currentSessionKey,
-    model: params.modelId,
-    accountId: params.accountId?.trim() || '',
-    agentId: params.currentAgentId,
+  return applySessionModel({
+    ...params,
     engineType: 'openclaw',
+  });
+}
+
+export async function applyPiSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+}): Promise<string> {
+  return applySessionModel({
+    ...params,
+    engineType: 'pi',
   });
 }
 
 /**
  * Decide which model to persist for a session (decision rule, not a display source).
- * Priority: session.model → pending → Claude agent model → workspace default.
+ * Priority: session.model → pending → workspace default, for every engine.
  * Callers that are switching to a different engine can opt out of the stored
  * session or pending model, which may have been inherited from that other engine.
  */
@@ -232,14 +255,6 @@ export function resolveModelToPersistForSession(opts: {
   if (opts.preferPendingModel !== false) {
     const fromPending = tryResolve(chat.pendingNewSessionModel, sessionPreferredAccount);
     if (fromPending) return fromPending;
-  }
-
-  if (opts.engineType === 'claude') {
-    const fromAgent = tryResolve(
-      agent?.modelDisplay,
-      agent?.modelAccountId?.trim() || fallbackAccountId,
-    );
-    if (fromAgent) return fromAgent;
   }
 
   const workspaceRaw = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
@@ -409,28 +424,8 @@ export async function applyWorkspaceDefaultToNewSession(
       useChatStore.getState().setPendingNewSessionModel(null);
       return;
     }
-    // Delisted user pick → fall through to workspace / Claude agent default.
+    // Delisted user pick → fall through to workspace default.
     useChatStore.getState().setPendingNewSessionModel(null);
-  }
-
-  if (agent?.engineType === 'claude' && isConcreteModelId(agent.modelDisplay)) {
-    const accountId = agent.modelAccountId?.trim() || fallbackAccountId;
-    const resolved = resolveProviderRawModelId(accounts, agent.modelDisplay, accountId);
-    if (
-      resolved
-      && isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)
-    ) {
-      const persisted = await persistSessionModelToGateway({
-        sessionKey: trimmedKey,
-        model: resolved.modelId,
-        accountId: resolved.accountId,
-        agentId,
-        engineType,
-      });
-      patchSessionModelInStore(trimmedKey, persisted);
-      return;
-    }
-    // Delisted agent preferred → fall through to workspace default.
   }
 
   const rawModelId = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);

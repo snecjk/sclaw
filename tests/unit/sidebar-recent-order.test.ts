@@ -34,6 +34,17 @@ describe('buildInitialSidebarRecentOrder', () => {
       'agent:main:session-a',
     ]);
   });
+
+  it('excludes PI workflow node sessions from recent order', () => {
+    expect(buildInitialSidebarRecentOrder([
+      ...sessions,
+      { key: 'pi:workflow:node-session', engineType: 'pi', updatedAt: 999 },
+    ], {})).toEqual([
+      'agent:main:session-b',
+      'agent:main:session-c',
+      'agent:main:session-a',
+    ]);
+  });
 });
 
 describe('sortSessionsByRecentActivity', () => {

@@ -13,7 +13,7 @@ export type SessionDeleteResult = {
   error?: string;
 };
 
-export type SessionDeleteEngineType = 'openclaw' | 'claude';
+export type SessionDeleteEngineType = 'openclaw' | 'claude' | 'pi';
 
 /** Route delete API to the backend that owns the session transcript. */
 export function resolveSessionDeleteEngineType(
@@ -21,6 +21,7 @@ export function resolveSessionDeleteEngineType(
   session?: { engineType?: SessionDeleteEngineType },
   agentEngineType?: string | null,
 ): SessionDeleteEngineType {
+  if (sessionKey.startsWith('pi:') || sessionKey.startsWith('pi-task:')) return 'pi';
   if (isAnyCronSessionKey(sessionKey)) return 'openclaw';
   if (isStoTaskSessionKey(sessionKey) || isHiddenStoTaskSubitemChatSessionKey(sessionKey)) {
     return 'openclaw';
@@ -28,10 +29,10 @@ export function resolveSessionDeleteEngineType(
   if (isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey)) {
     return 'claude';
   }
-  if (session?.engineType === 'claude' || session?.engineType === 'openclaw') {
+  if (session?.engineType === 'claude' || session?.engineType === 'openclaw' || session?.engineType === 'pi') {
     return session.engineType;
   }
-  return agentEngineType === 'claude' ? 'claude' : 'openclaw';
+  return agentEngineType === 'claude' || agentEngineType === 'pi' ? agentEngineType : 'openclaw';
 }
 
 export async function requestSessionDelete(

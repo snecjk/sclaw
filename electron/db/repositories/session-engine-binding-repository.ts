@@ -19,6 +19,7 @@ function buildExtraJson(input: UpsertEngineBindingInput): string | null {
   if (input.pendingHistoryBridge) {
     extra.pendingHistoryBridge = input.pendingHistoryBridge;
   }
+  if (input.piSessionFile) extra.piSessionFile = input.piSessionFile;
   return Object.keys(extra).length > 0 ? JSON.stringify(extra) : null;
 }
 

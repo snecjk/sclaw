@@ -8,7 +8,7 @@ export interface ChatRuntimeRunsTable {
   origin: 'interactive' | 'scheduled_task' | 'channel' | 'bridge';
   owner_id: string | null;
   deadline_at: number | null;
-  engine_type: 'openclaw' | 'claude';
+  engine_type: 'openclaw' | 'claude' | 'pi';
   phase: string;
   epoch: number;
   sequence: number;
@@ -18,6 +18,8 @@ export interface ChatRuntimeRunsTable {
   error: string | null;
   interrupt_cause: string | null;
   acceptance_result_json: string | null;
+  activity_json: string | null;
+  context_usage_json: string | null;
   created_at: string;
   updated_at: string;
   version: Generated<number>;

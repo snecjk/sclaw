@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DEFAULT_MODEL_CONTEXT_WINDOW } from '../../shared/model-runtime-defaults';
 import type { ProviderAccount } from '../shared/providers/types';
 import { getProviderAccount } from '../services/providers/provider-store';
 import {
@@ -138,6 +139,10 @@ async function buildClaudeEnvForAccount(
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
     CLAUDE_CODE_STREAM_CLOSE_TIMEOUT:
       process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT || '300000',
+    // Claude Code falls back to 200K for unrecognized Anthropic-compatible
+    // models. Keep its context accounting and auto-compaction threshold aligned
+    // with the shared runtime default until provider model metadata is wired in.
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(DEFAULT_MODEL_CONTEXT_WINDOW),
   };
   // Connector CLIs: only inject PATH when the connector is connected (Gateway parity).
   if (isBinaryAllowedByConnectors('dws')) {

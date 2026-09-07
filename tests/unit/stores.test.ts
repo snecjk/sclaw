@@ -20,6 +20,8 @@ describe('Settings Store', () => {
       autoDownloadUpdate: true,
       startMinimized: false,
       launchAtStartup: false,
+      personalizedMemoryEnabled: true,
+      skillDiscoveryEnabled: true,
       updateChannel: 'stable',
     });
   });
@@ -131,6 +133,54 @@ describe('Settings Store', () => {
       'hostapi:fetch',
       expect.objectContaining({
         path: '/api/settings/launchAtStartup',
+        method: 'PUT',
+      }),
+    );
+  });
+
+  it('should persist personalized-memory setting through host api', () => {
+    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        status: 200,
+        ok: true,
+        json: { success: true },
+      },
+    });
+
+    const { setPersonalizedMemoryEnabled } = useSettingsStore.getState();
+    setPersonalizedMemoryEnabled(false);
+
+    expect(useSettingsStore.getState().personalizedMemoryEnabled).toBe(false);
+    expect(invoke).toHaveBeenCalledWith(
+      'hostapi:fetch',
+      expect.objectContaining({
+        path: '/api/settings/personalizedMemoryEnabled',
+        method: 'PUT',
+      }),
+    );
+  });
+
+  it('should persist skill-discovery setting through host api', async () => {
+    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        status: 200,
+        ok: true,
+        json: { success: true },
+      },
+    });
+
+    const { setSkillDiscoveryEnabled } = useSettingsStore.getState();
+    await setSkillDiscoveryEnabled(false);
+
+    expect(useSettingsStore.getState().skillDiscoveryEnabled).toBe(false);
+    expect(invoke).toHaveBeenCalledWith(
+      'hostapi:fetch',
+      expect.objectContaining({
+        path: '/api/settings/skillDiscoveryEnabled',
         method: 'PUT',
       }),
     );

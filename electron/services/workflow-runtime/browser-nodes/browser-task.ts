@@ -10,6 +10,7 @@ import { resolveBaRunForBrowserTask } from './resume-context';
 import { browserAutomationService } from '../../browser-automation/service';
 import { browserAutomationRepository } from '../../../db/repositories/browser-automation-repository';
 import { getWorkflowPacketFailureMessage, isWorkflowPacket } from '../workflow-packet';
+import type { AgentEngineType } from '../../../../shared/agent-engine';
 
 export async function executeBrowserTaskNode(
   ctx: RunCtx,
@@ -18,7 +19,7 @@ export async function executeBrowserTaskNode(
   deps: {
     invokeAgent: InvokeAgentFn;
     quota?: () => Promise<boolean>;
-    execEngine?: 'claude' | 'openclaw';
+    execEngine?: AgentEngineType;
     versionId?: unknown;
   },
 ): Promise<NodeResult> {

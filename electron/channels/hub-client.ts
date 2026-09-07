@@ -215,7 +215,7 @@ export class SclawHubClient extends EventEmitter {
 
       ws.on('error', (err) => {
         if (this.ws === ws) {
-          logger.warn('[SclawHub] socket error', err);
+          logger.warn('[SclawHub] socket error', err?.message);
         }
         settleErr(err instanceof Error ? err : new Error(String(err)));
       });
@@ -291,7 +291,7 @@ export class SclawHubClient extends EventEmitter {
       const token = this.refreshToken;
       if (!token) return;
       void this.connect(token).catch((err) => {
-        logger.warn('[SclawHub] reconnect failed', err);
+        logger.warn('[SclawHub] reconnect failed', err?.message);
         this.scheduleReconnect();
       });
     }, delay);

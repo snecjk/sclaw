@@ -27,9 +27,9 @@ describe('chat inline model selector layout', () => {
     expect(selectorSource).not.toContain('<span className="min-w-0 flex-1 truncate">{modelDisplayText}</span>');
   });
 
-  it('does not force the inline model selector to share width with the engine selector', () => {
-    expect(homeComposerSource).toContain('<ChatEngineModelCascade className="min-w-0 max-w-full" />');
-    expect(chatPageSource).toContain('<ChatEngineModelCascade className="min-w-0 max-w-full" />');
+  it('mounts the combined picker without forcing it beyond the composer width', () => {
+    expect(homeComposerSource).toContain('<ChatEngineModelPicker className="min-w-0 max-w-full" />');
+    expect(chatPageSource).toContain('<ChatEngineModelPicker className="min-w-0 max-w-full" />');
   });
 
   it('uses a styled portal menu without Radix composed callback refs', () => {
@@ -40,11 +40,28 @@ describe('chat inline model selector layout', () => {
     expect(selectorSource).not.toContain('<DropdownMenuTrigger');
   });
 
-  it('selects cascade engines by click instead of hover', () => {
-    expect(selectorSource).toContain('setPickedEngine(engineType)');
-    expect(selectorSource).toContain('aria-selected={selected}');
-    expect(selectorSource).toContain('bg-primary/12 font-medium text-primary');
-    expect(selectorSource).not.toContain('onMouseEnter={() => {');
-    expect(selectorSource).not.toContain('setPreviewEngine');
+  it('presents engine and model as independent panels', () => {
+    expect(selectorSource).toContain('Combined independent engine/model picker');
+    expect(selectorSource).toContain('const selectedEngine = canSwitchEngine ? agentDefaultEngineType : currentEngineType;');
+    expect(selectorSource).toContain('const selected = option.value === selectedModelId;');
+    expect(selectorSource).not.toContain('previewEngine');
+    expect(selectorSource).not.toContain('模型 ·');
+    expect(selectorSource).not.toContain('<ChevronRight');
+  });
+
+  it('only mutes the engine label when engine switching is unavailable', () => {
+    expect(selectorSource).toContain(
+      "canSwitchEngine && !engineSelectDisabled ? 'text-foreground' : 'text-muted-foreground'",
+    );
+    expect(selectorSource).not.toContain(
+      '<span className="text-muted-foreground">{displayEngineLabel}</span>',
+    );
+  });
+
+  it('shows a separate default-model star action without nesting it in the model option button', () => {
+    expect(selectorSource).toContain("option.key === defaultModelOptionKey");
+    expect(selectorSource).toContain("fill={isDefault ? 'currentColor' : 'none'}");
+    expect(selectorSource).toContain("onClick={() => void handleSetDefaultModel(option.key)}");
+    expect(selectorSource).toContain('role="option"');
   });
 });

@@ -14,6 +14,7 @@ import {
 import {
   applyFinanceBiModelMenuAccess,
   formatFinanceBiAutoUpdate,
+  formatFinanceBiCreator,
   listFinanceBiModelMenu,
   type FinanceBiModelMenuItem,
 } from '@/lib/finance-bi-api';
@@ -22,6 +23,7 @@ import { DataCenterToolbarSearch, TabButton } from '../components/navigation';
 import { dataCenterToolbarButtonClass } from '../components/toolbar-styles';
 import { actionTooltipClass } from '../constants';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuthStore } from '@/stores/auth';
 
 const PAGE_SIZE = 20;
 
@@ -69,6 +71,7 @@ function applyButtonText(model: FinanceBiModelMenuItem): string {
 export function ReportListPage() {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
+  const authUserCode = useAuthStore((s) => s.user?.code ?? '');
   const [loading, setLoading] = useState(false);
   const [list, setList] = useState<FinanceBiModelMenuItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -109,8 +112,20 @@ export function ReportListPage() {
   }, [t]);
 
   useEffect(() => {
+    if (!authUserCode) {
+      setList([]);
+      setTotal(0);
+      setError(null);
+      setKeyword('');
+      setKeywordDraft('');
+      setPage(1);
+      return;
+    }
+    setKeyword('');
+    setKeywordDraft('');
+    setPage(1);
     void fetchList(1, '');
-  }, [fetchList]);
+  }, [fetchList, authUserCode]);
 
   const onSearchChange = (value: string) => {
     setKeywordDraft(value);
@@ -233,7 +248,7 @@ export function ReportListPage() {
                 <div
                   key={model.id}
                   className={cn(
-                    'grid h-[56px] grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_72px_minmax(0,0.9fr)_128px_48px] items-center gap-2 rounded-[8px] border px-3 text-[12px] leading-5 text-[#6B778C] transition-[background-color,border-color,box-shadow] duration-base dark:text-muted-foreground',
+                    'grid h-[56px] grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_72px_minmax(0,0.8fr)_minmax(0,0.9fr)_128px_48px] items-center gap-2 rounded-[8px] border px-3 text-[12px] leading-5 text-[#6B778C] transition-[background-color,border-color,box-shadow] duration-base dark:text-muted-foreground',
                     listCardHoverBorderShadowClass,
                     model.hasPermission && 'cursor-pointer',
                   )}
@@ -288,6 +303,15 @@ export function ReportListPage() {
                     onMouseLeave={hideTip}
                   >
                     {formatFinanceBiAutoUpdate(model)}
+                  </div>
+
+                  <div
+                    className="min-w-0 truncate"
+                    onMouseEnter={(e) => showTip(e, formatFinanceBiCreator(model))}
+                    onMouseMove={(e) => showTip(e, formatFinanceBiCreator(model))}
+                    onMouseLeave={hideTip}
+                  >
+                    {formatFinanceBiCreator(model)}
                   </div>
 
                   <div className="truncate">{formatPublishTime(model.publishTime)}</div>

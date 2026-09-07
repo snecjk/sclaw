@@ -7,8 +7,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { isSiteUser, useAuthStore } from '@/stores/auth';
-import { sidebarFooterSettingsIconClass } from '@/lib/surfaces';
+import {
+  sidebarFooterPopoverBodyClass,
+  sidebarFooterPopoverContentClass,
+  sidebarFooterSettingsIconClass,
+} from '@/lib/surfaces';
 import { resolveSupportGroupQrUrl } from '../../../shared/support-group-qr';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 
 /** Lucide CircleHelp paths — circle thin, question mark heavier. */
 function CircleHelpBoldQuestion({ className }: { className?: string }) {
@@ -29,10 +34,6 @@ function CircleHelpBoldQuestion({ className }: { className?: string }) {
     </svg>
   );
 }
-
-const SUPPORT_QR_SIZE_PX = 320;
-const SUPPORT_QR_PANEL_SURFACE =
-  '!bg-white dark:!bg-popover text-popover-foreground shadow-lg backdrop-blur-none border border-border !px-0 !py-0 !max-w-none overflow-visible rounded-xl';
 
 type SidebarSupportQrTooltipProps = {
   className?: string;
@@ -75,6 +76,7 @@ export function SidebarSupportQrTooltip({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <SidebarTooltip label={t('sidebar.supportGroup.helpAria')} sideOffset={8}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -89,29 +91,25 @@ export function SidebarSupportQrTooltip({
           <CircleHelpBoldQuestion className={sidebarFooterSettingsIconClass} />
         </button>
       </DropdownMenuTrigger>
+      </SidebarTooltip>
       <DropdownMenuContent
         side="right"
         align="end"
         sideOffset={8}
         collisionPadding={16}
-        className={cn(
-          SUPPORT_QR_PANEL_SURFACE,
-          'z-[60000] max-h-[calc(100vh-24px)] min-w-0 border p-0',
-        )}
+        className={sidebarFooterPopoverContentClass}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
-        <div className="flex max-h-[calc(100vh-24px)] items-center justify-center overflow-y-auto p-3">
+        <div className={sidebarFooterPopoverBodyClass}>
           {imgError ? (
-            <p className="px-2 py-4 text-sm leading-5 text-muted-foreground">
+            <p className="flex min-h-[160px] items-center justify-center rounded-[10px] bg-[var(--sto-surface-subtle)] px-4 py-6 text-center text-sm leading-5 text-muted-foreground">
               {t('sidebar.supportGroup.loadError')}
             </p>
           ) : (
             <img
               src={qrUrl}
               alt=""
-              width={SUPPORT_QR_SIZE_PX}
-              height={SUPPORT_QR_SIZE_PX}
-              className="size-[320px] max-w-full shrink-0 rounded-lg object-contain"
+              className="h-auto w-full rounded-[10px] object-contain"
               onError={() => setImgError(true)}
             />
           )}

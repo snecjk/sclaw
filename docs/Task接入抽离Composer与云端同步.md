@@ -2,7 +2,7 @@
 
 > 状态：阶段二联调中；「extra 真源收敛」已编码；Host 已补 prompt 内 `~/.stoclaw/.../outbound` 裸路径 → file segments / composerAttachments；待客户端重启验证
 > 日期：2026-08-14
-> 关联：`src/pages/MyTask/components/TaskInstructionComposer.tsx`、`src/pages/MyTask/components/TaskCreateModal.tsx`、`src/pages/Chat/ChatInput.tsx`、`src/components/input-composer/`、`src/components/attachments/`、`src/lib/composer-gateway-text.ts`、`src/lib/dingtalk-mention-composer.ts`、`electron/scheduled-tasks/`、`shared/dingtalk-send/scheduled-task-dingtalk-lift.ts`、`sto-plugin/openclaw/sto-scheduled-task-tool/`、`sto-plugin/claude/claude-scheduled-task-tool/`、`memory-center/`（云端同步）
+> 关联：`src/pages/MyTask/components/TaskInstructionComposer.tsx`、`src/pages/MyTask/components/TaskCreateModal.tsx`、`src/pages/Chat/ChatInput.tsx`、`src/components/input-composer/`、`src/components/attachments/`、`src/lib/composer-gateway-text.ts`、`src/lib/dingtalk-mention-composer.ts`、`electron/scheduled-tasks/`、`shared/dingtalk-send/scheduled-task-dingtalk-lift.ts`、`sto-plugin/openclaw/sto-scheduled-task-tool/`、`electron/agent-extensions/extensions/sto-scheduled-task-tool/`、`memory-center/`（云端同步）
 
 ---
 
@@ -313,7 +313,7 @@ OpenClaw / Claude 的 create 工具：
 
 - `sto-plugin/openclaw/sto-scheduled-task-tool/index.ts`
 - `sto-plugin/openclaw/sto-scheduled-task-tool/host-api-client.ts`
-- `sto-plugin/claude/claude-scheduled-task-tool/tools.ts`
+- `electron/agent-extensions/extensions/sto-scheduled-task-tool/operations.ts`
 - `electron/scheduled-tasks/scheduled-task-nl-create.ts`
 - `electron/scheduled-tasks/scheduled-task-nl-hints.ts`
 

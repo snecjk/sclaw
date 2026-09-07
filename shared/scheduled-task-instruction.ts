@@ -61,6 +61,13 @@ const CLAUDE_SCHEDULED_TASK_MUTATION_TOOLS = new Set([
   'trigger_claude_scheduled_task',
 ]);
 
+const STO_SCHEDULED_TASK_MUTATION_TOOLS = new Set([
+  'create_sto_scheduled_task',
+  'update_sto_scheduled_task',
+  'delete_sto_scheduled_task',
+  'trigger_sto_scheduled_task',
+]);
+
 function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -85,7 +92,7 @@ export function isScheduledTaskExecutionSessionKey(sessionKey: string | undefine
 
   if (key.startsWith('agent:')) {
     const parts = key.split(':');
-    if (parts.length >= 4 && parts[2] === 'cron') return true;
+    if (parts.length >= 4 && (parts[2] === 'cron' || parts[2] === 'scheduled-task')) return true;
   }
 
   const legacyMatch = key.match(/^\[?cron:[^\]]+\]?$/);
@@ -105,6 +112,7 @@ export function isLegacyCronToolName(toolName: string): boolean {
 export function isScheduledTaskCreationToolName(toolName: string): boolean {
   const normalized = normalizeToolName(toolName).toLowerCase();
   if (OPENCLAW_SCHEDULED_TASK_CREATION_TOOLS.has(normalized)) return true;
+  if (STO_SCHEDULED_TASK_MUTATION_TOOLS.has(normalized)) return true;
   if (CLAUDE_SCHEDULED_TASK_MUTATION_TOOLS.has(normalizeToolName(toolName))) return true;
   return isLegacyCronToolName(toolName);
 }

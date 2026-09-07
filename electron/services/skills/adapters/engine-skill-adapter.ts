@@ -1,6 +1,6 @@
 import type { DesiredSkillPackage } from '../canonical-store';
 
-export type EngineSkillId = 'openclaw' | 'claude';
+export type EngineSkillId = 'openclaw' | 'claude' | 'pi';
 
 export interface SkillPackage {
   slug: string;

@@ -35,6 +35,7 @@ export type ChatStaticItemsListVariant = 'page' | 'home' | 'embed';
 
 export interface ChatStaticItemsListHandle {
   scrollToSearchKey: (searchKey: string, behavior?: ScrollBehavior) => boolean;
+  scrollToDisplayItemKey: (itemKey: string, behavior?: ScrollBehavior) => boolean;
 }
 
 export interface ChatStaticItemsListProps {
@@ -146,7 +147,26 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
         });
         return true;
       },
-    }), [items, virtualize, virtualizer]);
+      scrollToDisplayItemKey: (itemKey, behavior = 'smooth') => {
+        const index = items.findIndex((item) => item.key === itemKey);
+        if (index < 0) return false;
+        if (virtualize) {
+          virtualizer.scrollToIndex(index, { align: 'start', behavior });
+          return true;
+        }
+
+        const container = scrollRef.current;
+        if (!container) return false;
+        const target = Array.from(container.querySelectorAll<HTMLElement>('[data-chat-display-item-key]'))
+          .find((node) => node.dataset.chatDisplayItemKey === itemKey);
+        if (!target) return false;
+        container.scrollBy({
+          top: target.getBoundingClientRect().top - container.getBoundingClientRect().top - 24,
+          behavior,
+        });
+        return true;
+      },
+    }), [items, scrollRef, virtualize, virtualizer]);
 
     const virtualItems = virtualizer.getVirtualItems();
     const onReachStartRef = useRef(onReachStart);
@@ -299,7 +319,7 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
       return (
         <>
           {items.map((item) => (
-            <div key={item.key}>
+            <div key={item.key} data-chat-display-item-key={item.key}>
               {renderItem(item)}
             </div>
           ))}
@@ -319,6 +339,7 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
             <div
               key={virtualItem.key}
               data-index={virtualItem.index}
+              data-chat-display-item-key={item.key}
               ref={virtualizer.measureElement}
               className="absolute left-0 top-0 w-full"
               style={{ transform: `translateY(${virtualItem.start}px)` }}

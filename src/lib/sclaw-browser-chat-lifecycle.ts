@@ -81,7 +81,7 @@ function upsertChatSessionEntry(chatSessionKey: string, savedMainSessionKey: str
     || chat.sessionLastActivity[chatSessionKey],
   );
   const engineType = looksUsed
-    && (existing?.engineType === 'claude' || existing?.engineType === 'openclaw')
+    && (existing?.engineType === 'claude' || existing?.engineType === 'openclaw' || existing?.engineType === 'pi')
     ? existing.engineType
     : agentEngineType;
 
@@ -106,11 +106,13 @@ function reconcileUnusedEmbedEngineType(chatSessionKey: string): ChatEngineType 
   const state = useChatStore.getState();
   if (state.currentSessionKey !== chatSessionKey) {
     const session = state.sessions.find((item) => item.key === chatSessionKey);
-    return session?.engineType === 'claude' ? 'claude' : 'openclaw';
+    return session?.engineType === 'claude' || session?.engineType === 'pi' ? session.engineType : 'openclaw';
   }
   if (getCurrentChatDisplayMessages().length > 0) {
     const session = state.sessions.find((item) => item.key === chatSessionKey);
-    return session?.engineType === 'claude' ? 'claude' : resolveCurrentAgentEngineType(state.currentAgentId);
+    return session?.engineType === 'claude' || session?.engineType === 'pi'
+      ? session.engineType
+      : resolveCurrentAgentEngineType(state.currentAgentId);
   }
 
   const agentEngineType = resolveCurrentAgentEngineType(state.currentAgentId);

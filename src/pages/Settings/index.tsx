@@ -80,6 +80,10 @@ export function Settings() {
     setLanguage,
     launchAtStartup,
     setLaunchAtStartup,
+    personalizedMemoryEnabled,
+    setPersonalizedMemoryEnabled,
+    skillDiscoveryEnabled,
+    setSkillDiscoveryEnabled,
     gatewayAutoStart,
     setGatewayAutoStart,
     proxyEnabled,
@@ -117,6 +121,7 @@ export function Settings() {
   const [proxyBypassRulesDraft, setProxyBypassRulesDraft] = useState('');
   const [proxyEnabledDraft, setProxyEnabledDraft] = useState(false);
   const [savingProxy, setSavingProxy] = useState(false);
+  const [savingSkillDiscovery, setSavingSkillDiscovery] = useState(false);
   const [wsDiagnosticEnabled, setWsDiagnosticEnabled] = useState(false);
   const [showTelemetryViewer, setShowTelemetryViewer] = useState(false);
   const [telemetryEntries, setTelemetryEntries] = useState<UiTelemetryEntry[]>([]);
@@ -381,6 +386,18 @@ export function Settings() {
     }
   };
 
+  const handleSkillDiscoveryToggle = async (enabled: boolean) => {
+    if (savingSkillDiscovery) return;
+    setSavingSkillDiscovery(true);
+    try {
+      await setSkillDiscoveryEnabled(enabled);
+    } catch {
+      toast.error(t('appearance.skillDiscoverySaveFailed'));
+    } finally {
+      setSavingSkillDiscovery(false);
+    }
+  };
+
   const telemetryStats = useMemo(() => {
     let errorCount = 0;
     let slowCount = 0;
@@ -559,6 +576,34 @@ export function Settings() {
                 <Switch
                   checked={launchAtStartup}
                   onCheckedChange={setLaunchAtStartup}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-[15px] font-medium text-foreground/80">{t('appearance.personalizedMemory')}</Label>
+                  <p className="text-[13px] text-muted-foreground mt-1">
+                    {t('appearance.personalizedMemoryDesc')}
+                  </p>
+                </div>
+                <Switch
+                  checked={personalizedMemoryEnabled}
+                  onCheckedChange={setPersonalizedMemoryEnabled}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-[15px] font-medium text-foreground/80">{t('appearance.skillDiscovery')}</Label>
+                  <p className="text-[13px] text-muted-foreground mt-1">
+                    {t(skillDiscoveryEnabled
+                      ? 'appearance.skillDiscoveryEnabledDesc'
+                      : 'appearance.skillDiscoveryDisabledDesc')}
+                  </p>
+                </div>
+                <Switch
+                  checked={skillDiscoveryEnabled}
+                  disabled={savingSkillDiscovery}
+                  aria-label={t('appearance.skillDiscovery')}
+                  onCheckedChange={(checked) => void handleSkillDiscoveryToggle(checked)}
                 />
               </div>
             </div>

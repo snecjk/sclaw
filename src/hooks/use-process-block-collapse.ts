@@ -26,6 +26,8 @@ export interface UseProcessBlockCollapseOptions {
   isComplete: boolean;
   /** 流式进行中且未完成 → 自动展开 */
   autoExpand: boolean;
+  /** 首次渲染时是否展开；默认沿用“未完成即展开”的现有行为 */
+  defaultExpanded?: boolean;
   /** 展开时滚入视口（§5.5） */
   scrollOnExpand?: boolean;
 }
@@ -40,9 +42,10 @@ export function useProcessBlockCollapse({
   collapsible,
   isComplete,
   autoExpand,
+  defaultExpanded,
   scrollOnExpand = true,
 }: UseProcessBlockCollapseOptions) {
-  const [expanded, setExpanded] = useState(() => !isComplete);
+  const [expanded, setExpanded] = useState(() => defaultExpanded ?? !isComplete);
   const [collapseAnimationEnabled, setCollapseAnimationEnabled] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 

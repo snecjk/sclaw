@@ -17,6 +17,8 @@ import {
 } from '@/lib/user-message-display';
 import { stripSkillGatewayPrefix } from '@/lib/skill-transcript-marker';
 import { unescapeLiteralNewlines } from '../../../shared/text-escape';
+import { hostApiFetch } from '@/lib/host-api';
+import { stageDataCenterSelection } from '@/components/data-center-file-picker/stage-selection';
 
 /** window 自定义事件名，与 ChatMessage 派发侧保持一致 */
 export const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
@@ -233,6 +235,63 @@ export function persistedSegmentsToComposer(
   return { segments: composerSegments, attachments, attachmentsById };
 }
 
+async function restoreEditDraftAttachments(
+  converted: ReturnType<typeof persistedSegmentsToComposer>,
+): Promise<ReturnType<typeof persistedSegmentsToComposer>> {
+  const paths = converted.attachments.map((attachment) => attachment.stagedPath).filter(Boolean);
+  const stat: { exists: Record<string, boolean> } | null = paths.length
+    ? await hostApiFetch<{ exists: Record<string, boolean> }>('/api/files/stat', {
+        method: 'POST',
+        body: JSON.stringify({ paths }),
+      }).catch(() => null)
+    : { exists: {} };
+  if (!stat) return converted;
+  const attachments = await Promise.all(converted.attachments.map(async (attachment) => {
+    if (attachment.stagedPath && stat.exists[attachment.stagedPath] === true) return attachment;
+    if (attachment.provenance?.kind === 'data_center') {
+      try {
+        const restored = await stageDataCenterSelection({
+          entryId: attachment.provenance.entryId,
+          name: attachment.fileName,
+          mimeType: attachment.mimeType,
+          fileSize: attachment.fileSize,
+          spaceType: attachment.provenance.spaceType,
+          spaceId: attachment.provenance.spaceId,
+        });
+        return {
+          ...attachment,
+          fileName: restored.fileName,
+          mimeType: restored.mimeType,
+          fileSize: restored.fileSize,
+          stagedPath: restored.stagedPath,
+          preview: restored.preview,
+          status: 'ready' as const,
+          error: undefined,
+        };
+      } catch (error) {
+        return { ...attachment, status: 'error' as const, error: String(error) };
+      }
+    }
+    return {
+      ...attachment,
+      status: 'error' as const,
+      error: 'File unavailable — please re-attach',
+    };
+  }));
+  const attachmentsById = { ...converted.attachmentsById };
+  for (const attachment of attachments) {
+    attachmentsById[attachment.id] = {
+      id: attachment.id,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      fileSize: attachment.fileSize,
+      status: attachment.status,
+      preview: attachment.preview,
+    };
+  }
+  return { ...converted, attachments, attachmentsById };
+}
+
 export function useInputComposerEditDraft({
   mentionEditorRef,
   editDraft = null,
@@ -240,7 +299,7 @@ export function useInputComposerEditDraft({
   onAfterApply,
   onApplyAttachments,
 }: UseInputComposerEditDraftOptions) {
-  const applyEditDraftText = useCallback((detail: ChatEditDraftEventDetail) => {
+  const applyEditDraftText = useCallback(async (detail: ChatEditDraftEventDetail) => {
     const skill = detail.skill;
     const text = sanitizeEditPlainText(detail.text ?? '', skill);
     const prefixText = sanitizeEditPlainText(detail.prefixText ?? '', skill);
@@ -252,7 +311,9 @@ export function useInputComposerEditDraft({
 
     if (hasSegments && detail.segments) {
       // DOM span 与附件注册表共用同一 ID 空间（preferred 仅补充路径）。
-      const converted = persistedSegmentsToComposer(detail.segments, detail.attachments);
+      const converted = await restoreEditDraftAttachments(
+        persistedSegmentsToComposer(detail.segments, detail.attachments),
+      );
       onApplyAttachments?.(converted.attachments);
       mentionEditorRef.current?.setSegments(converted.segments, converted.attachmentsById);
       mentionEditorRef.current?.focusAtEnd();

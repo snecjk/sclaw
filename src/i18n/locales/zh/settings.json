@@ -10,7 +10,13 @@
     "system": "跟随系统",
     "language": "语言",
     "launchAtStartup": "开机自动启动",
-    "launchAtStartupDesc": "登录系统后自动启动 SClaw"
+    "launchAtStartupDesc": "登录系统后自动启动 SClaw",
+    "personalizedMemory": "个性化记忆",
+    "personalizedMemoryDesc": "在问答准备阶段检索记忆，为回答提供个性化上下文",
+    "skillDiscovery": "技能发现",
+    "skillDiscoveryEnabledDesc": "按需加载匹配的技能，减少 token 消耗",
+    "skillDiscoveryDisabledDesc": "加载全部已安装技能",
+    "skillDiscoverySaveFailed": "技能发现设置保存失败"
   },
   "aiProviders": {
     "title": "AI 模型提供商",
