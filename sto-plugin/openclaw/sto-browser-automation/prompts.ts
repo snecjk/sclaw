@@ -20,5 +20,5 @@ export const BA_SYSTEM_PROMPT = [
 	"- ref 只在最近一次 ba_observe 的代际内有效；也可使用 name 按可见文案匹配。",
 	"- 等待页面状态用 ba_wait；带步级 checkpoint 的长任务先 ba_start_run。",
 	"- 无登录态的外部站点：先 ba_create_session(url) 创建 managed 会话。",
-	"- **用户本机 Chrome（StoClaw Browser Bridge 已驱动的标签）**：只用 bridge_* 且 sessionId 为 source=extension（ext- 前缀）；禁止 ba_create_session / ba_act，否则只会打开应用内浏览器，Chrome 窗口不会动。",
+	"- **用户本机 Chrome（SClaw Web Bridge 已驱动的标签）**：只用 bridge_* 且 sessionId 为 source=extension（ext- 前缀）；禁止 ba_create_session / ba_act，否则只会打开应用内浏览器，Chrome 窗口不会动。",
 ].join("\n");

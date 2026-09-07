@@ -22,7 +22,7 @@ const SESSION_ID_PARAM = Type.Optional(
 
 export default definePluginEntry({
 	id: "sto-browser-bridge",
-	name: "StoClaw Browser Bridge",
+	name: "SClaw Web Bridge",
 	description: "通过内置 webview 或 Chrome 扩展操作用户浏览器页面",
 	register(api: OpenClawPluginApi) {
 		const cfg = (api.pluginConfig ?? {}) as BrowserBridgePluginConfig;
@@ -140,7 +140,7 @@ export default definePluginEntry({
 			domain: "browser-bridge",
 			resultType: "browser_sessions",
 			label: "列出浏览器桥接会话",
-			description: "列出活动桥接会话。source=extension 是本机 Chrome（StoClaw Browser Bridge）；source=embed 是应用内 webview。主聊天打开网页必须用 extension。",
+			description: "列出活动桥接会话。source=extension 是本机 Chrome（SClaw Web Bridge）；source=embed 是应用内 webview。主聊天打开网页必须用 extension。",
 			parameters: Type.Object({}),
 			execute: async () => formatBridgeSessionList(await listBridgeSessions(cfg)),
 		});

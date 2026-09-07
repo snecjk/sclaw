@@ -14,8 +14,11 @@ import { isCdpMethodAllowed } from '../../../shared/browser-automation/cdp-allow
 import { isBrowserAutomationEnabled } from '../../../shared/browser-automation/feature-flag';
 import {
   getBundledBrowserBridgeExtensionVersion,
+  launchGoogleChrome,
+  prepareBrowserBridgeExtensionInstall,
   resolveBrowserBridgeExtensionZipPath,
 } from '../../utils/browser-bridge-extension';
+import { getSclawWebBridgeChromeWebStoreUrl } from '../../../shared/browser-bridge/chrome-web-store';
 
 function setBridgeCors(req: IncomingMessage, res: ServerResponse): void {
   const origin = req.headers.origin;
@@ -58,6 +61,16 @@ function broadcastChromeConsent(payload: { url?: string }): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (window.isDestroyed()) continue;
     window.webContents.send('browser-bridge:consent', payload);
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+  }
+}
+
+function broadcastInstallGuide(): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) continue;
+    window.webContents.send('browser-bridge:install-guide');
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
@@ -150,12 +163,54 @@ export async function handleBrowserBridgeRoutes(
   if (url.pathname === '/api/browser-bridge/extension-info' && req.method === 'GET') {
     const bundledVersion = getBundledBrowserBridgeExtensionVersion();
     const zipPath = resolveBrowserBridgeExtensionZipPath();
+    const storeUrl = getSclawWebBridgeChromeWebStoreUrl();
     sendJson(res, 200, {
       success: true,
       version: bundledVersion,
       downloadAvailable: Boolean(zipPath),
       downloadPath: '/api/browser-bridge/extension-download',
+      storeAvailable: Boolean(storeUrl),
+      storeUrl,
     });
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/open-chrome-store' && req.method === 'POST') {
+    if (!isLoopback(req)) {
+      sendJson(res, 403, { success: false, error: 'Store helper is localhost-only' });
+      return true;
+    }
+    const storeUrl = getSclawWebBridgeChromeWebStoreUrl();
+    if (!storeUrl) {
+      sendJson(res, 404, {
+        success: false,
+        error: 'CHROME_WEB_STORE_UNAVAILABLE',
+        message: 'SClaw Web Bridge 尚未上架 Chrome 应用店。',
+      });
+      return true;
+    }
+    sendJson(res, 200, {
+      success: true,
+      url: storeUrl,
+      chromeOpened: launchGoogleChrome(storeUrl),
+    });
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/prepare-extension-install' && req.method === 'POST') {
+    if (!isLoopback(req)) {
+      sendJson(res, 403, { success: false, error: 'Install helper is localhost-only' });
+      return true;
+    }
+    try {
+      const prepared = await prepareBrowserBridgeExtensionInstall();
+      sendJson(res, 200, { success: true, ...prepared });
+    } catch (error) {
+      sendJson(res, 500, {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return true;
   }
 
@@ -458,10 +513,11 @@ export async function handleBrowserBridgeRoutes(
     browserBridgeService.enqueueControlAttach(urlHint || undefined);
     const attached = await browserBridgeService.waitForExtensionSession(BROWSER_BRIDGE_ATTACH_TIMEOUT_MS);
     if (!attached) {
+      broadcastInstallGuide();
       sendJson(res, 504, {
         success: false,
         error: 'EXTENSION_ATTACH_WAIT',
-        message: '等待 Chrome 扩展连接超时。请确认已安装 StoClaw Browser Bridge，并已打开 Google Chrome。',
+        message: '等待 Chrome 扩展连接超时。请按 SClaw 安装引导安装 SClaw Web Bridge，并保持 Google Chrome 已打开。',
       });
       return true;
     }

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, Download, RefreshCw } from 'lucide-react';
+import { Copy, Puzzle, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { requestBrowserBridgeInstallGuide } from '@/lib/browser-bridge-install-guide';
 import { hostApiFetch } from '@/lib/host-api';
-import { openExternalUrl } from '@/lib/preview-url';
 
 type BridgeSettingsResponse = {
   success?: boolean;
@@ -14,7 +14,6 @@ type BridgeSettingsResponse = {
   installedExtensionVersion?: string | null;
   bundledExtensionVersion?: string;
   updateAvailable?: boolean;
-  downloadAvailable?: boolean;
 };
 
 type PairingResponse = {
@@ -29,7 +28,6 @@ export function BrowserBridgeSettings({ automationEnabled }: { automationEnabled
   const [bundledVersion, setBundledVersion] = useState<string | null>(null);
   const [installedVersion, setInstalledVersion] = useState<string | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [downloadAvailable, setDownloadAvailable] = useState(false);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -40,10 +38,6 @@ export function BrowserBridgeSettings({ automationEnabled }: { automationEnabled
       setBundledVersion(settings.bundledExtensionVersion ?? null);
       setInstalledVersion(settings.installedExtensionVersion ?? null);
       setUpdateAvailable(settings.updateAvailable === true);
-      const info = await hostApiFetch<{ success?: boolean; downloadAvailable?: boolean }>(
-        '/api/browser-bridge/extension-info',
-      );
-      setDownloadAvailable(info.downloadAvailable === true);
       if (automationEnabled) {
         let pairing = await hostApiFetch<PairingResponse>('/api/browser-bridge/pairing-code');
         if (!pairing.code) {
@@ -56,7 +50,7 @@ export function BrowserBridgeSettings({ automationEnabled }: { automationEnabled
         setPairingCode(null);
       }
     } catch {
-      setDownloadAvailable(false);
+      setBundledVersion(null);
     } finally {
       setLoading(false);
     }
@@ -95,10 +89,6 @@ export function BrowserBridgeSettings({ automationEnabled }: { automationEnabled
     if (!pairingCode) return;
     await navigator.clipboard.writeText(pairingCode);
     toast.success(t('advanced.browserBridgeCodeCopied'));
-  };
-
-  const handleDownload = () => {
-    openExternalUrl('http://127.0.0.1:3210/api/browser-bridge/extension-download');
   };
 
   return (
@@ -164,11 +154,11 @@ export function BrowserBridgeSettings({ automationEnabled }: { automationEnabled
         variant="outline"
         size="sm"
         className="sto-control-outline h-8"
-        disabled={!downloadAvailable}
-        onClick={handleDownload}
+        disabled={!automationEnabled}
+        onClick={requestBrowserBridgeInstallGuide}
       >
-        <Download className="mr-1 size-3.5" />
-        {t('advanced.browserBridgeDownload')}
+        <Puzzle className="mr-1 size-3.5" />
+        {t('advanced.browserBridgeInstall')}
       </Button>
     </div>
   );

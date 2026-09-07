@@ -99,7 +99,7 @@ async function ensureExtensionSession(
 		},
 	);
 	if (!data.sessionId) {
-		throw new Error("浏览器未连接。请安装 StoClaw Browser Bridge 扩展，并在 SClaw 中允许连接 Google Chrome。");
+		throw new Error("浏览器未连接。请安装 SClaw Web Bridge 扩展，并在 SClaw 中允许连接 Google Chrome。");
 	}
 	return data.sessionId;
 }

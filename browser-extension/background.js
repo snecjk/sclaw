@@ -829,7 +829,7 @@ async function cmdCdp(tabId, payload) {
 async function cmdGroupTabs(tabId, rec, payload) {
   const title = typeof payload.title === 'string' && payload.title
     ? payload.title
-    : (rec.taskLabel || 'StoClaw');
+    : (rec.taskLabel || 'SClaw');
   const color = typeof payload.color === 'string' ? payload.color : 'orange';
   let tabIds = Array.isArray(payload.tabIds) ? payload.tabIds.filter((id) => typeof id === 'number') : [];
   if (tabIds.length === 0) {

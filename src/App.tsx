@@ -44,6 +44,7 @@ import { WorkflowCompletionNotifier } from './components/workflow/WorkflowComple
 import { ChatResultNotificationNavigator } from './components/chat/ChatResultNotificationNavigator';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
 import { ChromeAttachConsentDialog } from './components/browser-bridge/ChromeAttachConsentDialog';
+import { ChromeBridgeInstallDialog } from './components/browser-bridge/ChromeBridgeInstallDialog';
 import { ThemeController } from './components/theme/ThemeController';
 
 /**
@@ -345,7 +346,10 @@ function App() {
             {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
             <JsBridgeHostPortal />
             {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-              <ChromeAttachConsentDialog />
+              <>
+                <ChromeAttachConsentDialog />
+                <ChromeBridgeInstallDialog />
+              </>
             ) : null}
             {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
               <UserWatermark />

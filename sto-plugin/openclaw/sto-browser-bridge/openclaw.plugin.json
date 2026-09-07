@@ -1,6 +1,6 @@
 {
   "id": "sto-browser-bridge",
-  "name": "StoClaw Browser Bridge",
+  "name": "SClaw Web Bridge",
   "description": "通过 Chrome 扩展操作用户真实浏览器页面（bridge_* 工具）",
   "activation": {
     "onStartup": true

@@ -294,6 +294,7 @@ const electronAPI = {
         'jsbridge:toast',
         'app-dev-ide:ownership',
         'browser-bridge:consent',
+        'browser-bridge:install-guide',
       ];
 
       if (validChannels.includes(channel)) {

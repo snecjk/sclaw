@@ -8,7 +8,7 @@ const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
 const version = manifest.version;
 const distDir = join(root, 'dist');
 mkdirSync(distDir, { recursive: true });
-const zipName = `stoclaw-browser-bridge-${version}.zip`;
+const zipName = `sclaw-web-bridge-${version}.zip`;
 const zipPath = join(distDir, zipName);
 if (existsSync(zipPath)) {
   execFileSync('rm', [zipPath]);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "StoClaw Browser Bridge",
-  "description": "Drive the current Chrome tab from StoClaw over a local loopback Host API. Page ops use chrome.debugger, not content scripts.",
+  "name": "SClaw Web Bridge",
+  "description": "Drive the current Chrome tab from SClaw over a local loopback Host API. Page ops use chrome.debugger, not content scripts.",
   "version": "1.0.0",
   "permissions": [
     "storage",
@@ -20,7 +20,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "StoClaw Browser Bridge",
+    "default_title": "SClaw Web Bridge",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

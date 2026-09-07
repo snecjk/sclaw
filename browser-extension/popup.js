@@ -7,7 +7,7 @@ async function refresh() {
   $('disconnected').hidden = mismatch || status.connected;
   $('connected').hidden = mismatch || !status.connected;
   if (mismatch) {
-    $('mismatch-versions').textContent = `已安装 ${status.installedVersion}，StoClaw 内置 ${status.bundledVersion || '?'}`;
+    $('mismatch-versions').textContent = `已安装 ${status.installedVersion}，SClaw 内置 ${status.bundledVersion || '?'}`;
   }
   $('tab-url').textContent = status.tabUrl || '(无标签)';
   const restricted = /^(chrome|chrome-extension|edge|about|devtools):/i.test(status.tabUrl || '');

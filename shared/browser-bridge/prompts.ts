@@ -2,7 +2,7 @@
 
 export const BRIDGE_SYSTEM_PROMPT = [
 	"浏览器工具路由（只选一套）：",
-	"- 本机 Chrome（StoClaw Browser Bridge）→ 只用 bridge_*；不要 ba_create_session / ba_act。",
+	"- 本机 Chrome（SClaw Web Bridge）→ 只用 bridge_*；不要 ba_create_session / ba_act。",
 	"- 无登录托管浏览器 / 自动化测试 → 只用 ba_*（ba_create_session 起 managed）。",
 	"- 应用广场左侧 webview → 只用 bridge_*，每次传 embed-<runtimeId>。",
 	"浏览器桥接工具（bridge_*，重要）：",
