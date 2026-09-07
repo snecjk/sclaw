@@ -59,22 +59,9 @@ export default defineConfig(({ mode }) => {
             const electronEnv = { ...process.env, ...loadedEnv };
             delete electronEnv.ELECTRON_RUN_AS_NODE;
 
-            // AgentLoop / ARMS: inject CMS probe only into the Electron main process.
-            // Do NOT set NODE_OPTIONS globally — that loads the probe into vite,
-            // electron-rebuild, and zx scripts during predev and breaks local startup.
-            const armsLicense = (electronEnv.ARMS_LICENSE_KEY || electronEnv.ARMS_LICENSE || '').trim();
-            if (armsLicense && armsLicense !== 'auto') {
-              const registerFlag = '-r @loongsuite/cms_node_sdk/register';
-              electronEnv.NODE_OPTIONS = electronEnv.NODE_OPTIONS?.includes(registerFlag)
-                ? electronEnv.NODE_OPTIONS
-                : [registerFlag, electronEnv.NODE_OPTIONS].filter(Boolean).join(' ');
-              console.log(`[ARMS] CMS probe enabled for Electron main process (service=${electronEnv.ARMS_APP_NAME || electronEnv.CMS_SERVICE_NAME || 'unknown'})`);
-            } else if (armsLicense === 'auto') {
-              console.warn(
-                '[ARMS] ARMS_LICENSE=auto is not valid for @loongsuite/cms_node_sdk. '
-                  + 'Set ARMS_LICENSE_KEY in .env.development.local (from AgentLoop console).',
-              );
-            }
+            // AgentLoop / ARMS：探针改由主进程引导入口（electron/main/index.ts）统一注册，
+            // 覆盖 development 与打包应用。此处不再注入 NODE_OPTIONS --require，
+            // 避免把探针带进 vite / electron-rebuild / zx 等前置脚本进程。
 
             options.startup(['.', '--no-sandbox'], { env: electronEnv });
           },
@@ -113,6 +100,11 @@ export default defineConfig(({ mode }) => {
                   // claude-agent-sdk at runtime (bundled code cannot be patched).
                   '@anthropic-ai/claude-agent-sdk',
                   /^@anthropic-ai\/claude-agent-sdk/,
+                  // Keep the CMS probe itself external too: it uses import-in-the-middle
+                  // to hook claude-agent-sdk at runtime, which requires real module files
+                  // on disk (must not be inlined into the main bundle).
+                  '@loongsuite/cms_node_sdk/register',
+                  /^@loongsuite\/cms_node_sdk/,
                   // mem0's official OSS entry imports its provider peers at runtime.
                   // Keep it external so electron-builder packages those dependencies
                   // once under node_modules instead of duplicating them in this bundle.
@@ -123,9 +115,12 @@ export default defineConfig(({ mode }) => {
                   /^node:/,
                 ],
                 output: {
-                  // Keep main process in a single file so require('electron') resolves
-                  // to the built-in module (not node_modules/electron path string).
-                  inlineDynamicImports: true,
+                  // 主进程为多 chunk 输出：引导入口 index.js（先注册 AgentLoop 探针）
+                  // + 业务入口 main.js（由 index 在探针注册后 require）。两者同为 CJS，
+                  // require('electron') 在任一分片中均解析为内置模块（而非 node_modules
+                  // 路径字符串），故无需再用 inlineDynamicImports 强制单文件——该选项会把
+                  // require('./main') 拆出的 main.js 分片静默丢弃，导致业务逻辑缺失。
+                  inlineDynamicImports: false,
                 },
               },
             },

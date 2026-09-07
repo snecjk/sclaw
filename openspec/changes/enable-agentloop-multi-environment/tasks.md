@@ -6,10 +6,10 @@
 
 ## 2. 主进程统一初始化
 
-- [ ] 2.1 实现 AgentLoop 配置校验、固定应用名映射、进程内幂等和脱敏日志模块，并通过单元测试覆盖完整配置、缺失 License、名称不匹配及重复初始化
-- [ ] 2.2 增加 Electron 主进程引导入口，在注册 CMS 探针后动态加载现有主进程入口，并通过顺序测试验证 CMS 注册早于 Claude Agent SDK 首次加载
-- [ ] 2.3 将 `@loongsuite/cms_node_sdk/register` 保持为运行时外部依赖并调整打包配置，通过安装包内容检查验证 SDK 及其依赖可被解析
-- [ ] 2.4 移除 Vite `onstart` 中仅用于 AgentLoop 的 `NODE_OPTIONS` 注入，同时保留现有 Electron 启动环境处理，并通过 development 启动测试验证未向 Vite 或前置脚本注入探针
+- [x] 2.1 实现 AgentLoop 配置校验、固定应用名映射、进程内幂等和脱敏日志模块，并通过单元测试覆盖完整配置、缺失 License、名称不匹配及重复初始化
+- [x] 2.2 增加 Electron 主进程引导入口，在注册 CMS 探针后动态加载现有主进程入口，并通过顺序测试验证 CMS 注册早于 Claude Agent SDK 首次加载
+- [x] 2.3 将 `@loongsuite/cms_node_sdk/register` 保持为运行时外部依赖并调整打包配置，通过安装包内容检查验证 SDK 及其依赖可被解析
+- [x] 2.4 移除 Vite `onstart` 中仅用于 AgentLoop 的 `NODE_OPTIONS` 注入，同时保留现有 Electron 启动环境处理，并通过 development 启动测试验证未向 Vite 或前置脚本注入探针
 
 ## 3. 安全与环境策略
 
