@@ -162,6 +162,8 @@
     "connectingModel": "Connecting to model...",
     "understandingQuestion": "Understanding your question…",
     "stillExecuting": "Still executing…",
+    "startingRuntime": "Starting runtime…",
+    "readingProjectContext": "Reading project context…",
     "thinkingNow": "Thinking…",
     "preparingToolInput": "Preparing tool parameters…",
     "runningTool": "Running tool…",

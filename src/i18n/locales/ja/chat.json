@@ -162,6 +162,8 @@
     "connectingModel": "モデルに接続中...",
     "understandingQuestion": "ご質問を理解しています…",
     "stillExecuting": "実行中（ファイル書き込み中…）",
+    "startingRuntime": "実行環境を起動しています…",
+    "readingProjectContext": "プロジェクト文脈を読み取っています…",
     "thinkingNow": "思考中…",
     "preparingToolInput": "ツールパラメータを準備中…",
     "runningTool": "ツールを実行中…",

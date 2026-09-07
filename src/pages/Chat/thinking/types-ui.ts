@@ -8,7 +8,12 @@ export type ThinkingStreamingTool = {
   summary?: string;
 };
 
-export type ConnectingLabelKey = 'connectingModel' | 'understandingQuestion' | 'stillExecuting';
+export type ConnectingLabelKey =
+  | 'connectingModel'
+  | 'understandingQuestion'
+  | 'stillExecuting'
+  | 'startingRuntime'
+  | 'readingProjectContext';
 
 export interface ConnectingModelIndicatorProps {
   className?: string;

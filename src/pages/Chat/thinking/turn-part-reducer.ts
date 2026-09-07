@@ -170,11 +170,23 @@ export function reduceTurnParts(
 /** 供 adapter 查询：identity → 合并后的 tool part */
 export function buildToolPartLookup(parts: TurnPart[]): Map<string, ToolCallTurnPart> {
   const map = new Map<string, ToolCallTurnPart>();
+  /**
+   * name 只是兜底键。同名多次调用时它会互相覆盖，查回来的是「最后一次」的 input——
+   * 曾导致同轮 3 次 exec 被补成同一份参数、随后当成重复项合并掉。歧义时宁可查不到。
+   */
+  const ambiguousNames = new Set<string>();
+
   for (const part of parts) {
     if (part.kind !== 'tool_call') continue;
     map.set(part.toolIdentity, part);
     if (part.toolCallId) {
       map.set(part.toolCallId, part);
+    }
+    if (ambiguousNames.has(part.name)) continue;
+    if (map.has(part.name)) {
+      ambiguousNames.add(part.name);
+      map.delete(part.name);
+      continue;
     }
     map.set(part.name, part);
   }

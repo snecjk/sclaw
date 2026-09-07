@@ -88,6 +88,8 @@ export interface ActiveTurnStream {
   isConnecting: boolean;
   isProcessing: boolean;
   isStillExecuting?: boolean;
+  /** Client run phase for connecting fake-progress (P5 W1-3). */
+  phase?: string | null;
 }
 
 interface AssistantTurnMessageProps {
@@ -289,18 +291,26 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     turnToolResults,
   ]);
 
+  const isConnecting = activeStream?.isConnecting ?? false;
+  const isProcessing = activeStream?.isProcessing ?? false;
+  const isStillExecuting = activeStream?.isStillExecuting ?? false;
+
   const connectingLabelKey = useMemo((): ConnectingLabelKey => {
     if (pendingWorkflow !== null) return 'connectingModel';
     const hasWorkflowInTurn = turnMessages.some((msg) => {
       if (msg.role !== 'assistant') return false;
       return extractParameterForm(msg, pendingWorkflow) !== null;
     });
-    return hasWorkflowInTurn ? 'connectingModel' : 'understandingQuestion';
-  }, [turnMessages, pendingWorkflow]);
+    if (hasWorkflowInTurn) return 'connectingModel';
 
-  const isConnecting = activeStream?.isConnecting ?? false;
-  const isProcessing = activeStream?.isProcessing ?? false;
-  const isStillExecuting = activeStream?.isStillExecuting ?? false;
+    // P5 W1-3：connecting 期间用 phase 假进度遮蔽等待
+    if (isConnecting) {
+      const phase = activeStream?.phase ?? null;
+      if (phase === 'dispatching') return 'startingRuntime';
+      return 'readingProjectContext';
+    }
+    return 'understandingQuestion';
+  }, [turnMessages, pendingWorkflow, activeStream?.phase, isConnecting]);
 
   const precedingUserText = useMemo(() => {
     if (precedingUserMessage) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import type { RawMessage } from '@/stores/chat';
 import {
   buildTurnStableKey,
@@ -78,6 +78,8 @@ export function useChatDisplay(params: {
   streamingTools: StreamingTool[];
   turnAnchorAt: number | null;
   workflowCards?: ChatWorkflowCardRef[];
+  /** Runtime phase for connecting fake-progress labels (P5 W1-3). */
+  phase?: string | null;
 }) {
   const {
     messages,
@@ -93,7 +95,11 @@ export function useChatDisplay(params: {
     streamingTools = [],
     workflowCards = [],
     turnAnchorAt,
+    phase = null,
   } = params;
+
+  // P5 W1-1 B1-②：渲染层合帧，降低每 token markdown 重算频率；工具状态保持即时。
+  const deferredStreamText = useDeferredValue(streamText);
 
   const [, staleTick] = useState(0);
   useEffect(() => {
@@ -106,7 +112,7 @@ export function useChatDisplay(params: {
 
   const hasAnyStreamContent = hasStreamPayload(
     streamMsg,
-    streamText,
+    deferredStreamText,
     streamingMessages,
     streamingToolResults,
     streamingTools,
@@ -114,7 +120,7 @@ export function useChatDisplay(params: {
   );
   const hasLiveStreamContent = hasActiveStreamContent(
     streamMsg,
-    streamText,
+    deferredStreamText,
     streamingMessages,
     streamingTools,
     showThinking,
@@ -147,17 +153,17 @@ export function useChatDisplay(params: {
       ? ({
           ...(streamMsg as Record<string, unknown>),
           role: (typeof streamMsg.role === 'string' ? streamMsg.role : 'assistant') as RawMessage['role'],
-          content: streamMsg.content ?? streamText,
+          content: streamMsg.content ?? deferredStreamText,
           timestamp: streamMsg.timestamp,
           id: streamMsg.id,
         } as RawMessage)
-      : streamText.trim()
-        ? ({ role: 'assistant', content: streamText } as RawMessage)
+      : deferredStreamText.trim()
+        ? ({ role: 'assistant', content: deferredStreamText } as RawMessage)
         : null;
 
     const activeStream: ActiveTurnStream = {
       streamMessage,
-      streamText,
+      streamText: deferredStreamText,
       streamingTools,
       streamingMessages,
       streamingToolResults,
@@ -165,6 +171,7 @@ export function useChatDisplay(params: {
       isConnecting: !pendingFinal && !hasAnyStreamContent && !isStillExecuting,
       isProcessing: pendingFinal && sending && !hasLiveStreamContent,
       isStillExecuting,
+      phase,
     };
 
     // Only promote the last assistant turn/message into activeTurn when the
@@ -246,12 +253,13 @@ export function useChatDisplay(params: {
     transcriptPending,
     showThinking,
     streamMsg,
-    streamText,
+    deferredStreamText,
     streamingMessages,
     streamingToolResults,
     streamingTools,
     isStillExecuting,
     turnAnchorAt,
+    phase,
   ]);
 
   const visibleWorkflowCards = activeTurn?.precedingUserMessage?.id

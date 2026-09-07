@@ -162,6 +162,8 @@
     "connectingModel": "连接模型中...",
     "understandingQuestion": "正在理解你的问题…",
     "stillExecuting": "仍在执行（写文件中…）",
+    "startingRuntime": "正在启动运行环境…",
+    "readingProjectContext": "正在读取项目上下文…",
     "thinkingNow": "正在思考…",
     "preparingToolInput": "正在准备工具参数…",
     "runningTool": "正在调用工具…",

@@ -90,7 +90,12 @@ const thinkingPanelChevronClass = (expanded: boolean, animate: boolean) =>
 
 type StreamingTool = ToolStatus;
 
-export type ConnectingLabelKey = 'connectingModel' | 'understandingQuestion' | 'stillExecuting';
+export type ConnectingLabelKey =
+  | 'connectingModel'
+  | 'understandingQuestion'
+  | 'stillExecuting'
+  | 'startingRuntime'
+  | 'readingProjectContext';
 
 export interface ConnectingModelIndicatorProps {
   className?: string;

@@ -91,6 +91,7 @@ export function Chat() {
     streamingToolResults,
     streamingTools,
     error,
+    phase,
   } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
@@ -215,6 +216,7 @@ export function Chat() {
     streamingToolResults,
     streamingTools,
     turnAnchorAt,
+    phase,
   });
 
   const streamContentKey = useMemo(
