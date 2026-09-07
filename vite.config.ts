@@ -1,9 +1,14 @@
-import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
 import { resolve } from 'path';
+import {
+  resolveAgentLoopBuildConfig,
+  serializeAgentLoopSecrets,
+  toAgentLoopProcessEnvDefine,
+} from './scripts/agentloop-env';
 
 function copyGatewayPreloadCjs(outDir: string) {
   const src = resolve(__dirname, 'electron/gateway/gateway-fetch-preload.cjs');
@@ -20,11 +25,20 @@ export default defineConfig(({ mode }) => {
   const stoMemoryCenterBaseUrl = (loadedEnv.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
   const stoSclawHubBaseUrl = (loadedEnv.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
   const stoWisdomStarBaseUrl = (loadedEnv.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
+
+  // AgentLoop / ARMS：按 mode 解析固定应用名映射与接入配置。
+  // 非敏感字段走 define 注入主进程 bundle；License 只写入 dist-electron/main/agentloop.config.json，
+  // 由主进程引导入口在运行时读取（构建日志与代码生成中均不出现凭证值）。
+  const agentLoopConfig = resolveAgentLoopBuildConfig(mode, loadedEnv, process.env);
+  for (const warning of agentLoopConfig.warnings) {
+    console.warn(warning);
+  }
   const envDefine = {
     'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
     'process.env.STO_MEMORY_CENTER_BASE_URL': JSON.stringify(stoMemoryCenterBaseUrl),
     'process.env.STO_SCLAW_HUB_BASE_URL': JSON.stringify(stoSclawHubBaseUrl),
     'process.env.STO_WISDOM_STAR_BASE_URL': JSON.stringify(stoWisdomStarBaseUrl),
+    ...toAgentLoopProcessEnvDefine(agentLoopConfig),
   };
 
   return {
@@ -71,6 +85,20 @@ export default defineConfig(({ mode }) => {
                 name: 'copy-gateway-preload-cjs',
                 closeBundle() {
                   copyGatewayPreloadCjs(resolve(__dirname, 'dist-electron/main'));
+                },
+              },
+              {
+                name: 'write-agentloop-config-json',
+                closeBundle() {
+                  // License 不进 Vite define：构建日志和产物源码中都不出现凭证值，
+                  // 运行时由主进程引导入口读取该文件并注入 process.env。
+                  const outDir = resolve(__dirname, 'dist-electron/main');
+                  mkdirSync(outDir, { recursive: true });
+                  writeFileSync(
+                    resolve(outDir, 'agentloop.config.json'),
+                    serializeAgentLoopSecrets(agentLoopConfig.secrets),
+                    'utf-8',
+                  );
                 },
               },
             ],

@@ -1,8 +1,8 @@
 ## 1. 环境配置与构建注入
 
-- [ ] 1.1 在 `.env.development`、`.env.test`、`.env.staging`、`.env.production` 中配置对应的非敏感 `ARMS_APP_NAME`，并通过配置测试验证名称分别为 `sto-claw-development`、`sto-claw-test`、`sto-claw-staging`、`sto-claw-production`
-- [ ] 1.2 将 License、Region、Workspace 及可选运行策略纳入 Vite 主进程配置解析，保持本地忽略文件和 CI 密钥优先级，并通过单元测试验证四种 mode 与 development local override
-- [ ] 1.3 检查 AgentLoop License 仅具备可分发的遥测写入权限并记录验证结果，确认仓库和构建日志均不包含完整凭证
+- [x] 1.1 在 `.env.development`、`.env.test`、`.env.staging`、`.env.production` 中配置对应的非敏感 `ARMS_APP_NAME`，并通过配置测试验证名称分别为 `sto-claw-development`、`sto-claw-test`、`sto-claw-staging`、`sto-claw-production`
+- [x] 1.2 将 License、Region、Workspace 及可选运行策略纳入 Vite 主进程配置解析，保持本地忽略文件和 CI 密钥优先级，并通过单元测试验证四种 mode 与 development local override
+- [x] 1.3 检查 AgentLoop License 仅具备可分发的遥测写入权限并记录验证结果，确认仓库和构建日志均不包含完整凭证
 
 ## 2. 主进程统一初始化
 
