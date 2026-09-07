@@ -369,6 +369,8 @@ export const BROWSER_AUTOMATION_OBSERVE_SCRIPT = `(function() {
       centerY: centerY,
       value: readTargetValue(target),
       editable: !!(el.matches && el.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"]')),
+      disabled: !!(el.disabled || el.getAttribute('aria-disabled') === 'true'),
+      readonly: !!(el.readOnly || el.hasAttribute('readonly') || el.getAttribute('aria-readonly') === 'true'),
     };
   }
 

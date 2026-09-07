@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getOrCreateCdpSession, pressKeyViaCdp, valuesMatch } from '../../electron/services/browser-automation/input';
+import { getOrCreateCdpSession, pressKeyViaCdp, valuesMatch, assertElementActionable } from '../../electron/services/browser-automation/input';
 import { BrowserAutomationCdpSession } from '../../electron/services/browser-automation/cdp-session';
 import { buildObserveScript } from '../../shared/browser-automation/observe-script';
 
@@ -22,6 +22,12 @@ describe('browser automation input helpers', () => {
   it('rejects mismatched typed values', () => {
     expect(valuesMatch('', 'Sclaw浏览器自动化')).toBe(false);
     expect(valuesMatch('other', 'Sclaw浏览器自动化')).toBe(false);
+  });
+
+  it('B7.3 fill 前 disabled/readonly 前置检查', () => {
+    expect(() => assertElementActionable({ found: true, disabled: true }, 'fill')).toThrow(/disabled/);
+    expect(() => assertElementActionable({ found: true, readonly: true }, 'fill')).toThrow(/readonly/);
+    expect(() => assertElementActionable({ found: true, readonly: true }, 'click')).not.toThrow();
   });
 });
 

@@ -285,7 +285,19 @@
     "browserAutomationDesc": "关闭后禁用工作流浏览器节点、ba_* 工具与内嵌自动操作。DOM / AX 为页面感知方式。",
     "browserAutomationOff": "关闭",
     "browserAutomationDom": "DOM 模式",
-    "browserAutomationAx": "AX 模式"
+    "browserAutomationAx": "AX 模式",
+    "browserBridgeTitle": "Chrome 扩展桥",
+    "browserBridgeDesc": "在真实 Chrome 里加载扩展后，可用配对码或本机自动连接驱动已打开的标签。不会关闭你的标签。",
+    "browserBridgeVersion": "内置包 {{bundled}} · 已连接扩展 {{installed}}",
+    "browserBridgeNotPaired": "未上报",
+    "browserBridgeUpdate": "有更新",
+    "browserBridgeAutoConnect": "本机自动连接",
+    "browserBridgeNoCode": "暂无配对码",
+    "browserBridgeCopyCode": "复制",
+    "browserBridgeRefreshCode": "换码",
+    "browserBridgeCodeCopied": "配对码已复制",
+    "browserBridgeDownload": "下载扩展 zip",
+    "browserBridgeSaveFailed": "保存失败"
   },
   "developer": {
     "title": "开发者",

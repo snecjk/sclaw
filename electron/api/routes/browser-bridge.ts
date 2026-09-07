@@ -6,6 +6,7 @@ import { browserBridgeService } from '../../services/browser-bridge-service';
 import { parseJsonBody, sendJson, sendNoContent } from '../route-utils';
 import type { BrowserBridgeAction } from '../../../shared/browser-bridge/types';
 import { isCdpMethodAllowed } from '../../../shared/browser-automation/cdp-allowlist';
+import { isBrowserAutomationEnabled } from '../../../shared/browser-automation/feature-flag';
 import {
   getBundledBrowserBridgeExtensionVersion,
   resolveBrowserBridgeExtensionZipPath,
@@ -62,6 +63,15 @@ export async function handleBrowserBridgeRoutes(
 
   if (req.method === 'OPTIONS') {
     sendNoContent(res);
+    return true;
+  }
+
+  const bridgeMetaWhenOff =
+    (url.pathname === '/api/browser-bridge/extension-info' && req.method === 'GET')
+    || (url.pathname === '/api/browser-bridge/extension-download' && req.method === 'GET')
+    || (url.pathname === '/api/browser-bridge/settings' && req.method === 'GET');
+  if (!isBrowserAutomationEnabled() && !bridgeMetaWhenOff) {
+    sendJson(res, 503, { success: false, error: 'Browser automation is disabled' });
     return true;
   }
 
@@ -244,7 +254,7 @@ export async function handleBrowserBridgeRoutes(
     const session = browserBridgeService.heartbeat(body.sessionId, {
       url: body.url,
       title: body.title,
-    });
+    }, readToken(req));
     if (!session) {
       sendJson(res, 404, { success: false, error: 'Session not found' });
       return true;
@@ -260,7 +270,15 @@ export async function handleBrowserBridgeRoutes(
       sendJson(res, 400, { success: false, error: 'sessionId is required' });
       return true;
     }
-    const commands = browserBridgeService.pollCommands(sessionId);
+    const waitRaw = Number(url.searchParams.get('waitMs') || 0);
+    const waitMs = Number.isFinite(waitRaw) ? waitRaw : 0;
+    const commands = waitMs > 0
+      ? await browserBridgeService.waitForCommands(sessionId, waitMs)
+      : browserBridgeService.pollCommands(sessionId);
+    if (commands === null) {
+      sendJson(res, 404, { success: false, error: 'Session not found' });
+      return true;
+    }
     sendJson(res, 200, { success: true, commands });
     return true;
   }
@@ -281,7 +299,12 @@ export async function handleBrowserBridgeRoutes(
     }
     const target = browserBridgeService.getSession(body.sessionId);
     if (!target) {
-      sendJson(res, 404, { success: false, error: 'Session not found' });
+      const replacement = browserBridgeService.findReplacementSession(body.sessionId);
+      sendJson(res, 404, {
+        success: false,
+        error: 'SESSION_STALE',
+        currentSessionId: replacement?.sessionId ?? null,
+      });
       return true;
     }
     if (body.action === 'cdp') {
@@ -301,7 +324,12 @@ export async function handleBrowserBridgeRoutes(
       body.payload ?? {},
     );
     if (!command) {
-      sendJson(res, 404, { success: false, error: 'Session not found' });
+      const replacement = browserBridgeService.findReplacementSession(body.sessionId);
+      sendJson(res, 404, {
+        success: false,
+        error: 'SESSION_STALE',
+        currentSessionId: replacement?.sessionId ?? null,
+      });
       return true;
     }
     if (body.sessionId.startsWith('embed-')) {

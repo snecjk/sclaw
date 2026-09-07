@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserAutomationCdpSession } from '../../electron/services/browser-automation/cdp-session';
-import { startNetworkRecorder } from '../../electron/services/browser-automation/network-recorder';
+import { getNetworkInflightCounter, startNetworkRecorder } from '../../electron/services/browser-automation/network-recorder';
 
 function createFakeWebContents() {
   const emitter = new EventEmitter();
@@ -59,5 +59,22 @@ describe('network recorder', () => {
     expect(stopped.entries).toHaveLength(2);
     expect(stopped.truncated).toBe(true);
     expect(stopped.entries.map((entry) => entry.requestId)).toEqual(['r2', 'r3']);
+  });
+
+  it('inflight 计数随 request 生命周期更新，可供 networkIdle 实时读取', async () => {
+    const { wc, fakeDebugger, sendCommand } = createFakeWebContents();
+    const cdp = new BrowserAutomationCdpSession(wc);
+    const counter = getNetworkInflightCounter(cdp);
+
+    await vi.waitFor(() => {
+      expect(sendCommand.mock.calls.some((call) => call[0] === 'Network.enable')).toBe(true);
+    });
+    await Promise.resolve();
+
+    expect(counter.count()).toBe(0);
+    fakeDebugger.emit('message', {}, 'Network.requestWillBeSent', { requestId: 'r1' });
+    expect(counter.count()).toBe(1);
+    fakeDebugger.emit('message', {}, 'Network.loadingFinished', { requestId: 'r1' });
+    expect(counter.count()).toBe(0);
   });
 });

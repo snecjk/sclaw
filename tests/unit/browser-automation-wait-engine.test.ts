@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { waitForReadyState } from '../../electron/services/browser-automation/wait-engine';
+import { waitForCondition, waitForReadyState } from '../../electron/services/browser-automation/wait-engine';
 
 describe('waitForReadyState', () => {
   it('命中 interactive/complete 立即返回', async () => {
@@ -30,5 +30,27 @@ describe('waitForReadyState', () => {
     expect(result.success).toBe(true);
     expect(result.message).toContain('unavailable');
     expect(Date.now() - started).toBeLessThan(1_000);
+  });
+});
+
+describe('waitForCondition networkIdle', () => {
+  it('每次轮询读取 getPendingRequestCount，不冻结首次快照', async () => {
+    let pending = 2;
+    const resultPromise = waitForCondition(
+      {
+        webContents: {
+          isDestroyed: () => false,
+          isLoading: () => false,
+        } as import('electron').WebContents,
+        executeJavaScript: async () => ({}),
+        getPendingRequestCount: () => pending,
+      },
+      { type: 'networkIdle', timeoutMs: 2_000 },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    pending = 0;
+    const result = await resultPromise;
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Network idle');
   });
 });

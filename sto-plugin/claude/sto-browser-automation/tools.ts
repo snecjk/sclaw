@@ -8,6 +8,10 @@ import {
 	type BrowserAutomationPluginConfig,
 } from "../../openclaw/sto-browser-automation/automation-client.js";
 import { BA_SYSTEM_PROMPT } from "../../openclaw/sto-browser-automation/prompts.js";
+import {
+	annotateFailedToolPayload,
+	isFailedToolPayload,
+} from "../../../shared/browser-bridge/failed-payload.js";
 
 export const BROWSER_AUTOMATION_MCP_SERVER_NAME = "sto-browser-automation";
 export { BA_SYSTEM_PROMPT };
@@ -21,10 +25,14 @@ function textResult(value: unknown, isError = false): CallToolResult {
 
 async function run<T>(fn: () => Promise<T>): Promise<CallToolResult> {
 	try {
-		return textResult(await fn());
+		const value = await fn();
+		if (isFailedToolPayload(value)) {
+			return textResult(annotateFailedToolPayload(value), true);
+		}
+		return textResult(value);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		return textResult({ success: false, error: message }, true);
+		return textResult(annotateFailedToolPayload({ success: false, error: message }), true);
 	}
 }
 

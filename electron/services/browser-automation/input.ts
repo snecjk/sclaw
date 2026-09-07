@@ -26,6 +26,10 @@ interface ResolvedInputTarget {
   pageNotVisible?: boolean;
   /** 页内可见性守卫（B7）：scrollIntoView 后中心点仍出视口。 */
   outsideViewport?: boolean;
+  /** 页内前置检查（B7.3）：disabled / aria-disabled。 */
+  disabled?: boolean;
+  /** 页内前置检查（B7.3）：readonly / aria-readonly。 */
+  readonly?: boolean;
 }
 
 interface ReadTargetValueResult {
@@ -93,11 +97,26 @@ export async function readTargetInputValue(
   return result ?? { found: false, error: 'readTargetInputValue returned null' };
 }
 
+/**
+ * includes 语义对短期望值有假阳性（计划 §四 B7.3）；workflow 校验已依赖，不改行为。
+ */
 function valuesMatch(actual: string, expected: string): boolean {
   const normalizedActual = actual.trim();
   const normalizedExpected = expected.trim();
   if (!normalizedExpected) return normalizedActual.length === 0;
   return normalizedActual === normalizedExpected || normalizedActual.includes(normalizedExpected);
+}
+
+export function assertElementActionable(
+  resolved: ResolvedInputTarget,
+  action: 'fill' | 'click' | 'press' = 'click',
+): void {
+  if (resolved.disabled) {
+    throw Object.assign(new Error('Element is disabled'), { code: 'ELEMENT_NOT_VISIBLE' });
+  }
+  if (action === 'fill' && resolved.readonly) {
+    throw Object.assign(new Error('Element is readonly'), { code: 'FILL_NOT_STUCK' });
+  }
 }
 
 async function dispatchMouseClick(
@@ -234,6 +253,20 @@ export async function actFillOrType(
           : resolved.outsideViewport
             ? 'ELEMENT_NOT_VISIBLE'
             : undefined,
+    };
+  }
+
+  try {
+    assertElementActionable(resolved, 'fill');
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    return {
+      success: false,
+      action: 'fill',
+      ref: resolved.ref ?? input.payload.ref,
+      stableKey: resolved.stableKey ?? input.payload.stableKey,
+      error: error instanceof Error ? error.message : String(error),
+      errorCode: code === 'ELEMENT_NOT_VISIBLE' || code === 'FILL_NOT_STUCK' ? code : undefined,
     };
   }
 

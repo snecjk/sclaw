@@ -124,7 +124,7 @@ export default definePluginEntry({
 			domain: "browser-bridge",
 			resultType: "browser_sessions",
 			label: "列出浏览器桥接会话",
-			description: "检查内置 webview 或 Chrome 扩展是否已连接，返回活动会话列表。",
+			description: "列出活动桥接会话。source=extension 是本机 Chrome（StoClaw Browser Bridge）；source=embed 是应用内 webview。主聊天打开网页必须用 extension。",
 			parameters: Type.Object({}),
 			execute: async () => listBridgeSessions(cfg),
 		});

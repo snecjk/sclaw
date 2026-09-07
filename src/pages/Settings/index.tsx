@@ -28,6 +28,7 @@ import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import { UpdateChangelogPanel } from '@/components/settings/update/UpdateChangelogPanel';
 import { DwsCliSettings } from '@/components/settings/DwsCliSettings';
+import { BrowserBridgeSettings } from '@/components/settings/BrowserBridgeSettings';
 import { SettingsShell, type SettingsSectionId } from '@/components/settings/SettingsShell';
 import {
   getGatewayWsDiagnosticEnabled,
@@ -703,6 +704,10 @@ export function Settings() {
                     <option value="ax">{t('advanced.browserAutomationAx')}</option>
                   </select>
                 </div>
+              )}
+
+              {!isSite && (
+                <BrowserBridgeSettings automationEnabled={browserAutomationLevel !== 'off'} />
               )}
 
             </div>

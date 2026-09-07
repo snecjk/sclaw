@@ -231,4 +231,21 @@ describe('B7 页内可见性/视口守卫（resolveTargetForInput）', () => {
     const visibleResult = api().resolveTargetForInput({ ref: '@e1' });
     expect(visibleResult.found).toBe(true);
   });
+
+  it('disabled/readonly 输入框仍 found，并上报前置检查字段', () => {
+    const rect = { x: 10, y: 10, left: 10, top: 10, width: 20, height: 20, right: 30, bottom: 30, toJSON: () => ({}) };
+    window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      return rect as DOMRect;
+    };
+    document.body.innerHTML = '<input id="t" type="text" disabled readonly />';
+    runScript(1);
+    const result = api().resolveTargetForInput({ ref: '@e1' }) as {
+      found: boolean;
+      disabled?: boolean;
+      readonly?: boolean;
+    };
+    expect(result.found).toBe(true);
+    expect(result.disabled).toBe(true);
+    expect(result.readonly).toBe(true);
+  });
 });

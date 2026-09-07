@@ -1,6 +1,6 @@
 import type { TSchema } from "./typebox-shim.js";
 import type { OpenClawPluginApi } from "./api.js";
-import { stoToolError, toolResultFromEnvelope, type StoToolEnvelope } from "./tool-envelope.js";
+import { envelopeFromExecuteResult, stoToolError, toolResultFromEnvelope, type StoToolEnvelope } from "./tool-envelope.js";
 
 export type StoToolExecuteContext = {
 	sessionKey?: string;
@@ -45,12 +45,7 @@ export function defineStoTool<TParams>(
 			);
 			try {
 				const data = await execute(params as TParams, {});
-				const envelope: StoToolEnvelope = {
-					type: resultType,
-					success: true,
-					domain,
-					data,
-				};
+				const envelope: StoToolEnvelope = envelopeFromExecuteResult(resultType, domain, data);
 				return toolResultFromEnvelope(envelope);
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);

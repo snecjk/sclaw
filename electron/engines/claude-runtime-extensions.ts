@@ -37,6 +37,8 @@ import { logger } from '../utils/logger';
 import { PORTS } from '../utils/config';
 import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
 import { buildConnectorBashGateHooks } from '../connectors/claude-binary-gate';
+import { isBrowserAutomationEnabled } from '../../shared/browser-automation/feature-flag';
+import { buildClaudeLoopGuardHooks } from './claude-loop-guard';
 
 export interface ClaudeRuntimeOptions {
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -95,6 +97,7 @@ const browserToolExtension: ClaudeRuntimeExtension = {
   id: 'sto-browser-tool',
   build({ sessionKey }) {
     if (isAppDevSessionKey(sessionKey)) return {};
+    if (!isBrowserAutomationEnabled()) return {};
     return buildStoBrowserToolClaudeRuntimeOptions({
       sessionKey,
       hostApiPort: PORTS.CLAWX_HOST_API,
@@ -106,6 +109,7 @@ const browserAutomationExtension: ClaudeRuntimeExtension = {
   id: 'sto-browser-automation',
   build({ sessionKey }) {
     if (isAppDevSessionKey(sessionKey)) return {};
+    if (!isBrowserAutomationEnabled()) return {};
     return buildStoBrowserAutomationClaudeRuntimeOptions({
       sessionKey,
       hostApiPort: PORTS.CLAWX_HOST_API,
@@ -254,7 +258,16 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
   },
 };
 
+/** 空转防护：无条件启用，是所有会话的安全网而不是某个域的能力。 */
+const loopGuardExtension: ClaudeRuntimeExtension = {
+  id: 'sto-loop-guard',
+  build({ sessionKey }) {
+    return { hooks: buildClaudeLoopGuardHooks(sessionKey) };
+  },
+};
+
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
+  loopGuardExtension,
   connectorBashGateExtension,
   browserToolExtension,
   browserAutomationExtension,

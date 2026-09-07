@@ -250,7 +250,9 @@ export async function captureAxTree(
     );
   }
   if (rawNodes.length === 0) {
-    // 无数据等同域不可用（§六 R1：embed guest 进程可能静默返回空树）→ 上层回退 DOM 观察
+    // 空树仍当域不可用并回退 DOM。Electron 40.10.4 实机 PoC（scripts/ax-webview-poc.cjs）
+    // 在 BrowserWindow 与 <webview> guest 上均可不经 Accessibility.enable 拿到非空树；
+    // 保留本分支覆盖未绘制/跨站点隔离等仍返回空数组的情况。
     throw axError('CDP_DOMAIN_UNSUPPORTED', 'Accessibility.getFullAXTree returned no data');
   }
 

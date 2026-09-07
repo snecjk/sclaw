@@ -139,6 +139,11 @@ function buildBrowserTaskPrompt(
       `- 类型：${node?.type ?? 'browser_task'}`,
     ].join('\n')),
     promptSection('浏览器会话', `\`\`\`json\n${JSON.stringify(browserContext)}\n\`\`\``),
+    promptSection('引用代际', [
+      '操作前必须 ba_observe 拿 @e ref 与 documentGeneration。',
+      'ba_act 必须携带最近一次 ba_observe 的 documentGeneration；收到 STALE_REF 说明页面已变更，必须重新 ba_observe 再重试，禁止沿用旧 ref。',
+      'ref 只在最近一次 ba_observe 的代际内有效。',
+    ].join('\n')),
     resume?.isResume
       ? promptSection('恢复执行', [
         `这是从 checkpoint 恢复的执行，已完成 ${resume.stepsCompleted ?? 0} 步。`,

@@ -6,7 +6,9 @@ import {
 import { getSetting } from '../../utils/store';
 import {
   ensureStoBrowserAutomationPluginInOpenClaw,
+  ensureStoBrowserBridgePluginInOpenClaw,
   setStoBrowserAutomationPluginEnabled,
+  setStoBrowserBridgePluginEnabled,
 } from '../../utils/openclaw-auth';
 import { browserBridgeService } from '../browser-bridge-service';
 
@@ -14,10 +16,14 @@ export async function applyBrowserAutomationLevel(level: BrowserAutomationLevel)
   setBrowserAutomationSettingsLevel(level);
   if (level === 'off') {
     await setStoBrowserAutomationPluginEnabled(false);
+    await setStoBrowserBridgePluginEnabled(false);
+    browserBridgeService.setAutoConnectEnabled(false);
     browserBridgeService.revokeAllTokens();
     return;
   }
   await ensureStoBrowserAutomationPluginInOpenClaw();
+  await ensureStoBrowserBridgePluginInOpenClaw();
+  browserBridgeService.setAutoConnectEnabled(true);
 }
 
 export async function applyBrowserAutomationLevelFromStore(): Promise<BrowserAutomationLevel> {

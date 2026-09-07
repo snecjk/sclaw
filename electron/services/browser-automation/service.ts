@@ -3,6 +3,7 @@ import type {
   BrowserAutomationActPayload,
   BrowserAutomationActResult,
   BrowserAutomationArtifactRef,
+  BrowserAutomationDialogRecord,
   BrowserAutomationErrorCode,
   BrowserAutomationFindMatch,
   BrowserAutomationFindQuery,
@@ -35,7 +36,7 @@ import { attachDialogGuard, type DialogGuardHandle } from './dialog-guard';
 import { searchAxSnapshot, type AxSnapshot, type RefTable } from './ax-observer';
 import { collectReadPageText, paginateReadPageText } from './read-page';
 import { writeBaArtifact } from './artifact-writer';
-import { startNetworkRecorder, type NetworkCaptureHandle } from './network-recorder';
+import { getNetworkInflightCounter, startNetworkRecorder, type NetworkCaptureHandle } from './network-recorder';
 import { waitAfterAction, waitForCondition, type WaitEngineDeps } from './wait-engine';
 import {
   buildEmbedSessionId,
@@ -50,7 +51,6 @@ import {
   resolveSessionWebContents,
 } from './session-manager';
 import {
-  getSclawEmbedBrowserNetworkLog,
   getSclawEmbedBrowserRuntime,
 } from '../../main/services/sclaw-embed-browser-runtime';
 import { logger } from '../../utils/logger';
@@ -248,6 +248,16 @@ export class BrowserAutomationService {
     return this.enqueue(sessionId, async () => {
       const deps = this.requireDeps(sessionId);
       return waitForCondition(deps.waitDeps, condition);
+    });
+  }
+
+  async drainDialogs(sessionId: string): Promise<BrowserAutomationDialogRecord[]> {
+    return this.enqueue(sessionId, async () => {
+      this.requireDeps(sessionId);
+      const guard = this.dialogGuards.get(sessionId);
+      if (!guard) return [];
+      await guard.pullPageDialogs();
+      return guard.drain();
     });
   }
 
@@ -1010,18 +1020,17 @@ export class BrowserAutomationService {
       this.dialogGuards.set(sessionId, attachDialogGuard(cdp));
     }
 
-    const embedRuntimeId = session.embedRuntimeId ?? parseEmbedRuntimeId(sessionId) ?? undefined;
-    const pendingRequests = embedRuntimeId
-      ? getSclawEmbedBrowserNetworkLog(embedRuntimeId).filter((event) => event.timestamp > Date.now() - 2000).length
-      : 0;
+    const inflight = getNetworkInflightCounter(cdp);
+    void inflight.ready;
 
     const executeJavaScript = async (script: string) => wc.executeJavaScript(script, true);
     const waitDeps: WaitEngineDeps = {
       webContents: wc,
       executeJavaScript,
-      getPendingRequestCount: () => pendingRequests,
+      getPendingRequestCount: () => inflight.count(),
     };
 
+    const pendingRequests = inflight.count();
     return {
       webContents: wc,
       cdp,

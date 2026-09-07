@@ -297,7 +297,7 @@ export async function buildStoAgentTelemetryClaudeRuntimeOptions(
 
     if (isPreToolUse(input)) {
       const runId = getOrCreateRunId(sessionKey, input.session_id);
-      await emit({
+      void emit({
         nativeHook: 'before_tool_call',
         correlation: {
           agentId: input.agent_id,
@@ -323,7 +323,7 @@ export async function buildStoAgentTelemetryClaudeRuntimeOptions(
       const runId = getOrCreateRunId(sessionKey, input.session_id);
       const response = input.tool_response as Record<string, unknown> | undefined;
       const success = !(response && typeof response === 'object' && response.isError === true);
-      await emit({
+      void emit({
         nativeHook: 'after_tool_call',
         correlation: {
           agentId: input.agent_id,

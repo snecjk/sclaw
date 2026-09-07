@@ -66,6 +66,12 @@ describe('T9 BRIDGE_SYSTEM_PROMPT 单源', () => {
     expect(OPENCLAW_BRIDGE_PROMPT).toBe(SHARED_BRIDGE_PROMPT);
   });
 
+  it('提示词限制 list_sessions 空转并声明 SESSION_STALE 自愈', () => {
+    expect(SHARED_BRIDGE_PROMPT).toContain('SESSION_STALE');
+    expect(SHARED_BRIDGE_PROMPT).toContain('禁止再 list_sessions');
+    expect(BA_SYSTEM_PROMPT).toContain('本机 Chrome Bridge');
+  });
+
   it('提示词提及的 bridge_* 工具名 ⊆ OpenClaw 注册表', () => {
     const index = readFileSync(resolve(here, '../../sto-plugin/openclaw/sto-browser-bridge/index.ts'), 'utf8');
     const registered = new Set(Array.from(index.matchAll(/id:\s*"(bridge_[a-z_]+)"/g)).map((match) => match[1]));

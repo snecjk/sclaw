@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
 import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
@@ -6,6 +6,7 @@ import { SCHEDULED_TASK_CORE_PROMPT } from '../../shared/scheduled-task-instruct
 import { CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
 import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 import { resetDingTalkSendRateLimitForTests } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/dingtalk-send-guard';
+import { setBrowserAutomationSettingsLevel } from '../../shared/browser-automation/feature-flag';
 
 const { readDingTalkMentionPending, clearDingTalkMentionPending } = vi.hoisted(() => ({
   readDingTalkMentionPending: vi.fn(),
@@ -23,6 +24,10 @@ describe('buildClaudeRuntimeOptions', () => {
     resetDingTalkSendRateLimitForTests();
     readDingTalkMentionPending.mockReset();
     clearDingTalkMentionPending.mockReset();
+  });
+
+  afterEach(() => {
+    setBrowserAutomationSettingsLevel(null);
   });
 
   it('injects retired skills deprecation into Claude system prompt', async () => {
@@ -65,6 +70,18 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(runtime.mcpServers?.['sto-browser-tool']).toBeUndefined();
     expect(runtime.mcpServers?.['sto-workflow-tool']).toBeUndefined();
     expect(runtime.systemPromptAppend ?? '').not.toContain('bridge_click');
+  });
+
+  it('does not register ba_* or bridge MCP when browser automation is off', async () => {
+    setBrowserAutomationSettingsLevel('off');
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('agent:main:main');
+
+    expect(runtime.mcpServers?.['sto-browser-automation']).toBeUndefined();
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeUndefined();
+    expect(runtime.systemPromptAppend ?? '').not.toContain('bridge_click');
+    expect(runtime.systemPromptAppend ?? '').not.toContain('ba_observe');
   });
 
   it('registers embed bridge prompt for app plaza embed sessions', async () => {

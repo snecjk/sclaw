@@ -31,7 +31,8 @@ import { inspectTranscript } from './chat-runtime-inspection';
 import { logUserSend } from '../../shared/user-send-log';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
-import { isClaudeRuntimeControlText } from '../../shared/claude-runtime-control-text';
+import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend } from '../../shared/claude-runtime-control-text';
+import { ActiveQueryRegistry } from './active-query-registry';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -49,17 +50,25 @@ type ClaudeEventSink = {
   emit(event: string, payload: unknown): boolean;
 };
 
-type ActiveClaudeQuery = {
-  close: () => void;
-  runId: string;
-  sessionId: string;
-  sessionKey: string;
-};
-
 const CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS = 400;
 const CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS = 4_096;
 
-const activeClaudeQueries = new Map<string, ActiveClaudeQuery>();
+const activeClaudeQueries = new ActiveQueryRegistry({
+  onReplace: (previous, next) => {
+    logger.warn('[claude-adapter] replacing an in-flight query for the same session', {
+      sessionKey: next.sessionKey,
+      previousRunId: previous.runId,
+      nextRunId: next.runId,
+    });
+  },
+  onCloseError: (handle, error) => {
+    logger.warn('[claude-adapter] failed to close a superseded query', {
+      sessionKey: handle.sessionKey,
+      runId: handle.runId,
+      error: String(error),
+    });
+  },
+});
 type ClaudeConsumeTiming = {
   launchStartedAt: number;
   queryCreatedAt: number;
@@ -288,6 +297,18 @@ function stringifyClaudeContent(content: unknown): string {
 function formatClaudeError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return String(error);
+}
+
+const lastClaudeInterruptBySession = new Map<string, string>();
+
+function rememberClaudeInterrupt(sessionKey: string, error: unknown): void {
+  lastClaudeInterruptBySession.set(sessionKey, formatClaudeError(error));
+}
+
+function consumeClaudeInterrupt(sessionKey: string): string | undefined {
+  const value = lastClaudeInterruptBySession.get(sessionKey);
+  lastClaudeInterruptBySession.delete(sessionKey);
+  return value;
 }
 
 function cacheClaudeErrorMessage(sessionKey: string, error: unknown): void {
@@ -1134,12 +1155,14 @@ export async function consumeClaudeQuery(
       && isMissingClaudeConversationError(error)
     )) {
       emitEngineEvent({ type: 'turn.failed', errorMessage: String(error) });
+      rememberClaudeInterrupt(sessionKey, error);
     }
     throw error;
   } finally {
     flushPendingToolInputDelta();
     clearPendingToolInputDelta();
-    activeClaudeQueries.delete(sessionKey);
+    // 只释放自己那一格：若已有更新的 run 接管，抹掉它会让停止按钮失去句柄。
+    activeClaudeQueries.releaseIfCurrent(sessionKey, runId);
     logClaudeQueryTiming('active_query_removed', {
       sessionKey,
       runId,
@@ -1243,10 +1266,16 @@ async function startClaudeQuery(
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
+    const lastInterrupt = queryMode === 'resume' ? consumeClaudeInterrupt(sessionKey) : undefined;
+    const resumeInterruptAppend = buildClaudeResumeInterruptAppend({
+      isResume: queryMode === 'resume',
+      isContinue: isContinueUserPrompt(options?.userPrompt),
+      lastError: lastInterrupt,
+    });
     // 默认将 cwd 工作区/工作空间写入提示词：用户未指定特殊路径时，模型以该路径作为默认工作目录。
     // 走 systemPromptAppend（与 historyBridge 一致），避免污染用户消息与侧栏标题。
     const cwdPromptNote = `# 工作区/项目空间限制\n 当前工作目录/空间根目录为：**${cwd}**。若用户未指定特殊路径，请默认使用该路径作为工作目录进行文件读写等操作。**如果记忆中也出现了，必须以此处路径为准**。`;
-    const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
+    const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend, resumeInterruptAppend]
       .filter(Boolean)
       .join('\n\n');
     logger.info('[claude-adapter][prompt] final systemPromptAppend', {
@@ -1337,7 +1366,7 @@ async function startClaudeQuery(
       mode: queryMode,
     });
 
-    activeClaudeQueries.set(sessionKey, {
+    activeClaudeQueries.register({
       close: () => query.close(),
       runId,
       sessionId,
@@ -1444,7 +1473,7 @@ async function startClaudeQuery(
             stageStartedAt: recoveryQueryCreateStartedAt,
             mode: 'recovery',
           });
-          activeClaudeQueries.set(sessionKey, {
+          activeClaudeQueries.register({
             close: () => recoveryQuery.close(),
             runId,
             sessionId: recoverySessionId,
@@ -1490,6 +1519,7 @@ async function startClaudeQuery(
     void consumeWithMissingSessionRecovery().catch((error) => {
       logger.error('Claude query failed:', error);
       cacheClaudeErrorMessage(sessionKey, error);
+      rememberClaudeInterrupt(sessionKey, error);
       void patchEngineSessionRegistryEntry(sessionKey, {
         updatedAt: Date.now(),
         model: launchSelection.model,
@@ -1716,12 +1746,7 @@ export const claudeAdapter: EngineAdapter = {
   },
 
   async abortRun(_ctx, params) {
-    const active = activeClaudeQueries.get(params.sessionKey);
-    if (!active) {
-      return { success: true };
-    }
-    active.close();
-    activeClaudeQueries.delete(params.sessionKey);
+    activeClaudeQueries.abort(params.sessionKey);
     return { success: true };
   },
 };

@@ -136,6 +136,8 @@ async function buildClaudeEnvForAccount(
   let base: NodeJS.ProcessEnv = {
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
+    CLAUDE_CODE_STREAM_CLOSE_TIMEOUT:
+      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT || '300000',
   };
   // Connector CLIs: only inject PATH when the connector is connected (Gateway parity).
   if (isBinaryAllowedByConnectors('dws')) {

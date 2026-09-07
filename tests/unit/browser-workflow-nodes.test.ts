@@ -148,6 +148,8 @@ describe('buildBrowserTaskPrompt', () => {
     expect(prompt).toContain('embed-app-1');
     expect(prompt).toContain('ba_observe');
     expect(prompt).toContain('填写表单并提交');
+    expect(prompt).toContain('documentGeneration');
+    expect(prompt).toContain('STALE_REF');
   });
 
   it('includes resume instructions when checkpoint exists', () => {

@@ -20,6 +20,10 @@
       "commandTimeoutMs": {
         "type": "number",
         "default": 120000
+      },
+      "authToken": {
+        "type": "string",
+        "description": "loopback API Bearer token（由主进程注入，见 openclaw-auth ensureStoBrowserAutomationPluginConfig）"
       }
     }
   },

@@ -73,6 +73,23 @@ describe('BrowserBridgeService', () => {
     const polled = service.pollCommands('sess-1');
     expect(polled).toHaveLength(1);
     expect(service.pollCommands('sess-1')).toHaveLength(0);
+    expect(service.pollCommands('missing-session')).toBeNull();
+  });
+
+  it('waitForCommands returns queued work as soon as it is enqueued', async () => {
+    const { code } = service.refreshPairingCode();
+    const { token } = service.pairWithCode(code)!;
+    service.connectSession({
+      sessionId: 'sess-wait',
+      tabId: 8,
+      url: 'https://example.com',
+      title: 'Example',
+      token,
+    });
+    const pending = service.waitForCommands('sess-wait', 5_000);
+    const command = service.enqueueCommand('sess-wait', 'navigate', { url: 'https://www.baidu.com' });
+    expect(command?.action).toBe('navigate');
+    await expect(pending).resolves.toEqual([command]);
   });
 
   it('stores and retrieves command result', () => {
@@ -115,6 +132,9 @@ describe('BrowserBridgeService', () => {
       title: 'App',
     });
     expect(embed.ownership).toBe('owned');
+    const listed = service.listActiveSessions();
+    expect(listed[0]?.sessionId).toBe('ext-1');
+    expect(service.getPrimarySession()?.sessionId).toBe('embed-rt');
     expect(service.listSessionsByGroup('g1')).toEqual([]);
     service.connectSession({
       sessionId: 'ext-g',
@@ -125,6 +145,16 @@ describe('BrowserBridgeService', () => {
       groupId: 'g1',
     });
     expect(service.listSessionsByGroup('g1')).toHaveLength(1);
+    const replaced = service.connectSession({
+      sessionId: 'ext-3',
+      tabId: 3,
+      url: 'https://example.com/next',
+      title: 'Next',
+      token,
+    });
+    expect(replaced.sessionId).toBe('ext-3');
+    expect(service.getSession('ext-1')).toBeNull();
+    expect(service.getSession('ext-3')?.tabId).toBe(3);
   });
 
   it('keeps rotated tokens valid during grace then drops them', () => {
@@ -171,5 +201,30 @@ describe('BrowserBridgeService', () => {
     expect(service.autoConnect('2.0.0')).toBeNull();
     expect(service.checkExtensionCompatibility('1.2.0').compatible).toBe(true);
     expect(service.autoConnect('1.0.0')?.token).toBeTruthy();
+  });
+
+  it('resurrects a pruned Chrome tab session on heartbeat with the same sessionId', () => {
+    const revived = service.heartbeat('ext-464165454', {
+      url: 'https://example.com',
+      title: 'Example',
+    }, 'tok');
+    expect(revived?.sessionId).toBe('ext-464165454');
+    expect(revived?.tabId).toBe(464165454);
+    expect(revived?.source).toBe('extension');
+    expect(service.getSession('ext-464165454')?.url).toBe('https://example.com');
+  });
+
+  it('finds a replacement session by chrome tab id after the old id is gone', () => {
+    const { code } = service.refreshPairingCode();
+    const { token } = service.pairWithCode(code)!;
+    service.connectSession({
+      sessionId: 'ext-12',
+      tabId: 12,
+      url: 'https://example.com',
+      title: 'Live',
+      token,
+    });
+    expect(service.findReplacementSession('ext-12-deadbeef')?.sessionId).toBe('ext-12');
+    expect(service.findReplacementSession('missing')?.sessionId).toBe('ext-12');
   });
 });

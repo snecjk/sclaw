@@ -11,6 +11,10 @@ import {
 	BRIDGE_SYSTEM_PROMPT,
 	EMBED_BRIDGE_SYSTEM_PROMPT,
 } from "../../../shared/browser-bridge/prompts.js";
+import {
+	annotateFailedToolPayload,
+	isFailedToolPayload,
+} from "../../../shared/browser-bridge/failed-payload.js";
 
 export const BROWSER_MCP_SERVER_NAME = "sto-browser-tool";
 
@@ -31,11 +35,30 @@ async function runBridgeTool(
 ): Promise<CallToolResult> {
 	try {
 		const result = await runBridgeCommand(cfg, action, payload, options);
+		if (action === "screenshot") return screenshotToolResult(result);
+		if (isFailedToolPayload(result)) {
+			return textResult(annotateFailedToolPayload(result), true);
+		}
 		return textResult(result, false);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		return textResult({ success: false, error: message }, true);
 	}
+}
+
+function screenshotToolResult(value: unknown): CallToolResult {
+	const rec = value as { success?: boolean; dataUrl?: string; error?: string };
+	const dataUrl = typeof rec?.dataUrl === "string" ? rec.dataUrl : "";
+	const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+	if (rec?.success && match) {
+		return {
+			content: [
+				{ type: "image", data: match[2], mimeType: match[1] },
+				{ type: "text", text: JSON.stringify({ success: true, mimeType: match[1] }) },
+			],
+		};
+	}
+	return textResult(annotateFailedToolPayload(value ?? { success: false, error: rec?.error || "screenshot failed" }), true);
 }
 
 export function createBrowserMcpTools(cfg: BrowserBridgePluginConfig) {
@@ -107,14 +130,14 @@ export function createBrowserMcpTools(cfg: BrowserBridgePluginConfig) {
 
 	const bridgeScreenshot = tool(
 		"bridge_screenshot",
-		"截取当前 bridge 会话页面可见区域。内嵌预览须传 sessionId。",
+		"截取当前 Chrome / 内嵌页可见区域，返回图片。须已驱动 http(s) 标签；不要用 captureVisibleTab 权限话术放弃分析。",
 		{ sessionId: sessionIdSchema },
 		async (params) => runBridgeTool(cfg, "screenshot", {}, bridgeOptionsFromParams(params)),
 	);
 
 	const bridgeListSessions = tool(
 		"bridge_list_sessions",
-		"检查内置 webview 或 Chrome 扩展是否已连接，返回活动会话列表。",
+		"列出活动桥接会话。source=extension 是本机 Chrome（StoClaw Browser Bridge）；source=embed 是应用内 webview。主聊天打开网页必须用 extension。",
 		{},
 		async () => {
 			try {

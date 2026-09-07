@@ -28,16 +28,46 @@ function baseUrl(cfg: BrowserBridgePluginConfig): string {
 	return `http://${host}:${port}`;
 }
 
+type BridgeHttpPayload = {
+	success?: boolean;
+	error?: string;
+	currentSessionId?: string | null;
+	commandId?: string;
+};
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(url, init);
-	const payload = await response.json() as T & { success?: boolean; error?: string };
+	const payload = await response.json() as T & BridgeHttpPayload;
 	if (!response.ok) {
 		const message = typeof payload === "object" && payload && "error" in payload
 			? String(payload.error)
 			: `HTTP ${response.status}`;
-		throw new Error(message);
+		throw Object.assign(new Error(message), { status: response.status, payload });
 	}
 	return payload;
+}
+
+function isSessionStaleError(error: unknown): error is Error & { payload?: BridgeHttpPayload } {
+	return error instanceof Error && (
+		error.message === "SESSION_STALE"
+		|| error.message === "Session not found"
+	);
+}
+
+async function postCommand(
+	cfg: BrowserBridgePluginConfig,
+	sessionId: string,
+	action: string,
+	payload: Record<string, unknown>,
+): Promise<{ commandId: string }> {
+	return fetchJson<{ commandId: string }>(
+		`${baseUrl(cfg)}/api/browser-bridge/command`,
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ sessionId, action, payload }),
+		},
+	);
 }
 
 export async function listBridgeSessions(
@@ -50,7 +80,7 @@ export async function listBridgeSessions(
 }
 
 function isEmbedSession(session: SessionSummary): boolean {
-	return session.source === 'embed' || session.tabId < 0;
+	return session.source === 'embed' || session.tabId < 0 || session.sessionId.startsWith('embed-');
 }
 
 function pickBridgeSession(
@@ -64,14 +94,39 @@ function pickBridgeSession(
 			return null;
 		}
 	}
-
-	const embed = sessions.find(isEmbedSession);
-	if (embed) return embed;
-	if (options?.embedOnly) return null;
+	if (options?.embedOnly) {
+		return sessions.find(isEmbedSession) ?? null;
+	}
+	const extension = sessions.find((session) => !isEmbedSession(session));
+	if (extension) return extension;
 	return sessions[0] ?? null;
 }
 
 const RESULT_POLL_MS = 50;
+
+/**
+ * 会话自愈必须对模型可见（与 shared/browser-bridge/failed-payload.ts 保持一致）。
+ * 命令被改投到另一个会话却仍返回裸 success:true 时，模型会继续拿错误 / 编造的
+ * sessionId 重试——实测出现过同一个 ref 连点 16 次、每次换一个不存在的会话。
+ */
+function annotateHealedSession(
+	value: unknown,
+	requestedSessionId: string | undefined,
+	actualSessionId: string,
+): unknown {
+	if (!requestedSessionId || requestedSessionId === actualSessionId) return value;
+	const note = `你请求的会话 ${requestedSessionId} 不存在，命令实际在 ${actualSessionId} 上执行。`
+		+ `后续调用请改用 ${actualSessionId} 或直接省略 sessionId；不要再猜测会话 ID。`;
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		return { result: value, healedSessionId: actualSessionId, requestedSessionId, actionHint: note };
+	}
+	return {
+		...(value as Record<string, unknown>),
+		healedSessionId: actualSessionId,
+		requestedSessionId,
+		actionHint: note,
+	};
+}
 
 export async function runBridgeCommand(
 	cfg: BrowserBridgePluginConfig,
@@ -99,25 +154,43 @@ export async function runBridgeCommand(
 		sessionId = target.sessionId;
 	}
 
-	const timeoutMs = cfg.commandTimeoutMs ?? 30_000;
-	const commandResponse = await fetchJson<{ commandId: string }>(
-		`${baseUrl(cfg)}/api/browser-bridge/command`,
-		{
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ sessionId, action, payload }),
-		},
-	);
+	const timeoutMs = cfg.commandTimeoutMs
+		?? (action === "read_page" || action === "screenshot" || action === "snapshot" ? 45_000 : 25_000);
+
+	const postOrHeal = async (id: string): Promise<{ commandId: string; sessionId: string }> => {
+		try {
+			const commandResponse = await postCommand(cfg, id, action, payload);
+			return { commandId: commandResponse.commandId, sessionId: id };
+		} catch (error) {
+			if (!isSessionStaleError(error) || embedOnly) throw error;
+			const hinted = (error as { payload?: BridgeHttpPayload }).payload?.currentSessionId;
+			const sessions = await listBridgeSessions(cfg);
+			const target = hinted
+				? sessions.find((session) => session.sessionId === hinted)
+				: pickBridgeSession(sessions, { ...options, embedOnly });
+			if (!target || target.sessionId === id) throw error;
+			const commandResponse = await postCommand(cfg, target.sessionId, action, payload);
+			return { commandId: commandResponse.commandId, sessionId: target.sessionId };
+		}
+	};
+
+	const posted = await postOrHeal(sessionId);
+	const requestedSessionId = sessionId;
+	sessionId = posted.sessionId;
 	const started = Date.now();
 	while (Date.now() - started < timeoutMs) {
 		const resultResponse = await fetchJson<{
 			ready: boolean;
 			result?: { result?: unknown };
 		}>(
-			`${baseUrl(cfg)}/api/browser-bridge/result?commandId=${encodeURIComponent(commandResponse.commandId)}`,
+			`${baseUrl(cfg)}/api/browser-bridge/result?commandId=${encodeURIComponent(posted.commandId)}`,
 		);
 		if (resultResponse.ready && resultResponse.result) {
-			return resultResponse.result.result;
+			return annotateHealedSession(
+				resultResponse.result.result,
+				requestedSessionId,
+				posted.sessionId,
+			);
 		}
 		await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
 	}

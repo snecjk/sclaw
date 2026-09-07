@@ -209,6 +209,21 @@ export async function handleBrowserAutomationRoutes(
     return true;
   }
 
+  const dialogsMatch = /^\/api\/browser-automation\/sessions\/([^/]+)\/dialogs$/.exec(url.pathname);
+  if (dialogsMatch && req.method === 'GET') {
+    const sessionId = decodeURIComponent(dialogsMatch[1]);
+    try {
+      const dialogs = await browserAutomationService.drainDialogs(sessionId);
+      sendJson(res, 200, { success: true, dialogs });
+    } catch (error) {
+      sendJson(res, 404, {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/browser-automation/wait' && req.method === 'POST') {
     const body = await parseJsonBody<{
       sessionId?: string;

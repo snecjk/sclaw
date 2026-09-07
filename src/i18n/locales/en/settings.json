@@ -290,7 +290,19 @@
     "browserAutomationDesc": "Off disables workflow browser nodes, ba_* tools, and in-app automation. DOM / AX choose how pages are observed.",
     "browserAutomationOff": "Off",
     "browserAutomationDom": "DOM mode",
-    "browserAutomationAx": "AX mode"
+    "browserAutomationAx": "AX mode",
+    "browserBridgeTitle": "Chrome extension bridge",
+    "browserBridgeDesc": "Load the extension in Chrome, then pair or auto-connect on this machine to drive existing tabs. User tabs are never closed.",
+    "browserBridgeVersion": "Bundled {{bundled}} · installed {{installed}}",
+    "browserBridgeNotPaired": "not reported",
+    "browserBridgeUpdate": "update available",
+    "browserBridgeAutoConnect": "Local auto-connect",
+    "browserBridgeNoCode": "No pairing code",
+    "browserBridgeCopyCode": "Copy",
+    "browserBridgeRefreshCode": "New code",
+    "browserBridgeCodeCopied": "Pairing code copied",
+    "browserBridgeDownload": "Download extension zip",
+    "browserBridgeSaveFailed": "Save failed"
   },
   "developer": {
     "title": "Developer",

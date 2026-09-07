@@ -10,11 +10,13 @@ import {
   BROWSER_BRIDGE_COMMAND_TTL_MS,
   BROWSER_BRIDGE_EMBED_TAB_ID,
   BROWSER_BRIDGE_EMBED_TOKEN,
+  BROWSER_BRIDGE_POLL_WAIT_MAX_MS,
   BROWSER_BRIDGE_SESSION_STALE_MS,
 } from '../../shared/browser-bridge/types';
 import { checkBrowserBridgeExtensionCompatibility } from '../../shared/browser-bridge/version';
 import { getOpenClawConfigDir } from '../utils/paths';
 import { getBundledBrowserBridgeExtensionVersion } from '../utils/browser-bridge-extension';
+import { parseChromeTabIdFromBridgeSessionId } from '../../shared/browser-bridge/session-id';
 
 const TOKEN_GRACE_DEFAULT_MS = 60_000;
 const COMMAND_RESULTS_MAX = 1000;
@@ -40,6 +42,7 @@ export class BrowserBridgeService {
   private readonly sessions = new Map<string, BrowserBridgeSession>();
   private readonly commandQueues = new Map<string, BrowserBridgeCommand[]>();
   private readonly commandResults = new Map<string, BrowserBridgeCommandResult>();
+  private readonly pollWaiters = new Map<string, Array<(commands: BrowserBridgeCommand[] | null) => void>>();
   private pairingCode: string | null = null;
   private readonly tokens = new Map<string, TokenRecord>();
   private readonly graceTokens = new Map<string, TokenRecord>();
@@ -147,6 +150,13 @@ export class BrowserBridgeService {
     taskLabel?: string;
   }): BrowserBridgeSession {
     const source = input.source ?? 'extension';
+    if (source === 'extension') {
+      for (const [id, existing] of this.sessions.entries()) {
+        if (existing.tabId === input.tabId && existing.source !== 'embed' && id !== input.sessionId) {
+          this.disconnectSession(id);
+        }
+      }
+    }
     const session: BrowserBridgeSession = {
       sessionId: input.sessionId,
       tabId: input.tabId,
@@ -191,15 +201,45 @@ export class BrowserBridgeService {
   disconnectSession(sessionId: string): void {
     this.sessions.delete(sessionId);
     this.commandQueues.delete(sessionId);
+    this.flushPollWaiters(sessionId, null);
   }
 
-  heartbeat(sessionId: string, patch?: { url?: string; title?: string }): BrowserBridgeSession | null {
-    const session = this.sessions.get(sessionId);
+  heartbeat(
+    sessionId: string,
+    patch?: { url?: string; title?: string },
+    token?: string,
+  ): BrowserBridgeSession | null {
+    let session: BrowserBridgeSession | null = this.sessions.get(sessionId) ?? null;
+    if (!session && !sessionId.startsWith('embed-')) {
+      const tabId = parseChromeTabIdFromBridgeSessionId(sessionId);
+      if (tabId != null) {
+        this.connectSession({
+          sessionId,
+          tabId,
+          url: patch?.url ?? '',
+          title: patch?.title ?? '',
+          token: token ?? '',
+          source: 'extension',
+          ownership: 'borrowed',
+        });
+        session = this.sessions.get(sessionId) ?? null;
+      }
+    }
     if (!session) return null;
     session.lastHeartbeat = Date.now();
     if (patch?.url) session.url = patch.url;
     if (patch?.title !== undefined) session.title = patch.title;
     return session;
+  }
+
+  findReplacementSession(staleSessionId: string): BrowserBridgeSession | null {
+    const tabId = parseChromeTabIdFromBridgeSessionId(staleSessionId);
+    const active = this.listActiveSessions();
+    if (tabId != null) {
+      const sameTab = active.find((session) => session.source !== 'embed' && session.tabId === tabId);
+      if (sameTab) return sameTab;
+    }
+    return active.find((session) => session.source !== 'embed') ?? null;
   }
 
   listActiveSessions(): BrowserBridgeSession[] {
@@ -208,9 +248,9 @@ export class BrowserBridgeService {
       (session) => now - session.lastHeartbeat < BROWSER_BRIDGE_SESSION_STALE_MS,
     );
     return active.sort((left, right) => {
-      const leftEmbed = left.source === 'embed' ? 0 : 1;
-      const rightEmbed = right.source === 'embed' ? 0 : 1;
-      if (leftEmbed !== rightEmbed) return leftEmbed - rightEmbed;
+      const leftExt = left.source === 'embed' ? 1 : 0;
+      const rightExt = right.source === 'embed' ? 1 : 0;
+      if (leftExt !== rightExt) return leftExt - rightExt;
       return right.lastHeartbeat - left.lastHeartbeat;
     });
   }
@@ -225,7 +265,7 @@ export class BrowserBridgeService {
 
   getPrimarySession(): BrowserBridgeSession | null {
     const sessions = this.listActiveSessions();
-    return sessions[0] ?? null;
+    return sessions.find((session) => session.source === 'embed') ?? sessions[0] ?? null;
   }
 
   enqueueCommand(
@@ -245,15 +285,53 @@ export class BrowserBridgeService {
     const queue = this.commandQueues.get(sessionId) ?? [];
     queue.push(command);
     this.commandQueues.set(sessionId, queue);
+    const waiter = this.pollWaiters.get(sessionId)?.shift();
+    if (waiter) {
+      waiter(this.drainPending(sessionId) ?? []);
+    }
     return command;
   }
 
-  pollCommands(sessionId: string): BrowserBridgeCommand[] {
-    const queue = this.commandQueues.get(sessionId) ?? [];
-    const now = Date.now();
-    const pending = queue.filter((cmd) => cmd.expiresAt > now);
-    this.commandQueues.set(sessionId, []);
-    return pending;
+  /**
+   * Drain pending commands. `null` means the session is gone (caller should 404
+   * so the extension re-connects instead of spinning on an empty poll).
+   */
+  pollCommands(sessionId: string): BrowserBridgeCommand[] | null {
+    return this.drainPending(sessionId);
+  }
+
+  /**
+   * Long-poll: return immediately if commands are queued, otherwise wait up to
+   * waitMs for enqueueCommand. Keeps the Chrome MV3 service worker alive via fetch.
+   */
+  waitForCommands(sessionId: string, waitMs: number): Promise<BrowserBridgeCommand[] | null> {
+    if (!this.sessions.has(sessionId)) return Promise.resolve(null);
+    const cap = Math.max(0, Math.min(waitMs, BROWSER_BRIDGE_POLL_WAIT_MAX_MS));
+    if (cap <= 0) return Promise.resolve(this.drainPending(sessionId));
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value: BrowserBridgeCommand[] | null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.removePollWaiter(sessionId, waiter);
+        resolve(value);
+      };
+      const waiter = (commands: BrowserBridgeCommand[] | null) => finish(commands);
+      const timer = setTimeout(() => {
+        finish(this.drainPending(sessionId) ?? []);
+      }, cap);
+      const list = this.pollWaiters.get(sessionId) ?? [];
+      list.push(waiter);
+      this.pollWaiters.set(sessionId, list);
+      const already = this.drainPending(sessionId);
+      if (already === null) {
+        finish(null);
+        return;
+      }
+      if (already.length > 0) finish(already);
+    });
   }
 
   storeResult(input: {
@@ -352,12 +430,37 @@ export class BrowserBridgeService {
     writeFileSync(stateFilePath(), JSON.stringify(payload, null, 2), 'utf8');
   }
 
+  private drainPending(sessionId: string): BrowserBridgeCommand[] | null {
+    if (!this.sessions.has(sessionId)) return null;
+    const queue = this.commandQueues.get(sessionId) ?? [];
+    const now = Date.now();
+    const pending = queue.filter((cmd) => cmd.expiresAt > now);
+    this.commandQueues.set(sessionId, []);
+    return pending;
+  }
+
+  private removePollWaiter(
+    sessionId: string,
+    waiter: (commands: BrowserBridgeCommand[] | null) => void,
+  ): void {
+    const list = this.pollWaiters.get(sessionId);
+    if (!list) return;
+    this.pollWaiters.set(sessionId, list.filter((item) => item !== waiter));
+  }
+
+  private flushPollWaiters(sessionId: string, value: BrowserBridgeCommand[] | null): void {
+    const list = this.pollWaiters.get(sessionId) ?? [];
+    this.pollWaiters.delete(sessionId);
+    for (const waiter of list) waiter(value);
+  }
+
   private pruneStale(): void {
     const now = Date.now();
     for (const [sessionId, session] of this.sessions.entries()) {
       if (now - session.lastHeartbeat > BROWSER_BRIDGE_SESSION_STALE_MS) {
         this.sessions.delete(sessionId);
         this.commandQueues.delete(sessionId);
+        this.flushPollWaiters(sessionId, null);
       }
     }
     for (const [commandId, result] of this.commandResults.entries()) {

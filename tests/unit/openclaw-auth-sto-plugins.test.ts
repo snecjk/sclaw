@@ -89,10 +89,12 @@ describe('syncStoPluginsToOpenClaw', () => {
     expect(writtenConfig.plugins.allow).toContain('sto-user-skill-tool');
     expect(writtenConfig.plugins.allow).toContain('sto-browser-bridge');
     expect(writtenConfig.plugins.allow).not.toContain('sto-distinctive-design-guard');
+    // baseUrl 是桌面端 Host API（见 sto-workflow-tool/openclaw.plugin.json 的 schema 描述），
+    // 不是 STO 远端；远端地址只用于遥测/技能上报类插件。
     expect(writtenConfig.plugins.entries['sto-workflow-tool']).toEqual({
       enabled: true,
       config: {
-        baseUrl: 'https://sto.example.com',
+        baseUrl: 'http://127.0.0.1:3210',
         ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
         timeoutMs: 30000,
       },

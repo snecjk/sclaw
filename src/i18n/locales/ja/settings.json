@@ -287,7 +287,19 @@
     "browserAutomationDesc": "オフにするとワークフローのブラウザノード、ba_* ツール、アプリ内自動操作を無効化します。DOM / AX はページ認識方式です。",
     "browserAutomationOff": "オフ",
     "browserAutomationDom": "DOM モード",
-    "browserAutomationAx": "AX モード"
+    "browserAutomationAx": "AX モード",
+    "browserBridgeTitle": "Chrome 拡張ブリッジ",
+    "browserBridgeDesc": "Chrome に拡張を読み込み、ペアリングコードまたは同一マシンの自動接続で既存タブを操作します。タブは閉じません。",
+    "browserBridgeVersion": "同梱 {{bundled}} · 接続済み {{installed}}",
+    "browserBridgeNotPaired": "未報告",
+    "browserBridgeUpdate": "更新あり",
+    "browserBridgeAutoConnect": "ローカル自動接続",
+    "browserBridgeNoCode": "コードなし",
+    "browserBridgeCopyCode": "コピー",
+    "browserBridgeRefreshCode": "再発行",
+    "browserBridgeCodeCopied": "ペアリングコードをコピーしました",
+    "browserBridgeDownload": "拡張 zip をダウンロード",
+    "browserBridgeSaveFailed": "保存に失敗しました"
   },
   "developer": {
     "title": "開発者",

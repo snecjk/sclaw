@@ -204,7 +204,7 @@ async function executeCommand(entry: EmbedDriverEntry, command: BrowserBridgeCom
 
 async function tickEntry(entry: EmbedDriverEntry): Promise<void> {
   browserBridgeService.heartbeat(entry.sessionId);
-  const commands = browserBridgeService.pollCommands(entry.sessionId);
+  const commands = browserBridgeService.pollCommands(entry.sessionId) ?? [];
   for (const command of commands) {
     await executeCommand(entry, command);
   }
