@@ -98,6 +98,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingToolResults,
     streamingTools,
     error,
+    phase,
   } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
@@ -191,6 +192,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingToolResults,
     streamingTools,
     turnAnchorAt,
+    phase,
   });
 
   useEffect(() => {

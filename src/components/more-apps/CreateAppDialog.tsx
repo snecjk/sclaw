@@ -35,6 +35,7 @@ export interface CreateAppDialogProps {
 export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   const [name, setName] = useState('');
   const [pageType, setPageType] = useState<CodeApplicationPageType>('site');
+  const [projectType, setProjectType] = useState<'frontend' | 'fullstack'>('frontend');
   const [parentDir, setParentDir] = useState('');
   const [defaultParentDir, setDefaultParentDir] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +51,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
       setName('');
       setParentDir('');
       setPageType('site');
+      setProjectType('frontend');
       setTemplates([]);
       setTemplateId('');
       setTemplateError('');
@@ -77,9 +79,13 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
         if (cancelled) return;
         const items = result.items.filter((item) => item.pageType === pageType && item.latestVersion);
         setTemplates(items);
+        const preferredId = pageType === 'site' && projectType === 'fullstack'
+          ? 'site-fullstack'
+          : `${pageType}-minimal`;
         const preferred = items.find(
-          (item) => item.templateId === `${pageType}-minimal` && item.source === 'local-resource',
-        ) ?? items.find((item) => item.templateId === `${pageType}-minimal`);
+          (item) => item.templateId === preferredId && item.source === 'local-resource',
+        ) ?? items.find((item) => item.templateId === preferredId)
+          ?? items.find((item) => item.templateId === `${pageType}-minimal`);
         setTemplateId(preferred ? templateSelectionKey(preferred) : '');
         if (!preferred) {
           setTemplateError(
@@ -98,7 +104,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, pageType]);
+  }, [open, pageType, projectType]);
 
   if (!open) return null;
 
@@ -131,7 +137,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
       const result = await createUserApp({
         name: trimmed,
         parentDir: resolvedParentDir,
-        projectType: 'frontend',
+        projectType: pageType === 'site' ? projectType : 'frontend',
         pageType,
         templateId: selectedTemplate.templateId,
         templateVersion: selectedTemplate.latestVersion,
@@ -194,7 +200,10 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
                 key={option.value}
                 type="button"
                 aria-pressed={selected}
-                onClick={() => setPageType(option.value)}
+                onClick={() => {
+                  setPageType(option.value);
+                  if (option.value !== 'site') setProjectType('frontend');
+                }}
                 className={cn(
                   'rounded-xl border px-3 py-3 text-left transition-colors',
                   selected && 'border-[var(--sto-brand-6)] bg-[var(--sto-brand-6)]/5',
@@ -213,6 +222,36 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
             );
           })}
         </div>
+
+        {pageType === 'site' ? (
+          <>
+            <label className="mb-2 block text-sm font-medium text-foreground">工程形态</label>
+            <div className="mb-5 grid grid-cols-2 gap-2">
+              {([
+                { value: 'frontend' as const, label: '前端应用', hint: '仅 Vite 预览' },
+                { value: 'fullstack' as const, label: '全栈应用', hint: '前端 + 本地 Hono/SQLite' },
+              ]).map((option) => {
+                const selected = projectType === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setProjectType(option.value)}
+                    className={cn(
+                      'rounded-xl border px-3 py-3 text-left transition-colors',
+                      selected && 'border-[var(--sto-brand-6)] bg-[var(--sto-brand-6)]/5',
+                      !selected && 'border-border bg-muted/40 hover:bg-muted',
+                    )}
+                  >
+                    <span className="block text-sm font-medium text-foreground">{option.label}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{option.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
 
         <label className="mb-2 block text-sm font-medium text-foreground">应用模板</label>
         <select

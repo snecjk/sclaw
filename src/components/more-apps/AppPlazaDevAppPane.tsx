@@ -56,6 +56,7 @@ import { buildTurnCheckpointSubject, excerptUserText } from '@/lib/app-dev-turn-
 import {
   buildPlanConfirmPrompt,
   extractSclawPlan,
+  extractSclawStyles,
   wrapUserTextForPlanGate,
 } from '@/lib/app-dev-plan-gate';
 import {
@@ -97,6 +98,10 @@ import {
   captureAppPreview,
   drainAppErrors,
   getAppDevEnvironment,
+  getAppRuntimeStatus,
+  consumeAppRuntimeEscalate,
+  restartAppBackend,
+  runAppRuntimeSmoke,
   getStoAppStatus,
   pullStoApp,
   publishAppTemplateWorkspace,
@@ -195,6 +200,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    phase,
   });
 
   // ── T02 生成过程可视化 ──
@@ -293,6 +299,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     });
     const assistantText = item.messages.map((m) => extractText(m)).join('\n');
     const plan = extractSclawPlan(assistantText);
+    const stylePresets = extractSclawStyles(assistantText);
     const audit = auditsByTurn?.[item.key] ?? null;
     if (tools.length === 0 && !captured?.interrupted && !plan && !audit) return null;
     const durationMs = captured?.durationMs ?? resolveAppDevTurnDurationMs({
@@ -315,10 +322,16 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
         {showPlan && plan ? (
           <AppDevPlanCard
             plan={plan}
+            stylePresets={stylePresets}
             onDismiss={() => setDismissedPlans((prev) => ({ ...prev, [item.key]: true }))}
-            onConfirm={(next) => {
+            onConfirm={(next, style) => {
               setDismissedPlans((prev) => ({ ...prev, [item.key]: true }));
-              onPickSuggestion?.(buildPlanConfirmPrompt(next));
+              const prompt = buildPlanConfirmPrompt(next, { style });
+              onPickSuggestion?.(prompt);
+              void useChatStore.getState().sendMessage({
+                text: prompt,
+                sessionKey,
+              }).catch(() => undefined);
             }}
           />
         ) : null}
@@ -503,6 +516,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [isBuiltinTemplateDebug, setIsBuiltinTemplateDebug] = useState<boolean | null>(null);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
+  /** True after auto-heal injected a repair turn; success toast only when this clears via smoke.ok. */
+  const healPendingRef = useRef(false);
   if (statusWorkspaceId !== workspaceId) {
     setStatusWorkspaceId(workspaceId);
     setSourceRevision(0);
@@ -523,6 +538,31 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     active && ideOwnership.ready && !ideOwnership.open,
   );
   const sending = useChatSessionSending(appDevSessionKey ?? '');
+  const clearDevAppPendingPrompt = useAppPlazaShellStore((s) => s.clearDevAppPendingPrompt);
+
+  // P5 W2-1：对话式创建后自动发送首条（已包装 Plan 闸门）
+  useEffect(() => {
+    const prompt = tab.pendingPrompt?.trim();
+    if (!active || !prompt || !appDevSessionKey || sending) return;
+    clearDevAppPendingPrompt(tab.id);
+    setChatOpen(true);
+    setTuneMode('chat');
+    setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
+    void useChatStore.getState().sendMessage({
+      text: prompt,
+      sessionKey: appDevSessionKey,
+    }).catch((error) => {
+      toast.error(error instanceof Error ? error.message : String(error));
+    });
+  }, [
+    active,
+    tab.id,
+    tab.pendingPrompt,
+    appDevSessionKey,
+    sending,
+    clearDevAppPendingPrompt,
+    setTuneMode,
+  ]);
   const {
     pending: runPending,
     previewRevision,
@@ -593,6 +633,46 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   }, [workspaceId, isTemplateWorkspace]);
 
   useAppDevStatusPoll(workspaceId, setStatus, active);
+
+  // DoD-3：后端 escalate → 自动发修复回合（业务用户零操作）
+  useEffect(() => {
+    if (!active || !workspaceId || !appDevSessionKey || sending) return;
+    let cancelled = false;
+    const tick = async () => {
+      const runtime = await getAppRuntimeStatus(workspaceId).catch(() => null);
+      if (cancelled || !runtime?.status.escalateNeeded) return;
+      const escalate = await consumeAppRuntimeEscalate(workspaceId).catch(() => null);
+      if (cancelled || !escalate) return;
+      if (escalate.melted) {
+        healPendingRef.current = false;
+        toast.error('还没修好，你可以直接再说一句需求继续让我修');
+        return;
+      }
+      if (!escalate.prompt) return;
+      healPendingRef.current = true;
+      toast.message('出了点问题，正在自动修复…');
+      setChatOpen(true);
+      setComposerSeed((prev) => ({
+        text: escalate.prompt!,
+        version: (prev?.version ?? 0) + 1,
+      }));
+      try {
+        await useChatStore.getState().sendMessage({
+          text: escalate.prompt,
+          sessionKey: appDevSessionKey,
+        });
+      } catch {
+        healPendingRef.current = false;
+        toast.error('自动修复未能发出，请再说一句「帮我修一下后端」');
+      }
+    };
+    const timer = setInterval(() => { void tick(); }, 4000);
+    void tick();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [active, workspaceId, appDevSessionKey, sending]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -697,10 +777,42 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
         if (errors.length > 0) setPendingErrors(errors);
         setSourceRevision((n) => n + 1);
+
+        // 全栈：回合结束后重启后端 + smoke。仅在自愈链路中提示「已修好」；失败再自动塞修复回合。
+        const runtime = await getAppRuntimeStatus(workspaceId).catch(() => null);
+        if (runtime?.fullstack) {
+          try {
+            await restartAppBackend(workspaceId);
+            const smoke = await runAppRuntimeSmoke(workspaceId);
+            if (smoke.ok) {
+              if (healPendingRef.current) {
+                healPendingRef.current = false;
+                toast.success('已修好，可以继续用');
+              }
+            } else if (smoke.prompt) {
+              healPendingRef.current = true;
+              toast.message('复检未通过，继续自动修复…');
+              setComposerSeed((prev) => ({
+                text: smoke.prompt!,
+                version: (prev?.version ?? 0) + 1,
+              }));
+              if (appDevSessionKey) {
+                void useChatStore.getState().sendMessage({
+                  text: smoke.prompt,
+                  sessionKey: appDevSessionKey,
+                }).catch(() => {
+                  healPendingRef.current = false;
+                });
+              }
+            }
+          } catch {
+            // ignore — escalate poll will pick up hard crashes
+          }
+        }
       })();
     }
     prevSendingRef.current = sending;
-  }, [sending, workspaceId, previewBridge, status?.previewUrl, runResponsiveAudit]);
+  }, [sending, workspaceId, previewBridge, status?.previewUrl, runResponsiveAudit, appDevSessionKey]);
 
   const handleFixErrors = useCallback(() => {
     const text = [

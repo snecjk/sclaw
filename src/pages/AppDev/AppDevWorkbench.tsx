@@ -88,6 +88,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingToolResults,
     streamingTools,
     error,
+    phase,
   } = useChatSessionRuntimeView(sessionKey);
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
@@ -110,6 +111,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    phase,
   });
 
   const priorUserMessageCount = useMemo(

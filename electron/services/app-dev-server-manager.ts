@@ -115,6 +115,10 @@ function allocateFreePort(): Promise<number> {
   });
 }
 
+export async function allocateDevServerPort(): Promise<number> {
+  return allocateFreePort();
+}
+
 function pushLog(entry: DevServerEntry, chunk: string): void {
   for (const line of chunk.split('\n')) {
     const trimmed = line.trimEnd();

@@ -2,15 +2,16 @@
  * AppDevToolRollupLine — 生成过程工具聚合摘要行（P1 交互改造 T02）
  *
  * 对话流中实时滚动「编辑 home.page.json +26 −60」「执行 pnpm run build」，
- * 增删行数红绿着色（--sto-success-primary / --sto-danger-primary）。
+ * 增删行数红绿着色；有 edits 时可展开轻量逐行 diff（P5 W1-2）。
  */
-import { memo } from 'react';
-import { FileEdit, FilePlus2, Search, Terminal, Wrench } from 'lucide-react';
+import { memo, useCallback, useState } from 'react';
+import { ChevronDown, ChevronRight, FileEdit, FilePlus2, Search, Terminal, Wrench } from 'lucide-react';
 import {
   appDevFileOpVerb,
   appDevToolBaseName,
   type AppDevToolRollup,
 } from '@/lib/app-dev-tool-rollup';
+import { AppDevInlineDiff } from '@/components/app-dev/AppDevInlineDiff';
 import { cn } from '@/lib/utils';
 
 const MAX_FILE_ROWS = 5;
@@ -40,6 +41,11 @@ export const AppDevToolRollupLine = memo(function AppDevToolRollupLine({
   rollup,
   className,
 }: AppDevToolRollupLineProps) {
+  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
+  const togglePath = useCallback((path: string) => {
+    setExpandedPaths((prev) => ({ ...prev, [path]: !prev[path] }));
+  }, []);
+
   if (rollup.totals.completedTools === 0) return null;
 
   const files = rollup.files.slice(0, MAX_FILE_ROWS);
@@ -55,17 +61,40 @@ export const AppDevToolRollupLine = memo(function AppDevToolRollupLine({
       {files.map((file) => {
         const isCreate = file.hasCreate && !file.hasEdit;
         const Icon = isCreate ? FilePlus2 : FileEdit;
+        const canExpand = file.edits.length > 0;
+        const expanded = Boolean(expandedPaths[file.path]);
         return (
-          <div
-            key={file.path}
-            className="flex h-5 items-center gap-1.5 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
-          >
-            <Icon className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
-            <span className="text-[var(--sto-text-secondary)]">{appDevFileOpVerb(file)}</span>
-            <span className="truncate text-foreground" title={file.path}>
-              {appDevToolBaseName(file.path)}
-            </span>
-            <DiffCounts added={file.added} removed={file.removed} />
+          <div key={file.path} className="flex flex-col">
+            <button
+              type="button"
+              className={cn(
+                'flex h-5 items-center gap-1.5 text-left animate-in fade-in-0 slide-in-from-bottom-1 duration-150',
+                canExpand
+                  ? 'cursor-pointer rounded-sm hover:bg-[var(--sto-bg-inset)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--sto-border-strong)]'
+                  : 'cursor-default',
+              )}
+              disabled={!canExpand}
+              aria-expanded={canExpand ? expanded : undefined}
+              onClick={() => {
+                if (canExpand) togglePath(file.path);
+              }}
+            >
+              {canExpand ? (
+                expanded ? (
+                  <ChevronDown className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+                ) : (
+                  <ChevronRight className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+                )
+              ) : (
+                <Icon className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+              )}
+              <span className="text-[var(--sto-text-secondary)]">{appDevFileOpVerb(file)}</span>
+              <span className="truncate text-foreground" title={file.path}>
+                {appDevToolBaseName(file.path)}
+              </span>
+              <DiffCounts added={file.added} removed={file.removed} />
+            </button>
+            {canExpand && expanded ? <AppDevInlineDiff edits={file.edits} /> : null}
           </div>
         );
       })}

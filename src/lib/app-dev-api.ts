@@ -41,11 +41,29 @@ export interface AppDevStatus {
   phase: AppDevPhase;
   progress: number;
   previewUrl?: string;
+  backendUrl?: string;
+  dbStatus?: 'unknown' | 'ready' | 'error';
   error?: string;
   /** Extra line for the active setup step (e.g. snpm found vs installing). */
   detail?: string;
   /** Recent snpm / setup command output shown in the workbench log panel. */
   log?: string;
+}
+
+export interface AppRuntimeStatus {
+  workspaceId: string;
+  appPath: string;
+  frontendRunning: boolean;
+  backendRunning: boolean;
+  previewUrl?: string;
+  backendUrl?: string;
+  backendPort?: number;
+  dbStatus: 'unknown' | 'ready' | 'error';
+  phase: 'stopped' | 'starting' | 'ready' | 'error';
+  crashCount?: number;
+  recentErrorCount?: number;
+  escalateNeeded?: boolean;
+  error?: string;
 }
 
 export interface AppDevEnvironment {
@@ -410,6 +428,142 @@ export async function drainAppErrors(workspaceId: string): Promise<string[]> {
     `/api/app-dev/apps/errors?workspaceId=${encodeURIComponent(workspaceId)}`,
   );
   return res.errors ?? [];
+}
+
+export async function getAppRuntimeStatus(workspaceId: string): Promise<{
+  fullstack: boolean;
+  status: AppRuntimeStatus;
+  appStatus: AppDevStatus | null;
+}> {
+  return hostApiFetch(`/api/app-dev/runtime/status?workspaceId=${encodeURIComponent(workspaceId)}`);
+}
+
+export async function startAppRuntime(workspaceId: string): Promise<AppRuntimeStatus> {
+  const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return res.status;
+}
+
+export async function stopAppRuntime(workspaceId: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/runtime/stop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+  });
+}
+
+export async function restartAppRuntime(workspaceId: string): Promise<AppRuntimeStatus> {
+  const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/restart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return res.status;
+}
+
+export async function getAppRuntimeLogs(
+  workspaceId: string,
+  source: 'frontend' | 'backend' | 'all' = 'all',
+): Promise<string[]> {
+  const res = await hostApiFetch<{ logs: string[] }>(
+    `/api/app-dev/runtime/logs?workspaceId=${encodeURIComponent(workspaceId)}&source=${encodeURIComponent(source)}`,
+  );
+  return res.logs ?? [];
+}
+
+export async function consumeAppRuntimeEscalate(workspaceId: string): Promise<{
+  fingerprint: string;
+  attempt: number;
+  melted: boolean;
+  prompt: string | null;
+  lines: string[];
+} | null> {
+  const res = await hostApiFetch<{
+    escalate: {
+      fingerprint: string;
+      attempt: number;
+      melted: boolean;
+      prompt: string | null;
+      lines: string[];
+    } | null;
+  }>('/api/app-dev/runtime/escalate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+  });
+  return res.escalate;
+}
+
+export async function runAppRuntimeSmoke(workspaceId: string): Promise<{
+  ok: boolean;
+  output?: string;
+  errMessage?: string;
+  prompt?: string;
+}> {
+  const res = await hostApiFetch<{
+    success: boolean;
+    output?: string;
+    errMessage?: string;
+    prompt?: string;
+  }>('/api/app-dev/runtime/smoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return {
+    ok: res.success,
+    output: res.output,
+    errMessage: res.errMessage,
+    prompt: res.prompt,
+  };
+}
+
+export async function restartAppBackend(workspaceId: string): Promise<AppRuntimeStatus> {
+  const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/restart-backend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return res.status;
+}
+
+export async function migrateAppDb(workspaceId: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/db/migrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function listAppSecrets(workspaceId: string): Promise<string[]> {
+  const res = await hostApiFetch<{ keys: string[] }>(
+    `/api/app-dev/secrets?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.keys ?? [];
+}
+
+export async function setAppSecret(workspaceId: string, key: string, value: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/secrets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, key, value }),
+  });
+}
+
+export async function deleteAppSecret(workspaceId: string, key: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/secrets', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, key }),
+  });
 }
 
 export async function listAppCheckpoints(workspaceId: string): Promise<AppCheckpoint[]> {

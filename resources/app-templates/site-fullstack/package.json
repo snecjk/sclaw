@@ -1,0 +1,46 @@
+{
+  "name": "__APP_NAME__",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "db:migrate": "tsx server/scripts/migrate.ts",
+    "smoke": "tsx server/scripts/smoke.ts",
+    "build": "vite build",
+    "typecheck": "tsc -b",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@a2ui/react": "^0.10.2",
+    "@a2ui/web_core": "^0.10.5",
+    "@hono/node-server": "^1.14.1",
+    "@sto/sclaw-plugin-sso-auth": "0.1.5",
+    "antd": "^5.24.0",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.8.1",
+    "drizzle-orm": "^0.39.3",
+    "hono": "^4.7.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tsx": "^4.19.3",
+    "typescript": "~5.8.3",
+    "vite": "^5.4.0"
+  },
+  "resolutions": {
+    "rollup": "4.62.2"
+  },
+  "overrides": {
+    "rollup": "4.62.2"
+  }
+}

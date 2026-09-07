@@ -24,7 +24,7 @@ import { gunzipSync } from 'node:zlib';
 import { createGzip } from 'node:zlib';
 
 const SOURCE_DIGEST_DOMAIN = 'sto-source-v1';
-const DEFAULT_EXCLUDED_DIRECTORIES = new Set(['.git', '.sto', 'node_modules']);
+const DEFAULT_EXCLUDED_DIRECTORIES = new Set(['.git', '.sto', 'node_modules', '.data']);
 const ALLOWED_ENV_FILES = new Set(['.env.example', '.env.sample', '.env.template']);
 
 interface GitIgnoreRule {

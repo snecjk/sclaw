@@ -4,6 +4,7 @@ import {
   appDevCompletedToolsSignature,
   appDevFileOpVerb,
   appDevToolBaseName,
+  buildAppDevLineDiff,
   classifyAppDevTool,
   countAppDevLines,
   describeAppDevTool,
@@ -56,6 +57,15 @@ describe('countAppDevLines / diffAppDevLineCounts 行数统计', () => {
     expect(diffAppDevLineCounts('same', 'same')).toEqual({ added: 0, removed: 0 });
     expect(diffAppDevLineCounts('', 'new\nblock')).toEqual({ added: 2, removed: 0 });
   });
+
+  it('buildAppDevLineDiff 产出 same/del/add 行', () => {
+    expect(buildAppDevLineDiff('a\nb\nc', 'a\nx\nc')).toEqual([
+      { type: 'same', text: 'a' },
+      { type: 'del', text: 'b' },
+      { type: 'add', text: 'x' },
+      { type: 'same', text: 'c' },
+    ]);
+  });
 });
 
 describe('extractAppDevFileOpStat 单工具行数提取', () => {
@@ -64,7 +74,13 @@ describe('extractAppDevFileOpStat 单工具行数提取', () => {
       name: 'Edit',
       input: { file_path: '/app/src/pages/home.page.json', old_string: 'a\nb\nc', new_string: 'a\nx\ny\nc' },
     }));
-    expect(stat).toEqual({ path: '/app/src/pages/home.page.json', added: 2, removed: 1, isCreate: false });
+    expect(stat).toEqual({
+      path: '/app/src/pages/home.page.json',
+      added: 2,
+      removed: 1,
+      isCreate: false,
+      edits: [{ oldText: 'a\nb\nc', newText: 'a\nx\ny\nc' }],
+    });
   });
 
   it('MultiEdit：edits[] 逐项求和', () => {
@@ -78,7 +94,16 @@ describe('extractAppDevFileOpStat 单工具行数提取', () => {
         ],
       },
     }));
-    expect(stat).toEqual({ path: '/app/a.ts', added: 1, removed: 1, isCreate: false });
+    expect(stat).toEqual({
+      path: '/app/a.ts',
+      added: 1,
+      removed: 1,
+      isCreate: false,
+      edits: [
+        { oldText: 'a', newText: 'a\nb' },
+        { oldText: 'x\ny', newText: 'x' },
+      ],
+    });
   });
 
   it('Write：content 全计 +', () => {
@@ -86,7 +111,13 @@ describe('extractAppDevFileOpStat 单工具行数提取', () => {
       name: 'Write',
       input: { file_path: '/app/b.ts', content: 'l1\nl2\nl3\n' },
     }));
-    expect(stat).toEqual({ path: '/app/b.ts', added: 3, removed: 0, isCreate: true });
+    expect(stat).toEqual({
+      path: '/app/b.ts',
+      added: 3,
+      removed: 0,
+      isCreate: true,
+      edits: [{ oldText: '', newText: 'l1\nl2\nl3\n' }],
+    });
   });
 
   it('input 为 JSON 字符串时解析；不完整 JSON 跳过行数统计', () => {
@@ -120,7 +151,9 @@ describe('rollupAppDevTools 聚合', () => {
     expect(rollup.totals.completedTools).toBe(6);
     expect(rollup.files).toHaveLength(2);
     expect(rollup.files[0]).toMatchObject({ path: '/app/home.page.json', added: 3, removed: 1, ops: 2 });
+    expect(rollup.files[0]!.edits.length).toBeGreaterThan(0);
     expect(rollup.files[1]).toMatchObject({ path: '/app/new.ts', added: 2, removed: 0, ops: 1, hasCreate: true });
+    expect(rollup.files[1]!.edits).toEqual([{ oldText: '', newText: '1\n2' }]);
     expect(rollup.totals.added).toBe(5);
     expect(rollup.totals.removed).toBe(1);
     expect(rollup.commands).toEqual([{ cmd: 'pnpm run build' }]);

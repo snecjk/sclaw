@@ -17,7 +17,8 @@ export type AppDevStageMode =
   | 'more-git'
   | 'more-external'
   | 'more-community'
-  | 'more-assets';
+  | 'more-assets'
+  | 'more-runtime';
 
 export type AppDevPreviewDevice = 'desktop' | 'mobile';
 export type AppDevTuneMode = 'chat' | 'tune';
@@ -36,6 +37,7 @@ const APP_DEV_STAGE_MODES: readonly AppDevStageMode[] = [
   'more-external',
   'more-community',
   'more-assets',
+  'more-runtime',
 ];
 
 export function isAppDevStageMode(value: unknown): value is AppDevStageMode {

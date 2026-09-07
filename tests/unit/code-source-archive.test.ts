@@ -47,6 +47,8 @@ describe('source snapshot gitignore packing', () => {
     await writeFile(join(root, '.env.example'), 'TOKEN=');
     await writeFile(join(root, '.git', 'config'), 'git');
     await writeFile(join(root, '.sto', 'workspace.json'), '{}');
+    await mkdir(join(root, '.data'), { recursive: true });
+    await writeFile(join(root, '.data', 'app.db'), 'sqlite-bytes');
 
     const files = await listSourceSnapshotFiles(root);
     expect(files).toEqual([
@@ -55,6 +57,7 @@ describe('source snapshot gitignore packing', () => {
       'package.json',
       'src/main.tsx',
     ]);
+    expect(files.some((f) => f.startsWith('.data'))).toBe(false);
 
     const snapshot = await createSourceSnapshot(root);
     try {

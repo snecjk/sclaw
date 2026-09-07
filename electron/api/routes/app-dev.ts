@@ -46,8 +46,28 @@ import {
   listAppDevPackageCatalog,
   deleteDevApp,
   type CreateUserAppInput,
+  isFullstackAppMarker,
+  readAppDevMarker,
 } from '../../services/app-dev-service';
 import { getDevServerLogs, drainDevServerErrors } from '../../services/app-dev-server-manager';
+import {
+  getRuntimeLogs,
+  getRuntimeStatus,
+  migrateAppDatabase,
+  restartRuntime,
+  startRuntime,
+  stopRuntime,
+  drainBackendErrors,
+  consumeBackendEscalate,
+  buildBackendRepairPrompt,
+  restartBackendOnly,
+  runAppSmoke,
+} from '../../services/app-runtime-manager';
+import {
+  deleteAppDevSecret,
+  listAppDevSecretKeys,
+  setAppDevSecret,
+} from '../../services/app-dev-secrets';
 import { getWorkspaceRootPath } from '../../services/session-catalog-service';
 import { logger } from '../../utils/logger';
 import {
@@ -313,7 +333,134 @@ export async function handleAppDevRoutes(
     // Drained by the workbench to feed compile/runtime errors to the agent.
     if (url.pathname === '/api/app-dev/apps/errors' && req.method === 'GET') {
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
-      sendJson(res, 200, { success: true, errors: drainDevServerErrors(workspaceId) });
+      const frontend = drainDevServerErrors(workspaceId);
+      const backend = drainBackendErrors(workspaceId);
+      sendJson(res, 200, {
+        success: true,
+        errors: [...frontend, ...backend],
+      });
+      return true;
+    }
+
+    // --- Fullstack runtime / secrets ---
+    if (url.pathname === '/api/app-dev/runtime/status' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      const marker = await readAppDevMarker(appPath);
+      sendJson(res, 200, {
+        success: true,
+        fullstack: isFullstackAppMarker(marker),
+        status: getRuntimeStatus(workspaceId, appPath),
+        appStatus: getAppDevStatus(workspaceId),
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/start' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = await startRuntime(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true, status });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/stop' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      stopRuntime(body.workspaceId);
+      sendJson(res, 200, { success: true });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/restart' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = await restartRuntime(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true, status });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/restart-backend' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = await restartBackendOnly(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true, status });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/escalate' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const escalate = consumeBackendEscalate(body.workspaceId);
+      if (!escalate) {
+        sendJson(res, 200, { success: true, escalate: null });
+        return true;
+      }
+      sendJson(res, 200, {
+        success: true,
+        escalate: {
+          fingerprint: escalate.fingerprint,
+          attempt: escalate.attempt,
+          melted: escalate.melted,
+          prompt: escalate.melted ? null : buildBackendRepairPrompt(escalate.lines),
+          lines: escalate.lines,
+        },
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/smoke' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = getRuntimeStatus(body.workspaceId, appPath);
+      if (!status.backendUrl) {
+        sendJson(res, 400, { success: false, errMessage: '后端未运行' });
+        return true;
+      }
+      try {
+        const output = await runAppSmoke(appPath, status.backendUrl);
+        sendJson(res, 200, { success: true, output });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        sendJson(res, 200, {
+          success: false,
+          errMessage: message,
+          prompt: buildBackendRepairPrompt(message.split('\n').slice(-30)),
+        });
+      }
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/logs' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const source = (url.searchParams.get('source') as 'frontend' | 'backend' | 'all' | null) ?? 'all';
+      sendJson(res, 200, { success: true, logs: getRuntimeLogs(workspaceId, source) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/db/migrate' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      await migrateAppDatabase(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/secrets' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      sendJson(res, 200, { success: true, keys: await listAppDevSecretKeys(workspaceId) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/secrets' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; key: string; value: string }>(req);
+      await setAppDevSecret(body.workspaceId, body.key, body.value);
+      sendJson(res, 200, { success: true });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/secrets' && req.method === 'DELETE') {
+      const body = await parseJsonBody<{ workspaceId: string; key: string }>(req);
+      await deleteAppDevSecret(body.workspaceId, body.key);
+      sendJson(res, 200, { success: true });
       return true;
     }
 

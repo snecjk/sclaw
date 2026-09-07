@@ -16,6 +16,7 @@ import {
   RotateCw,
   Save,
   Search,
+  Server,
   Square,
   Users,
   X,
@@ -24,6 +25,7 @@ import {
 import { toast } from 'sonner';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
 import { AppDevAssetsPanel } from '@/components/app-dev/AppDevAssetsPanel';
+import { AppDevRuntimePanel } from '@/components/app-dev/AppDevRuntimePanel';
 import { AppDevDiffViewer } from '@/components/app-dev/AppDevDiffViewer';
 import { AppDevVersionsPanel } from '@/components/app-dev/AppDevVersionsPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
@@ -98,6 +100,7 @@ const PRIMARY_TABS = [
 const OVERFLOW_TABS = [
   { id: 'more-git', label: 'Git 代码管理', icon: GitBranch },
   { id: 'more-assets', label: '文件', icon: FolderOpen },
+  { id: 'more-runtime', label: '运行时', icon: Server },
   { id: 'more-external', label: '外部服务', icon: PlugZap },
   { id: 'more-community', label: '社区', icon: Users },
 ] as const;
@@ -844,6 +847,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       ) : null}
 
       {mode === 'more-assets' ? <AppDevAssetsPanel workspaceId={workspaceId} /> : null}
+
+      {mode === 'more-runtime' ? <AppDevRuntimePanel workspaceId={workspaceId} /> : null}
 
       {mode === 'more-external' ? <AppExternalServicesPanel workspaceId={workspaceId} /> : null}
 

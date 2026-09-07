@@ -125,6 +125,7 @@ describe('isAppDevStageMode', () => {
     'more-external',
     'more-community',
     'more-assets',
+    'more-runtime',
   ] as const)('accepts %s', (mode) => {
     expect(isAppDevStageMode(mode)).toBe(true);
   });

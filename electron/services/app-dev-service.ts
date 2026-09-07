@@ -30,7 +30,11 @@ import { getUvMirrorEnv } from '../utils/uv-env';
 import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
 import { needsWinShell, prepareWinSpawn, quoteForCmd } from '../utils/paths';
 import { createWorkspace, deleteWorkspace, getWorkspaceRootPath, listUserWorkspaces } from './session-catalog-service';
-import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
+import { startDevServer, getDevServer } from './app-dev-server-manager';
+import {
+  startRuntime,
+  stopRuntime,
+} from './app-runtime-manager';
 import { KeyedGenerationTracker, OperationCanceledError } from './keyed-single-flight';
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
@@ -80,6 +84,10 @@ export interface AppDevStatus {
   /** 0-100 single continuous progress across all pipeline phases. */
   progress: number;
   previewUrl?: string;
+  /** Fullstack backend base URL when runtime is up. */
+  backendUrl?: string;
+  /** SQLite / migrate readiness for fullstack apps. */
+  dbStatus?: 'unknown' | 'ready' | 'error';
   /** Shown on the workbench error panel, including snpm install output. */
   error?: string;
   /** Extra line for the active setup step (e.g. snpm found vs installing). */
@@ -104,6 +112,8 @@ export interface AppDevMarker {
   kind: 'app-dev' | 'app-template';
   name: string;
   projectType: string;
+  /** True when projectType is fullstack (local FE+BE runtime). */
+  fullstack?: boolean;
   createdAt: string;
   /** Cloud Site App id; written on first create so retries do not register a second app. */
   appCode?: string;
@@ -385,35 +395,60 @@ async function isAbandonedAppDevShell(appPath: string): Promise<boolean> {
   }
 }
 
-function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppPageType }): string {
+function buildAppDevAgentsContextBlock(vars: {
+  name: string;
+  pageType?: SiteAppPageType;
+  fullstack?: boolean;
+}): string {
   const pageType = normalizeSiteAppPageType(vars.pageType);
   const menuShape = pageType === 'assets'
     ? '本应用 pageType 为 assets：云端菜单只同步 **一个一级菜单**'
     : '本应用 pageType 为 site：云端菜单遵循用户导航，只同步 **一级目录 + 二级页面**';
-  return `<!-- sclaw-app-dev-context -->
-你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
+  const fullstackBlock = vars.fullstack
+    ? `
+## 本地全栈后端（强制）
+- 本应用为 fullstack：前端 Vite + 后端 Hono（\`server/\`）+ Drizzle/SQLite（\`.data/app.db\`）
+- **可改**：\`server/routes/\`、\`server/services/\`（若有）、\`drizzle/schema.ts\`
+- **禁止改**：\`server/runtime/\` 平台壳（logger / auth-middleware / error / db 打开方式），除非修明确 bug
+- 改 schema 后必须执行 \`npm run db:migrate\`，并用 \`GET /api/health\`（或 \`/proxy/appBackend/api/health\`）自检
+- 密钥只通过工作台 Secrets 注入环境变量，禁止写入源码 / \`.env\` 提交；\`.data/\` 永不进源码同步
+- 后端开发细则见 \`openspec/skill-catalog/backend-dev/SKILL.md\`
 
-## 项目结构
-- \`src/pages/\`：A2UI 页面资产（**主战场**，优先修改）
-- \`contracts/\`：action / intent 契约（Button 的 action 名必须已注册）
-- \`docs/api/\`：公司接口文档（Markdown），调用接口前先阅读这里
-- \`src/runtime/\`：页面加载与 Action Runtime（平台壳，默认不要改）
-- \`src/App.tsx\`：A2UI 宿主壳，**默认不要改**；**禁止**在业务预览里展示 Action Runtime / 开发者调试日志（调试日志应由 SClaw 工作台单独一列展示，不在应用页面内）
-- 工程构建对齐公司发布平台：\`npm run build\` 产物在 \`build/\`；不要改 \`outDir\` 或随意升级 rollup（模板已锁定）
-- \`openspec/\`：本应用的 OpenSpec；**不是** SClaw 客户端仓库
-
-## 工作方式
-- 用户是业务人员，用自然语言描述需求；不要要求他们写代码或看终端日志
-- 预览面向业务用户：只展示业务页面；不要加「Action Runtime」「当前页 #id」「改 page.json」等开发说明
-- **优先修改 \`src/pages/*.page.json\` 与 \`contracts/\`**；预览由 A2UI 渲染器驱动
+## 全栈页面双轨（强制，覆盖下方「优先 page.json」默认）
+- **需要调后端 / 持登录态 / 表单列表刷新的业务页** → 写 \`src/pages/*.tsx\`，并在 \`src/App.tsx\` 用 React Router 注册；参考 \`HomePage.tsx\`（登录 + Todos 走 \`/proxy/appBackend\`）
+- **纯展示 / 营销 / 无后端交互页** → 仍可用 \`src/pages/*.page.json\` + \`src/runtime/page-loader.ts\`（A2UI）
+- **禁止混用**：同一业务能力不要既写 JSX 又写 page.json；全栈 CRUD 不要硬套 A2UI catalog
+- 前端访问本应用后端一律 \`/proxy/appBackend/...\`，禁止写死 \`http://127.0.0.1:<port>\`
+`
+    : '';
+  const pagePriorityBlock = vars.fullstack
+    ? `- **全栈业务页优先改 JSX**（见上方双轨）；展示型页面仍可改 \`src/pages/*.page.json\` 与 \`contracts/\`
+- 查询/列表若做成 A2UI 展示页：仍须用 antd Catalog；若做成 JSX 业务页：可用 antd 组件，样式只走 \`src/theme/theme.css\` token`
+    : `- **优先修改 \`src/pages/*.page.json\` 与 \`contracts/\`**；预览由 A2UI 渲染器驱动
 - 禁止把业务页面写成自由 React JSX
 - 组件：查询/列表/表格/分页页 **必须** 使用 antd Catalog（\`catalogId: "antd"\`）组件：\`AntdFilterBar\`、\`AntdTable\`、\`AntdPagination\`、\`AntdButton\`、\`AntdStack\`、\`AntdText\`
 - 用户即使不提 antd，只要需求是「查询条件 + 表格 + 分页」，也要优先用上述组件；参考 \`src/pages/customer-list.page.json\`
 - 同一 surface 不要混用 basic 的 Column/Text 与 Antd*（一个 surface 一个 catalogId）
 - page JSON 必须是 A2UI v0.9 消息数组（createSurface / updateComponents / updateDataModel），不要编造 \`{ type, props }\` 伪格式
 - 交互通过 actionId：先改 \`contracts/action-registry.v1.json\`，再在页面 Button/Filter 上引用
-- 多页面：新增 \`src/pages/<id>.page.json\` 后还要在 \`src/runtime/page-loader.ts\` 注册
-- 优先使用公司接口文档；不确定时先查 \`docs/api/\`；页面里用 actionId，不写死后端 URL
+- 多页面：新增 \`src/pages/<id>.page.json\` 后还要在 \`src/runtime/page-loader.ts\` 注册`;
+  return `<!-- sclaw-app-dev-context -->
+你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
+
+## 项目结构
+- \`src/pages/\`：页面资产（${vars.fullstack ? '全栈以 JSX 业务页为主，A2UI page.json 为展示辅轨' : 'A2UI 页面资产（**主战场**，优先修改)'}）
+- \`contracts/\`：action / intent 契约（Button 的 action 名必须已注册）
+- \`docs/api/\`：公司接口文档（Markdown），调用接口前先阅读这里
+- \`src/runtime/\`：页面加载与 Action Runtime（平台壳，默认不要改）
+- \`src/App.tsx\`：${vars.fullstack ? '路由与布局宿主；注册新 JSX 业务页时需要改 Route' : 'A2UI 宿主壳，**默认不要改**'}；**禁止**在业务预览里展示 Action Runtime / 开发者调试日志（调试日志应由 SClaw 工作台单独一列展示，不在应用页面内）
+- 工程构建对齐公司发布平台：\`npm run build\` 产物在 \`build/\`；不要改 \`outDir\` 或随意升级 rollup（模板已锁定）
+- \`openspec/\`：本应用的 OpenSpec；**不是** SClaw 客户端仓库
+${fullstackBlock}
+## 工作方式
+- 用户是业务人员，用自然语言描述需求；不要要求他们写代码或看终端日志
+- 预览面向业务用户：只展示业务页面；不要加「Action Runtime」「当前页 #id」「改 page.json」等开发说明
+${pagePriorityBlock}
+- 优先使用公司接口文档；不确定时先查 \`docs/api/\`；页面里用 actionId 或 \`/proxy/...\`，不写死后端绝对 URL
 - 新功能或跨模块改动：先读 \`openspec/skills/\`，再按 OpenSpec（proposal → design → specs → tasks → apply）推进
 - 保持页面简洁可用；改动后用简短中文说明「改了什么、用户会看到什么」
 - 不要提交密钥到代码里；鉴权方式以接口文档为准
@@ -453,7 +488,7 @@ function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppP
 - 起始页 \`HomePage\` / \`home.page.json\` 是设计规范实例，新页面优先仿写其层级与 token 用法
 
 ## 输出协议（可选增强，失败时宿主会降级）
-- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"...","steps":[{"id":"1","title":"...","fileHints":["src/pages/..."]}]}\\n\`\`\`，**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
+- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"...","overview":"...","audience":"...","scenarios":"...","steps":[{"id":"1","title":"...","fileHints":["src/pages/..."],"assets":["..."]}]}\\n\`\`\`（契约见工作台 plan-gate v2），可选再输出 \`\`\`sclaw_styles\`\`\` 风格预设；**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
 - 每步完成可输出 \`\`\`sclaw_step\\n{"id":"1","status":"done"}\\n\`\`\`
 - 轮结束可输出 ≤3 条建议：\`\`\`sclaw_suggestions\\n[{"label":"检查移动端","prompt":"请检查一下移动端效果并修复溢出"}]\\n\`\`\`
 <!-- /sclaw-app-dev-context -->`;
@@ -494,6 +529,7 @@ async function writeAppDevBootstrap(
     kind: vars.kind ?? 'app-dev',
     name: vars.name,
     projectType: vars.projectType,
+    fullstack: vars.projectType === 'fullstack' ? true : undefined,
     createdAt: new Date().toISOString(),
     source: vars.source,
     pageType: vars.pageType,
@@ -544,6 +580,7 @@ async function writeAppDevBootstrap(
     : buildAppDevAgentsContextBlock({
       name: vars.name,
       pageType: normalizeSiteAppPageType(vars.pageType),
+      fullstack: vars.projectType === 'fullstack' || marker.fullstack === true,
     });
   if (existsSync(agentsPath)) {
     let content = await readFile(agentsPath, 'utf8');
@@ -738,7 +775,7 @@ export interface CreateUserAppInput {
   name: string;
   /** Parent directory; the app folder `<parent>/<name>` is created inside. Defaults to ~/SClawApps. */
   parentDir?: string;
-  /** 'frontend' | 'fullstack' — same template in MVP (backend placeholder). */
+  /** 'frontend' | 'fullstack' — fullstack uses site-fullstack + dual-process runtime. */
   projectType?: string;
   /** Cloud application publishing mode. Defaults to site for older clients. */
   pageType?: SiteAppPageType;
@@ -752,6 +789,21 @@ export interface CreateUserAppResult {
   workspaceId: string;
   appPath: string;
   workspaceName: string;
+}
+
+export function isFullstackAppMarker(marker: Pick<AppDevMarker, 'projectType' | 'fullstack'> | null | undefined): boolean {
+  if (!marker) return false;
+  return marker.projectType === 'fullstack' || marker.fullstack === true;
+}
+
+export async function readAppDevMarker(appPath: string): Promise<AppDevMarker | null> {
+  const markerFile = appDevMarkerPath(appPath);
+  if (!existsSync(markerFile)) return null;
+  try {
+    return JSON.parse(await readFile(markerFile, 'utf8')) as AppDevMarker;
+  } catch {
+    return null;
+  }
 }
 
 export interface AppTemplateWorkspaceMarker {
@@ -1854,16 +1906,37 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
       detail: '正在启动预览服务',
       log: undefined,
     });
-    const entry = await startDevServer(workspaceId, appPath);
-    pipeline.throwIfCanceled();
-    setStatus(workspaceId, {
-      phase: 'ready',
-      progress: 100,
-      previewUrl: entry.previewUrl,
-      error: undefined,
-      detail: undefined,
-      log: undefined,
-    });
+    const marker = await readAppDevMarker(appPath);
+    if (isFullstackAppMarker(marker)) {
+      setStatus(workspaceId, {
+        detail: '正在启动全栈运行时（migrate → 后端 → 前端）',
+      });
+      const runtime = await startRuntime(workspaceId, appPath);
+      pipeline.throwIfCanceled();
+      setStatus(workspaceId, {
+        phase: 'ready',
+        progress: 100,
+        previewUrl: runtime.previewUrl,
+        backendUrl: runtime.backendUrl,
+        dbStatus: runtime.dbStatus,
+        error: undefined,
+        detail: undefined,
+        log: undefined,
+      });
+    } else {
+      const entry = await startDevServer(workspaceId, appPath);
+      pipeline.throwIfCanceled();
+      setStatus(workspaceId, {
+        phase: 'ready',
+        progress: 100,
+        previewUrl: entry.previewUrl,
+        backendUrl: undefined,
+        dbStatus: undefined,
+        error: undefined,
+        detail: undefined,
+        log: undefined,
+      });
+    }
   } catch (err) {
     if (err instanceof OperationCanceledError || !isCurrent()) return;
     const message = err instanceof Error ? err.message : String(err);
@@ -1875,8 +1948,14 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
 
 export function stopApp(workspaceId: string): void {
   setupPipelineGenerations.cancel(workspaceId);
-  stopDevServer(workspaceId);
-  setStatus(workspaceId, { phase: 'stopped', progress: 0, previewUrl: undefined });
+  stopRuntime(workspaceId);
+  setStatus(workspaceId, {
+    phase: 'stopped',
+    progress: 0,
+    previewUrl: undefined,
+    backendUrl: undefined,
+    dbStatus: undefined,
+  });
 }
 
 /**
