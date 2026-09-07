@@ -12,7 +12,6 @@ import {
   FILL_DONE_HINT,
   REPEAT_FILL_HINT,
 } from '../../shared/browser-bridge/act-progress';
-import { claudeThinkingConfigForModel, isKimiModel } from '../../shared/claude-kimi-thinking';
 import type { PageObservationElement } from '../../shared/browser-bridge/page-observation';
 
 describe('inspectFillLikeTool', () => {
@@ -114,13 +113,5 @@ describe('attachSuccessfulActProgress', () => {
     });
     expect(result).toEqual({ success: false, error: 'ELEMENT_NOT_FOUND' });
     expect(snapped).toBe(0);
-  });
-});
-
-describe('claudeThinkingConfigForModel', () => {
-  it('disables extended thinking only for kimi', () => {
-    expect(isKimiModel('dashscope/kimi-k3')).toBe(true);
-    expect(claudeThinkingConfigForModel('dashscope/kimi-k3')).toEqual({ type: 'disabled' });
-    expect(claudeThinkingConfigForModel('dashscope/qwen3.6-plus')).toBeUndefined();
   });
 });

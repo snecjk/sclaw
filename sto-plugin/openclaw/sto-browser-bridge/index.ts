@@ -9,6 +9,7 @@ import {
 	type BrowserBridgePluginConfig,
 } from "./bridge-client.js";
 import { attachSuccessfulActProgress } from "../../../shared/browser-bridge/act-progress.js";
+import { formatBridgeSessionList } from "../../../shared/browser-bridge/pick-session.js";
 
 const TAG = "sto-browser-bridge";
 
@@ -141,7 +142,7 @@ export default definePluginEntry({
 			label: "列出浏览器桥接会话",
 			description: "列出活动桥接会话。source=extension 是本机 Chrome（StoClaw Browser Bridge）；source=embed 是应用内 webview。主聊天打开网页必须用 extension。",
 			parameters: Type.Object({}),
-			execute: async () => listBridgeSessions(cfg),
+			execute: async () => formatBridgeSessionList(await listBridgeSessions(cfg)),
 		});
 
 		defineStoTool(api, {

@@ -72,12 +72,10 @@ export function shouldAutoResumeContentlessTurn(input: {
   ownerRunId: string | null | undefined;
   currentRunId: string;
 }): boolean {
-  if (!input.turnWasContentless) return false;
-  if (input.autoResumeCount >= 1) return false;
-  // 已经定性中断的回合（空转熔断 / 用户停止 / 流断开）再续跑，会把同一轮空转推回去。
-  if (input.interruptCause) return false;
-  if (input.ownerRunId && input.ownerRunId !== input.currentRunId) return false;
-  return true;
+  void input;
+  // 空回合自动续跑会 startClaudeQuery('')，SDK 注入 Continue from where you left off，
+  // 模型把 tool_result / 空 user turn 讲成「用户发了空消息」。零 tool_use 的首轮更会卡在读取项目上下文。
+  return false;
 }
 
 function extractAssistantBlocks(payload: unknown): Array<{ type?: string; text?: string }> {

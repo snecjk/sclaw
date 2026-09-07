@@ -95,7 +95,7 @@ describe('contentless turn + auto-resume mutex', () => {
     })).toBe(false);
   });
 
-  it('auto-resume mutex: cap 1, user_abort, owner mismatch', () => {
+  it('does not auto-resume empty turns (empty prompt injects SDK Continue)', () => {
     const base = {
       turnWasContentless: true,
       autoResumeCount: 0,
@@ -103,7 +103,7 @@ describe('contentless turn + auto-resume mutex', () => {
       ownerRunId: 'run-a',
       currentRunId: 'run-a',
     };
-    expect(shouldAutoResumeContentlessTurn(base)).toBe(true);
+    expect(shouldAutoResumeContentlessTurn(base)).toBe(false);
     expect(shouldAutoResumeContentlessTurn({ ...base, autoResumeCount: 1 })).toBe(false);
     expect(shouldAutoResumeContentlessTurn({ ...base, interruptCause: 'user_abort' })).toBe(false);
     expect(shouldAutoResumeContentlessTurn({ ...base, interruptCause: 'loop_guard_blocked' })).toBe(false);

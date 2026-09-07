@@ -298,7 +298,7 @@ describe('consumeClaudeQuery stream projection', () => {
     });
   });
 
-  it('does not complete a control-line / thinking-only result', async () => {
+  it('does not auto-resume a control-line / thinking-only result', async () => {
     const { notifications, sink } = createSink();
     const outcome = await consumeClaudeQuery(
       'agent:test:session:contentless',
@@ -321,7 +321,10 @@ describe('consumeClaudeQuery stream projection', () => {
       'run-contentless',
     );
 
-    expect(notifications).toEqual([]);
-    expect(outcome.autoResume).toBe(true);
+    expect(outcome.autoResume).toBe(false);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      params: { phase: 'completed', runId: 'run-contentless' },
+    });
   });
 });

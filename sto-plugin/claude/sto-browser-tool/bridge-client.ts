@@ -1,4 +1,4 @@
-import { pickBridgeSession } from "../../../shared/browser-bridge/pick-session.js";
+import { normalizeBridgeSessionId, pickBridgeSession } from "../../../shared/browser-bridge/pick-session.js";
 import { annotateHealedSession } from "../../../shared/browser-bridge/failed-payload.js";
 import { resolveCommandTimeoutMs } from "../../../shared/browser-bridge/command-budget.js";
 
@@ -114,7 +114,7 @@ export async function runBridgeCommand(
 	payload: Record<string, unknown> = {},
 	options?: BridgeCommandOptions,
 ): Promise<unknown> {
-	const sessionIdFromOptions = options?.sessionId?.trim();
+	const sessionIdFromOptions = normalizeBridgeSessionId(options?.sessionId);
 	const embedOnly = options?.embedOnly || Boolean(sessionIdFromOptions?.startsWith('embed-'));
 	let sessionId = sessionIdFromOptions;
 
@@ -179,7 +179,7 @@ export async function runBridgeCommand(
 export function bridgeOptionsFromParams(params: {
 	sessionId?: string;
 }): BridgeCommandOptions {
-	const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : undefined;
+	const sessionId = normalizeBridgeSessionId(params.sessionId);
 	return {
 		sessionId,
 		embedOnly: Boolean(sessionId?.startsWith('embed-')),

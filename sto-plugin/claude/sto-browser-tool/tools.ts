@@ -7,6 +7,7 @@ import {
 	runBridgeCommand,
 	type BrowserBridgePluginConfig,
 } from "./bridge-client.js";
+import { formatBridgeSessionList } from "../../../shared/browser-bridge/pick-session.js";
 import {
 	BRIDGE_SYSTEM_PROMPT,
 	EMBED_BRIDGE_SYSTEM_PROMPT,
@@ -150,7 +151,7 @@ export function createBrowserMcpTools(cfg: BrowserBridgePluginConfig) {
 		async () => {
 			try {
 				const sessions = await listBridgeSessions(cfg);
-				return textResult(sessions);
+				return textResult(formatBridgeSessionList(sessions));
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return textResult({ success: false, error: message }, true);

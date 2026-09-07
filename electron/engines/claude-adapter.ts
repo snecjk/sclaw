@@ -34,7 +34,6 @@ import { sliceHistoryPage } from '../../shared/chat-history-page';
 import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend, buildClaudeResumeContinueUserPrompt, inspectClaudeAssistantPayload, isClaudeTurnContentless, shouldAutoResumeContentlessTurn } from '../../shared/claude-runtime-control-text';
 import { resolveClaudeResumePlan } from '../../shared/claude-resume-plan';
 import { classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
-import { claudeThinkingConfigForModel } from '../../shared/claude-kimi-thinking';
 import { assembleSystemPromptAppend } from '../../shared/system-prompt-sections';
 import { consumeRunInterrupt, peekRunInterrupt, rememberRunInterrupt } from './run-interrupt-store';
 import { bindClaudeLoopGuardAbort, unbindClaudeLoopGuardAbort } from './claude-loop-guard';
@@ -1400,9 +1399,6 @@ async function startClaudeQuery(
       // consumer loop can forward text deltas to the renderer in real time.
       includePartialMessages: true,
       settings: launchSelection.model ? { model: launchSelection.model } : undefined,
-      ...(claudeThinkingConfigForModel(launchSelection.model)
-        ? { thinking: { type: 'disabled' as const } }
-        : {}),
       additionalDirectories: mergeAppDevAdditionalDirectories(
         sessionKey,
         cwd,
