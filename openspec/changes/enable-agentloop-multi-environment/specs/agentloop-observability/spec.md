@@ -1,6 +1,6 @@
 ## Purpose
 
-为 SClaw Electron 主进程提供跨 development、test、staging、production 的一致 AgentLoop 可观测能力，同时按环境隔离应用数据并保证探针异常不影响 Agent 核心功能。
+为 SClaw Electron 主进程提供跨 development、test、staging、production 的一致 AgentLoop 可观测能力，同时按 Agent 框架和发布环境分类应用数据，并保证探针异常不影响 Agent 核心功能。
 
 ## ADDED Requirements
 
@@ -16,11 +16,11 @@
 - **THEN** Electron 主进程完成 AgentLoop 初始化
 
 ### Requirement: AgentLoop 应用名称按环境隔离
-系统 SHALL 根据构建环境使用固定的 AgentLoop 应用名称：development 使用 `sto-claw-development`，test 使用 `sto-claw-test`，staging 使用 `sto-claw-staging`，production 使用 `sto-claw-production`。
+系统 SHALL 按 `SClaw-<Agent框架名>-<环境名>` 命名 AgentLoop 应用。当前 Claude Agent SDK 中，development 使用 `SClaw-Claude_Agent_SDK-dev`，test 与 staging 使用 `SClaw-Claude_Agent_SDK-test`，production 使用 `SClaw-Claude_Agent_SDK-online`。
 
 #### Scenario: 各环境选择对应应用名称
 - **WHEN** 任一受支持环境初始化 AgentLoop
-- **THEN** 上报服务名称与该环境约定的 AgentLoop 应用名称一致
+- **THEN** 上报服务名称与该 Agent 框架及发布环境约定的 AgentLoop 应用名称一致
 
 #### Scenario: 按 mode 文件加载配置
 - **WHEN** 构建过程加载任一 `.env.<mode>` 文件

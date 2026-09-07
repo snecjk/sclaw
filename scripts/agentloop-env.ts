@@ -2,7 +2,7 @@
  * AgentLoop / ARMS 多环境构建期配置解析。
  *
  * 职责：
- * - 按 Vite mode 校验固定应用名映射（sto-claw-<mode>），防止环境串流；
+ * - 按 Vite mode 校验固定应用名映射（SClaw-<Agent框架名>-<环境名>），防止环境串流；
  * - 区分敏感字段（License）与非敏感字段：非敏感字段通过 Vite define 注入主进程 bundle，
  *   License 只写入 dist-electron/main/agentloop.config.json，不参与代码生成与日志输出；
  * - 保持优先级：真实进程环境变量（CI 密钥） > Vite loadEnv 结果（.env.<mode>.local > .env.<mode>）。
@@ -13,10 +13,10 @@
 export type AgentLoopMode = 'development' | 'test' | 'staging' | 'production';
 
 export const AGENTLOOP_APP_NAMES: Readonly<Record<AgentLoopMode, string>> = {
-  development: 'sto-claw-development',
-  test: 'sto-claw-test',
-  staging: 'sto-claw-staging',
-  production: 'sto-claw-production',
+  development: 'SClaw-Claude_Agent_SDK-dev',
+  test: 'SClaw-Claude_Agent_SDK-test',
+  staging: 'SClaw-Claude_Agent_SDK-test',
+  production: 'SClaw-Claude_Agent_SDK-online',
 };
 
 /** 注入 dist-electron/main/agentloop.config.json 的敏感配置（不进入 Vite define）。 */

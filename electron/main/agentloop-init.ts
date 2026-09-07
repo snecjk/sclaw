@@ -20,10 +20,10 @@ import { join } from 'node:path';
 export type AgentLoopAppEnv = 'development' | 'test' | 'staging' | 'production';
 
 export const AGENTLOOP_EXPECTED_APP_NAMES: Readonly<Record<AgentLoopAppEnv, string>> = {
-  development: 'sto-claw-development',
-  test: 'sto-claw-test',
-  staging: 'sto-claw-staging',
-  production: 'sto-claw-production',
+  development: 'SClaw-Claude_Agent_SDK-dev',
+  test: 'SClaw-Claude_Agent_SDK-test',
+  staging: 'SClaw-Claude_Agent_SDK-test',
+  production: 'SClaw-Claude_Agent_SDK-online',
 };
 
 export interface AgentLoopInitResult {

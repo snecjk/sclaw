@@ -25,9 +25,8 @@ describe('AgentLoop 环境文件应用名配置（task 1.1）', () => {
     ['.env.test', 'test'],
     ['.env.staging', 'staging'],
     ['.env.production', 'production'],
-  ] as const)('%s 配置固定的 ARMS_APP_NAME=sto-claw-%s', (fileName, mode) => {
+  ] as const)('%s 配置固定的 Claude Agent SDK 应用名', (fileName, mode) => {
     const expected = AGENTLOOP_APP_NAMES[mode];
-    expect(expected).toBe(`sto-claw-${mode}`);
     expect(readEnvFileValue(fileName, 'ARMS_APP_NAME')).toBe(expected);
   });
 

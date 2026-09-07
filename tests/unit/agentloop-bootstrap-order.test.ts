@@ -29,7 +29,7 @@ describe('主进程引导编排加载顺序（task 2.2）', () => {
     });
 
     await bootstrap({
-      env: { ARMS_APP_NAME: 'sto-claw-development' },
+      env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-dev' },
       readSecretsFile: () => JSON.stringify({ licenseKey: 'lic-x' }),
       loadProbe,
       loader,
@@ -51,7 +51,7 @@ describe('主进程引导编排加载顺序（task 2.2）', () => {
   it('探针注册失败时 fail-open：仍加载业务入口', async () => {
     const loader = vi.fn(async () => ({}));
     await bootstrap({
-      env: { ARMS_APP_NAME: 'sto-claw-test' },
+      env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test' },
       readSecretsFile: () => JSON.stringify({ licenseKey: 'lic-x' }),
       loadProbe: () => {
         throw new Error('probe load failed');
@@ -66,7 +66,7 @@ describe('主进程引导编排加载顺序（task 2.2）', () => {
     const loadProbe = vi.fn();
     const loader = vi.fn(async () => ({}));
     await bootstrap({
-      env: { ARMS_APP_NAME: 'sto-claw-test' },
+      env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test' },
       readSecretsFile: () => null,
       loadProbe,
       loader,

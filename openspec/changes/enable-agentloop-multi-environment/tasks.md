@@ -1,6 +1,6 @@
 ## 1. 环境配置与构建注入
 
-- [x] 1.1 在 `.env.development`、`.env.test`、`.env.staging`、`.env.production` 中配置对应的非敏感 `ARMS_APP_NAME`，并通过配置测试验证名称分别为 `sto-claw-development`、`sto-claw-test`、`sto-claw-staging`、`sto-claw-production`
+- [x] 1.1 在 `.env.development`、`.env.test`、`.env.staging`、`.env.production` 中按 `SClaw-<Agent框架名>-<环境名>` 配置 `ARMS_APP_NAME`，并通过配置测试验证 Claude Agent SDK 的 dev/test/online 映射
 - [x] 1.2 将相同的 License、Region、Workspace 及运行策略写入四个 `.env.<mode>` 并纳入 Vite 主进程配置解析，通过单元测试验证按 mode 加载且应用名保持隔离
 - [x] 1.3 检查 AgentLoop License 仅具备可分发的遥测写入权限并记录验证结果，确认构建日志不会输出完整凭证
 
@@ -20,6 +20,6 @@
 ## 4. 多环境验证
 
 - [x] 4.1 分别执行 development、test、staging、production 的配置或构建验证，确认每种 mode 只使用对应的 AgentLoop 应用名称
-- [ ] 4.2 在 development 发起 Claude Agent 冒烟会话，确认 AgentLoop 收到 `claude_agent` span 且应用名为 `sto-claw-development`
-- [ ] 4.3 对 test、staging、production 安装包执行启动与上报冒烟验证，确认调用链分别进入对应 AgentLoop 应用且探针异常不会阻断应用
+- [ ] 4.2 在 development 发起 Claude Agent 冒烟会话，确认 AgentLoop 收到 `claude_agent` span 且应用名为 `SClaw-Claude_Agent_SDK-dev`
+- [ ] 4.3 对 test、staging、production 安装包执行启动与上报冒烟验证，确认调用链分别进入 `SClaw-Claude_Agent_SDK-test`、`SClaw-Claude_Agent_SDK-test`、`SClaw-Claude_Agent_SDK-online` 且探针异常不会阻断应用
 - [ ] 4.4 运行类型检查和相关自动化测试，确认 Electron 主进程启动、Claude 会话及现有构建流程无回归

@@ -17,14 +17,17 @@
 
 | Vite mode | AgentLoop 应用名称 |
 | --- | --- |
-| `development` | `sto-claw-development` |
-| `test` | `sto-claw-test` |
-| `staging` | `sto-claw-staging` |
-| `production` | `sto-claw-production` |
+| `development` | `SClaw-Claude_Agent_SDK-dev` |
+| `test` | `SClaw-Claude_Agent_SDK-test` |
+| `staging` | `SClaw-Claude_Agent_SDK-test` |
+| `production` | `SClaw-Claude_Agent_SDK-online` |
 
 - 应用名按构建 mode 固定映射并写入 `.env.<mode>`，**勿改**；
   初始化时校验应用名属于固定映射，防止配置复制导致的环境串流。
-- 四个 mode 文件共用同一套 AgentLoop 接入参数，仅应用名不同。
+- 应用命名规则为 `SClaw-<Agent框架名>-<环境名>`。框架名使用
+  `Claude_Agent_SDK` 或 `Pi_Agent_SDK`；环境名使用 `dev`、`test` 或
+  `online`。当前接入 Claude Agent SDK，staging 归入测试环境。
+- 四个 mode 文件共用同一套 AgentLoop 接入参数。
 
 ## 配置项清单
 
@@ -48,7 +51,7 @@
 
 ```ini
 ARMS_LICENSE_KEY=your_agentloop_license_key
-ARMS_APP_NAME=sto-claw-<mode>
+ARMS_APP_NAME=SClaw-<Claude_Agent_SDK|Pi_Agent_SDK>-<dev|test|online>
 ARMS_REGION_ID=cn-shanghai
 ARMS_WORKSPACE=your_agentloop_workspace
 ARMS_ENABLE_CONSOLE_EXPORTER=true
@@ -60,10 +63,10 @@ OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT=true
 
 | 命令 | 加载文件 | AgentLoop 应用名 |
 | --- | --- | --- |
-| `pnpm dev` | `.env.development` | `sto-claw-development` |
-| `pnpm package:test` | `.env.test` | `sto-claw-test` |
-| `pnpm package:staging` | `.env.staging` | `sto-claw-staging` |
-| `pnpm package` | `.env.production` | `sto-claw-production` |
+| `pnpm dev` | `.env.development` | `SClaw-Claude_Agent_SDK-dev` |
+| `pnpm package:test` | `.env.test` | `SClaw-Claude_Agent_SDK-test` |
+| `pnpm package:staging` | `.env.staging` | `SClaw-Claude_Agent_SDK-test` |
+| `pnpm package` | `.env.production` | `SClaw-Claude_Agent_SDK-online` |
 
 若构建进程显式设置同名环境变量，Vite 会优先使用进程环境变量；常规构建以
 对应的 `.env.<mode>` 为准。
@@ -82,7 +85,7 @@ License 会随桌面安装包分发、可被提取，因此必须是**仅具备�
 
 - 启动日志特征：
   - 成功：`[AgentLoop] 探针已注册（应用环境=<env>）`，随后
-    `[CMS][INFO] NodeSDK initialized ... service=sto-claw-<env>`
+    `[CMS][INFO] NodeSDK initialized ... service=SClaw-Claude_Agent_SDK-<env>`
   - 降级：`[AgentLoop] ... 跳过探针初始化` 或 `探针注册失败，已降级继续启动`
     （缺应用名 / 缺 License / 应用名串流 / 探针模块缺失等，均为脱敏固定文案，
     日志不会出现 License 或完整配置值）。

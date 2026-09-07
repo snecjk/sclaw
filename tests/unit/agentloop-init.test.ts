@@ -31,7 +31,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
   describe('完整配置', () => {
     it('应用名 + License 完整时注册探针并透传非敏感字段', () => {
       const env: Env = {
-        ARMS_APP_NAME: 'sto-claw-test',
+        ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test',
         ARMS_REGION_ID: 'cn-shanghai',
         ARMS_WORKSPACE: 'ws-1',
         ARMS_ENABLE_CONSOLE_EXPORTER: 'true',
@@ -46,7 +46,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
       expect(loadProbe).toHaveBeenCalledTimes(1);
       // License 与应用名写入运行时 env，供探针读取
       expect(env.ARMS_LICENSE_KEY).toBe('lic-valid');
-      expect(env.ARMS_APP_NAME).toBe('sto-claw-test');
+      expect(env.ARMS_APP_NAME).toBe('SClaw-Claude_Agent_SDK-test');
       expect(env.ARMS_REGION_ID).toBe('cn-shanghai');
       expect(env.ARMS_WORKSPACE).toBe('ws-1');
     });
@@ -66,7 +66,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
   describe('缺失 License', () => {
     it('无 agentloop.config.json 时跳过初始化并告警（不加载探针）', () => {
       const { deps, logs, loadProbe } = makeDeps({
-        env: { ARMS_APP_NAME: 'sto-claw-production' },
+        env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-online' },
         readSecretsFile: () => null,
       });
       const result = initAgentLoop(deps);
@@ -79,7 +79,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
 
     it('License 为占位值 auto 时跳过初始化', () => {
       const { deps, loadProbe } = makeDeps({
-        env: { ARMS_APP_NAME: 'sto-claw-test' },
+        env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test' },
         readSecretsFile: () => JSON.stringify({ licenseKey: 'auto' }),
       });
       const result = initAgentLoop(deps);
@@ -90,7 +90,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
 
     it('agentloop.config.json 非法 JSON 时 fail-open 跳过', () => {
       const { deps, loadProbe } = makeDeps({
-        env: { ARMS_APP_NAME: 'sto-claw-test' },
+        env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test' },
         readSecretsFile: () => '{ not json',
       });
       const result = initAgentLoop(deps);
@@ -103,7 +103,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
   describe('应用名不匹配（环境串流防护）', () => {
     it('应用名不在固定映射内时拒绝初始化', () => {
       const { deps, logs, loadProbe } = makeDeps({
-        env: { ARMS_APP_NAME: 'sto-claw-production-copy' },
+        env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-online-copy' },
         readSecretsFile: () => SECRETS_WITH_LICENSE,
       });
       const result = initAgentLoop(deps);
@@ -128,7 +128,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
   describe('探针加载异常 fail-open', () => {
     it('loadProbe 抛错时不阻断，记录脱敏告警并返回 failed', () => {
       const { deps, logs } = makeDeps({
-        env: { ARMS_APP_NAME: 'sto-claw-test' },
+        env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test' },
         readSecretsFile: () => SECRETS_WITH_LICENSE,
         loadProbe: () => {
           throw new Error('Cannot find module @loongsuite/cms_node_sdk/register');
@@ -145,7 +145,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
   describe('进程内幂等', () => {
     it('重复初始化只注册一次探针，第二次返回 already-initialized', () => {
       const { deps, loadProbe } = makeDeps({
-        env: { ARMS_APP_NAME: 'sto-claw-staging' },
+        env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test' },
         readSecretsFile: () => SECRETS_WITH_LICENSE,
       });
       const first = initAgentLoop(deps);
@@ -160,7 +160,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
     it('env 缺省时从真实 process.env（define 注入点同源）解析配置并注册', () => {
       // 打包应用中 define 把 process.env.ARMS_APP_NAME 等字面量访问替换为构建期值；
       // 此处以 stubEnv 模拟该同源取值路径（未注入隔离 env，deps.env 缺省 = process.env）。
-      vi.stubEnv('ARMS_APP_NAME', 'sto-claw-staging');
+      vi.stubEnv('ARMS_APP_NAME', 'SClaw-Claude_Agent_SDK-test');
       vi.stubEnv('ARMS_REGION_ID', 'cn-shanghai');
       const loadProbe = vi.fn(() => ({}));
       try {
@@ -180,7 +180,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
     });
 
     it('注入隔离 env 时不回退到真实 process.env（测试隔离不被环境污染）', () => {
-      vi.stubEnv('ARMS_APP_NAME', 'sto-claw-production');
+      vi.stubEnv('ARMS_APP_NAME', 'SClaw-Claude_Agent_SDK-online');
       try {
         const { deps, loadProbe } = makeDeps({
           env: {}, // 注入隔离 env 且缺失应用名
@@ -205,7 +205,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
 
     it('显式配置的开关在探针加载前写入 env', () => {
       const env: Env = {
-        ARMS_APP_NAME: 'sto-claw-test',
+        ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test',
         ARMS_ENABLE_CONSOLE_EXPORTER: 'true',
         OTEL_LOG_LEVEL: 'debug',
         OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT: 'true',
@@ -226,7 +226,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
     });
 
     it('未配置开关时不写入任何默认值（production 未配置不自动启用）', () => {
-      const env: Env = { ARMS_APP_NAME: 'sto-claw-production' };
+      const env: Env = { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-online' };
       let snapshot: Env = {};
       const { deps } = makeDeps({
         env,
@@ -249,7 +249,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
       vi.stubEnv('OTEL_LOG_LEVEL', 'debug');
       vi.stubEnv('OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT', 'true');
       try {
-        const env: Env = { ARMS_APP_NAME: 'sto-claw-production' };
+        const env: Env = { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-online' };
         let snapshot: Env = {};
         const { deps } = makeDeps({
           env,
@@ -273,7 +273,7 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
     it('所有日志均不包含 License 值', () => {
       const license = 'lic-super-secret-value';
       const { deps, logs } = makeDeps({
-        env: { ARMS_APP_NAME: 'sto-claw-test' },
+        env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-test' },
         readSecretsFile: () => JSON.stringify({ licenseKey: license }),
       });
       initAgentLoop(deps);
