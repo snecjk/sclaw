@@ -40,8 +40,8 @@ describe('site-fullstack template contract', () => {
 
 /**
  * 手工冒烟清单（不自动跑）：
- * 1. 创建应用 → 工程形态选「全栈应用」→ template site-fullstack
- * 2. 工作台等待 ready，预览打开首页显示「后端已连接」
+ * 1. 创建应用不再展示工程形态；默认前端应用 / site-minimal
+ * 2. 已有 fullstack 工作台等待 ready，预览打开首页显示「后端已连接」
  * 3. 注册 / 登录 → 添加/勾选/删除 todo
  * 4. 溢出菜单「运行时」：看 backend URL、日志、停止后再启动
  * 5. 密钥页保存 SESSION_SECRET，重启后端后仍可登录

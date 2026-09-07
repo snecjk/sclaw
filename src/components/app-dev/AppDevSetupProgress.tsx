@@ -4,6 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import {
   appDevSetupHeadline,
+  appDevSetupLogStepId,
   appDevSetupSteps,
   type AppDevSetupStep,
 } from '@/lib/app-dev-pipeline';
@@ -68,6 +69,8 @@ export function AppDevSetupProgress({
   onCancel?: () => void;
 }) {
   const steps = appDevSetupSteps(phase, detail);
+  const logText = log?.trim() ?? '';
+  const logStepId = appDevSetupLogStepId(phase);
 
   return (
     <div className="w-full max-w-[480px] text-left">
@@ -78,38 +81,41 @@ export function AppDevSetupProgress({
       </div>
 
       <ol className="relative space-y-0 rounded-xl border border-border/80 bg-background/80 px-4 py-3">
-        {steps.map((step, index) => (
-          <li key={step.id} className="relative flex gap-3 py-2.5">
-            {index < steps.length - 1 ? (
-              <span
-                className={cn(
-                  'absolute left-[9px] top-8 h-[calc(100%-8px)] w-px',
-                  step.state === 'done' ? 'bg-emerald-400/70' : 'bg-border',
-                )}
-                aria-hidden
-              />
-            ) : null}
-            <StepGlyph state={step.state} />
-            <div className="min-w-0 flex-1 pt-px">
-              <p
-                className={cn(
-                  'text-[13px] leading-5',
-                  step.state === 'active' && 'font-medium text-foreground',
-                  step.state === 'done' && 'text-foreground/80',
-                  step.state === 'pending' && 'text-muted-foreground',
-                )}
-              >
-                {step.title}
-              </p>
-              {step.hint ? (
-                <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">{step.hint}</p>
+        {steps.map((step, index) => {
+          const showLog = logStepId === step.id;
+          return (
+            <li key={step.id} className="relative flex gap-3 py-2.5">
+              {index < steps.length - 1 ? (
+                <span
+                  className={cn(
+                    'absolute left-[9px] top-8 h-[calc(100%-8px)] w-px',
+                    step.state === 'done' ? 'bg-emerald-400/70' : 'bg-border',
+                  )}
+                  aria-hidden
+                />
               ) : null}
-            </div>
-          </li>
-        ))}
+              <StepGlyph state={step.state} />
+              <div className="min-w-0 flex-1 pt-px">
+                <p
+                  className={cn(
+                    'text-[13px] leading-5',
+                    step.state === 'active' && 'font-medium text-foreground',
+                    step.state === 'done' && 'text-foreground/80',
+                    step.state === 'pending' && 'text-muted-foreground',
+                  )}
+                >
+                  {step.title}
+                </p>
+                {showLog && (logText || step.hint) ? (
+                  <AppDevCommandLog log={logText || step.hint} className="mt-1 max-h-[6.25rem] py-1" />
+                ) : step.hint ? (
+                  <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">{step.hint}</p>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
       </ol>
-
-      {log?.trim() ? <AppDevCommandLog log={log} className="mt-3" /> : null}
 
       <p className="mt-4 text-center text-xs leading-relaxed text-muted-foreground">
         首次创建通常一两分钟。你可以先在左侧描述想做的功能。

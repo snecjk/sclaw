@@ -72,8 +72,7 @@ export const AppDevRuntimePanel = memo(function AppDevRuntimePanel({
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center" data-testid="app-dev-runtime-panel">
         <Terminal className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-foreground">当前不是全栈应用</p>
-        <p className="text-xs text-muted-foreground">创建          创建应用时选择「全栈应用」，或使用 site-fullstack 模板后可在此管理运行时与密钥。
-        </p>
+        <p className="text-xs text-muted-foreground">当前应用没有本地后端，全栈运行时仅对已有 fullstack 工程开放。</p>
       </div>
     );
   }
