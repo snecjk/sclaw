@@ -8,6 +8,7 @@ import {
 } from '../../../shared/browser-automation/observe-script';
 import { BROWSER_AUTOMATION_MAX_ELEMENTS } from '../../../shared/browser-automation/types';
 import { BrowserAutomationCdpSession } from './cdp-session';
+import { resolveBackendNodeClickPoint } from './ax-observer';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -228,6 +229,107 @@ async function nativeFillTarget(
     value: result?.value,
     stableKey: result?.stableKey,
     error: result?.error,
+  };
+}
+
+async function callOnBackendNode<T>(
+  cdp: BrowserAutomationCdpSession,
+  backendNodeId: number,
+  functionDeclaration: string,
+  args: unknown[] = [],
+): Promise<T | undefined> {
+  await cdp.enableDomains('DOM', 'Runtime');
+  const resolved = await cdp.send<{ object?: { objectId?: string } }>('DOM.resolveNode', { backendNodeId });
+  const objectId = resolved?.object?.objectId;
+  if (!objectId) return undefined;
+  try {
+    const result = await cdp.send<{ result?: { value?: T } }>('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration,
+      arguments: args.map((value) => ({ value })),
+      returnByValue: true,
+    });
+    return result?.result?.value;
+  } finally {
+    try {
+      await cdp.send('Runtime.releaseObject', { objectId });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+const READ_BACKEND_NODE_VALUE =
+  "function(){ return 'value' in this ? String(this.value || '') : String(this.textContent || ''); }";
+
+const SET_BACKEND_NODE_VALUE = `function(value) {
+  if (typeof this.focus === 'function') this.focus();
+  if (this.isContentEditable) {
+    this.textContent = value;
+  } else if ('value' in this) {
+    var proto = this instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : (this instanceof HTMLInputElement ? HTMLInputElement.prototype : null);
+    if (proto) {
+      var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (descriptor && descriptor.set) descriptor.set.call(this, value);
+      else this.value = value;
+    } else {
+      this.value = value;
+    }
+  }
+  this.dispatchEvent(new Event('input', { bubbles: true }));
+  this.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'value' in this ? String(this.value || '') : String(this.textContent || '');
+}`;
+
+/**
+ * AX ref 填写：不走页内 refMap，用 backendNodeId 聚焦后 CDP 输入，失败再 native setter。
+ */
+export async function actFillByBackendNodeId(input: {
+  cdp: BrowserAutomationCdpSession;
+  backendNodeId: number;
+  ref: string;
+  value: string;
+}): Promise<BrowserAutomationActResult> {
+  const expected = input.value ?? '';
+  const point = await resolveBackendNodeClickPoint(input.cdp, input.backendNodeId);
+  if (!point) {
+    return {
+      success: false,
+      action: 'fill',
+      ref: input.ref,
+      error: 'Element not found',
+      errorCode: 'ELEMENT_NOT_FOUND',
+    };
+  }
+
+  await dispatchMouseClick(input.cdp, point.x, point.y);
+  await typeTextViaCdp(input.cdp, expected, { clearFirst: true });
+
+  let actual = await callOnBackendNode<string>(input.cdp, input.backendNodeId, READ_BACKEND_NODE_VALUE) ?? '';
+  if (valuesMatch(actual, expected)) {
+    return { success: true, action: 'fill', ref: input.ref };
+  }
+
+  actual = await callOnBackendNode<string>(
+    input.cdp,
+    input.backendNodeId,
+    SET_BACKEND_NODE_VALUE,
+    [expected],
+  ) ?? '';
+  if (valuesMatch(actual, expected)) {
+    return { success: true, action: 'fill', ref: input.ref };
+  }
+
+  return {
+    success: false,
+    action: 'fill',
+    ref: input.ref,
+    error: expected
+      ? `Typed value did not stick (expected "${expected}", got "${actual}")`
+      : 'Unable to clear or fill the target field',
+    errorCode: 'FILL_NOT_STUCK',
   };
 }
 

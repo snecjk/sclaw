@@ -53,7 +53,16 @@ export interface BrowserBridgeSnapshot {
   url: string;
   title: string;
   timestamp: number;
-  tree: unknown[];
+  elements: Array<{
+    ref: string;
+    role: string;
+    name?: string;
+    clickable?: boolean;
+    editable?: boolean;
+  }>;
+  documentGeneration: number;
+  observationMode: 'ax' | 'dom';
+  truncated?: boolean;
 }
 
 export const BROWSER_BRIDGE_EMBED_TAB_ID = -1;
@@ -61,5 +70,17 @@ export const BROWSER_BRIDGE_EMBED_TOKEN = '__stoclaw_embed__';
 export const BROWSER_BRIDGE_COMMAND_TTL_MS = 30 * 1000;
 export const BROWSER_BRIDGE_SESSION_STALE_MS = 60 * 1000;
 export const BROWSER_BRIDGE_POLL_WAIT_MAX_MS = 25 * 1000;
+export const BROWSER_BRIDGE_CONSENT_TIMEOUT_MS = 90 * 1000;
+export const BROWSER_BRIDGE_ATTACH_TIMEOUT_MS = 25 * 1000;
 export const BROWSER_BRIDGE_DEFAULT_HOST = '127.0.0.1';
 export const BROWSER_BRIDGE_DEFAULT_PORT = 3210;
+
+export type BrowserBridgeChromeConsent = 'unknown' | 'allowed' | 'denied';
+
+export interface BrowserBridgeControlCommand {
+  commandId: string;
+  action: 'attach';
+  url?: string;
+  createdAt: number;
+  expiresAt: number;
+}

@@ -5,7 +5,7 @@ export interface ChatRuntimeRunsTable {
   session_key: string;
   run_id: string | null;
   idempotency_key: string;
-  origin: 'interactive' | 'scheduled_task' | 'channel';
+  origin: 'interactive' | 'scheduled_task' | 'channel' | 'bridge';
   owner_id: string | null;
   deadline_at: number | null;
   engine_type: 'openclaw' | 'claude';
@@ -16,6 +16,7 @@ export interface ChatRuntimeRunsTable {
   last_event_at: number;
   terminal_at: number | null;
   error: string | null;
+  interrupt_cause: string | null;
   acceptance_result_json: string | null;
   created_at: string;
   updated_at: string;

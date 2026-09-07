@@ -28,7 +28,30 @@ export function classifyChatRunInterrupt(error: unknown): ChatRunInterruptCause 
   if (/timeout|超时/i.test(text) && /tool|command|浏览器|bridge|automation/i.test(text)) {
     return 'tool_timeout';
   }
-  if (/stream|STREAM_CLOSE|aborted|AbortError|socket hang up/i.test(text)) return 'stream_closed';
+  if (/iterator_eof|stream|STREAM_CLOSE|aborted|AbortError|socket hang up/i.test(text)) {
+    return 'stream_closed';
+  }
   if (/deadline|hard.?deadline/i.test(text)) return 'hard_deadline';
   return 'unknown';
+}
+
+/**
+ * 新一轮 dispatch 时从上一轮快照继承原因。completed 不继承。
+ * 读当前 latest 会读到新 run（cause 为 null），所以必须在 begin 时拷过去。
+ */
+export function inheritChatRunInterruptCause(
+  prior: {
+    phase: string;
+    interruptCause?: ChatRunInterruptCause | null;
+    error?: string | null;
+  } | null | undefined,
+): ChatRunInterruptCause | null {
+  if (!prior) return null;
+  if (prior.phase === 'completed') return null;
+  if (prior.interruptCause) return prior.interruptCause;
+  if (prior.phase === 'aborted') return 'user_abort';
+  if (prior.phase === 'failed') return classifyChatRunInterrupt(prior.error);
+  if (prior.phase === 'interrupted') return 'unknown';
+  if (prior.phase === 'reconciling') return 'process_restart';
+  return null;
 }

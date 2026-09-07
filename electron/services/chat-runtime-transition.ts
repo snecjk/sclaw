@@ -5,7 +5,7 @@ import {
   type ChatRuntimeSnapshot,
 } from '../../shared/chat-runtime-protocol';
 
-const TARGET_PHASE: Record<CanonicalChatEventType, ChatRunPhase | null> = {
+export const CHAT_RUNTIME_EVENT_TARGET_PHASE: Record<CanonicalChatEventType, ChatRunPhase | null> = {
   'run.dispatching': 'dispatching',
   'run.accepted': 'running',
   'run.started': 'running',
@@ -20,7 +20,7 @@ const TARGET_PHASE: Record<CanonicalChatEventType, ChatRunPhase | null> = {
   'run.interrupted': 'interrupted',
 };
 
-const ALLOWED: Record<ChatRunPhase, ReadonlySet<ChatRunPhase>> = {
+export const CHAT_RUNTIME_ALLOWED_TRANSITIONS: Record<ChatRunPhase, ReadonlySet<ChatRunPhase>> = {
   dispatching: new Set([
     'dispatching', 'uncertain', 'running', 'awaiting_transcript', 'aborting',
     'completed', 'failed', 'aborted', 'interrupted',
@@ -55,12 +55,12 @@ export function transitionChatRuntime(input: {
     return { accepted: false, reason: 'run-id-mismatch' };
   }
 
-  const target = TARGET_PHASE[type] ?? snapshot.phase;
+  const target = CHAT_RUNTIME_EVENT_TARGET_PHASE[type] ?? snapshot.phase;
   const nextPhase = target ?? snapshot.phase;
   if (isTerminalChatRunPhase(snapshot.phase) && nextPhase !== snapshot.phase) {
     return { accepted: false, reason: 'terminal-is-immutable' };
   }
-  if (!ALLOWED[snapshot.phase].has(nextPhase)) {
+  if (!CHAT_RUNTIME_ALLOWED_TRANSITIONS[snapshot.phase].has(nextPhase)) {
     return { accepted: false, reason: 'invalid-transition' };
   }
 
@@ -104,7 +104,7 @@ export function transitionChatRuntimePhase(input: {
   if (isTerminalChatRunPhase(snapshot.phase) && phase !== snapshot.phase) {
     return { accepted: false, reason: 'terminal-is-immutable' };
   }
-  if (!ALLOWED[snapshot.phase].has(phase)) {
+  if (!CHAT_RUNTIME_ALLOWED_TRANSITIONS[snapshot.phase].has(phase)) {
     return { accepted: false, reason: 'invalid-transition' };
   }
   return {

@@ -2,8 +2,8 @@
  * 感知预算的单一事实源（契约 3）。
  *
  * 任何返回页面观察结果的路径都必须有上限，超限必须自述 truncated。
- * AX 主路径按字符预算三轮降级；embed DOM 快照按节点数截断；
- * Chrome 扩展 page-agent 只收可交互节点，另有节点上限。
+ * AX 主路径按字符预算三轮降级；统一观测契约再按字符预算裁剪 elements；
+ * embed DOM 快照按节点数截断；Chrome 扩展只收可交互节点，另有节点上限。
  *
  * 页内注入脚本不能 import 本模块，数字由测试钉死（embed 的 MAX_SNAPSHOT_NODES、
  * 扩展的 ELEMENT_LIMIT）。改这里必须同步改注入脚本。

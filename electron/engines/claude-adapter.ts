@@ -31,10 +31,12 @@ import { inspectTranscript } from './chat-runtime-inspection';
 import { logUserSend } from '../../shared/user-send-log';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
-import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend } from '../../shared/claude-runtime-control-text';
+import { isClaudeRuntimeControlText, isContinueUserPrompt, buildClaudeResumeInterruptAppend, buildClaudeResumeContinueUserPrompt } from '../../shared/claude-runtime-control-text';
 import { resolveClaudeResumePlan } from '../../shared/claude-resume-plan';
 import { classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
+import { assembleSystemPromptAppend } from '../../shared/system-prompt-sections';
 import { consumeRunInterrupt, peekRunInterrupt, rememberRunInterrupt } from './run-interrupt-store';
+import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
 import { ActiveQueryRegistry } from './active-query-registry';
 import {
   applyClaudeStreamEvent,
@@ -1258,10 +1260,13 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
+    const storedCause = (await getChatRuntimeRepository().getLatestForSession(sessionKey).catch(() => null))
+      ?.interruptCause ?? null;
+    const interruptCause = peekRunInterrupt(sessionKey) ?? storedCause ?? null;
     const resumePlan = resolveClaudeResumePlan({
       registryEntry: existing,
-      interruptCause: peekRunInterrupt(sessionKey),
-      userPrompt: options?.userPrompt,
+      interruptCause,
+      userPrompt: typeof prompt === 'string' ? prompt : options?.userPrompt,
     });
     const queryMode = resumePlan.mode === 'new' ? 'new' as const : 'resume' as const;
     logClaudeQueryTiming('launch_prepared', {
@@ -1285,19 +1290,28 @@ async function startClaudeQuery(
     // 默认将 cwd 工作区/工作空间写入提示词：用户未指定特殊路径时，模型以该路径作为默认工作目录。
     // 走 systemPromptAppend（与 historyBridge 一致），避免污染用户消息与侧栏标题。
     const cwdPromptNote = `# 工作区/项目空间限制\n 当前工作目录/空间根目录为：**${cwd}**。若用户未指定特殊路径，请默认使用该路径作为工作目录进行文件读写等操作。**如果记忆中也出现了，必须以此处路径为准**。`;
-    const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend, resumeInterruptAppend]
-      .filter(Boolean)
-      .join('\n\n');
+    const systemPromptAppend = assembleSystemPromptAppend([
+      { id: 'cwd', text: cwdPromptNote },
+      { id: 'runtime-extensions', text: runtimeOptions.systemPromptAppend },
+      { id: 'caller', text: options?.systemPromptAppend },
+      { id: 'history-bridge', text: historyBridgeAppend },
+      { id: 'resume-interrupt', text: resumeInterruptAppend },
+    ]);
+    const resumeContinuePrompt = resumePlan.mode === 'resume' && resumePlan.isContinuePrompt
+      ? buildClaudeResumeContinueUserPrompt(resumePlan.interruptCause)
+      : null;
+    const queryPrompt = resumeContinuePrompt ?? prompt;
     logger.info('[claude-adapter][prompt] final systemPromptAppend', {
       sessionKey,
       systemPromptAppendChars: systemPromptAppend.length,
     });
     logger.info('[claude-adapter][prompt] user message', {
       sessionKey,
-      userPromptChars: typeof prompt === 'string' ? prompt.length : null,
+      userPromptChars: typeof queryPrompt === 'string' ? queryPrompt.length : null,
+      replacedContinuePrompt: Boolean(resumeContinuePrompt),
     });
-    const userMessageForLog = typeof prompt === 'string'
-      ? prompt
+    const userMessageForLog = typeof queryPrompt === 'string'
+      ? queryPrompt
       : (options?.userPrompt ?? '(stream/non-string prompt)');
     logUserSend({
       engine: 'claude',
@@ -1356,7 +1370,7 @@ async function startClaudeQuery(
       mode: queryMode,
     });
     const query = await createClaudeQuery({
-      prompt,
+      prompt: queryPrompt,
       options: existing?.sessionId
         ? {
           ...queryBaseOptions,
@@ -1424,7 +1438,7 @@ async function startClaudeQuery(
           runId,
           undefined,
           {
-            suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof prompt === 'string',
+            suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof queryPrompt === 'string',
             timing: { launchStartedAt, queryCreatedAt, mode: queryMode },
           },
         );
@@ -1432,7 +1446,7 @@ async function startClaudeQuery(
         const invalidSessionId = existing?.sessionId;
         if (
           invalidSessionId
-          && typeof prompt === 'string'
+          && typeof queryPrompt === 'string'
           && isMissingClaudeConversationError(error)
         ) {
           logger.warn('[claude-adapter] Resume session is unavailable; retrying as a new SDK session', {
@@ -1457,13 +1471,18 @@ async function startClaudeQuery(
             pendingHistoryBridge: true,
           };
           const recoveryBridge = await buildClaudeHistoryBridge(recoveryEntry);
-          const recoverySystemPromptAppend = [systemPromptAppend, recoveryBridge]
-            .filter(Boolean)
-            .join('\n\n');
+          const recoverySystemPromptAppend = assembleSystemPromptAppend([
+            { id: 'cwd', text: cwdPromptNote },
+            { id: 'runtime-extensions', text: runtimeOptions.systemPromptAppend },
+            { id: 'caller', text: options?.systemPromptAppend },
+            { id: 'history-bridge', text: historyBridgeAppend },
+            { id: 'resume-interrupt', text: resumeInterruptAppend },
+            { id: 'recovery-bridge', text: recoveryBridge },
+          ]);
           const recoverySessionId = randomUUID();
           const recoveryQueryCreateStartedAt = Date.now();
           const recoveryQuery = await createClaudeQuery({
-            prompt,
+            prompt: queryPrompt,
             options: {
               ...queryBaseOptions,
               sessionId: recoverySessionId,
@@ -1639,9 +1658,10 @@ export const claudeAdapter: EngineAdapter = {
     const memorySystemPrompt = [memory.preference, memory.execution].filter(Boolean).join('\n\n');
     // Memory is advisory. Put task-specific system context after it so recalled
     // experience cannot override the current task's rules or workflow contract.
-    const systemPromptAppend = [memorySystemPrompt, params.systemPromptAppend?.trim()]
-      .filter(Boolean)
-      .join('\n\n') || undefined;
+    const systemPromptAppend = assembleSystemPromptAppend([
+      { id: 'memory', text: memorySystemPrompt },
+      { id: 'caller', text: params.systemPromptAppend },
+    ]) || undefined;
     if (memorySystemPrompt) {
       logger.info('[agent-memory][claude] systemPromptAppend after memory injection', {
         sessionKey: params.sessionKey,

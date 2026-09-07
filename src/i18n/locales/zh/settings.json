@@ -287,7 +287,7 @@
     "browserAutomationDom": "DOM 模式",
     "browserAutomationAx": "AX 模式",
     "browserBridgeTitle": "Chrome 扩展桥",
-    "browserBridgeDesc": "在真实 Chrome 里加载扩展后，可用配对码或本机自动连接驱动已打开的标签。不会关闭你的标签。",
+    "browserBridgeDesc": "首次操作本机 Google Chrome 时会在 SClaw 弹确认；允许后扩展自动接管标签。不会关闭你的标签。",
     "browserBridgeVersion": "内置包 {{bundled}} · 已连接扩展 {{installed}}",
     "browserBridgeNotPaired": "未上报",
     "browserBridgeUpdate": "有更新",
@@ -297,7 +297,12 @@
     "browserBridgeRefreshCode": "换码",
     "browserBridgeCodeCopied": "配对码已复制",
     "browserBridgeDownload": "下载扩展 zip",
-    "browserBridgeSaveFailed": "保存失败"
+    "browserBridgeSaveFailed": "保存失败",
+    "browserBridgeConsentTitle": "连接 Google Chrome",
+    "browserBridgeConsentMessage": "SClaw 将连接并控制本机 Google Chrome 打开或操作网页（不会关闭你的标签）。是否允许？",
+    "browserBridgeConsentWithUrl": "SClaw 将连接并控制本机 Google Chrome 打开：{{url}}（不会关闭你的标签）。是否允许？",
+    "browserBridgeConsentAllow": "允许",
+    "browserBridgeConsentDeny": "拒绝"
   },
   "developer": {
     "title": "开发者",

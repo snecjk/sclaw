@@ -292,7 +292,7 @@
     "browserAutomationDom": "DOM mode",
     "browserAutomationAx": "AX mode",
     "browserBridgeTitle": "Chrome extension bridge",
-    "browserBridgeDesc": "Load the extension in Chrome, then pair or auto-connect on this machine to drive existing tabs. User tabs are never closed.",
+    "browserBridgeDesc": "The first time SClaw uses Google Chrome, it asks for confirmation here. After you allow it, the extension attaches tabs automatically. User tabs are never closed.",
     "browserBridgeVersion": "Bundled {{bundled}} · installed {{installed}}",
     "browserBridgeNotPaired": "not reported",
     "browserBridgeUpdate": "update available",
@@ -302,7 +302,12 @@
     "browserBridgeRefreshCode": "New code",
     "browserBridgeCodeCopied": "Pairing code copied",
     "browserBridgeDownload": "Download extension zip",
-    "browserBridgeSaveFailed": "Save failed"
+    "browserBridgeSaveFailed": "Save failed",
+    "browserBridgeConsentTitle": "Connect Google Chrome",
+    "browserBridgeConsentMessage": "SClaw will connect to and control Google Chrome on this machine to open or operate pages. Your tabs will not be closed. Allow?",
+    "browserBridgeConsentWithUrl": "SClaw will connect to Google Chrome and open: {{url}}. Your tabs will not be closed. Allow?",
+    "browserBridgeConsentAllow": "Allow",
+    "browserBridgeConsentDeny": "Deny"
   },
   "developer": {
     "title": "Developer",

@@ -18,6 +18,8 @@ import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-ses
 import { isEmbedAppChatSessionKey } from '../../shared/session-type';
 import { patchTerminalRuntimeMetadata, transitionChatRuntime, transitionChatRuntimePhase } from './chat-runtime-transition';
 import { inspectTranscript } from '../engines/chat-runtime-inspection';
+import { inheritChatRunInterruptCause, classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
+import { peekRunInterrupt, rememberRunInterrupt } from '../engines/run-interrupt-store';
 
 const RECOVERY_DEADLINE_MS = 135_000;
 const EMBED_BROWSER_RECOVERY_IDLE_MS = 5 * 60_000;
@@ -231,6 +233,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
             phase: 'interrupted',
             terminalAt: Date.now(),
             error: 'Superseded by a newer active run during recovery.',
+            interruptCause: previous.interruptCause ?? 'process_restart',
             updatedAt: Date.now(),
           });
         }
@@ -243,11 +246,11 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           phase: 'reconciling',
           epoch: stored.epoch + 1,
           sequence: 0,
+          interruptCause: 'process_restart',
           updatedAt: Date.now(),
         };
         this.snapshots.set(recovered.sessionKey, recovered);
         await this.persist(recovered, true);
-        const { rememberRunInterrupt } = await import('../engines/run-interrupt-store');
         rememberRunInterrupt(recovered.sessionKey, 'process_restart');
         this.touchRunActivity(recovered.sessionKey, recovered.lastEventAt);
         this.scheduleRecovery(recovered.sessionKey);
@@ -355,10 +358,12 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     }
     const now = Date.now();
     const prior = this.snapshots.get(input.sessionKey);
+    const inheritedCause = inheritChatRunInterruptCause(prior);
     if (prior && !isTerminalChatRunPhase(prior.phase) && prior.idempotencyKey !== input.idempotencyKey) {
       await this.publish({
         ...prior,
         error: 'Superseded by a newer send in the same session.',
+        interruptCause: prior.interruptCause ?? inheritedCause,
       }, 'run.interrupted', { reason: 'superseded' }, true);
     }
     const snapshot: ChatRuntimeSnapshot = {
@@ -375,6 +380,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       lastEventAt: now,
       terminalAt: null,
       error: null,
+      interruptCause: inheritedCause,
       acceptanceResult: null,
       updatedAt: now,
     };
@@ -486,7 +492,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.scheduleRecovery(input.sessionKey);
       return;
     }
-    await this.publish({ ...current, error: input.error }, 'run.failed', { error: input.error }, true);
+    await this.publish(this.withTerminalInterruptCause({ ...current, error: input.error }, 'run.failed'), 'run.failed', { error: input.error }, true);
   }
 
   async aborting(sessionKey: string): Promise<void> {
@@ -510,7 +516,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private async abortedUnlocked(sessionKey: string, runId?: string | null): Promise<void> {
     const current = this.snapshots.get(sessionKey);
     if (!current || (runId && current.runId && runId !== current.runId)) return;
-    await this.publish(current, 'run.aborted', undefined, true);
+    await this.publish(this.withTerminalInterruptCause(current, 'run.aborted'), 'run.aborted', undefined, true);
   }
 
   async abortFailed(sessionKey: string, error: string): Promise<void> {
@@ -615,6 +621,43 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (engineCompleted && latest) this.startTranscriptSettle(latest, event.type);
   }
 
+  private withTerminalInterruptCause(
+    base: ChatRuntimeSnapshot,
+    type: CanonicalChatEventType,
+  ): ChatRuntimeSnapshot {
+    if (type === 'run.completed') {
+      return { ...base, interruptCause: null };
+    }
+    if (type === 'run.aborted') {
+      return { ...base, interruptCause: 'user_abort' };
+    }
+    if (type === 'run.failed') {
+      return { ...base, interruptCause: classifyChatRunInterrupt(base.error) };
+    }
+    if (type === 'run.interrupted') {
+      return {
+        ...base,
+        interruptCause: base.interruptCause ?? classifyChatRunInterrupt(base.error),
+      };
+    }
+    return base;
+  }
+
+  private applyHotInterruptCause(snapshot: ChatRuntimeSnapshot): ChatRuntimeSnapshot {
+    if (snapshot.phase === 'completed') {
+      return { ...snapshot, interruptCause: snapshot.interruptCause ?? null };
+    }
+    if (snapshot.interruptCause) return snapshot;
+    const hot = peekRunInterrupt(snapshot.sessionKey);
+    if (!hot) return snapshot;
+    const next = { ...snapshot, interruptCause: hot };
+    const live = this.snapshots.get(snapshot.sessionKey);
+    if (live && live.epoch === snapshot.epoch) {
+      this.snapshots.set(snapshot.sessionKey, { ...live, interruptCause: hot });
+    }
+    return next;
+  }
+
   private async publish(
     base: ChatRuntimeSnapshot,
     type: CanonicalChatEventType,
@@ -622,7 +665,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     forcePersist = false,
   ): Promise<void> {
     const now = Date.now();
-    const transition = transitionChatRuntime({ snapshot: base, type, occurredAt: now });
+    const stamped = this.withTerminalInterruptCause(base, type);
+    const transition = transitionChatRuntime({ snapshot: stamped, type, occurredAt: now });
     if (!transition.accepted) {
       logger.debug('[chat-runtime] transition rejected', {
         sessionKey: base.sessionKey,
@@ -718,13 +762,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     const operation = previous.catch(() => undefined).then(async () => {
       const snapshot = this.dirtySnapshots.get(sessionKey);
       if (!snapshot) return;
+      const toWrite = this.applyHotInterruptCause(snapshot);
+      if (toWrite !== snapshot) this.dirtySnapshots.set(sessionKey, toWrite);
       try {
         const repository = getChatRuntimeRepository();
         const result = typeof repository.upsertIfNewer === 'function'
-          ? await repository.upsertIfNewer(snapshot)
-          : (await repository.upsert(snapshot), 'updated' as const);
+          ? await repository.upsertIfNewer(toWrite)
+          : (await repository.upsert(toWrite), 'updated' as const);
         const current = this.dirtySnapshots.get(sessionKey);
-        if (current === snapshot) this.dirtySnapshots.delete(sessionKey);
+        if (current === toWrite || current === snapshot) this.dirtySnapshots.delete(sessionKey);
         this.lastPersistedAt.set(sessionKey, Date.now());
         const diagnostics = this.diagnostics.get(sessionKey);
         if (diagnostics && result !== 'stale') diagnostics.databaseWrites += 1;
@@ -942,7 +988,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         const latest = this.snapshots.get(sessionKey);
         if (!latest || isTerminalChatRunPhase(latest.phase)) return;
         if (runId && latest.runId && runId !== latest.runId) return;
-        await this.publish({ ...latest, error }, 'run.failed', { error }, true);
+        await this.publish(this.withTerminalInterruptCause({ ...latest, error }, 'run.failed'), 'run.failed', { error }, true);
       });
     }, graceMs);
     this.errorTimers.set(sessionKey, timer);
@@ -986,8 +1032,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     await this.publish({
       ...current,
       error: 'The run exceeded its configured deadline.',
+      interruptCause: 'hard_deadline',
     }, 'run.interrupted', { reason, ...(abortError ? { abortError } : {}) }, true);
-    const { rememberRunInterrupt } = await import('../engines/run-interrupt-store');
     rememberRunInterrupt(snapshot.sessionKey, 'hard_deadline');
   }
 

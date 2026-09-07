@@ -184,4 +184,27 @@ describe('chat runtime repository', () => {
     await expect(repository.getLatestForSession('agent:main:terminal-500')).resolves.not.toBeNull();
     await expect(repository.getLatestForSession('agent:main:terminal-0')).resolves.toBeNull();
   });
+
+  it('persists interrupt_cause and allows same-sequence metadata updates', async () => {
+    await expect(repository.upsertIfNewer(snapshot({
+      runId: 'run-1',
+      phase: 'running',
+      sequence: 4,
+    }))).resolves.toBe('inserted');
+
+    await expect(repository.upsertIfNewer(snapshot({
+      runId: 'run-1',
+      phase: 'running',
+      sequence: 4,
+      interruptCause: 'loop_guard_blocked',
+      updatedAt: 250,
+    }))).resolves.toBe('updated');
+
+    await expect(repository.getByIdempotencyKey('agent:main:session-1', 'message-1'))
+      .resolves.toMatchObject({
+        phase: 'running',
+        sequence: 4,
+        interruptCause: 'loop_guard_blocked',
+      });
+  });
 });

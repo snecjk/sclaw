@@ -24,9 +24,11 @@ describe('perception budget SSOT', () => {
     expect(inject).toContain(`var MAX_SNAPSHOT_NODES = ${EMBED_SNAPSHOT_MAX_NODES};`);
   });
 
-  it('扩展 page-agent 的可交互上限与 SSOT 一致', () => {
+  it('扩展 page-agent 与 AX 扁平化的可交互上限与 SSOT 一致', () => {
     const agent = readFileSync(resolve(root, 'browser-extension/page-agent.js'), 'utf8');
     expect(agent).toContain(`var ELEMENT_LIMIT = ${EXTENSION_INTERACTIVE_MAX_NODES};`);
     expect(agent).toContain('truncated');
+    const background = readFileSync(resolve(root, 'browser-extension/background.js'), 'utf8');
+    expect(background).toContain(`const AX_ELEMENT_LIMIT = ${EXTENSION_INTERACTIVE_MAX_NODES};`);
   });
 });

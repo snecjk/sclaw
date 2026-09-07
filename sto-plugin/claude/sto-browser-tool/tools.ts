@@ -69,10 +69,10 @@ export function createBrowserMcpTools(cfg: BrowserBridgePluginConfig) {
 
 	const bridgeSnapshot = tool(
 		"bridge_snapshot",
-		"获取当前浏览器页面可交互元素树（含 @e ref）。应用广场内嵌预览须传 sessionId。",
+		"获取当前浏览器页面可交互元素列表（扁平 elements，含 @e ref）。默认无障碍树；失败时回退 DOM 并标注 observationMode。应用广场内嵌预览须传 sessionId。",
 		{
 			sessionId: sessionIdSchema,
-			mode: z.enum(["dom", "ax"]).optional().describe("ax 优先无障碍树；扩展未支持时回退 DOM"),
+			mode: z.enum(["dom", "ax"]).optional().describe("默认 ax；失败时回退 DOM 并标注 observationMode/fallbackFrom"),
 		},
 		async (params) => {
 			const payload: Record<string, unknown> = {};

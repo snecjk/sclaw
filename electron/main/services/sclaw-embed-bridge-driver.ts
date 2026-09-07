@@ -4,13 +4,31 @@
 import { webContents } from 'electron';
 import type { BrowserBridgeAction, BrowserBridgeCommand } from '../../../shared/browser-bridge/types';
 import {
+  applyObservationCharBudget,
+  flattenDomSnapshotToElements,
+  toPageObservation,
+  type DomSnapshotNode,
+  type PageObservation,
+} from '../../../shared/browser-bridge/page-observation';
+import { PERCEPTION_TRUNCATED_HINT } from '../../../shared/browser-bridge/perception-budget';
+import {
   buildSclawEmbedBridgeSessionId,
   SCLAW_EMBED_BRIDGE_INJECT_SCRIPT,
 } from '../../../shared/sclaw-embed-bridge-inject';
 import { browserBridgeService } from '../../services/browser-bridge-service';
 import { cdpMethodTimeoutMs, isCdpMethodAllowed } from '../../../shared/browser-automation/cdp-allowlist';
+import {
+  captureAxTree,
+  resolveAxClickPoint,
+  type RefTable,
+} from '../../services/browser-automation/ax-observer';
 import { BrowserAutomationCdpSession } from '../../services/browser-automation/cdp-session';
-import { actFillOrType, getOrCreateCdpSession } from '../../services/browser-automation/input';
+import {
+  actClickWithFallback,
+  actFillByBackendNodeId,
+  actFillOrType,
+  getOrCreateCdpSession,
+} from '../../services/browser-automation/input';
 import { collectReadPageText, paginateReadPageText } from '../../services/browser-automation/read-page';
 import { sendSclawEmbedAutomationMark } from './sclaw-embed-automation-mark';
 
@@ -24,7 +42,14 @@ interface EmbedDriverEntry {
   webContentsId: number;
 }
 
+interface EmbedPerceptionState {
+  generation: number;
+  refTable: RefTable | null;
+  mode: 'ax' | 'dom';
+}
+
 const entries = new Map<string, EmbedDriverEntry>();
+const perceptionByRuntime = new Map<string, EmbedPerceptionState>();
 const embedCdpByWebContentsId = new Map<number, BrowserAutomationCdpSession>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -59,6 +84,116 @@ async function injectBridgeScript(webContentsId: number): Promise<void> {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function bumpPerception(
+  runtimeId: string,
+  next: Omit<EmbedPerceptionState, 'generation'> & { generation?: number },
+): number {
+  const previous = perceptionByRuntime.get(runtimeId);
+  const generation = next.generation ?? (previous?.generation ?? 0) + 1;
+  perceptionByRuntime.set(runtimeId, {
+    generation,
+    refTable: next.refTable,
+    mode: next.mode,
+  });
+  return generation;
+}
+
+async function executeInjectCommand(
+  wc: NonNullable<ReturnType<typeof resolveWebContents>>,
+  action: BrowserBridgeAction,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  const script = `window.__stoEmbedBridge && window.__stoEmbedBridge.executeCommand(
+    ${JSON.stringify(action)},
+    ${JSON.stringify(payload)}
+  )`;
+  return wc.executeJavaScript(script);
+}
+
+async function snapshotEmbedDom(
+  entry: EmbedDriverEntry,
+  wc: NonNullable<ReturnType<typeof resolveWebContents>>,
+  extras: { fallbackFrom?: 'ax'; unsupported?: string },
+): Promise<PageObservation> {
+  await injectBridgeScript(entry.webContentsId);
+  const raw = await executeInjectCommand(wc, 'snapshot', {}) as {
+    url?: string;
+    title?: string;
+    timestamp?: number;
+    tree?: DomSnapshotNode[];
+    truncated?: boolean;
+    actionHint?: string;
+  } | null;
+  const generation = bumpPerception(entry.runtimeId, { refTable: null, mode: 'dom' });
+  return applyObservationCharBudget(toPageObservation({
+    url: raw?.url || wc.getURL(),
+    title: raw?.title || wc.getTitle(),
+    timestamp: raw?.timestamp,
+    documentGeneration: generation,
+    observationMode: 'dom',
+    elements: flattenDomSnapshotToElements(raw?.tree ?? []),
+    truncated: raw?.truncated === true,
+    actionHint: raw?.actionHint,
+    fallbackFrom: extras.fallbackFrom,
+    unsupported: extras.unsupported,
+  }));
+}
+
+async function snapshotEmbedPage(
+  entry: EmbedDriverEntry,
+  wc: NonNullable<ReturnType<typeof resolveWebContents>>,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  const mode = payload.mode === 'dom' ? 'dom' : 'ax';
+  try {
+    if (mode === 'dom') {
+      return { success: true, ...await snapshotEmbedDom(entry, wc, {}) };
+    }
+
+    try {
+      const nextGeneration = (perceptionByRuntime.get(entry.runtimeId)?.generation ?? 0) + 1;
+      const cdp = getOrCreateCdpSession(wc, embedCdpByWebContentsId);
+      const capture = await captureAxTree(cdp, nextGeneration, { interactiveOnly: true });
+      if (capture.elements.length === 0) {
+        return {
+          success: true,
+          ...await snapshotEmbedDom(entry, wc, {
+            fallbackFrom: 'ax',
+            unsupported: 'AX_NO_INTERACTIVE',
+          }),
+        };
+      }
+      bumpPerception(entry.runtimeId, {
+        generation: nextGeneration,
+        refTable: capture.refTable,
+        mode: 'ax',
+      });
+      const observation = applyObservationCharBudget(toPageObservation({
+        url: wc.getURL(),
+        title: wc.getTitle(),
+        documentGeneration: nextGeneration,
+        observationMode: 'ax',
+        elements: capture.elements,
+        truncated: capture.truncated,
+        degradationRound: capture.degradationRound,
+        actionHint: capture.truncated ? PERCEPTION_TRUNCATED_HINT : undefined,
+      }));
+      return { success: true, ...observation };
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code;
+      return {
+        success: true,
+        ...await snapshotEmbedDom(entry, wc, {
+          fallbackFrom: 'ax',
+          unsupported: code === 'CDP_DOMAIN_UNSUPPORTED' ? 'CDP_DOMAIN_UNSUPPORTED' : 'AX_CAPTURE_FAILED',
+        }),
+      };
+    }
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
 
 async function waitForEmbedNavigation(
   wc: NonNullable<ReturnType<typeof resolveWebContents>>,
@@ -137,25 +272,80 @@ async function runEmbedCommand(
     };
   }
 
+  if (action === 'snapshot') {
+    return snapshotEmbedPage(entry, wc, payload);
+  }
+
+  const perception = perceptionByRuntime.get(entry.runtimeId);
+  const ref = typeof payload.ref === 'string' ? payload.ref : undefined;
+  const name = typeof payload.name === 'string' ? payload.name : undefined;
+  const executeJavaScript = async (script: string) => wc.executeJavaScript(script, true);
+
   if (action === 'fill') {
+    const value = typeof payload.value === 'string' ? payload.value : String(payload.value ?? '');
     const cdp = getOrCreateCdpSession(wc, embedCdpByWebContentsId);
-    const executeJavaScript = async (script: string) => wc.executeJavaScript(script, true);
+    if (ref && perception?.refTable) {
+      const backendNodeId = perception.refTable.resolve(ref);
+      if (backendNodeId === undefined) {
+        return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 fill。' };
+      }
+      const fillResult = await actFillByBackendNodeId({ cdp, backendNodeId, ref, value });
+      return {
+        success: fillResult.success,
+        ref: fillResult.ref,
+        value,
+        error: fillResult.error,
+        errorCode: fillResult.errorCode,
+      };
+    }
+    if (ref) {
+      await injectBridgeScript(entry.webContentsId);
+      return executeInjectCommand(wc, 'fill', payload);
+    }
     const fillResult = await actFillOrType({
       cdp,
       executeJavaScript,
-      payload: {
-        action: 'fill',
-        ref: typeof payload.ref === 'string' ? payload.ref : undefined,
-        name: typeof payload.name === 'string' ? payload.name : undefined,
-        value: typeof payload.value === 'string' ? payload.value : String(payload.value ?? ''),
-      },
+      payload: { action: 'fill', name, value },
     });
     return {
       success: fillResult.success,
       ref: fillResult.ref,
-      value: payload.value,
+      value,
       error: fillResult.error,
+      errorCode: fillResult.errorCode,
     };
+  }
+
+  if (action === 'click') {
+    const cdp = getOrCreateCdpSession(wc, embedCdpByWebContentsId);
+    if (ref && perception?.refTable) {
+      if (perception.refTable.resolve(ref) === undefined) {
+        return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 click。' };
+      }
+      const point = await resolveAxClickPoint(cdp, perception.refTable, ref);
+      if (!point) {
+        return { success: false, error: 'ELEMENT_NOT_FOUND' };
+      }
+      const startUrl = wc.getURL();
+      const clickResult = await actClickWithFallback({
+        cdp,
+        executeJavaScript,
+        payload: { action: 'click', ref },
+        resolvedPoint: point,
+      });
+      if (clickResult.success) {
+        await waitForEmbedNavigation(wc, startUrl);
+      }
+      return {
+        success: clickResult.success,
+        ref,
+        error: clickResult.error,
+        errorCode: clickResult.errorCode,
+        url: wc.getURL(),
+        title: wc.getTitle(),
+        navigated: wc.getURL() !== startUrl,
+      };
+    }
   }
 
   await injectBridgeScript(entry.webContentsId);
@@ -262,6 +452,7 @@ export function disconnectSclawEmbedBridge(runtimeId: string): void {
   if (!entry) return;
   browserBridgeService.disconnectSession(entry.sessionId);
   entries.delete(runtimeId);
+  perceptionByRuntime.delete(runtimeId);
   stopPollLoopIfIdle();
 }
 

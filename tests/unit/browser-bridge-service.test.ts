@@ -227,4 +227,30 @@ describe('BrowserBridgeService', () => {
     expect(service.findReplacementSession('ext-12-deadbeef')?.sessionId).toBe('ext-12');
     expect(service.findReplacementSession('missing')?.sessionId).toBe('ext-12');
   });
+
+  it('Chrome 确认：先弹窗，允许后再排队 attach', async () => {
+    expect(service.beginChromeConsent()).toBe('need-ui');
+    expect(service.beginChromeConsent()).toBe('pending');
+    const waiting = service.waitForChromeConsent(5_000);
+    service.resolveChromeConsent(true);
+    await expect(waiting).resolves.toBe('allowed');
+    expect(service.getChromeConsent()).toBe('allowed');
+    expect(service.beginChromeConsent()).toBe('allowed');
+
+    const pending = service.waitForControl(5_000);
+    const command = service.enqueueControlAttach('https://meoo.com/');
+    expect(command.action).toBe('attach');
+    expect(command.url).toBe('https://meoo.com/');
+    await expect(pending).resolves.toEqual([command]);
+    expect(service.pollControl()).toEqual([]);
+  });
+
+  it('Chrome 确认拒绝后不再排队', async () => {
+    const denied = new BrowserBridgeService();
+    expect(denied.beginChromeConsent()).toBe('need-ui');
+    const waiting = denied.waitForChromeConsent(5_000);
+    denied.resolveChromeConsent(false);
+    await expect(waiting).resolves.toBe('denied');
+    expect(denied.beginChromeConsent()).toBe('denied');
+  });
 });

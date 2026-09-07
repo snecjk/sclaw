@@ -291,6 +291,7 @@ const electronAPI = {
         'jsbridge:close-tab',
         'jsbridge:toast',
         'app-dev-ide:ownership',
+        'browser-bridge:consent',
       ];
 
       if (validChannels.includes(channel)) {

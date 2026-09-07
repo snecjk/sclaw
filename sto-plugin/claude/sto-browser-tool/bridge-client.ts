@@ -35,6 +35,7 @@ function baseUrl(cfg: BrowserBridgePluginConfig): string {
 type BridgeHttpPayload = {
 	success?: boolean;
 	error?: string;
+	message?: string;
 	currentSessionId?: string | null;
 	commandId?: string;
 };
@@ -43,9 +44,13 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(url, init);
 	const payload = await response.json() as T & BridgeHttpPayload;
 	if (!response.ok) {
-		const message = typeof payload === "object" && payload && "error" in payload
+		const code = typeof payload === "object" && payload && "error" in payload
 			? String(payload.error)
-			: `HTTP ${response.status}`;
+			: "";
+		const detail = typeof payload === "object" && payload && typeof payload.message === "string"
+			? payload.message
+			: "";
+		const message = detail || code || `HTTP ${response.status}`;
 		throw Object.assign(new Error(message), { status: response.status, payload });
 	}
 	return payload;
@@ -83,6 +88,24 @@ export async function listBridgeSessions(
 	return data.sessions ?? [];
 }
 
+async function ensureExtensionSession(
+	cfg: BrowserBridgePluginConfig,
+	url?: string,
+): Promise<string> {
+	const data = await fetchJson<{ sessionId?: string }>(
+		`${baseUrl(cfg)}/api/browser-bridge/ensure-session`,
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ url }),
+		},
+	);
+	if (!data.sessionId) {
+		throw new Error("浏览器未连接。请安装 StoClaw Browser Bridge 扩展，并在 SClaw 中允许连接 Google Chrome。");
+	}
+	return data.sessionId;
+}
+
 const RESULT_POLL_MS = 50;
 
 export async function runBridgeCommand(
@@ -104,11 +127,11 @@ export async function runBridgeCommand(
 					`应用广场内置浏览器未就绪（sessionId=${options?.sessionId ?? 'embed'}）。请确认左侧页面已加载完成后再试。`,
 				);
 			}
-			throw new Error(
-				"浏览器未连接。应用广场内嵌预览未就绪，或请安装 StoClaw Browser Bridge 扩展并完成配对。",
-			);
+			const url = typeof payload.url === "string" ? payload.url : undefined;
+			sessionId = await ensureExtensionSession(cfg, url);
+		} else {
+			sessionId = target.sessionId;
 		}
-		sessionId = target.sessionId;
 	}
 
 	const timeoutMs = resolveCommandTimeoutMs(action, cfg.commandTimeoutMs);

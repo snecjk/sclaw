@@ -19,6 +19,7 @@ import {
   type ToolRepeatTracker,
 } from '../../shared/claude-loop-guard';
 import { logger } from '../utils/logger';
+import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
 
 const trackers = new Map<string, ToolRepeatTracker>();
 
@@ -73,6 +74,9 @@ export function buildClaudeLoopGuardHooks(
     });
     const { rememberRunInterrupt } = await import('./run-interrupt-store');
     rememberRunInterrupt(sessionKey, 'loop_guard_blocked');
+    void getChatRuntimeRepository().stampInterruptCause(sessionKey, 'loop_guard_blocked').catch((error) => {
+      logger.warn('[claude-loop-guard] failed to persist interrupt cause', { sessionKey, error });
+    });
     return deny(buildToolRepeatBlockReason({
       toolName: input.tool_name,
       count: decision.count,

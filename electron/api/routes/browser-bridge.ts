@@ -1,10 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync } from 'node:fs';
 import { basename } from 'node:path';
+import { BrowserWindow } from 'electron';
 import type { HostApiContext } from '../context';
 import { browserBridgeService } from '../../services/browser-bridge-service';
 import { parseJsonBody, sendJson, sendNoContent } from '../route-utils';
 import type { BrowserBridgeAction } from '../../../shared/browser-bridge/types';
+import {
+  BROWSER_BRIDGE_ATTACH_TIMEOUT_MS,
+  BROWSER_BRIDGE_CONSENT_TIMEOUT_MS,
+} from '../../../shared/browser-bridge/types';
 import { isCdpMethodAllowed } from '../../../shared/browser-automation/cdp-allowlist';
 import { isBrowserAutomationEnabled } from '../../../shared/browser-automation/feature-flag';
 import {
@@ -47,6 +52,16 @@ function requireExtensionToken(req: IncomingMessage, res: ServerResponse): boole
 
 function emitBridgeEvent(ctx: HostApiContext, eventName: string, payload: unknown): void {
   ctx.eventBus.emit(eventName, payload);
+}
+
+function broadcastChromeConsent(payload: { url?: string }): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) continue;
+    window.webContents.send('browser-bridge:consent', payload);
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+  }
 }
 
 export async function handleBrowserBridgeRoutes(
@@ -376,6 +391,81 @@ export async function handleBrowserBridgeRoutes(
     }
     const result = browserBridgeService.getResult(commandId);
     sendJson(res, 200, { success: true, ready: Boolean(result), result });
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/control' && req.method === 'GET') {
+    if (!requireExtensionToken(req, res)) return true;
+    const waitRaw = Number(url.searchParams.get('waitMs') || 0);
+    const waitMs = Number.isFinite(waitRaw) ? waitRaw : 0;
+    const commands = waitMs > 0
+      ? await browserBridgeService.waitForControl(waitMs)
+      : browserBridgeService.pollControl();
+    sendJson(res, 200, { success: true, commands });
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/consent' && req.method === 'POST') {
+    if (!isLoopback(req)) {
+      sendJson(res, 403, { success: false, error: 'Consent endpoint is localhost-only' });
+      return true;
+    }
+    const body = await parseJsonBody<{ allowed?: boolean }>(req);
+    browserBridgeService.resolveChromeConsent(body.allowed === true);
+    sendJson(res, 200, { success: true, consent: browserBridgeService.getChromeConsent() });
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/ensure-session' && req.method === 'POST') {
+    if (!isLoopback(req)) {
+      sendJson(res, 403, { success: false, error: 'Ensure-session is localhost-only' });
+      return true;
+    }
+    const body = await parseJsonBody<{ url?: string }>(req);
+    const urlHint = typeof body.url === 'string' ? body.url.trim() : '';
+    const existing = browserBridgeService.getExtensionSession();
+    if (existing) {
+      sendJson(res, 200, { success: true, sessionId: existing.sessionId, attached: true });
+      return true;
+    }
+
+    const started = browserBridgeService.beginChromeConsent();
+    if (started === 'denied' || browserBridgeService.getChromeConsent() === 'denied') {
+      sendJson(res, 403, {
+        success: false,
+        error: 'EXTENSION_ATTACH_DENIED',
+        message: '用户拒绝连接 Google Chrome。',
+      });
+      return true;
+    }
+    if (started === 'need-ui') {
+      broadcastChromeConsent({ url: urlHint || undefined });
+    }
+    if (started !== 'allowed') {
+      const decision = await browserBridgeService.waitForChromeConsent(BROWSER_BRIDGE_CONSENT_TIMEOUT_MS);
+      if (decision !== 'allowed') {
+        sendJson(res, 403, {
+          success: false,
+          error: decision === 'denied' ? 'EXTENSION_ATTACH_DENIED' : 'EXTENSION_ATTACH_TIMEOUT',
+          message: decision === 'denied'
+            ? '用户拒绝连接 Google Chrome。'
+            : '等待确认连接 Google Chrome 超时。',
+        });
+        return true;
+      }
+    }
+
+    browserBridgeService.enqueueControlAttach(urlHint || undefined);
+    const attached = await browserBridgeService.waitForExtensionSession(BROWSER_BRIDGE_ATTACH_TIMEOUT_MS);
+    if (!attached) {
+      sendJson(res, 504, {
+        success: false,
+        error: 'EXTENSION_ATTACH_WAIT',
+        message: '等待 Chrome 扩展连接超时。请确认已安装 StoClaw Browser Bridge，并已打开 Google Chrome。',
+      });
+      return true;
+    }
+    sendJson(res, 200, { success: true, sessionId: attached.sessionId });
     return true;
   }
 

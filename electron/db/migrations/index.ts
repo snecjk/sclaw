@@ -14,6 +14,7 @@ import scheduleTasksCloudSyncMigration from './0033-schedule-tasks-cloud-sync';
 import browserAutomationMigration from './0023-browser-automation';
 import chatRuntimeBridgeOriginMigration from './0024-chat-runtime-bridge-origin';
 import browserAutomationArtifactsMigration from './0034-browser-automation-artifacts';
+import chatRuntimeInterruptCauseMigration from './0035-chat-runtime-interrupt-cause';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -34,4 +35,5 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   browserAutomationMigration,
   chatRuntimeBridgeOriginMigration,
   browserAutomationArtifactsMigration,
+  chatRuntimeInterruptCauseMigration,
 ].sort((left, right) => left.version - right.version);

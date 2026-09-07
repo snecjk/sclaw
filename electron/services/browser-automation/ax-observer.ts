@@ -44,7 +44,7 @@ export const AX_INTERACTIVE_ROLES: ReadonlySet<string> = new Set([
   'treeitem',
 ]);
 
-const AX_CLICKABLE_ROLES: ReadonlySet<string> = new Set([
+export const AX_CLICKABLE_ROLES: ReadonlySet<string> = new Set([
   'link',
   'button',
   'menuitem',
@@ -58,7 +58,7 @@ const AX_CLICKABLE_ROLES: ReadonlySet<string> = new Set([
   'treeitem',
 ]);
 
-const AX_EDITABLE_ROLES: ReadonlySet<string> = new Set([
+export const AX_EDITABLE_ROLES: ReadonlySet<string> = new Set([
   'textbox',
   'searchbox',
   'combobox',
@@ -564,6 +564,72 @@ export async function captureAxTree(
     degradationRound,
     rawNodeCount,
   };
+}
+
+function centerFromContentQuads(quads: number[][] | undefined): { x: number; y: number } | null {
+  if (!Array.isArray(quads) || quads.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const quad of quads) {
+    if (!Array.isArray(quad) || quad.length < 8) continue;
+    for (let p = 0; p < 8; p += 2) {
+      minX = Math.min(minX, quad[p]);
+      maxX = Math.max(maxX, quad[p]);
+      minY = Math.min(minY, quad[p + 1]);
+      maxY = Math.max(maxY, quad[p + 1]);
+    }
+  }
+  if (minX === Infinity) return null;
+  return {
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+  };
+}
+
+/** 把 backendNodeId 滚进视口并取内容中心点，供 AX ref 的 click/fill 走 CDP。 */
+export async function resolveBackendNodeClickPoint(
+  cdp: BrowserAutomationCdpSession,
+  backendNodeId: number,
+): Promise<{ x: number; y: number } | null> {
+  await cdp.enableDomains('DOM', 'Runtime');
+  try {
+    const resolved = await cdp.send<{ object?: { objectId?: string } }>('DOM.resolveNode', { backendNodeId });
+    const objectId = resolved?.object?.objectId;
+    if (objectId) {
+      try {
+        await cdp.send('Runtime.callFunctionOn', {
+          objectId,
+          functionDeclaration: 'function(){ this.scrollIntoView({ block: "center", inline: "center" }); }',
+        });
+      } finally {
+        try {
+          await cdp.send('Runtime.releaseObject', { objectId });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* scroll 失败仍尝试用当前 quads 点击 */
+  }
+  try {
+    const result = await cdp.send<{ quads?: number[][] }>('DOM.getContentQuads', { backendNodeId });
+    return centerFromContentQuads(result?.quads);
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveAxClickPoint(
+  cdp: BrowserAutomationCdpSession,
+  refTable: RefTable,
+  ref: string,
+): Promise<{ x: number; y: number } | null> {
+  const backendNodeId = refTable.resolve(ref);
+  if (backendNodeId === undefined) return null;
+  return resolveBackendNodeClickPoint(cdp, backendNodeId);
 }
 
 /**

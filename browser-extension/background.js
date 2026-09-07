@@ -20,6 +20,26 @@ let loopRunning = false;
 let reconnectingToken = false;
 /** @type {Set<number>} */
 const pollLoops = new Set();
+/** @type {Map<number, Map<string, number>>} */
+const axRefMaps = new Map();
+/** @type {Map<number, number>} */
+const documentGenerations = new Map();
+
+const AX_INTERACTIVE_ROLES = {
+  link: true, button: true, textbox: true, combobox: true, listbox: true,
+  menuitem: true, menuitemcheckbox: true, menuitemradio: true, tab: true,
+  checkbox: true, radio: true, switch: true, option: true, searchbox: true,
+  slider: true, spinbutton: true, treeitem: true,
+};
+const AX_CLICKABLE_ROLES = {
+  link: true, button: true, menuitem: true, menuitemcheckbox: true, menuitemradio: true,
+  tab: true, checkbox: true, radio: true, switch: true, option: true, treeitem: true,
+};
+const AX_EDITABLE_ROLES = {
+  textbox: true, searchbox: true, combobox: true, listbox: true, slider: true, spinbutton: true,
+};
+const AX_ELEMENT_LIMIT = 400;
+const AX_TRUNCATED_HINT = '观察已达预算并截断。请先滚动或收窄到目标区域再观察，不要指望一次拿到整页。';
 
 chrome.runtime.onInstalled.addListener(() => scheduleAlarms());
 chrome.runtime.onStartup.addListener(() => {
@@ -33,6 +53,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabSessions.delete(tabId);
+  axRefMaps.delete(tabId);
+  documentGenerations.delete(tabId);
   void detachDebugger(tabId);
 });
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -213,16 +235,98 @@ async function refreshTokenAndReconnect() {
 function startWorkLoop() {
   if (loopRunning) {
     for (const tabId of tabSessions.keys()) startPollLoop(tabId);
+    startControlLoop();
     return;
   }
   loopRunning = true;
   for (const tabId of tabSessions.keys()) startPollLoop(tabId);
+  startControlLoop();
   const beat = async () => {
     if (!loopRunning || !token || versionMismatch) return;
     await heartbeatAll();
     heartbeatTimer = setTimeout(beat, HEARTBEAT_MS);
   };
   void beat();
+}
+
+let controlLoopRunning = false;
+
+function startControlLoop() {
+  if (!loopRunning || controlLoopRunning || !token || versionMismatch) return;
+  controlLoopRunning = true;
+  const run = async () => {
+    try {
+      while (loopRunning && token && !versionMismatch) {
+        await pollControl();
+      }
+    } finally {
+      controlLoopRunning = false;
+    }
+  };
+  void run();
+}
+
+async function pollControl() {
+  const res = await api('GET', `/api/browser-bridge/control?waitMs=${POLL_WAIT_MS}`);
+  if (res.status === 403 && isInvalidToken(res)) {
+    await refreshTokenAndReconnect();
+    return;
+  }
+  if (res.status === 503) {
+    stopWorkLoop();
+    return;
+  }
+  const commands = (res.json && res.json.commands) || [];
+  for (const command of commands) {
+    if (command.action === 'attach') {
+      await handleAttach(command.url);
+    }
+  }
+}
+
+async function handleAttach(url) {
+  const targetUrl = typeof url === 'string' ? url.trim() : '';
+  let tab = null;
+  const tabs = await chrome.tabs.query({});
+  if (targetUrl) {
+    tab = tabs.find((item) => item.id != null && tabSessions.has(item.id))
+      || tabs.find((item) => (item.url || '') === targetUrl)
+      || tabs.find((item) => sameOrigin(item.url, targetUrl));
+    if (tab && tab.id != null && (tab.url || '') !== targetUrl) {
+      await chrome.tabs.update(tab.id, { url: targetUrl, active: true });
+      await waitTabComplete(tab.id, 15_000);
+      tab = await chrome.tabs.get(tab.id);
+    }
+    if (!tab) {
+      tab = await chrome.tabs.create({ url: targetUrl, active: true });
+      if (tab.id != null) {
+        await waitTabComplete(tab.id, 15_000);
+        tab = await chrome.tabs.get(tab.id);
+      }
+    }
+  } else {
+    const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (active && active.id != null && !isRestrictedTabUrl(active.url || '')) tab = active;
+    if (!tab) {
+      tab = tabs.find((item) => item.id != null && !isRestrictedTabUrl(item.url || '')) || null;
+    }
+  }
+  if (!tab || tab.id == null) return { ok: false, error: 'No tab to attach' };
+  try {
+    await chrome.windows.update(tab.windowId, { focused: true });
+    await chrome.tabs.update(tab.id, { active: true });
+  } catch {
+    /* focus is best-effort */
+  }
+  return connectTab(tab);
+}
+
+function sameOrigin(left, right) {
+  try {
+    return new URL(left || '').origin === new URL(right || '').origin;
+  } catch {
+    return false;
+  }
 }
 
 function startPollLoop(tabId) {
@@ -359,28 +463,121 @@ async function executeCommand(tabId, rec, command) {
 }
 
 async function cmdSnapshot(tabId, payload) {
-  const mode = payload.mode === 'ax' ? 'ax' : 'dom';
+  const mode = payload.mode === 'dom' ? 'dom' : 'ax';
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const url = tab?.url || '';
+  const title = tab?.title || '';
   if (mode === 'ax') {
     try {
       const ax = await withDebugger(tabId, async () => {
         return chrome.debugger.sendCommand({ tabId }, 'Accessibility.getFullAXTree');
       });
       const nodes = Array.isArray(ax?.nodes) ? ax.nodes : [];
-      if (nodes.length > 0) {
-        return { success: true, mode: 'ax', tree: nodes, url: undefined, title: undefined, timestamp: Date.now() };
-      }
+      const assembled = assembleAxObservation(tabId, nodes, url, title);
+      if (assembled.elements.length > 0) return assembled;
     } catch {
       /* fall through to DOM */
     }
+    const fallback = await snapshotDomObservation(tabId, url, title);
+    fallback.fallbackFrom = 'ax';
+    fallback.unsupported = 'CDP_DOMAIN_UNSUPPORTED';
+    return fallback;
   }
-  const tree = await evaluateBridge(tabId, 'window.__stoBridge.snapshot()');
-  if (mode === 'ax') {
-    return { success: true, mode: 'dom', unsupported: 'CDP_DOMAIN_UNSUPPORTED', ...tree };
+  return snapshotDomObservation(tabId, url, title);
+}
+
+function bumpGeneration(tabId) {
+  const next = (documentGenerations.get(tabId) || 0) + 1;
+  documentGenerations.set(tabId, next);
+  return next;
+}
+
+function axSlotString(slot) {
+  return slot && typeof slot.value === 'string' ? slot.value : '';
+}
+
+function compactElement(el) {
+  const out = { ref: el.ref, role: el.role };
+  if (el.name) out.name = el.name;
+  if (el.clickable) out.clickable = true;
+  if (el.editable) out.editable = true;
+  if (el.boundingBox) out.boundingBox = el.boundingBox;
+  return out;
+}
+
+function assembleAxObservation(tabId, rawNodes, url, title) {
+  const refMap = new Map();
+  const elements = [];
+  let truncated = false;
+  for (let i = 0; i < rawNodes.length; i++) {
+    const node = rawNodes[i];
+    if (node.ignored) continue;
+    const role = axSlotString(node.role).toLowerCase();
+    if (!AX_INTERACTIVE_ROLES[role]) continue;
+    if (elements.length >= AX_ELEMENT_LIMIT) {
+      truncated = true;
+      break;
+    }
+    const ref = `@e${elements.length + 1}`;
+    if (typeof node.backendDOMNodeId === 'number') refMap.set(ref, node.backendDOMNodeId);
+    const name = axSlotString(node.name);
+    elements.push(compactElement({
+      ref,
+      role,
+      name,
+      clickable: Boolean(AX_CLICKABLE_ROLES[role]),
+      editable: Boolean(AX_EDITABLE_ROLES[role]),
+    }));
   }
-  return { success: true, mode: 'dom', ...tree, tree: tree.elements || [] };
+  if (elements.length === 0) return { success: true, elements: [] };
+  axRefMaps.set(tabId, refMap);
+  const observation = {
+    success: true,
+    url,
+    title,
+    timestamp: Date.now(),
+    elements,
+    documentGeneration: bumpGeneration(tabId),
+    observationMode: 'ax',
+  };
+  if (truncated) {
+    observation.truncated = true;
+    observation.actionHint = AX_TRUNCATED_HINT;
+  }
+  return observation;
+}
+
+async function snapshotDomObservation(tabId, url, title) {
+  axRefMaps.delete(tabId);
+  const raw = await evaluateBridge(tabId, 'window.__stoBridge.snapshot()');
+  const elements = Array.isArray(raw?.elements)
+    ? raw.elements.map(compactElement)
+    : [];
+  const observation = {
+    success: true,
+    url: raw?.url || url,
+    title: raw?.title || title,
+    timestamp: raw?.timestamp || Date.now(),
+    elements,
+    documentGeneration: bumpGeneration(tabId),
+    observationMode: 'dom',
+  };
+  if (raw?.truncated) {
+    observation.truncated = true;
+    observation.actionHint = raw.actionHint || AX_TRUNCATED_HINT;
+  }
+  return observation;
 }
 
 async function cmdClick(tabId, payload) {
+  const ref = typeof payload.ref === 'string' ? payload.ref : '';
+  const backendNodeId = ref ? axRefMaps.get(tabId)?.get(ref) : undefined;
+  if (typeof backendNodeId === 'number') {
+    return clickAxRef(tabId, ref, backendNodeId);
+  }
+  if (ref && axRefMaps.has(tabId)) {
+    return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 click。' };
+  }
   await ensureAgent(tabId);
   await evaluateBridge(tabId, `window.__stoBridge.installClickProbe(${JSON.stringify(payload)})`);
   const jsResult = await evaluateBridge(tabId, `window.__stoBridge.jsClick(${JSON.stringify(payload)})`);
@@ -412,8 +609,101 @@ async function cmdClick(tabId, payload) {
   };
 }
 
+async function clickAxRef(tabId, ref, backendNodeId) {
+  return withDebugger(tabId, async () => {
+    await chrome.debugger.sendCommand({ tabId }, 'DOM.enable');
+    await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+    try {
+      const resolved = await chrome.debugger.sendCommand({ tabId }, 'DOM.resolveNode', { backendNodeId });
+      const objectId = resolved?.object?.objectId;
+      if (objectId) {
+        await chrome.debugger.sendCommand({ tabId }, 'Runtime.callFunctionOn', {
+          objectId,
+          functionDeclaration: 'function(){ this.scrollIntoView({ block: "center", inline: "center" }); }',
+        });
+        await chrome.debugger.sendCommand({ tabId }, 'Runtime.releaseObject', { objectId }).catch(() => {});
+      }
+    } catch {
+      /* scroll 失败仍尝试当前 quads */
+    }
+    const quadsResult = await chrome.debugger.sendCommand({ tabId }, 'DOM.getContentQuads', { backendNodeId });
+    const point = centerFromContentQuads(quadsResult?.quads);
+    if (!point) return { success: false, error: 'ELEMENT_NOT_FOUND' };
+    await dispatchMouseClick(tabId, point.x, point.y);
+    return { success: true, ref };
+  });
+}
+
+function centerFromContentQuads(quads) {
+  if (!Array.isArray(quads) || quads.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < quads.length; i++) {
+    const quad = quads[i];
+    if (!Array.isArray(quad) || quad.length < 8) continue;
+    for (let p = 0; p < 8; p += 2) {
+      minX = Math.min(minX, quad[p]);
+      maxX = Math.max(maxX, quad[p]);
+      minY = Math.min(minY, quad[p + 1]);
+      maxY = Math.max(maxY, quad[p + 1]);
+    }
+  }
+  if (minX === Infinity) return null;
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+}
+
 async function cmdFill(tabId, payload) {
+  const ref = typeof payload.ref === 'string' ? payload.ref : '';
+  const backendNodeId = ref ? axRefMaps.get(tabId)?.get(ref) : undefined;
+  if (typeof backendNodeId === 'number') {
+    return fillAxRef(tabId, ref, backendNodeId, payload.value);
+  }
+  if (ref && axRefMaps.has(tabId)) {
+    return { success: false, error: 'STALE_REF', actionHint: '页面引用已过期，请重新 snapshot 后再 fill。' };
+  }
   return evaluateBridge(tabId, `window.__stoBridge.nativeFill(${JSON.stringify(payload)})`);
+}
+
+async function fillAxRef(tabId, ref, backendNodeId, value) {
+  const text = value == null ? '' : String(value);
+  return withDebugger(tabId, async () => {
+    await chrome.debugger.sendCommand({ tabId }, 'DOM.enable');
+    await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+    const resolved = await chrome.debugger.sendCommand({ tabId }, 'DOM.resolveNode', { backendNodeId });
+    const objectId = resolved?.object?.objectId;
+    if (!objectId) return { success: false, error: 'ELEMENT_NOT_FOUND' };
+    try {
+      const result = await chrome.debugger.sendCommand({ tabId }, 'Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `function(value) {
+          this.focus();
+          if (this.isContentEditable) this.textContent = value;
+          else if ('value' in this) {
+            var proto = this instanceof HTMLTextAreaElement
+              ? HTMLTextAreaElement.prototype
+              : (this instanceof HTMLInputElement ? HTMLInputElement.prototype : null);
+            if (proto) {
+              var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+              if (descriptor && descriptor.set) descriptor.set.call(this, value);
+              else this.value = value;
+            } else {
+              this.value = value;
+            }
+          }
+          this.dispatchEvent(new Event('input', { bubbles: true }));
+          this.dispatchEvent(new Event('change', { bubbles: true }));
+          return 'value' in this ? String(this.value || '') : String(this.textContent || '');
+        }`,
+        arguments: [{ value: text }],
+        returnByValue: true,
+      });
+      return { success: true, ref, value: result?.result?.value };
+    } finally {
+      await chrome.debugger.sendCommand({ tabId }, 'Runtime.releaseObject', { objectId }).catch(() => {});
+    }
+  });
 }
 
 async function cmdNavigate(tabId, payload) {

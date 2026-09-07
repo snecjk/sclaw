@@ -12,7 +12,6 @@ async function refresh() {
   $('tab-url').textContent = status.tabUrl || '(无标签)';
   const restricted = /^(chrome|chrome-extension|edge|about|devtools):/i.test(status.tabUrl || '');
   $('restricted').hidden = !restricted;
-  $('drive-tab').disabled = restricted;
   $('versions').textContent = `扩展 ${status.installedVersion}`
     + (status.bundledVersion ? ` · Host ${status.bundledVersion}` : '')
     + (status.sessionId ? ` · ${status.sessionId}` : '');
@@ -31,13 +30,6 @@ $('pair').addEventListener('click', async () => {
   $('status').textContent = '配对中…';
   const result = await chrome.runtime.sendMessage({ type: 'pair', code });
   $('status').textContent = result.ok ? '配对成功' : (result.error || '失败');
-  await refresh();
-});
-
-$('drive-tab').addEventListener('click', async () => {
-  $('status').textContent = '正在 connect 当前标签…';
-  const result = await chrome.runtime.sendMessage({ type: 'connectTab' });
-  $('status').textContent = result.ok ? `已驱动 ${result.sessionId}` : (result.error || '失败');
   await refresh();
 });
 

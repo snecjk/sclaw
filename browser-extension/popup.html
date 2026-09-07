@@ -8,7 +8,7 @@
 <body>
   <main>
     <h1>StoClaw Browser Bridge</h1>
-    <p class="hint">操作页面会短暂显示 Chrome「由扩展程序调试」提示，这是预期行为。</p>
+    <p class="hint">在 SClaw 里确认「连接 Google Chrome」后，扩展会自动接管标签。无需在此操作页面。</p>
     <section id="mismatch" hidden>
       <p class="error">扩展 major 版本与 StoClaw 内置包不一致，请下载新 zip 后重新加载。不能继续连接。</p>
       <p id="mismatch-versions"></p>
@@ -25,11 +25,10 @@
     </section>
     <section id="connected" hidden>
       <p id="tab-url" class="url"></p>
-      <p id="restricted" class="error" hidden>当前是 chrome:// 页面，不能驱动。请先打开百度等 http/https 网页，再点「驱动当前标签」。</p>
+      <p id="restricted" class="error" hidden>当前是 chrome:// 页面，无法接管。请先打开 http/https 网页。</p>
       <p id="versions" class="muted"></p>
       <p id="update" class="warn" hidden>有新版本可升级，功能可继续使用。</p>
       <div class="row">
-        <button id="drive-tab" type="button">驱动当前标签</button>
         <button id="disconnect" type="button" class="secondary">断开</button>
       </div>
     </section>

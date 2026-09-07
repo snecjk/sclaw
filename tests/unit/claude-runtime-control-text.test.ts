@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildClaudeResumeContinueUserPrompt,
   buildClaudeResumeInterruptAppend,
   isContinueUserPrompt,
 } from '../../shared/claude-runtime-control-text';
@@ -10,6 +11,8 @@ describe('isContinueUserPrompt', () => {
     expect(isContinueUserPrompt('请继续')).toBe(true);
     expect(isContinueUserPrompt('continue')).toBe(true);
     expect(isContinueUserPrompt('分析这个站点')).toBe(false);
+    expect(isContinueUserPrompt('Continue from where you left off.')).toBe(true);
+    expect(isContinueUserPrompt('Continue from where you left off')).toBe(true);
   });
 });
 
@@ -41,5 +44,18 @@ describe('buildClaudeResumeInterruptAppend', () => {
       cause: 'user_abort',
     });
     expect(append).toContain('不要自行接着干');
+  });
+});
+
+describe('buildClaudeResumeContinueUserPrompt', () => {
+  it('replaces the SDK empty continue turn with a cause-bearing user prompt', () => {
+    const prompt = buildClaudeResumeContinueUserPrompt('stream_closed');
+    expect(prompt.trim().length).toBeGreaterThan(0);
+    expect(prompt).not.toMatch(/continue from where you left off/i);
+    expect(prompt).toContain('流被关闭');
+  });
+
+  it('user_abort tells the model not to continue on its own', () => {
+    expect(buildClaudeResumeContinueUserPrompt('user_abort')).toContain('不要自行接着干');
   });
 });

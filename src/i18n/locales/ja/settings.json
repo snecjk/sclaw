@@ -289,7 +289,7 @@
     "browserAutomationDom": "DOM モード",
     "browserAutomationAx": "AX モード",
     "browserBridgeTitle": "Chrome 拡張ブリッジ",
-    "browserBridgeDesc": "Chrome に拡張を読み込み、ペアリングコードまたは同一マシンの自動接続で既存タブを操作します。タブは閉じません。",
+    "browserBridgeDesc": "本機 Google Chrome を操作する前に SClaw で確認します。許可後は拡張がタブを自動で接続します。タブは閉じません。",
     "browserBridgeVersion": "同梱 {{bundled}} · 接続済み {{installed}}",
     "browserBridgeNotPaired": "未報告",
     "browserBridgeUpdate": "更新あり",
@@ -299,7 +299,12 @@
     "browserBridgeRefreshCode": "再発行",
     "browserBridgeCodeCopied": "ペアリングコードをコピーしました",
     "browserBridgeDownload": "拡張 zip をダウンロード",
-    "browserBridgeSaveFailed": "保存に失敗しました"
+    "browserBridgeSaveFailed": "保存に失敗しました",
+    "browserBridgeConsentTitle": "Google Chrome に接続",
+    "browserBridgeConsentMessage": "SClaw は本機の Google Chrome に接続し、ページを開いたり操作したりします。タブは閉じません。許可しますか？",
+    "browserBridgeConsentWithUrl": "SClaw は Google Chrome に接続し、次を開きます：{{url}}。タブは閉じません。許可しますか？",
+    "browserBridgeConsentAllow": "許可",
+    "browserBridgeConsentDeny": "拒否"
   },
   "developer": {
     "title": "開発者",

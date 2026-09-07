@@ -33,6 +33,14 @@ describe('resolveClaudeResumePlan', () => {
     expect(plan).toMatchObject({ mode: 'resume', isContinuePrompt: true, interruptCause: 'process_restart' });
   });
 
+  it('treats the SDK Continue from where you left off line as a continue prompt', () => {
+    expect(resolveClaudeResumePlan({
+      registryEntry: { sessionId: 'sdk-1' },
+      interruptCause: 'stream_closed',
+      userPrompt: 'Continue from where you left off.',
+    })).toMatchObject({ mode: 'resume', isContinuePrompt: true, interruptCause: 'stream_closed' });
+  });
+
   it('keeps a real user question as a non-continue resume', () => {
     const plan = resolveClaudeResumePlan({
       registryEntry: { sessionId: 'sdk-1' },

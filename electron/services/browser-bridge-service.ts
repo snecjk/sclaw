@@ -4,6 +4,8 @@ import { randomBytes, randomInt } from 'node:crypto';
 import type {
   BrowserBridgeCommand,
   BrowserBridgeCommandResult,
+  BrowserBridgeControlCommand,
+  BrowserBridgeChromeConsent,
   BrowserBridgeSession,
 } from '../../shared/browser-bridge/types';
 import {
@@ -48,6 +50,11 @@ export class BrowserBridgeService {
   private readonly graceTokens = new Map<string, TokenRecord>();
   private autoConnectEnabled = true;
   private installedExtensionVersion: string | null = null;
+  private chromeConsent: BrowserBridgeChromeConsent = 'unknown';
+  private consentPromptOpen = false;
+  private readonly consentWaiters: Array<(decision: 'allowed' | 'denied') => void> = [];
+  private controlQueue: BrowserBridgeControlCommand[] = [];
+  private readonly controlWaiters: Array<(commands: BrowserBridgeControlCommand[]) => void> = [];
 
   constructor() {
     this.loadPersistedState();
@@ -266,6 +273,123 @@ export class BrowserBridgeService {
   getPrimarySession(): BrowserBridgeSession | null {
     const sessions = this.listActiveSessions();
     return sessions.find((session) => session.source === 'embed') ?? sessions[0] ?? null;
+  }
+
+  getExtensionSession(): BrowserBridgeSession | null {
+    return this.listActiveSessions().find((session) => session.source !== 'embed') ?? null;
+  }
+
+  getChromeConsent(): BrowserBridgeChromeConsent {
+    return this.chromeConsent;
+  }
+
+  /**
+   * 首次需要 Chrome 时：unknown → 调用方弹确认；已有决定则立即返回。
+   * 并发 ensure-session 共用同一次确认，不会叠两个弹窗。
+   */
+  beginChromeConsent(): 'allowed' | 'denied' | 'need-ui' | 'pending' {
+    if (this.chromeConsent === 'allowed' || this.chromeConsent === 'denied') {
+      return this.chromeConsent;
+    }
+    if (this.consentPromptOpen || this.consentWaiters.length > 0) return 'pending';
+    this.consentPromptOpen = true;
+    return 'need-ui';
+  }
+
+  waitForChromeConsent(timeoutMs: number): Promise<'allowed' | 'denied' | 'timeout'> {
+    if (this.chromeConsent === 'allowed' || this.chromeConsent === 'denied') {
+      return Promise.resolve(this.chromeConsent);
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value: 'allowed' | 'denied' | 'timeout') => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        const index = this.consentWaiters.indexOf(waiter);
+        if (index >= 0) this.consentWaiters.splice(index, 1);
+        if (value === 'timeout' && this.chromeConsent === 'unknown' && this.consentWaiters.length === 0) {
+          this.consentPromptOpen = false;
+        }
+        resolve(value);
+      };
+      const waiter = (decision: 'allowed' | 'denied') => finish(decision);
+      const timer = setTimeout(() => finish('timeout'), Math.max(0, timeoutMs));
+      this.consentWaiters.push(waiter);
+    });
+  }
+
+  resolveChromeConsent(allowed: boolean): void {
+    this.chromeConsent = allowed ? 'allowed' : 'denied';
+    this.consentPromptOpen = false;
+    const waiters = this.consentWaiters.splice(0, this.consentWaiters.length);
+    for (const waiter of waiters) waiter(this.chromeConsent);
+  }
+
+  enqueueControlAttach(url?: string): BrowserBridgeControlCommand {
+    const trimmed = typeof url === 'string' ? url.trim() : '';
+    const command: BrowserBridgeControlCommand = {
+      commandId: randomBytes(12).toString('hex'),
+      action: 'attach',
+      url: trimmed || undefined,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + BROWSER_BRIDGE_COMMAND_TTL_MS,
+    };
+    this.controlQueue.push(command);
+    const waiter = this.controlWaiters.shift();
+    if (waiter) waiter(this.drainControlQueue());
+    return command;
+  }
+
+  pollControl(): BrowserBridgeControlCommand[] {
+    return this.drainControlQueue();
+  }
+
+  waitForControl(waitMs: number): Promise<BrowserBridgeControlCommand[]> {
+    const cap = Math.max(0, Math.min(waitMs, BROWSER_BRIDGE_POLL_WAIT_MAX_MS));
+    const already = this.drainControlQueue();
+    if (already.length > 0 || cap <= 0) return Promise.resolve(already);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value: BrowserBridgeControlCommand[]) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        const index = this.controlWaiters.indexOf(waiter);
+        if (index >= 0) this.controlWaiters.splice(index, 1);
+        resolve(value);
+      };
+      const waiter = (commands: BrowserBridgeControlCommand[]) => finish(commands);
+      const timer = setTimeout(() => finish(this.drainControlQueue()), cap);
+      this.controlWaiters.push(waiter);
+    });
+  }
+
+  waitForExtensionSession(timeoutMs: number): Promise<BrowserBridgeSession | null> {
+    const started = Date.now();
+    return new Promise((resolve) => {
+      const tick = () => {
+        const session = this.getExtensionSession();
+        if (session) {
+          resolve(session);
+          return;
+        }
+        if (Date.now() - started >= timeoutMs) {
+          resolve(null);
+          return;
+        }
+        setTimeout(tick, 200);
+      };
+      tick();
+    });
+  }
+
+  private drainControlQueue(): BrowserBridgeControlCommand[] {
+    const now = Date.now();
+    this.controlQueue = this.controlQueue.filter((command) => command.expiresAt > now);
+    const pending = this.controlQueue;
+    this.controlQueue = [];
+    return pending;
   }
 
   enqueueCommand(

@@ -17,6 +17,7 @@ import {
   RefTable,
   captureAxTree,
   searchAxSnapshot,
+  resolveAxClickPoint,
 } from '../../electron/services/browser-automation/ax-observer';
 import { observePage } from '../../electron/services/browser-automation/observer';
 
@@ -341,5 +342,20 @@ describe('B6 searchAxSnapshot', () => {
     // 静态节点无 ref → ref 回退为可交互祖先 ref（契约非空）
     expect(matches[0].ref).toBe('@e1');
     expect(matches[0].path?.map((p) => p.role)).toEqual(['WebArea', 'button']);
+  });
+});
+
+describe('AX ref 点击坐标', () => {
+  it('resolveAxClickPoint 用 RefTable → quads 中心点', async () => {
+    const cdp = mockCdp(basicTree());
+    const capture = await captureAxTree(cdp, 1);
+    const point = await resolveAxClickPoint(cdp, capture.refTable, '@e1');
+    expect(point).toEqual({ x: 125, y: 20 });
+  });
+
+  it('未知 ref 返回 null，不把页内 refMap 当成 AX 引用', async () => {
+    const cdp = mockCdp(basicTree());
+    const capture = await captureAxTree(cdp, 1);
+    expect(await resolveAxClickPoint(cdp, capture.refTable, '@e99')).toBeNull();
   });
 });

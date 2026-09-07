@@ -36,7 +36,7 @@ export default definePluginEntry({
 			resultType: "browser_snapshot",
 			label: "获取浏览器页面快照",
 			description:
-				"获取当前浏览器页面可交互元素树（含 @e ref）。应用广场内嵌预览须传 sessionId；操作前必须先调用。",
+				"获取当前浏览器页面可交互元素列表（扁平 elements，含 @e ref）。默认无障碍树；失败时回退 DOM 并标注 observationMode。应用广场内嵌预览须传 sessionId。",
 			parameters: Type.Object({
 				sessionId: SESSION_ID_PARAM,
 				mode: Type.Optional(Type.Union([
