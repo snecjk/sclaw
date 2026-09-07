@@ -196,6 +196,79 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
     });
   });
 
+  describe('可选运行策略透传（task 3.1）', () => {
+    const TOGGLE_KEYS = [
+      'ARMS_ENABLE_CONSOLE_EXPORTER',
+      'OTEL_LOG_LEVEL',
+      'OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT',
+    ] as const;
+
+    it('显式配置的开关在探针加载前写入 env', () => {
+      const env: Env = {
+        ARMS_APP_NAME: 'sto-claw-test',
+        ARMS_ENABLE_CONSOLE_EXPORTER: 'true',
+        OTEL_LOG_LEVEL: 'debug',
+        OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT: 'true',
+      };
+      let snapshot: Env = {};
+      const { deps } = makeDeps({
+        env,
+        readSecretsFile: () => SECRETS_WITH_LICENSE,
+        loadProbe: () => {
+          snapshot = { ...env };
+        },
+      });
+      const result = initAgentLoop(deps);
+      expect(result.status).toBe('registered');
+      expect(snapshot.ARMS_ENABLE_CONSOLE_EXPORTER).toBe('true');
+      expect(snapshot.OTEL_LOG_LEVEL).toBe('debug');
+      expect(snapshot.OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT).toBe('true');
+    });
+
+    it('未配置开关时不写入任何默认值（production 未配置不自动启用）', () => {
+      const env: Env = { ARMS_APP_NAME: 'sto-claw-production' };
+      let snapshot: Env = {};
+      const { deps } = makeDeps({
+        env,
+        readSecretsFile: () => SECRETS_WITH_LICENSE,
+        loadProbe: () => {
+          snapshot = { ...env };
+        },
+      });
+      const result = initAgentLoop(deps);
+      expect(result.status).toBe('registered');
+      for (const key of TOGGLE_KEYS) {
+        expect(key in snapshot).toBe(false);
+      }
+    });
+
+    it('注入隔离 env 缺失开关时不回退真实 process.env（不跨环境污染）', () => {
+      // 真实进程环境显式开启开关（模拟其他环境的本机环境变量）；
+      // 注入的隔离 env 未配置开关时，探针加载前也不得出现这些键。
+      vi.stubEnv('ARMS_ENABLE_CONSOLE_EXPORTER', 'true');
+      vi.stubEnv('OTEL_LOG_LEVEL', 'debug');
+      vi.stubEnv('OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT', 'true');
+      try {
+        const env: Env = { ARMS_APP_NAME: 'sto-claw-production' };
+        let snapshot: Env = {};
+        const { deps } = makeDeps({
+          env,
+          readSecretsFile: () => SECRETS_WITH_LICENSE,
+          loadProbe: () => {
+            snapshot = { ...env };
+          },
+        });
+        const result = initAgentLoop(deps);
+        expect(result.status).toBe('registered');
+        for (const key of TOGGLE_KEYS) {
+          expect(key in snapshot).toBe(false);
+        }
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+  });
+
   describe('日志脱敏', () => {
     it('所有日志均不包含 License 值', () => {
       const license = 'lic-super-secret-value';

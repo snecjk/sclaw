@@ -87,6 +87,20 @@ function readNonSecret(env: Record<string, string | undefined>, key: string): st
 const DEFINED_APP_NAME = (process.env.ARMS_APP_NAME || '').trim();
 const DEFINED_REGION_ID = (process.env.ARMS_REGION_ID || '').trim();
 const DEFINED_WORKSPACE = (process.env.ARMS_WORKSPACE || '').trim();
+// 可选运行策略：仅在当前环境显式配置时才有 define 注入值（未配置则无 define 条目，
+// 此处回退为真实环境读取或空串），绝不在此处设置跨环境默认开启值。
+const DEFINED_CONSOLE_EXPORTER = (process.env.ARMS_ENABLE_CONSOLE_EXPORTER || '').trim();
+const DEFINED_OTEL_LOG_LEVEL = (process.env.OTEL_LOG_LEVEL || '').trim();
+const DEFINED_GENAI_EMIT_EVENT = (process.env.OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT || '').trim();
+
+/** 可被构建期 define 注入的非敏感字段。 */
+type AgentLoopNonSecretKey =
+  | 'ARMS_APP_NAME'
+  | 'ARMS_REGION_ID'
+  | 'ARMS_WORKSPACE'
+  | 'ARMS_ENABLE_CONSOLE_EXPORTER'
+  | 'OTEL_LOG_LEVEL'
+  | 'OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT';
 
 /**
  * 读取构建期注入的非敏感字段。
@@ -96,7 +110,7 @@ const DEFINED_WORKSPACE = (process.env.ARMS_WORKSPACE || '').trim();
  */
 function readBuildTimeNonSecret(
   env: Record<string, string | undefined>,
-  key: 'ARMS_APP_NAME' | 'ARMS_REGION_ID' | 'ARMS_WORKSPACE',
+  key: AgentLoopNonSecretKey,
   definedValue: string,
 ): string {
   return readNonSecret(env, key) || (env === process.env ? definedValue : '');
@@ -189,6 +203,16 @@ function doInit(ctx: {
     if (regionId) targetEnv.ARMS_REGION_ID = regionId;
     const workspace = readBuildTimeNonSecret(env, 'ARMS_WORKSPACE', DEFINED_WORKSPACE);
     if (workspace) targetEnv.ARMS_WORKSPACE = workspace;
+
+    // 可选运行策略（task 3.1）：仅当当前环境显式配置时透传，未配置则不写入
+    // 任何默认值——production 未配置时不会自动启用 Console exporter、调试日志
+    // 或会话内容事件上报。
+    const consoleExporter = readBuildTimeNonSecret(env, 'ARMS_ENABLE_CONSOLE_EXPORTER', DEFINED_CONSOLE_EXPORTER);
+    if (consoleExporter) targetEnv.ARMS_ENABLE_CONSOLE_EXPORTER = consoleExporter;
+    const otelLogLevel = readBuildTimeNonSecret(env, 'OTEL_LOG_LEVEL', DEFINED_OTEL_LOG_LEVEL);
+    if (otelLogLevel) targetEnv.OTEL_LOG_LEVEL = otelLogLevel;
+    const genaiEmitEvent = readBuildTimeNonSecret(env, 'OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT', DEFINED_GENAI_EMIT_EVENT);
+    if (genaiEmitEvent) targetEnv.OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT = genaiEmitEvent;
 
     // 5) 注册探针（同步 require，保证在 Claude SDK 首次加载前完成）。
     loadProbe();

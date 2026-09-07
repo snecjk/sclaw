@@ -31,9 +31,9 @@ Claude Agent SDK 已通过 `claude-agent-sdk-loader.ts` 使用 CommonJS `require
 
 ### 2. 构建时解析环境配置，运行时只消费已解析结果
 
-Vite 按当前 mode 读取 `.env.<mode>`；development 额外接受 `.env.development.local` 的本地覆盖。构建配置将 AgentLoop 必要字段注入主进程引导入口，使安装包运行时不依赖仓库中的 `.env` 文件。
+Vite 按当前 mode 读取 `.env.<mode>`。四个 mode 文件直接保存同一套 AgentLoop 接入参数和运行策略，并分别保存对应的应用名称。构建配置将 AgentLoop 必要字段注入主进程引导入口，使安装包运行时不依赖仓库中的 `.env` 文件。
 
-非敏感的应用名在各 mode 文件中维护。License 等接入参数由本地忽略文件或 CI/CD 密钥变量提供，禁止写入提交记录。由于构建期注入的值可能从桌面安装包中提取，本设计将 License 视为仅具备遥测写入权限、允许客户端分发且可轮换的接入凭证；实施时必须验证其权限范围，不得使用具备控制台管理或数据读取权限的凭证。
+应用名和 License 等接入参数均在各 mode 文件中维护。由于 License 会进入 Git 历史且可能从桌面安装包中提取，本设计将其视为仅具备遥测写入权限、允许客户端分发且可轮换的接入凭证；不得使用具备控制台管理或数据读取权限的凭证。
 
 替代方案是把 `.env` 文件作为安装包资源分发；该方案同样暴露凭证且增加运行时文件查找与篡改风险，因此不采用。
 
@@ -48,7 +48,7 @@ Vite 按当前 mode 读取 `.env.<mode>`；development 额外接受 `.env.develo
 | `staging` | `sto-claw-staging` |
 | `production` | `sto-claw-production` |
 
-`.env.development.local` 只覆盖 development 参数，不参与环境枚举。初始化时校验配置中的应用名与当前 mode 一致，防止测试数据误上报到生产应用。
+初始化时校验配置中的应用名与当前 mode 一致，防止测试数据误上报到生产应用。
 
 替代方案是仅依赖自由填写的 `ARMS_APP_NAME`；其灵活性更高，但容易因复制配置造成环境串流，因此采用固定映射校验。
 
@@ -56,7 +56,7 @@ Vite 按当前 mode 读取 `.env.<mode>`；development 额外接受 `.env.develo
 
 引导入口捕获配置校验和探针注册异常，输出不包含配置值的结构化告警，然后继续加载现有主进程入口。可观测能力不得成为桌面 Agent 的可用性依赖。
 
-初始化模块使用进程级状态防止重复注册。Console exporter、日志级别和会话内容事件开关仅透传当前环境显式提供的值，不设置跨环境默认开启值。
+初始化模块使用进程级状态防止重复注册。Console exporter、日志级别和会话内容事件开关从当前 mode 文件显式读取；当前四个 mode 使用相同配置。
 
 替代方案是初始化失败即退出应用；虽然更容易暴露部署错误，但会让遥测故障中断用户工作，因此不采用。
 
@@ -70,7 +70,7 @@ Vite 按当前 mode 读取 `.env.<mode>`；development 额外接受 `.env.develo
 - [错误 mode 或应用名导致环境串流] → 使用固定映射校验，并为四种 mode 增加构建测试。
 - [引导入口异步加载改变启动时序] → 保持入口轻量，并回归单实例、窗口创建和主进程初始化流程。
 - [SDK 升级改变 register 行为] → 固定兼容版本，增加探针加载与 `claude_agent` span 冒烟验证。
-- [会话内容造成隐私风险] → 默认不主动开启内容事件，按环境显式配置并经合规确认。
+- [会话内容造成隐私风险] → 四个 mode 已显式开启内容事件，发布和使用过程必须遵循既定合规要求。
 
 ## Migration Plan
 
@@ -82,5 +82,4 @@ Vite 按当前 mode 读取 `.env.<mode>`；development 额外接受 `.env.develo
 
 ## Open Questions
 
-- test、staging、production 的 Region、Workspace 和 License 具体取值由发布环境配置决定，不影响初始化结构。
-- production 的会话内容事件开关保持默认关闭，后续获得合规确认后可通过环境配置启用。
+- 四个 mode 当前共用 Region、Workspace、License 和运行策略，后续如需隔离可分别修改对应 `.env.<mode>`。

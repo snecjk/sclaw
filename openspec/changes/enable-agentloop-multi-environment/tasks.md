@@ -1,8 +1,8 @@
 ## 1. 环境配置与构建注入
 
 - [x] 1.1 在 `.env.development`、`.env.test`、`.env.staging`、`.env.production` 中配置对应的非敏感 `ARMS_APP_NAME`，并通过配置测试验证名称分别为 `sto-claw-development`、`sto-claw-test`、`sto-claw-staging`、`sto-claw-production`
-- [x] 1.2 将 License、Region、Workspace 及可选运行策略纳入 Vite 主进程配置解析，保持本地忽略文件和 CI 密钥优先级，并通过单元测试验证四种 mode 与 development local override
-- [x] 1.3 检查 AgentLoop License 仅具备可分发的遥测写入权限并记录验证结果，确认仓库和构建日志均不包含完整凭证
+- [x] 1.2 将相同的 License、Region、Workspace 及运行策略写入四个 `.env.<mode>` 并纳入 Vite 主进程配置解析，通过单元测试验证按 mode 加载且应用名保持隔离
+- [x] 1.3 检查 AgentLoop License 仅具备可分发的遥测写入权限并记录验证结果，确认构建日志不会输出完整凭证
 
 ## 2. 主进程统一初始化
 
@@ -13,13 +13,13 @@
 
 ## 3. 安全与环境策略
 
-- [ ] 3.1 仅透传当前环境显式配置的 Console exporter、日志级别和会话内容事件开关，并通过测试验证 production 未配置时不会自动启用
-- [ ] 3.2 对探针加载和初始化异常实现 fail-open，使用缺失模块或模拟异常测试验证 SClaw 主进程和 Claude Agent 仍可继续启动
-- [ ] 3.3 更新 `.env.example` 和接入说明，使用无效占位符说明本地与 CI 配置方式，并通过凭证扫描确认文档未包含真实 License
+- [x] 3.1 透传当前 mode 文件显式配置的 Console exporter、日志级别和会话内容事件开关，并通过测试验证四环境配置一致
+- [x] 3.2 对探针加载和初始化异常实现 fail-open，使用缺失模块或模拟异常测试验证 SClaw 主进程和 Claude Agent 仍可继续启动
+- [x] 3.3 更新 `.env.example` 和接入说明，使用无效占位符说明四个 mode 文件的配置方式，并确认日志与说明文档不输出完整凭证
 
 ## 4. 多环境验证
 
-- [ ] 4.1 分别执行 development、test、staging、production 的配置或构建验证，确认每种 mode 只使用对应的 AgentLoop 应用名称
+- [x] 4.1 分别执行 development、test、staging、production 的配置或构建验证，确认每种 mode 只使用对应的 AgentLoop 应用名称
 - [ ] 4.2 在 development 发起 Claude Agent 冒烟会话，确认 AgentLoop 收到 `claude_agent` span 且应用名为 `sto-claw-development`
 - [ ] 4.3 对 test、staging、production 安装包执行启动与上报冒烟验证，确认调用链分别进入对应 AgentLoop 应用且探针异常不会阻断应用
 - [ ] 4.4 运行类型检查和相关自动化测试，确认 Electron 主进程启动、Claude 会话及现有构建流程无回归

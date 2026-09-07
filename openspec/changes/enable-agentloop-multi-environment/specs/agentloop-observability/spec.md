@@ -22,9 +22,9 @@
 - **WHEN** 任一受支持环境初始化 AgentLoop
 - **THEN** 上报服务名称与该环境约定的 AgentLoop 应用名称一致
 
-#### Scenario: 本地覆盖文件不创建额外环境
-- **WHEN** development 使用 `.env.development.local` 覆盖配置
-- **THEN** 系统仍使用 `sto-claw-development`，且不创建独立的 local 应用名称
+#### Scenario: 按 mode 文件加载配置
+- **WHEN** 构建过程加载任一 `.env.<mode>` 文件
+- **THEN** 系统使用该 mode 对应的应用名称，并加载该文件中的 AgentLoop 接入参数
 
 ### Requirement: 探针先于 Claude Agent SDK 生效
 系统 MUST 在首次运行时加载 Claude Agent SDK 前完成 AgentLoop 探针注册，并 SHALL 保持 Claude Agent SDK 可被自动插桩的加载方式。
@@ -45,11 +45,11 @@
 - **THEN** 系统记录脱敏错误并继续启动，Claude Agent 功能仍可使用
 
 ### Requirement: 环境运行策略显式配置
-系统 SHALL 仅在当前环境显式配置时启用 Console exporter、调试日志或会话内容事件上报，不得因为启用 AgentLoop 而自动开启这些选项。
+系统 SHALL 按当前 `.env.<mode>` 中的显式配置启用 Console exporter、调试日志和会话内容事件上报，不得从其他 mode 文件读取运行策略。
 
-#### Scenario: 生产环境未配置调试选项
-- **WHEN** production 配置未显式启用 Console exporter 或调试日志
-- **THEN** 系统运行 AgentLoop 时不输出对应的调试数据
+#### Scenario: 生产环境显式配置运行策略
+- **WHEN** production 配置显式启用 Console exporter、调试日志和会话内容事件
+- **THEN** production 探针按配置启用这些能力
 
 #### Scenario: 会话内容上报未授权
 - **WHEN** 当前环境未显式启用会话内容事件上报
