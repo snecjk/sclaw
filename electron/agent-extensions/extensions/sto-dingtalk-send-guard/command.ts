@@ -12,6 +12,9 @@ const DWS_SEND = /dws(?:\.exe)?\s+chat\s+message\s+send\b/i;
 const DRY_RUN = /--dry-run\b/i;
 const LOOP = /\b(?:for|while|until|seq|xargs)\b/i;
 const MEDIA = /--msg-type\s+(?:image|file)\b|--media-id\b|\s--file\s/i;
+const HEREDOC = /<<\s*['"]?EOF['"]?/i;
+const CAT_HEREDOC = /\$\s*\(\s*cat\s+<</i;
+const LOST_MARKDOWN_HEADING = /--text\s+["']I\s+[一-鿿]/;
 const COMMAND_KEYS = ['command', 'cmd', 'script', 'input', 'bash_command'] as const;
 
 export const DINGTALK_NO_BYPASS_HINT =
@@ -38,6 +41,14 @@ export function classifyDingTalkSend(command: string): DingTalkSendCategory | nu
   return MEDIA.test(command) ? 'image' : 'text';
 }
 
+function buildDingTalkSendRetryExample(): string {
+  return buildDwsChatMessageSendAgentCommandExample({
+    recipientKind: 'user',
+    recipientId: '<userId>',
+    text: appendDingTalkAgentSendDisclaimer('{正文}'),
+  });
+}
+
 export function resolveDingTalkSendStaticProblem(command: string): string | null {
   if (!containsDingTalkSend(command)) return null;
   const sendCount = command.match(/dws(?:\.exe)?\s+chat\s+message\s+send\b/gi)?.length ?? 0;
@@ -47,12 +58,23 @@ export function resolveDingTalkSendStaticProblem(command: string): string | null
   if (dwsChatMessageSendTextContainsLocalArtifactPath(command)) {
     return DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON;
   }
+  if (HEREDOC.test(command) || CAT_HEREDOC.test(command)) {
+    return [
+      '[SClaw 安全策略] 钉钉发送正文禁止使用 Shell heredoc（`<<EOF` / `$(cat <<EOF)`）。',
+      'heredoc 会把 Markdown 标题的 `#` 当成注释吃掉，导致标题丢失。',
+      '请改用 --text "..." 直接传正文，示例：',
+      buildDingTalkSendRetryExample(),
+    ].join('\n');
+  }
+  if (LOST_MARKDOWN_HEADING.test(command)) {
+    return [
+      '[SClaw 安全策略] 检测到 `--text` 正文以 `I 中文` 开头，这通常是 Markdown 标题 `# 标题` 被 Shell 把 `#` 当成注释吃掉后的残留。',
+      '请改用 --text "### 标题\\n\\n正文"，不要使用 heredoc 或未加引号的 `#`，示例：',
+      buildDingTalkSendRetryExample(),
+    ].join('\n');
+  }
   if (!/--text\s+/i.test(command)) return null;
-  const example = buildDwsChatMessageSendAgentCommandExample({
-    recipientKind: 'user',
-    recipientId: '<userId>',
-    text: appendDingTalkAgentSendDisclaimer('{正文}'),
-  });
+  const example = buildDingTalkSendRetryExample();
   if (/<\/?font\b/i.test(command)) {
     return `钉钉发送正文禁止使用 <font> HTML。请改用 Markdown 底栏，示例：\n${example}`;
   }

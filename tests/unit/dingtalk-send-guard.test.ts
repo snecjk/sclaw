@@ -8,6 +8,7 @@ import {
   isSuccessfulDwsChatMessageSendResult,
   rememberPendingDingTalkSend,
   resolveDwsChatMessageSendFileProtocolInText,
+  resolveDwsChatMessageSendHeredocOrLostHeadingProblem,
   resolveDwsChatMessageSendTextFormatProblem,
   resetDingTalkSendRateLimitForTests,
 } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/dingtalk-send-guard';
@@ -264,6 +265,53 @@ describe('evaluateDingTalkSendGuard', () => {
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(true);
     expect(resolveDwsChatMessageSendTextFormatProblem(params.command)).toBeNull();
+  });
+
+  it('blocks shell heredoc --text payloads', () => {
+    const command =
+      "dws chat message send --user xxx --text $(cat <<'EOF'\n# 标题\nEOF)";
+    expect(resolveDwsChatMessageSendHeredocOrLostHeadingProblem(command)).toContain('heredoc');
+    const result = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params: { command },
+      sessionKey: 'sess-1',
+    });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain('heredoc');
+    }
+  });
+
+  it('blocks leftover I + CJK heading after shell ate #', () => {
+    const command = 'dws chat message send --user xxx --text "I 标题"';
+    expect(resolveDwsChatMessageSendHeredocOrLostHeadingProblem(command)).toContain('I 中文');
+    const result = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params: { command },
+      sessionKey: 'sess-1',
+    });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain('I 中文');
+    }
+  });
+
+  it('allows quoted markdown headings and ordinary text for heredoc/heading checks', () => {
+    expect(
+      resolveDwsChatMessageSendHeredocOrLostHeadingProblem(
+        'dws chat message send --user xxx --text "### 标题\\n\\n正文"',
+      ),
+    ).toBeNull();
+    expect(
+      resolveDwsChatMessageSendHeredocOrLostHeadingProblem(
+        'dws chat message send --user xxx --text "正常消息"',
+      ),
+    ).toBeNull();
+    expect(
+      resolveDwsChatMessageSendHeredocOrLostHeadingProblem(
+        'dws chat message send --user xxx --text "I like this"',
+      ),
+    ).toBeNull();
   });
 });
 
