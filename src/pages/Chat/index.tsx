@@ -6,7 +6,7 @@
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
+import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, RotateCcw, Sparkles, Workflow } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
@@ -406,6 +406,38 @@ export function Chat() {
     });
   }, [beginSendScroll]);
 
+  const retrySourceMessage = useMemo(() => (
+    [...messages]
+      .reverse()
+      .find((message) => message.role === 'user' && Boolean(extractText(message).trim()))
+      ?? null
+  ), [messages]);
+
+  const handleRetryFailedMessage = useCallback(() => {
+    if (sending || !retrySourceMessage) return;
+
+    const text = extractText(retrySourceMessage).trim();
+    if (!text) return;
+
+    // A retry is a fresh model run of the most recent user request.  Clear the
+    // previous terminal error immediately so there is only one actionable state.
+    clearError();
+    void handleSend(
+      text,
+      undefined,
+      undefined,
+      undefined,
+      null,
+      null,
+      null,
+      retrySourceMessage._skillMeta,
+      {
+        skillMetas: retrySourceMessage._skillMetas,
+        composerSegments: retrySourceMessage._composerSegments,
+      },
+    );
+  }, [clearError, handleSend, retrySourceMessage, sending]);
+
   const handleQueue = useCallback((
     text: string,
     attachments?: FileAttachment[],
@@ -747,12 +779,24 @@ export function Chat() {
               <AlertCircle className="h-4 w-4" />
               {error}
             </p>
-            <button
-              onClick={clearError}
-              className="text-xs text-destructive/60 hover:text-destructive underline"
-            >
-              {t('common:actions.dismiss')}
-            </button>
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={handleRetryFailedMessage}
+                disabled={sending || !retrySourceMessage}
+                className="inline-flex items-center gap-1 text-xs font-medium text-destructive hover:underline disabled:pointer-events-none disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                {t('workflow.retryQuery')}
+              </button>
+              <button
+                type="button"
+                onClick={clearError}
+                className="text-xs text-destructive/60 hover:text-destructive underline"
+              >
+                {t('common:actions.dismiss')}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -345,24 +345,9 @@ function stringifyClaudeContent(content: unknown): string {
     .join('\n');
 }
 
-function formatClaudeError(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
-}
-
-function cacheClaudeErrorMessage(sessionKey: string, error: unknown): void {
-  const current = liveClaudeMessages.get(sessionKey) ?? [];
-  setLiveClaudeMessages(sessionKey, [
-    ...current,
-    {
-      id: randomUUID(),
-      role: 'assistant',
-      content: `[Claude error] ${formatClaudeError(error)}`,
-      timestamp: Date.now(),
-      isError: true,
-      receivedAt: Date.now(),
-    },
-  ]);
+function formatClaudeResultError(message: Record<string, unknown>): string {
+  const result = typeof message.result === 'string' ? message.result.trim() : '';
+  return result || 'Claude Code returned an error result.';
 }
 
 function toRawContentFromClaudeMessage(message: unknown): unknown {
@@ -1163,6 +1148,16 @@ export async function consumeClaudeQuery(
         resultFailed = typeof (message as { subtype?: unknown }).subtype === 'string'
           && (message as { subtype: string }).subtype.startsWith('error_');
         seenResult = true;
+        if (resultFailed) {
+          // Claude SDK exposes API failures as a terminal result message. Do not
+          // emit a completed notification first, otherwise the later failure is
+          // ignored by the runtime supervisor and the UI only sees raw text.
+          emitEngineEvent({
+            type: 'turn.failed',
+            errorMessage: formatClaudeResultError(message),
+          });
+          continue;
+        }
         // A main-agent result may merely mean "waiting for background tasks".
         // Keep the same app run alive so task_notification/auto-continuation
         // messages remain visible. A later result after all tasks settle is the
@@ -1339,7 +1334,7 @@ export async function consumeClaudeQuery(
     // Some SDK task modes settle the outstanding task and then close the
     // iterator without producing another result. At iterator EOF all observed
     // tasks are terminal, so finalize the already-seen result here.
-    if (seenResult && !completionEmitted && pendingTaskIds.size === 0) {
+    if (seenResult && !resultFailed && !completionEmitted && pendingTaskIds.size === 0) {
       emitAgentCompleted();
     }
     // If the loop ended without a result and without an error, the query was
@@ -1690,7 +1685,6 @@ async function startClaudeQuery(
     void consumeWithMissingSessionRecovery().catch((error) => {
       void failSkillTurn(sessionKey, runId).catch(() => {});
       logger.error('Claude query failed:', error);
-      cacheClaudeErrorMessage(sessionKey, error);
       void patchEngineSessionRegistryEntry(sessionKey, {
         updatedAt: Date.now(),
         model: launchSelection.model,

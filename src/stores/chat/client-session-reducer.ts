@@ -395,6 +395,7 @@ export function reduceSessionEvent(
         : errorMessage
           ? new AppError(errorCode ?? 'GATEWAY', errorMessage, undefined, {
             reason: typeof payload?.reason === 'string' ? payload.reason : undefined,
+            retryAttempts: typeof payload?.retryAttempts === 'number' ? payload.retryAttempts : undefined,
           })
           : terminal
             ? null

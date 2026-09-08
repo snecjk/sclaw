@@ -195,7 +195,11 @@ export class StoModelSyncService {
 
     // Step 1 — Get user SK
     const { getUserSk } = await import('../user-sk-service');
-    const sk = await getUserSk();
+    // A persisted SK can be revoked or rotated while the desktop app is closed.
+    // Sync is the boundary at which we rebuild the provider configuration, so
+    // always obtain the current key instead of propagating a stale cached key
+    // into every managed model account.
+    const sk = await getUserSk(true);
     if (!await sessionIsCurrent()) return result;
     if (!sk) {
       result.error = 'no-sk';

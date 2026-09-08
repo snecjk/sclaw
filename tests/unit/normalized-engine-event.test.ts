@@ -57,6 +57,18 @@ describe('normalized engine events', () => {
     });
   });
 
+  it('preserves an exhausted network retry reason across the legacy bridge', () => {
+    const event: NormalizedEngineEvent = {
+      type: 'turn.failed',
+      runId: 'run-network',
+      errorMessage: 'Request timed out.',
+      reason: 'network-retry-exhausted',
+      retryAttempts: 2,
+    };
+
+    expect(normalizeLegacyChatPayload(toLegacyChatMessagePayload(event).message)).toMatchObject(event);
+  });
+
   it('normalizes legacy tool result finals into a tool.result event', () => {
     const message = {
       role: 'toolresult',
