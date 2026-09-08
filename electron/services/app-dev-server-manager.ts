@@ -15,6 +15,7 @@ import { isDevServerRepairWorthyLine } from '../../shared/app-dev-preview-noise'
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
 import { logger } from '../utils/logger';
 import { getPort } from '../utils/config';
+import { findAvailablePort } from '../utils/port-utils';
 import {
   buildSsoAuthLocalServerEnvironment,
   createSsoAuthLocalSession,
@@ -39,6 +40,7 @@ function resolveDevServerCwd(appPath: string): string {
 const LOG_BUFFER_LINES = 500;
 const MAX_CRASH_RESTARTS = 3;
 const CRASH_BACKOFF_BASE_MS = 1_000;
+const DEV_SERVER_START_PORT = 8801;
 
 export interface DevServerEntry {
   workspaceId: string;
@@ -106,11 +108,15 @@ function killProcessTree(child: ChildProcess): void {
 function allocateFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      server.close(() => (port ? resolve(port) : reject(new Error('failed to allocate port'))));
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        void findAvailablePort(DEV_SERVER_START_PORT + 1).then(resolve, reject);
+        return;
+      }
+      reject(error);
+    });
+    server.listen(DEV_SERVER_START_PORT, '127.0.0.1', () => {
+      server.close(() => resolve(DEV_SERVER_START_PORT));
     });
   });
 }
@@ -198,7 +204,7 @@ async function startDevServerImpl(
   if (!npmBin || !existsSync(npmBin)) {
     throw new Error(`未找到可用的 npm 可执行文件: ${npmBin || '(empty)'}`);
   }
-  const port = await allocateFreePort();
+  const port = await allocateDevServerPort();
   lease.throwIfCanceled();
   const cwd = resolveDevServerCwd(appPath);
   const previewUrl = `http://127.0.0.1:${port}/`;

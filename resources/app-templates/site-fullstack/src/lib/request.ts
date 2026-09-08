@@ -107,7 +107,7 @@ export async function request<T = unknown>(
       method,
       headers,
       body: method === 'GET' || method === 'HEAD' ? null : finalBody,
-      credentials: withCredentials ? 'include' : 'same-origin',
+      credentials: withCredentials ? 'include' : 'omit',
       signal: controller.signal,
     });
 
