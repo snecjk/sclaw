@@ -21,7 +21,6 @@ import {
   type ContextUsageDialogLayout,
 } from './context-usage-dialog-layout';
 import {
-  MANUAL_CONTEXT_COMPACTION_MIN_PERCENT,
   meetsManualContextCompactionThreshold,
   selectLatestContextUsage,
 } from './context-usage-selection';
@@ -162,7 +161,6 @@ function ContextUsageControlInner({
   const percent = usage?.percent;
   const roundedPercent = percent == null ? null : Math.round(percent);
   const meetsCompactionThreshold = meetsManualContextCompactionThreshold(percent);
-  const belowCompactionThreshold = roundedPercent != null && !meetsCompactionThreshold;
   const compactDisabled = busy || !canCompact || !meetsCompactionThreshold;
   const tone = roundedPercent != null && roundedPercent >= 90
     ? 'text-destructive'
@@ -224,13 +222,13 @@ function ContextUsageControlInner({
         maxHeight: embedDialogLayout.maxHeight,
       } : undefined}
     >
-      <h3 className="text-[14px] font-medium text-foreground">{t('composer.contextCompactTitle')}</h3>
-      <p className="mt-1.5 text-[12px] leading-5 text-muted-foreground">
+      <h3 className="text-[14px] font-semibold leading-5 text-foreground">{t('composer.contextCompactTitle')}</h3>
+      <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
         {t('composer.contextCompactDescription')}
       </p>
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex items-center gap-3">
         <div
-          className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+          className="h-1 flex-1 overflow-hidden rounded-full bg-muted"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
@@ -241,22 +239,12 @@ function ContextUsageControlInner({
             style={{ width: `${roundedPercent ?? 0}%` }}
           />
         </div>
-        <span className="w-9 text-right text-[12px] tabular-nums text-foreground">{roundedPercent ?? '—'}%</span>
-      </div>
-      <p className="mt-2 text-[11px] leading-[18px] text-muted-foreground">
-        {t('composer.contextCompactNotice')}
-      </p>
-      {belowCompactionThreshold ? (
-        <p className="mt-2 text-[11px] leading-[18px] text-amber-600 dark:text-amber-400">
-          {t('composer.contextCompactThresholdHint', {
-            percent: MANUAL_CONTEXT_COMPACTION_MIN_PERCENT,
-          })}
-        </p>
-      ) : null}
-      <div className="mt-4 flex justify-end">
+        <span className="w-7 shrink-0 text-right text-[12px] font-medium tabular-nums text-foreground">
+          {roundedPercent ?? '—'}%
+        </span>
         <Button
           type="button"
-          className="h-8 rounded-md px-3 text-[12px]"
+          className="h-8 shrink-0 rounded-md px-3 text-[12px]"
           disabled={compactDisabled}
           onClick={() => { void handleCompact(); }}
         >

@@ -396,14 +396,17 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
         if (message?.role === 'assistant') {
           const errorMessage = getPiAssistantError(message);
           if (errorMessage) {
-            entry.lastRunId = runId;
-            entry.lastRunStatus = 'failed';
-            entry.lastRunError = errorMessage;
-            emit(config.sessionKey, {
-              type: 'turn.failed', sessionKey: config.sessionKey, runId, errorMessage,
+            // An assistant error message is not a terminal signal. Pi may still
+            // retry the provider request (retry.maxRetries) or be unwinding the
+            // active agent. Releasing this lock here lets a follow-up race that
+            // work and leaves the upstream Agent reporting "already processing".
+            // The prompt promise's reject path below is the sole failure
+            // terminal: it emits turn.failed only after Pi has settled.
+            logPiCore('event.assistant-error-awaiting-settle', {
+              sessionKey: config.sessionKey,
+              runId,
+              error: errorMessage,
             });
-            entry.activeRunId = undefined;
-            entry.settledRunId = undefined;
             entry.streamingAssistant = undefined;
             break;
           }
