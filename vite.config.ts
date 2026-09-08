@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
   const stoSclawHubBaseUrl = (loadedEnv.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
   const stoWisdomStarBaseUrl = (loadedEnv.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
 
-  // AgentLoop / ARMS：按 mode 解析固定应用名映射与接入配置。
+  // AgentLoop / ARMS：按 mode 读取对应环境文件中的接入配置，ARMS_APP_NAME 以配置值为准。
   // 非敏感字段走 define 注入主进程 bundle；License 只写入 dist-electron/main/agentloop.config.json，
   // 由主进程引导入口在运行时读取（构建日志与代码生成中均不出现凭证值）。
   const agentLoopConfig = resolveAgentLoopBuildConfig(mode, loadedEnv, process.env);

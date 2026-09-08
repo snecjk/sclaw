@@ -13,17 +13,17 @@
 - 探针初始化失败一律 **fail-open**：记录脱敏告警并继续启动，不影响 SClaw 与
   Claude Agent 功能。
 
-## 环境与应用名固定映射
+## 环境与应用名配置
 
 | Vite mode | AgentLoop 应用名称 |
 | --- | --- |
-| `development` | `SClaw-Claude_Agent_SDK-dev` |
-| `test` | `SClaw-Claude_Agent_SDK-test` |
-| `staging` | `SClaw-Claude_Agent_SDK-test` |
-| `production` | `SClaw-Claude_Agent_SDK-online` |
+| `development` | 以 `.env.development` 的 `ARMS_APP_NAME` 为准 |
+| `test` | 以 `.env.test` 的 `ARMS_APP_NAME` 为准 |
+| `staging` | 以 `.env.staging` 的 `ARMS_APP_NAME` 为准 |
+| `production` | 以 `.env.production` 的 `ARMS_APP_NAME` 为准 |
 
-- 应用名按构建 mode 固定映射并写入 `.env.<mode>`，**勿改**；
-  初始化时校验应用名属于固定映射，防止配置复制导致的环境串流。
+- `ARMS_APP_NAME` 只在对应的 `.env.<mode>` 中维护；构建和运行时均原样使用，
+  代码不维护名称映射。新增 Agent 时只需在对应环境文件中配置应用名。
 - 应用命名规则为 `SClaw-<Agent框架名>-<环境名>`。框架名使用
   `Claude_Agent_SDK` 或 `Pi_Agent_SDK`；环境名使用 `dev`、`test` 或
   `online`。当前接入 Claude Agent SDK，staging 归入测试环境。
@@ -33,7 +33,7 @@
 
 | 配置项 | 敏感级别 | 交付方式 | 说明 |
 | --- | --- | --- | --- |
-| `ARMS_APP_NAME` | 非敏感 | `.env.<mode>` 固定映射 → Vite define | 四个 mode 分别使用独立名称 |
+| `ARMS_APP_NAME` | 非敏感 | `.env.<mode>` → Vite define | 唯一来源；不能为空，名称由当前环境配置决定 |
 | `ARMS_LICENSE_KEY` | **敏感** | `.env.<mode>` → 构建期配置文件 | 必填；四个 mode 共用；`ARMS_LICENSE` 仅作历史回退；`auto` 无效 |
 | `ARMS_REGION_ID` | 非敏感 | `.env.<mode>` → Vite define | 四个 mode 共用 |
 | `ARMS_WORKSPACE` | 非敏感 | `.env.<mode>` → Vite define | 四个 mode 共用 |
@@ -63,10 +63,10 @@ OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT=true
 
 | 命令 | 加载文件 | AgentLoop 应用名 |
 | --- | --- | --- |
-| `pnpm dev` | `.env.development` | `SClaw-Claude_Agent_SDK-dev` |
-| `pnpm package:test` | `.env.test` | `SClaw-Claude_Agent_SDK-test` |
-| `pnpm package:staging` | `.env.staging` | `SClaw-Claude_Agent_SDK-test` |
-| `pnpm package` | `.env.production` | `SClaw-Claude_Agent_SDK-online` |
+| `pnpm dev` | `.env.development` | 读取文件中的 `ARMS_APP_NAME` |
+| `pnpm package:test` | `.env.test` | 读取文件中的 `ARMS_APP_NAME` |
+| `pnpm package:staging` | `.env.staging` | 读取文件中的 `ARMS_APP_NAME` |
+| `pnpm package` | `.env.production` | 读取文件中的 `ARMS_APP_NAME` |
 
 若构建进程显式设置同名环境变量，Vite 会优先使用进程环境变量；常规构建以
 对应的 `.env.<mode>` 为准。
@@ -84,10 +84,10 @@ License 会随桌面安装包分发、可被提取，因此必须是**仅具备�
 ## 运行行为与排障
 
 - 启动日志特征：
-  - 成功：`[AgentLoop] 探针已注册（应用环境=<env>）`，随后
+  - 成功：`[AgentLoop] 探针已注册。`，随后
     `[CMS][INFO] NodeSDK initialized ... service=SClaw-Claude_Agent_SDK-<env>`
   - 降级：`[AgentLoop] ... 跳过探针初始化` 或 `探针注册失败，已降级继续启动`
-    （缺应用名 / 缺 License / 应用名串流 / 探针模块缺失等，均为脱敏固定文案，
+    （缺应用名 / 缺 License / 探针模块缺失等，均为脱敏固定文案，
     日志不会出现 License 或完整配置值）。
 - 探针异常不会阻断应用：fail-open 后业务入口照常加载（集成测试
   `tests/integration/agentloop-fail-open.test.ts` 覆盖真实缺失模块场景）。
