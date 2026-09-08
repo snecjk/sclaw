@@ -33,6 +33,7 @@ describe('local built-in app template catalog', () => {
     }))).toEqual([
       { templateId: 'assets-minimal', pageType: 'assets', source: 'local-resource' },
       { templateId: 'site-minimal', pageType: 'site', source: 'local-resource' },
+      { templateId: 'site-fullstack', pageType: 'site', source: 'local-resource' },
     ]);
   });
 
@@ -43,6 +44,7 @@ describe('local built-in app template catalog', () => {
     );
     expect(items.map((item) => item.templateId)).toEqual([
       'site-minimal',
+      'site-fullstack',
     ]);
   });
 });

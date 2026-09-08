@@ -3,7 +3,7 @@ import type {
 	OpenClawPluginApi,
 	OpenClawPluginToolContext,
 } from "openclaw/plugin-sdk/core";
-import { stoToolError, toolResultFromEnvelope, type StoToolEnvelope } from "./envelope.js";
+import { envelopeFromExecuteResult, stoToolError, toolResultFromEnvelope, type StoToolEnvelope } from "./envelope.js";
 
 export type StoToolExecuteContext = {
 	sessionKey?: string;
@@ -61,12 +61,7 @@ export function defineStoTool<TParams>(
 						`[${logTag}] ${id} ok templateId=${schemaData.templateId ?? "(none)"} schemaHash=${schemaData.schemaHash ?? "(none)"} fields=${schemaData.schema?.fields?.length ?? 0} steps=${schemaData.schema?.steps?.length ?? 0}`,
 					);
 				}
-				const envelope: StoToolEnvelope = {
-					type: resultType,
-					success: true,
-					domain,
-					data,
-				};
+				const envelope: StoToolEnvelope = envelopeFromExecuteResult(resultType, domain, data);
 				return toolResultFromEnvelope(envelope);
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);

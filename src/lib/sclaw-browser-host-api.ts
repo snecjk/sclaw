@@ -6,6 +6,7 @@ import type {
   SclawEmbedBrowserNetworkEvent,
   SclawEmbedBrowserPageSnapshot,
   SclawEmbedBrowserRuntimeMeta,
+  SclawEmbedBrowserVisibilityReason,
 } from '../../shared/sclaw-embed-browser-runtime';
 
 export async function registerSclawBrowserRuntime(input: {
@@ -49,6 +50,19 @@ export async function updateSclawBrowserPageState(input: {
 export async function unregisterSclawBrowserRuntime(runtimeId: string): Promise<{ ok: boolean }> {
   if (!window.electron) return { ok: false };
   return invokeIpc('sclaw-browser:unregisterRuntime', { runtimeId });
+}
+
+/**
+ * D1：上报 embed webview 可见性（BAP assertPageActionable 数据源）。
+ * SclawBrowserFrame 在 active 变化 / dom-ready / 卸载时调用；主进程写入 runtime meta.visible。
+ */
+export async function reportSclawBrowserVisibility(
+  runtimeId: string,
+  visible: boolean,
+  reason?: SclawEmbedBrowserVisibilityReason,
+): Promise<{ ok: boolean }> {
+  if (!window.electron) return { ok: false };
+  return invokeIpc('sclaw-browser:reportVisibility', { runtimeId, visible, reason });
 }
 
 export async function captureSclawBrowserPage(runtimeId: string): Promise<SclawEmbedBrowserPageSnapshot | null> {

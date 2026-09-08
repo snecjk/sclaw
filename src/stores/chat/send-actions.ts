@@ -341,6 +341,7 @@ export function createSendActions(
               sessionKey,
               getAgentIdFromSessionKey(sessionKey) ?? get().currentAgentId,
             ),
+            ...(runtime.activeRunId ? { runId: runtime.activeRunId } : {}),
           },
         );
         if (result?.aborted === false && Array.isArray(result.runIds) && result.runIds.length === 0) {

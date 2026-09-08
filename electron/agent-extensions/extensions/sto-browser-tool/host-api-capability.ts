@@ -75,6 +75,25 @@ export function createHostApiBrowserBridgePort(): StoBrowserBridgePort {
       );
       return response.sessions ?? [];
     },
+    async ensureSession(signal, url) {
+      throwIfAborted(signal);
+      const response = await fetchJson<{ sessionId?: string }>(
+        '/api/browser-bridge/ensure-session',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+          signal,
+        },
+      );
+      if (!response.sessionId) {
+        throw new StoBrowserBridgePortError(
+          'BROWSER_NOT_CONNECTED',
+          '浏览器未连接。请安装 SClaw Web Bridge 扩展，并在 SClaw 中允许连接 Google Chrome。',
+        );
+      }
+      return response.sessionId;
+    },
     async runCommand({ sessionId, action, payload, signal }) {
       throwIfAborted(signal);
       const command = await fetchJson<{ commandId?: string }>(

@@ -43,6 +43,8 @@ import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 import { ChatResultNotificationNavigator } from './components/chat/ChatResultNotificationNavigator';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
+import { ChromeAttachConsentDialog } from './components/browser-bridge/ChromeAttachConsentDialog';
+import { ChromeBridgeInstallDialog } from './components/browser-bridge/ChromeBridgeInstallDialog';
 import { ThemeController } from './components/theme/ThemeController';
 
 /**
@@ -343,6 +345,12 @@ function App() {
             {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
             {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
             <JsBridgeHostPortal />
+            {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
+              <>
+                <ChromeAttachConsentDialog />
+                <ChromeBridgeInstallDialog />
+              </>
+            ) : null}
             {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
               <UserWatermark />
             ) : null}

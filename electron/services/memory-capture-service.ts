@@ -7,6 +7,11 @@ import type { ExecutionSnapshot } from '../engines/execution-snapshot';
 import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 import { sanitizeMemoryCaptureUserMessage } from '../../shared/memory-capture-text';
 import { scheduleMemoryCaptureRetry } from './memory-capture-retry';
+import {
+  rejectExecutionMemoryPersist,
+  turnHadSessionStaleHeal,
+} from '../../shared/execution-memory-quality-gate';
+import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
 
 type RefreshInput = {
   runId?: string | null;
@@ -214,6 +219,17 @@ class MemoryCaptureService {
       return;
     }
 
+    const runtime = await getChatRuntimeRepository().getLatestForSession(context.sessionKey).catch(() => null);
+    const gate = rejectExecutionMemoryPersist({
+      terminalStatus: context.terminalStatus,
+      interruptCause: runtime?.interruptCause ?? null,
+      sessionStaleHealThisTurn: turnHadSessionStaleHeal(snapshot.tools),
+    });
+    if (gate.reject) {
+      await this.skipExecutionJob(context.executionJobId, gate.reason, snapshot);
+      return;
+    }
+
     this.pruneInjectedMemoryBindings();
     const injected = this.injectedMemoriesByRun.get(context.sourceId)?.memories ?? [];
     this.injectedMemoriesByRun.delete(context.sourceId);
@@ -362,6 +378,15 @@ class MemoryCaptureService {
           candidateDecisions: (exp.candidateAssessments ?? []).map((item) => ({ memoryId: item.memoryId, decision: item.decision, sameIntent: item.sameIntent, oldPathAttempted: item.oldPathAttempted, oldPathFailed: item.oldPathFailed, newPathSucceeded: item.newPathSucceeded })),
         });
         if (exp.shouldStore !== true) { const reason = String(exp.reason || 'summarizer_rejected'); await db.updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute(); trace('info', 'job.skipped', { jobId: id, kind: job.memory_kind, reason }); return; }
+        const persistGate = rejectExecutionMemoryPersist({
+          sessionStaleHealThisTurn: turnHadSessionStaleHeal(payload.tools),
+          avoidPath: Array.isArray(exp.avoidPath) ? exp.avoidPath : null,
+        });
+        if (persistGate.reject) {
+          await db.updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: persistGate.reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
+          trace('info', 'job.skipped', { jobId: id, kind: job.memory_kind, reason: persistGate.reason });
+          return;
+        }
         // 把 directCommand(可直接执行的目标命令)/discoveryPath(探索)/parameterPattern/
         // avoidPath/applicableWhen/constraints 全部序列化进存储文本，使检索注入时未来
         // 查询能直接拿到"下次直接执行什么命令"，而非重走探索老路。

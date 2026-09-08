@@ -26,6 +26,16 @@ function pickId(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+function pickNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+  return undefined;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -159,9 +169,9 @@ export function parseSiteappRevision(data: unknown): SiteappRevision | null {
     commitSha: pickString(body.commitSha, body.commit_sha),
     sourceSha256: pickString(body.sourceSha256, body.source_sha256),
     archiveSha256: pickString(body.archiveSha256, body.archive_sha256),
-    fileCount: typeof body.fileCount === 'number' ? body.fileCount : undefined,
-    archiveSizeBytes: typeof body.archiveSizeBytes === 'number' ? body.archiveSizeBytes : undefined,
-    expandedSizeBytes: typeof body.expandedSizeBytes === 'number' ? body.expandedSizeBytes : undefined,
+    fileCount: pickNumber(body.fileCount, body.file_count),
+    archiveSizeBytes: pickNumber(body.archiveSizeBytes, body.archive_size_bytes),
+    expandedSizeBytes: pickNumber(body.expandedSizeBytes, body.expanded_size_bytes),
     failureMessage: pickString(body.failureMessage, body.failure_message),
   };
 }

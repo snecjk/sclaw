@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "templateId": "site-fullstack",
+  "pageType": "site",
+  "name": "全栈 Site 模版",
+  "description": "本地全栈：Vite 前端 + Hono/Drizzle/SQLite 后端"
+}

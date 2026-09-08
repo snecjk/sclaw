@@ -110,6 +110,7 @@ describe('main chat runtime supervisor', () => {
       phase: 'completed',
       runId: 'run-1',
       sequence: 5,
+      interruptCause: null,
     });
     expect(repository.upsert).toHaveBeenCalled();
     } finally {
@@ -407,7 +408,7 @@ describe('main chat runtime supervisor', () => {
       const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
       await supervisor.initialize();
       expect(supervisor.get('agent:main:recover')).toMatchObject({
-        phase: 'reconciling', epoch: 5, sequence: 0,
+        phase: 'reconciling', epoch: 5, sequence: 0, interruptCause: 'process_restart',
       });
       expect(supervisor.listActive()).toHaveLength(1);
     } finally {
@@ -665,6 +666,7 @@ describe('main chat runtime supervisor', () => {
       );
       expect(supervisor.get('agent:main:scheduled-deadline')).toMatchObject({
         phase: 'interrupted',
+        interruptCause: 'hard_deadline',
         runtimePolicy: { origin: 'scheduled_task', ownerId: 'schedule-run-1', deadlineAt },
       });
       expect(events.at(-1)).toMatchObject({
@@ -996,5 +998,33 @@ describe('main chat runtime supervisor', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('copies the prior interrupt cause onto the next dispatch so resume can read latest', async () => {
+    const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+    await supervisor.begin({
+      sessionKey: 'agent:main:inherit',
+      idempotencyKey: 'message-1',
+      engineType: 'claude',
+    });
+    await supervisor.rejected({
+      sessionKey: 'agent:main:inherit',
+      idempotencyKey: 'message-1',
+      error: 'iterator_eof',
+    });
+    expect(supervisor.get('agent:main:inherit')).toMatchObject({
+      phase: 'failed',
+      interruptCause: 'stream_closed',
+    });
+
+    await supervisor.begin({
+      sessionKey: 'agent:main:inherit',
+      idempotencyKey: 'message-2',
+      engineType: 'claude',
+    });
+    expect(supervisor.get('agent:main:inherit')).toMatchObject({
+      phase: 'dispatching',
+      interruptCause: 'stream_closed',
+    });
   });
 });

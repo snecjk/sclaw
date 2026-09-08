@@ -10,25 +10,35 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { getNodeRuntimeStatus, setupManagedNode } from '../../utils/node-runtime';
 import {
   DEFAULT_APPS_PARENT_DIR,
-  createCheckpoint,
+  createCheckpointDetailed,
   createUserApp,
   cloneDevApp,
+  diffCheckpoint,
   importUserApp,
   ensureAppDevContext,
   getAppDevStatus,
   isGitAvailable,
+  listAppRoutes,
   listAppSourceFiles,
+  listAppArtifacts,
+  listAppGeneratedAssets,
+  exportAppGeneratedAsset,
   listCheckpoints,
   listDevAppWorkspaceIds,
   listDevApps,
   resolveCloudAppForWorkspace,
   readAppSourceFile,
+  readAppDesignTokens,
+  applyAppThemeOverrides,
+  captureAppPreviewByWebContentsId,
+  putAppArtifacts,
   restartApp,
   restoreCheckpoint,
   runSetupPipeline,
   searchAppSourceFiles,
   stopApp,
   writeAppSourceFile,
+  type AppDevArtifactRecord,
   installNpmPackage,
   installPipPackage,
   listAppDevAssistSkills,
@@ -36,8 +46,28 @@ import {
   listAppDevPackageCatalog,
   deleteDevApp,
   type CreateUserAppInput,
+  isFullstackAppMarker,
+  readAppDevMarker,
 } from '../../services/app-dev-service';
 import { getDevServerLogs, drainDevServerErrors } from '../../services/app-dev-server-manager';
+import {
+  getRuntimeLogs,
+  getRuntimeStatus,
+  migrateAppDatabase,
+  restartRuntime,
+  startRuntime,
+  stopRuntime,
+  drainBackendErrors,
+  consumeBackendEscalate,
+  buildBackendRepairPrompt,
+  restartBackendOnly,
+  runAppSmoke,
+} from '../../services/app-runtime-manager';
+import {
+  deleteAppDevSecret,
+  listAppDevSecretKeys,
+  setAppDevSecret,
+} from '../../services/app-dev-secrets';
 import { getWorkspaceRootPath } from '../../services/session-catalog-service';
 import { logger } from '../../utils/logger';
 import {
@@ -52,8 +82,9 @@ import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
 import { handleAppDevDeployResourceRoute } from './app-dev-deploy-resource';
 import { assertExternalServicesReadyForDeploy } from '../../services/app-dev-deploy-preflight';
-import { ensureSiteAppActiveForDeploy, probeSiteAppDeployCreateDownstream, probeSiteAppDeployRefreshDownstream } from '../../services/site-app-api';
-import { siteappCliErrorMessage } from '../../../shared/siteapp-cli-payload';
+import { ensureSiteAppActiveForDeploy, createSiteAppDeploy, refreshSiteAppDeploy, syncSiteAppMenus } from '../../services/site-app-api';
+import { resolveSiteappDeployCreateParams } from '../../utils/siteapp-cli';
+import { StoMemoryApiError } from '../../services/sto-memory-api-fetch';
 import {
   extractDeploymentIdFromText,
   formatCodeDeployImmediateFailureMessage,
@@ -97,24 +128,6 @@ function summarizeDeployCloud(cloud: {
   };
 }
 
-async function resolveSiteappDownstreamFailureMessage(
-  result: { ok: boolean; error?: unknown; data?: unknown; exitCode: number },
-  fallback: string,
-  probe: () => Promise<string | null>,
-): Promise<string> {
-  const cliMessage = siteappCliErrorMessage({
-    ok: result.ok,
-    exitCode: result.exitCode,
-    error: result.error,
-    data: result.data,
-  });
-  if (!result.ok && /downstream request failed/i.test(cliMessage)) {
-    const downstream = await probe();
-    if (downstream) return downstream;
-  }
-  return cliMessage || fallback;
-}
-
 function isDeploymentBusyMessage(message: string): boolean {
   return /DEPLOYMENT_BUSY|已有发布正在执行/.test(message);
 }
@@ -133,16 +146,19 @@ function buildBusyDeployReuseData(
   };
 }
 
-async function resolveDeployCreateResult(
-  result: { ok: boolean; error?: unknown; data?: unknown; exitCode: number },
+function siteAppHttpErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof StoMemoryApiError && error.message.trim()) return error.message.trim();
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  return fallback;
+}
+
+function resolveDeployCreatePayload(
+  json: unknown,
   deployParams: Record<string, string>,
-): Promise<{ data: unknown } | { error: string }> {
-  if (!result.ok) {
-    const message = await resolveSiteappDownstreamFailureMessage(
-      result,
-      '发布失败',
-      () => probeSiteAppDeployCreateDownstream(deployParams),
-    );
+  error?: unknown,
+): { data: unknown } | { error: string } {
+  if (error) {
+    const message = siteAppHttpErrorMessage(error, '发布失败');
     const busyDeploymentId = extractDeploymentIdFromText(message);
     if (busyDeploymentId && isDeploymentBusyMessage(message)) {
       logger.info(
@@ -153,7 +169,7 @@ async function resolveDeployCreateResult(
     return { error: message };
   }
 
-  const fields = pickCodeDeployFields(result.data);
+  const fields = pickCodeDeployFields(json);
   if (isSpuriousPendingDeployFailure(fields)) {
     logger.warn(
       `[app-dev] deploy:create-pending-misreport ${serializeForAppDevLog({
@@ -163,12 +179,12 @@ async function resolveDeployCreateResult(
         deploymentId: fields.deploymentId,
       })}`,
     );
-    return { data: result.data };
+    return { data: json };
   }
   if (isCodeDeployFailed(fields.status)) {
     return { error: formatCodeDeployImmediateFailureMessage(fields) };
   }
-  return { data: result.data };
+  return { data: json };
 }
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
@@ -319,7 +335,134 @@ export async function handleAppDevRoutes(
     // Drained by the workbench to feed compile/runtime errors to the agent.
     if (url.pathname === '/api/app-dev/apps/errors' && req.method === 'GET') {
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
-      sendJson(res, 200, { success: true, errors: drainDevServerErrors(workspaceId) });
+      const frontend = drainDevServerErrors(workspaceId);
+      const backend = drainBackendErrors(workspaceId);
+      sendJson(res, 200, {
+        success: true,
+        errors: [...frontend, ...backend],
+      });
+      return true;
+    }
+
+    // --- Fullstack runtime / secrets ---
+    if (url.pathname === '/api/app-dev/runtime/status' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      const marker = await readAppDevMarker(appPath);
+      sendJson(res, 200, {
+        success: true,
+        fullstack: isFullstackAppMarker(marker),
+        status: getRuntimeStatus(workspaceId, appPath),
+        appStatus: getAppDevStatus(workspaceId),
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/start' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = await startRuntime(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true, status });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/stop' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      stopRuntime(body.workspaceId);
+      sendJson(res, 200, { success: true });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/restart' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = await restartRuntime(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true, status });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/restart-backend' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = await restartBackendOnly(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true, status });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/escalate' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const escalate = consumeBackendEscalate(body.workspaceId);
+      if (!escalate) {
+        sendJson(res, 200, { success: true, escalate: null });
+        return true;
+      }
+      sendJson(res, 200, {
+        success: true,
+        escalate: {
+          fingerprint: escalate.fingerprint,
+          attempt: escalate.attempt,
+          melted: escalate.melted,
+          prompt: escalate.melted ? null : buildBackendRepairPrompt(escalate.lines),
+          lines: escalate.lines,
+        },
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/smoke' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const status = getRuntimeStatus(body.workspaceId, appPath);
+      if (!status.backendUrl) {
+        sendJson(res, 400, { success: false, errMessage: '后端未运行' });
+        return true;
+      }
+      try {
+        const output = await runAppSmoke(appPath, status.backendUrl);
+        sendJson(res, 200, { success: true, output });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        sendJson(res, 200, {
+          success: false,
+          errMessage: message,
+          prompt: buildBackendRepairPrompt(message.split('\n').slice(-30)),
+        });
+      }
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/runtime/logs' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const source = (url.searchParams.get('source') as 'frontend' | 'backend' | 'all' | null) ?? 'all';
+      sendJson(res, 200, { success: true, logs: getRuntimeLogs(workspaceId, source) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/db/migrate' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      await migrateAppDatabase(body.workspaceId, appPath);
+      sendJson(res, 200, { success: true });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/secrets' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      sendJson(res, 200, { success: true, keys: await listAppDevSecretKeys(workspaceId) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/secrets' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; key: string; value: string }>(req);
+      await setAppDevSecret(body.workspaceId, body.key, body.value);
+      sendJson(res, 200, { success: true });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/secrets' && req.method === 'DELETE') {
+      const body = await parseJsonBody<{ workspaceId: string; key: string }>(req);
+      await deleteAppDevSecret(body.workspaceId, body.key);
+      sendJson(res, 200, { success: true });
       return true;
     }
 
@@ -334,8 +477,31 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/checkpoints' && req.method === 'POST') {
       const body = await parseJsonBody<{ workspaceId: string; message?: string }>(req);
       const appPath = await resolveAppPath(body.workspaceId);
-      const created = await createCheckpoint(appPath, body.message ?? '应用更新');
-      sendJson(res, 200, { success: true, created });
+      const subject = body.message ?? '应用更新';
+      // T04：响应只增字段（status/hash/subject），旧调用方按 created 判定不受影响。
+      const result = await createCheckpointDetailed(appPath, subject);
+      sendJson(res, 200, {
+        success: true,
+        created: result.status === 'created',
+        status: result.status,
+        hash: result.hash,
+        subject,
+      });
+      return true;
+    }
+
+    // T04 / T10：checkpoint diff；可选 baseHash 做任意两版对比。
+    if (url.pathname === '/api/app-dev/checkpoints/diff' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const hash = url.searchParams.get('hash') ?? '';
+      const baseHash = url.searchParams.get('baseHash') ?? undefined;
+      const appPath = await resolveAppPath(workspaceId);
+      const diff = await diffCheckpoint(appPath, hash, baseHash || undefined);
+      if (!diff) {
+        sendJson(res, 200, { success: false, error: '无法读取该版本的差异' });
+        return true;
+      }
+      sendJson(res, 200, { success: true, diff });
       return true;
     }
 
@@ -377,6 +543,89 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(body.workspaceId);
       const hits = await searchAppSourceFiles(appPath, body.query ?? '');
       sendJson(res, 200, { success: true, hits });
+      return true;
+    }
+
+    // 预览路由下拉（T03）：扫描应用路由声明 / A2UI 页面资产。
+    if (url.pathname === '/api/app-dev/routes' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, routes: await listAppRoutes(appPath) });
+      return true;
+    }
+
+    // 设计 token 契约（T06/T08）：旧模板无契约时 degraded=true + 内置默认项。
+    if (url.pathname === '/api/app-dev/theme/tokens' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, ...(await readAppDesignTokens(appPath)) });
+      return true;
+    }
+
+    // 主题落盘（T06）：行级替换 theme.css 变量值。
+    if (url.pathname === '/api/app-dev/theme' && req.method === 'PUT') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        overrides?: Record<string, string>;
+      }>(req);
+      const workspaceId = (body.workspaceId ?? '').trim();
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const overrides = body.overrides && typeof body.overrides === 'object' ? body.overrides : {};
+      const appPath = await resolveAppPath(workspaceId);
+      const result = await applyAppThemeOverrides(appPath, overrides);
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    // 产物卡持久化（T09）
+    if (url.pathname === '/api/app-dev/artifacts' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, items: await listAppArtifacts(appPath) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/artifacts' && req.method === 'PUT') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        items?: AppDevArtifactRecord[];
+      }>(req);
+      const workspaceId = (body.workspaceId ?? '').trim();
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const appPath = await resolveAppPath(workspaceId);
+      const items = await putAppArtifacts(appPath, Array.isArray(body.items) ? body.items : []);
+      sendJson(res, 200, { success: true, items });
+      return true;
+    }
+
+    // 预览截图（T09）：webContentsId → JPEG dataURL
+    if (url.pathname === '/api/app-dev/preview/capture' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId?: string; webContentsId?: number }>(req);
+      const webContentsId = Number(body.webContentsId);
+      if (!Number.isInteger(webContentsId) || webContentsId <= 0) {
+        throw Object.assign(new Error('缺少有效的 webContentsId'), { statusCode: 400 });
+      }
+      // workspaceId 仅用于鉴权路径存在（防止任意 id 滥调）；真正截图按 webContentsId。
+      if (body.workspaceId) await resolveAppPath(body.workspaceId);
+      const shot = await captureAppPreviewByWebContentsId(webContentsId);
+      sendJson(res, 200, { success: true, ...shot });
+      return true;
+    }
+
+    // 生成资产列表（T14）
+    if (url.pathname === '/api/app-dev/generated-assets' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, items: await listAppGeneratedAssets(appPath) });
+      return true;
+    }
+
+    // 生成资产下载（另存为）
+    if (url.pathname === '/api/app-dev/generated-assets/export' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; path: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await exportAppGeneratedAsset(appPath, body.path ?? '');
+      sendJson(res, 200, { success: true, ...result });
       return true;
     }
 
@@ -560,20 +809,12 @@ export async function handleAppDevRoutes(
       if (!appCode) {
         throw new Error('缺少 appCode：提交后未能注册云端应用');
       }
-      if (cloud && !cloud.gitlabProjectId) {
-        logger.error(
-          `[app-dev] deploy:gitlab-check-failed appCode=${appCode} ` +
-          `cloud=${serializeForAppDevLog(summarizeDeployCloud(cloud))}`,
-        );
-        throw new Error('云端应用尚未创建 Git 项目（gitlabProjectId 为空），无法发布');
-      }
 
       const activated = await ensureSiteAppActiveForDeploy(appCode);
       logger.info(
         `[app-dev] deploy:site-app-active appCode=${appCode} status=${activated.status ?? '-'}`,
       );
 
-      const { resolveSiteappDeployCreateParams, siteappDeployCreate } = await import('../../utils/siteapp-cli');
       const deployParams = resolveSiteappDeployCreateParams({
         env,
         appCode,
@@ -581,21 +822,22 @@ export async function handleAppDevRoutes(
         deploymentVersion: body.deploymentVersion,
       });
       logger.info(`[app-dev] deploy:create-start params=${serializeForAppDevLog(deployParams)}`);
-      const result = await siteappDeployCreate({
-        appCode,
-        env,
-        requestId: deployParams.request_id,
-        deploymentVersion: deployParams.deployment_version,
-      });
-      if (!result.ok) {
+      let deployJson: unknown;
+      let deployError: unknown;
+      try {
+        deployJson = await createSiteAppDeploy({
+          appCode,
+          env,
+          requestId: deployParams.request_id,
+          deploymentVersion: deployParams.deployment_version,
+        });
+      } catch (error) {
+        deployError = error;
         logger.error(`[app-dev] deploy:create-failed ${serializeForAppDevLog({
-          ok: result.ok,
-          exitCode: result.exitCode,
-          error: result.error,
-          data: result.data,
+          error: siteAppHttpErrorMessage(error, '发布失败'),
         })}`);
       }
-      const outcome = await resolveDeployCreateResult(result, deployParams);
+      const outcome = resolveDeployCreatePayload(deployJson, deployParams, deployError);
       if ('error' in outcome) {
         logger.error(`[app-dev] deploy:create-error-detail ${outcome.error}`);
         throw new Error(outcome.error);
@@ -614,9 +856,7 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/sto-app/deploy/refresh' && req.method === 'POST') {
       const body = await parseJsonBody<{ deploymentId?: string; appCode?: string; workspaceId?: string }>(req);
       const deploymentId = (body.deploymentId ?? '').trim();
-      logger.info(
-        `[app-dev] deploy:refresh-start body=${serializeForAppDevLog(body)}`,
-      );
+      logger.info(`[app-dev] deploy:refresh-start body=${serializeForAppDevLog(body)}`);
       if (!deploymentId) throw new Error('缺少 deploymentId');
 
       let appCode = (body.appCode ?? '').trim();
@@ -627,29 +867,24 @@ export async function handleAppDevRoutes(
       }
       if (!appCode) throw new Error('缺少 appCode');
 
-      const { siteappDeployRefresh } = await import('../../utils/siteapp-cli');
-      const result = await siteappDeployRefresh({ appCode, deploymentId });
-      if (!result.ok) {
-        logger.error(`[app-dev] deploy:refresh-failed deploymentId=${deploymentId} appCode=${appCode} ` +
-          `${serializeForAppDevLog({ ok: result.ok, exitCode: result.exitCode, error: result.error, data: result.data })}`);
-        const refreshParams = { app_code: appCode, deployment_id: deploymentId };
-        const message = await resolveSiteappDownstreamFailureMessage(
-          result,
-          '刷新部署状态失败',
-          () => probeSiteAppDeployRefreshDownstream(refreshParams),
+      try {
+        const data = await refreshSiteAppDeploy({ appCode, deploymentId });
+        logger.info(
+          `[app-dev] deploy:refresh-ok deploymentId=${deploymentId} appCode=${appCode} ` +
+          `data=${serializeForAppDevLog(data)}`,
         );
-        logger.error(`[app-dev] deploy:refresh-error-detail ${message}`);
+        sendJson(res, 200, {
+          success: true,
+          deploymentId,
+          data: data ?? null,
+        });
+      } catch (error) {
+        const message = siteAppHttpErrorMessage(error, '刷新部署状态失败');
+        logger.error(
+          `[app-dev] deploy:refresh-failed deploymentId=${deploymentId} appCode=${appCode} ${message}`,
+        );
         throw new Error(message);
       }
-      logger.info(
-        `[app-dev] deploy:refresh-ok deploymentId=${deploymentId} appCode=${appCode} ` +
-        `data=${serializeForAppDevLog(result.data)}`,
-      );
-      sendJson(res, 200, {
-        success: true,
-        deploymentId,
-        data: result.data ?? null,
-      });
       return true;
     }
 
@@ -720,12 +955,8 @@ export async function handleAppDevRoutes(
         appCode,
         menus: menus as import('../../../shared/siteapp-menu-sync').SiteappMenuItemInput[],
       });
-      const { siteappMenuSync } = await import('../../utils/siteapp-cli');
-      const result = await siteappMenuSync(params);
-      if (!result.ok) {
-        throw new Error(siteappCliErrorMessage(result));
-      }
-      sendJson(res, 200, { success: true, appCode, data: result.data ?? null });
+      const data = await syncSiteAppMenus(params);
+      sendJson(res, 200, { success: true, appCode, data: data ?? null });
       return true;
     }
 

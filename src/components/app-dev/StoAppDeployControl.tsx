@@ -135,7 +135,7 @@ export function StoAppDeployControl({
               ? '点击查看最近一次发布结果'
               : canDeploy
                 ? '先提交代码，再发起发布'
-                : '当前无法发布（sai-cli 不可用或非云端建站应用）'
+                : '当前无法发布（非云端建站应用）'
         }
         onClick={handleClick}
       >

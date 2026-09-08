@@ -17,6 +17,18 @@ files:
   - package.json
 
 extraResources:
+  - from: browser-extension/
+    to: browser-extension/
+    filter:
+      - manifest.json
+      - background.js
+      - cdp-allowlist.js
+      - page-agent.js
+      - popup.html
+      - popup.js
+      - popup.css
+      - icons/*.png
+      - dist/*.zip
   - from: resources/
     to: resources/
     filter:

@@ -1,9 +1,7 @@
 import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { buildWorkspaceArtifactOutputRule } from '../../shared/workspace-paths';
-import {
-  isScheduledTaskExecutionSessionKey,
-} from '../../shared/scheduled-task-instruction';
+import { isScheduledTaskExecutionSessionKey } from '../../shared/scheduled-task-instruction';
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
@@ -11,6 +9,7 @@ import { getAuthState } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
 import { buildConnectorBashGateHooks } from '../connectors/claude-binary-gate';
+import { buildClaudeLoopGuardHooks } from './claude-loop-guard';
 import { buildClaudeAgentExtensions } from '../agent-extensions/adapters/claude';
 
 export interface ClaudeRuntimeOptions {
@@ -134,7 +133,16 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
   },
 };
 
+/** 空转防护：无条件启用，是所有会话的安全网而不是某个域的能力。 */
+const loopGuardExtension: ClaudeRuntimeExtension = {
+  id: 'sto-loop-guard',
+  build({ sessionKey }) {
+    return { hooks: buildClaudeLoopGuardHooks(sessionKey) };
+  },
+};
+
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
+  loopGuardExtension,
   connectorBashGateExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,

@@ -47,7 +47,7 @@ export interface HomeComposerProps {
     skillMeta?: SkillMeta,
   ) => void;
   /** Return true to consume a local command before it is sent to the agent. */
-  onBeforeSend?: (text: string) => boolean;
+  onBeforeSend?: (text: string) => boolean | string | void;
   onQueue?: (
     text: string,
     attachments?: FileAttachment[],
@@ -78,6 +78,8 @@ export interface HomeComposerProps {
   toolbarToolsLayout?: 'inline' | 'dropdown';
   /** 可选覆盖默认内联引擎/模型工具栏 */
   toolbarSelectors?: ReactNode;
+  /** 广场 / 建站：锁定草稿到该会话，不跟随全局 currentSessionKey */
+  composerDraftSessionKey?: string | null;
 }
 
 export function HomeComposer({
@@ -98,6 +100,7 @@ export function HomeComposer({
   composerScenarioActions,
   toolbarToolsLayout,
   toolbarSelectors,
+  composerDraftSessionKey,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
   const agents = useAgentsStore((s) => s.agents);
@@ -135,9 +138,11 @@ export function HomeComposer({
   const inputProps = useChatInputBindings({
     onSend: onBeforeSend
       ? (text, attachments, targetAgentId, dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta) => {
-          if (onBeforeSend(text)) return;
+          const gate = onBeforeSend(text);
+          if (gate === true) return;
+          const outbound = typeof gate === 'string' ? gate : text;
           sendMessage(
-            text,
+            outbound,
             attachments,
             targetAgentId,
             dingTalkMentions,
@@ -179,6 +184,7 @@ export function HomeComposer({
           showInterfaceCatalog={showInterfaceCatalog}
           composerScenarioActions={composerScenarioActions}
           toolbarToolsLayout={toolbarToolsLayout}
+          composerDraftSessionKey={composerDraftSessionKey}
         />
       </section>
       {showDisclaimer ? (

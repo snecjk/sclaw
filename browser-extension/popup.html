@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>SClaw Web Bridge</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main>
+    <h1>SClaw Web Bridge</h1>
+    <p class="hint">在 SClaw 里确认「连接 Google Chrome」后，扩展会自动接管标签。无需在此操作页面。</p>
+    <section id="mismatch" hidden>
+      <p class="error">扩展 major 版本与 SClaw 内置包不一致，请下载新 zip 后重新加载。不能继续连接。</p>
+      <p id="mismatch-versions"></p>
+    </section>
+    <section id="disconnected">
+      <label>配对码
+        <input id="pairing-code" type="text" autocomplete="off" placeholder="在 SClaw 设置页获取" />
+      </label>
+      <div class="row">
+        <button id="auto-connect" type="button">自动连接</button>
+        <button id="pair" type="button">用配对码连接</button>
+      </div>
+      <p class="muted">Host 仅 loopback，默认 http://127.0.0.1:3210</p>
+    </section>
+    <section id="connected" hidden>
+      <p id="tab-url" class="url"></p>
+      <p id="restricted" class="error" hidden>当前是 chrome:// 页面，无法接管。请先打开 http/https 网页。</p>
+      <p id="versions" class="muted"></p>
+      <p id="update" class="warn" hidden>有新版本可升级，功能可继续使用。</p>
+      <div class="row">
+        <button id="disconnect" type="button" class="secondary">断开</button>
+      </div>
+    </section>
+    <p id="status" class="status"></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

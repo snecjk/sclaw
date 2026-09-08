@@ -15,6 +15,7 @@ import {
   relocateInterruptPhaseBetweenAdjacentToolGroups,
 } from '@/pages/Chat/thinking/adjacent-group-phase';
 import {
+  isConflictingToolInput,
   mergeToolInput,
   thinkingTimelineToolIdentityKey,
 } from '@/lib/tool-input-merge';
@@ -774,10 +775,12 @@ function appendToolToGroup(
   tool: { id: string; name: string; input: unknown },
 ): ThinkingTimelineItem[] {
   const key = thinkingTimelineToolKey(tool);
+  // identity 相同但 input 冲突 = 另一次调用（弱 id / 网关复用同一个 id），不能当重复丢掉。
   const exists = group.some(
     (item) =>
       item.type === 'tool'
-      && thinkingTimelineToolKey({ id: item.id, name: item.name, input: item.input }) === key,
+      && thinkingTimelineToolKey({ id: item.id, name: item.name, input: item.input }) === key
+      && !isConflictingToolInput(item.input, tool.input),
   );
   if (exists) return group;
 
@@ -1162,6 +1165,12 @@ function mergeRawTurnEvents(
     if (event.type === 'tool') {
       const identityKey = thinkingTimelineToolIdentityKey(event);
       let mergedExisting = false;
+      /**
+       * 同 identity 但 input 互相冲突 —— 说明这是另一次调用，不是同一次的另一份快照。
+       * id 唯一性不可信：弱 id（id === name）之外，网关适配出来的 `toolu_<Name>_0`
+       * 也会被一整轮的不同命令共用，一律合并会把工具列表整段吞掉。
+       */
+      let sawConflictingCall = false;
       for (let i = merged.length - 1; i >= 0; i -= 1) {
         const candidate = merged[i];
         if (candidate?.type !== 'tool') continue;
@@ -1169,6 +1178,10 @@ function mergeRawTurnEvents(
           thinkingTimelineToolIdentityKey(candidate) === identityKey
           || (isStableToolId(event.id, event.name) && candidate.id === event.id);
         if (!sameIdentity) continue;
+        if (isConflictingToolInput(candidate.input, event.input)) {
+          sawConflictingCall = true;
+          continue;
+        }
         const updatedEvent: RawTurnEvent = {
           ...candidate,
           input: mergeToolInput(candidate.input, event.input),
@@ -1180,7 +1193,7 @@ function mergeRawTurnEvents(
       }
       if (mergedExisting) continue;
 
-      if (isDuplicateToolEvent(event, seenToolKeys, seenStableIds)) {
+      if (!sawConflictingCall && isDuplicateToolEvent(event, seenToolKeys, seenStableIds)) {
         continue;
       }
       registerToolEventKeys(event, seenToolKeys, seenStableIds);

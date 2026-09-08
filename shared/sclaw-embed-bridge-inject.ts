@@ -26,53 +26,87 @@ export const SCLAW_EMBED_BRIDGE_INJECT_SCRIPT = `(function() {
     );
   }
 
+  /** 直接文本子节点；用于判断"这个节点自己有名字"而不是名字来自后代。 */
+  function ownText(node) {
+    var out = '';
+    for (var t = 0; t < node.childNodes.length; t++) {
+      var child = node.childNodes[t];
+      if (child.nodeType === 3) out += child.nodeValue;
+    }
+    return out.trim().replace(/\\s+/g, ' ').slice(0, 100);
+  }
+
   function isVisible(node) {
     var style = window.getComputedStyle(node);
     return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   }
 
-  function walk(node) {
+  var INTERACTIVE_SELECTOR = 'a, button, input, textarea, select, summary, label, [contenteditable], [onclick], [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="textbox"], [role="combobox"], [role="slider"]';
+  var CLICKABLE_SELECTOR = 'a, button, input, textarea, select, [contenteditable], [onclick], [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]';
+  var EDITABLE_SELECTOR = 'input, textarea, select, [contenteditable]';
+  /** 单次快照的节点预算；超出即截断并告诉模型缩小范围，而不是把整页塞进上下文。 */
+  var MAX_SNAPSHOT_NODES = 600;
+
+  function walk(node, state) {
     var tag = node.tagName.toLowerCase();
-    var isInteractive = node.matches(
-      'a, button, input, textarea, select, [contenteditable], [onclick], [role="button"], [role="link"], [role="tab"], li, span, div'
-    );
+    var interactive = node.matches(INTERACTIVE_SELECTOR);
     var rect = node.getBoundingClientRect();
     var visible = rect.width > 0 && rect.height > 0 && isVisible(node);
-    var name = computeAccessibleName(node);
-    var hasName = Boolean(name && name.length > 0);
-    if (!visible && !hasName) return null;
-    if (!isInteractive && !hasName && node.children.length > 0) {
-      var onlyChildren = [];
+    var own = ownText(node);
+    var labelled = node.getAttribute('aria-label') || node.getAttribute('placeholder') || node.getAttribute('title') || '';
+    var selfNamed = Boolean(own || labelled);
+
+    // 只有可交互节点、和自己带文本的节点才产出记录，纯包装层折叠掉。
+    // 此前 li/span/div 都算可交互，且 name 取的是整棵后代 textContent，于是
+    // 页面上每个 div 都产出一条 ref+role+name+tag+两个布尔+四字段 boundingBox
+    // 的记录——实测单次快照 13.9 万字符，模型直接丢掉页面模型。
+    //
+    // 折叠时必须继续递归：零尺寸包装层（display:contents、绝对定位容器）的子
+    // 节点是有效的，原来在可见性判断处直接 return null 会连带丢掉整棵子树。
+    if ((!interactive || !visible) && !selfNamed) {
+      if (!node.children.length) return null;
+      var collapsed = [];
       for (var i = 0; i < node.children.length; i++) {
-        var childNode = walk(node.children[i]);
-        if (childNode) onlyChildren.push(childNode);
+        var childNode = walk(node.children[i], state);
+        if (childNode) collapsed.push(childNode);
       }
-      return onlyChildren.length === 1 ? onlyChildren[0] : (onlyChildren.length ? { role: tag, name: name || tag, tag: tag, children: onlyChildren } : null);
+      if (!collapsed.length) return null;
+      if (collapsed.length === 1) return collapsed[0];
+      return { role: tag, children: collapsed };
     }
+
+    if (state.count >= MAX_SNAPSHOT_NODES) {
+      state.truncated = true;
+      return null;
+    }
+    state.count += 1;
 
     var ref = '@e' + (refCounter++);
     refToElement.set(ref, node);
 
     var children = [];
     for (var j = 0; j < node.children.length; j++) {
-      var walked = walk(node.children[j]);
+      var walked = walk(node.children[j], state);
       if (walked) children.push(walked);
     }
 
-    var result = {
-      ref: ref,
-      role: node.getAttribute('role') || inferRole(tag, node),
-      name: name,
-      tag: tag,
-      clickable: node.matches('a, button, input, textarea, select, [contenteditable], [onclick], [role="button"], [role="link"], [role="tab"]'),
-      editable: node.matches('input, textarea, [contenteditable], select'),
-      boundingBox: {
+    var role = node.getAttribute('role') || inferRole(tag, node);
+    // 字段按需产出：布尔为假、tag 与 role 相同、非可交互节点的 boundingBox
+    // 都是纯字节浪费——它们占了旧快照的大头。
+    var result = { ref: ref, role: role };
+    var name = interactive ? computeAccessibleName(node) : (own || labelled);
+    if (name) result.name = name;
+    if (tag !== role) result.tag = tag;
+    if (node.matches(CLICKABLE_SELECTOR)) result.clickable = true;
+    if (node.matches(EDITABLE_SELECTOR)) result.editable = true;
+    if (interactive) {
+      result.boundingBox = {
         x: Math.round(rect.x + window.scrollX),
         y: Math.round(rect.y + window.scrollY),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
-      },
-    };
+      };
+    }
     if (children.length) result.children = children;
     return result;
   }
@@ -80,13 +114,21 @@ export const SCLAW_EMBED_BRIDGE_INJECT_SCRIPT = `(function() {
   function buildSnapshot() {
     refCounter = 1;
     refToElement.clear();
-    var body = document.body ? walk(document.body) : null;
-    return {
+    var state = { count: 0, truncated: false };
+    var body = document.body ? walk(document.body, state) : null;
+    var snapshot = {
       url: location.href,
       title: document.title,
       timestamp: Date.now(),
+      nodeCount: state.count,
       tree: body ? [body] : [],
     };
+    if (state.truncated) {
+      snapshot.truncated = true;
+      snapshot.actionHint = '快照已达 ' + MAX_SNAPSHOT_NODES + ' 节点预算并截断。'
+        + '请先滚动或收窄到目标区域再快照，不要指望一次拿到整页。';
+    }
+    return snapshot;
   }
 
   function findByName(text) {

@@ -8,6 +8,11 @@ import i18n from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
 import { clampSidebarPreferredWidth, SIDEBAR_DEFAULT_WIDTH } from '@/lib/sidebar-resize-metrics';
 import { resolveSupportedLanguage } from '../../shared/language';
+import {
+  parseBrowserAutomationLevel,
+  setBrowserAutomationSettingsLevel,
+  type BrowserAutomationLevel,
+} from '../../shared/browser-automation/feature-flag';
 
 type Theme = 'light' | 'dark' | 'system';
 type UpdateChannel = 'stable' | 'beta' | 'dev';
@@ -22,6 +27,7 @@ interface SettingsState {
   skillDiscoveryEnabled: boolean;
   preventSystemSleep: boolean;
   telemetryEnabled: boolean;
+  browserAutomationLevel: BrowserAutomationLevel;
 
   // Gateway
   gatewayAutoStart: boolean;
@@ -59,6 +65,7 @@ interface SettingsState {
   setSkillDiscoveryEnabled: (value: boolean) => Promise<void>;
   setPreventSystemSleep: (value: boolean) => void;
   setTelemetryEnabled: (value: boolean) => void;
+  setBrowserAutomationLevel: (value: BrowserAutomationLevel) => void;
   setGatewayAutoStart: (value: boolean) => void;
   setGatewayPort: (port: number) => void;
   setProxyEnabled: (value: boolean) => void;
@@ -89,6 +96,7 @@ const defaultSettings = {
   // Telemetry disabled by default for faster cold starts
   // Users can enable it in Settings > Advanced
   telemetryEnabled: false,
+  browserAutomationLevel: 'dom' as BrowserAutomationLevel,
   gatewayAutoStart: true,
   gatewayPort: 18789,
   proxyEnabled: false,
@@ -121,12 +129,18 @@ export const useSettingsStore = create<SettingsState>()(
           const preferred = settings.sidebarPreferredWidth != null
             ? clampSidebarPreferredWidth(settings.sidebarPreferredWidth)
             : undefined;
-          set((state) => ({
-            ...state,
-            ...settings,
-            ...(resolvedLanguage ? { language: resolvedLanguage } : {}),
-            ...(preferred != null ? { sidebarPreferredWidth: preferred } : {}),
-          }));
+          set((state) => {
+            const next = {
+              ...state,
+              ...settings,
+              ...(resolvedLanguage ? { language: resolvedLanguage } : {}),
+              ...(preferred != null ? { sidebarPreferredWidth: preferred } : {}),
+            };
+            const level = parseBrowserAutomationLevel(next.browserAutomationLevel) ?? 'dom';
+            next.browserAutomationLevel = level;
+            setBrowserAutomationSettingsLevel(level);
+            return next;
+          });
           if (resolvedLanguage) {
             i18n.changeLanguage(resolvedLanguage);
           }
@@ -192,6 +206,15 @@ export const useSettingsStore = create<SettingsState>()(
         void hostApiFetch('/api/settings/telemetryEnabled', {
           method: 'PUT',
           body: JSON.stringify({ value: telemetryEnabled }),
+        }).catch(() => { });
+      },
+      setBrowserAutomationLevel: (browserAutomationLevel) => {
+        const level = parseBrowserAutomationLevel(browserAutomationLevel) ?? 'dom';
+        setBrowserAutomationSettingsLevel(level);
+        set({ browserAutomationLevel: level });
+        void hostApiFetch('/api/settings/browserAutomationLevel', {
+          method: 'PUT',
+          body: JSON.stringify({ value: level }),
         }).catch(() => { });
       },
       setGatewayAutoStart: (gatewayAutoStart) => {

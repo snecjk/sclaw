@@ -430,9 +430,17 @@ export const openClawAdapter: EngineAdapter = {
     try {
       const result = await requireGatewayManager(ctx).rpc<{ aborted?: boolean; runIds?: unknown[] }>(
         'chat.abort',
-        { sessionKey: params.sessionKey },
+        {
+          sessionKey: params.sessionKey,
+          ...(params.runId ? { runId: params.runId } : {}),
+        },
       );
-      return { success: true, result };
+      const aborted = Boolean(result?.aborted);
+      return {
+        success: true,
+        outcome: aborted ? 'aborted' : 'idle',
+        result,
+      };
     } catch (error) {
       return { success: false, error: String(error) };
     }

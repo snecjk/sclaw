@@ -137,6 +137,8 @@ async function buildClaudeEnvForAccount(
   let base: NodeJS.ProcessEnv = {
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
+    CLAUDE_CODE_STREAM_CLOSE_TIMEOUT:
+      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT || '300000',
     // Claude Code falls back to 200K for unrecognized Anthropic-compatible
     // models. Keep its context accounting and auto-compaction threshold aligned
     // with the shared runtime default until provider model metadata is wired in.

@@ -6,6 +6,8 @@ node_modules/
 # Build outputs
 electron-builder.package-all.js
 dist/
+!browser-extension/dist/
+!browser-extension/dist/**
 dist-electron/
 release/
 *.local
@@ -81,3 +83,6 @@ plans/
 openspec/
 .roo/
 docs/superpowers/
+reports/
+.kimiapp-analysis/
+.webbridge-analysis/

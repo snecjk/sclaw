@@ -1,0 +1,9 @@
+{
+  "name": "sclaw-web-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SClaw Web Bridge Chrome MV3 extension. Page ops use chrome.debugger; Host API is loopback only.",
+  "scripts": {
+    "pack": "node scripts/pack.mjs"
+  }
+}

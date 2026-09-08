@@ -14,6 +14,7 @@ import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings
 import { appUpdater } from '../../main/updater';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { parseBrowserAutomationLevel } from '../../../shared/browser-automation/feature-flag';
 
 async function handleProxySettingsChange(ctx: HostApiContext): Promise<void> {
   const settings = await getAllSettings();
@@ -47,6 +48,16 @@ function patchTouchesLanguage(patch: Partial<AppSettings>): boolean {
   return Object.prototype.hasOwnProperty.call(patch, 'language');
 }
 
+async function applyBrowserAutomationLevelIfPresent(patch: Partial<AppSettings>): Promise<boolean> {
+  if (!Object.prototype.hasOwnProperty.call(patch, 'browserAutomationLevel')) return false;
+  const parsed = parseBrowserAutomationLevel(patch.browserAutomationLevel);
+  if (!parsed) return false;
+  patch.browserAutomationLevel = parsed;
+  const { applyBrowserAutomationLevel } = await import('../../services/browser-automation/master-switch');
+  await applyBrowserAutomationLevel(parsed);
+  return true;
+}
+
 export async function handleSettingsRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -72,6 +83,14 @@ export async function handleSettingsRoutes(
         sendJson(res, 400, { success: false, error: 'Invalid theme preference' });
         return true;
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'browserAutomationLevel')) {
+        const parsed = parseBrowserAutomationLevel(patch.browserAutomationLevel);
+        if (!parsed) {
+          sendJson(res, 400, { success: false, error: 'Invalid browserAutomationLevel' });
+          return true;
+        }
+        patch.browserAutomationLevel = parsed;
+      }
       const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
       for (const [key, value] of entries) {
         await setSetting(key, value);
@@ -94,6 +113,7 @@ export async function handleSettingsRoutes(
       if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
         await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
       }
+      await applyBrowserAutomationLevelIfPresent(patch);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -118,6 +138,14 @@ export async function handleSettingsRoutes(
       if (key === 'theme' && !isThemePreference(body.value)) {
         sendJson(res, 400, { success: false, error: 'Invalid theme preference' });
         return true;
+      }
+      if (key === 'browserAutomationLevel') {
+        const parsed = parseBrowserAutomationLevel(body.value);
+        if (!parsed) {
+          sendJson(res, 400, { success: false, error: 'Invalid browserAutomationLevel' });
+          return true;
+        }
+        body.value = parsed;
       }
       await setSetting(key, body.value as AppSettings[keyof AppSettings]);
       if (
@@ -145,6 +173,11 @@ export async function handleSettingsRoutes(
       if (key === 'autoCheckUpdate') {
         await appUpdater.syncPeriodicCheckFromSettings(body.value === true);
       }
+      if (key === 'browserAutomationLevel') {
+        await applyBrowserAutomationLevelIfPresent({
+          browserAutomationLevel: body.value as AppSettings['browserAutomationLevel'],
+        });
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -162,6 +195,8 @@ export async function handleSettingsRoutes(
       await syncNativeAppearanceFromStore();
       const settings = await getAllSettings();
       await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
+      const { applyBrowserAutomationLevelFromStore } = await import('../../services/browser-automation/master-switch');
+      await applyBrowserAutomationLevelFromStore();
       sendJson(res, 200, { success: true, settings });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

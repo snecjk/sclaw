@@ -184,6 +184,8 @@
     "connectingModel": "连接模型中...",
     "understandingQuestion": "正在理解你的问题…",
     "stillExecuting": "仍在执行（写文件中…）",
+    "startingRuntime": "正在启动运行环境…",
+    "readingProjectContext": "正在读取项目上下文…",
     "thinkingNow": "正在思考…",
     "preparingToolInput": "正在准备工具参数…",
     "runningTool": "正在调用工具…",
@@ -235,7 +237,8 @@
     "submitFailed": "表单提交失败，请刷新页面后重试"
   },
   "sessionList": {
-    "mainSessionTitle": "主会话"
+    "mainSessionTitle": "主会话",
+    "webBridgeTitle": "Chrome 侧栏"
   },
   "messageActions": {
     "copy": "复制",

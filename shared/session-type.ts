@@ -28,6 +28,13 @@ const APP_SESSION_PREFIX = 'session-embed-app-';
 const LEGACY_EMBED_RUNTIME_SESSION_PREFIX = 'session-embed-br-';
 const APP_CONV_SEPARATOR = '--';
 
+/** Chrome Side Panel ↔ local SClaw agent. Distinct from `agent:main:main`. */
+export const WEB_BRIDGE_CHAT_SESSION_KEY = 'agent:main:web-bridge';
+
+export function isWebBridgeChatSessionKey(sessionKey: string): boolean {
+  return sessionKey.trim() === WEB_BRIDGE_CHAT_SESSION_KEY;
+}
+
 /** App Plaza / embed-browser chat sessions (not workflow or channel). */
 export function isEmbedAppChatSessionKey(sessionKey: string): boolean {
   const trimmed = sessionKey.trim();

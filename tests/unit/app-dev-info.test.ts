@@ -13,6 +13,9 @@ import {
   stripInheritedNpmRegistryEnv,
   substituteTemplateVars,
   buildSnpmInstallArgs,
+  lastInstallLogLine,
+  pushInstallLogTail,
+  stripInstallLogAnsi,
 } from '../../electron/utils/app-dev-info';
 
 describe('app-dev-info', () => {
@@ -165,5 +168,14 @@ describe('app-dev-info', () => {
       ),
     ).toBe(true);
     expect(isTransientNpmInstallFailure('npm error code E404')).toBe(false);
+  });
+
+  it('keeps a readable snpm log tail for the workbench', () => {
+    expect(stripInstallLogAnsi('\u001B[32mhttp fetch\u001B[0m GET lodash')).toBe('http fetch GET lodash');
+    expect(pushInstallLogTail('line-1\n', 'line-2\rline-3\n')).toBe('line-1\nline-2\nline-3');
+    expect(lastInstallLogLine('a\n  b  \n')).toBe('b');
+    const many = Array.from({ length: 80 }, (_, i) => `pkg ${i}`).join('\n');
+    const tail = pushInstallLogTail('', many, 8, 2000);
+    expect(tail.split('\n')).toEqual(['pkg 72', 'pkg 73', 'pkg 74', 'pkg 75', 'pkg 76', 'pkg 77', 'pkg 78', 'pkg 79']);
   });
 });

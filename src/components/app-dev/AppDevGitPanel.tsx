@@ -26,7 +26,7 @@ import { stoAppPushToCheckpoint } from '../../../shared/sto-app-push-history';
 interface AppDevGitPanelProps {
   workspaceId: string;
   canDeploy?: boolean;
-  /** 建站应用：上传代码走 sai-cli push，与右上角提交同一条链路。 */
+  /** 建站应用：上传代码走云端源码提交，与右上角提交同一条链路。 */
   cloudPush?: boolean;
   /** Bump after header 提交 / 发布 so 最近提交 reloads. */
   recordsRevision?: number;
@@ -114,7 +114,7 @@ export function AppDevGitPanel({
         setMessage('上传代码');
         await refresh();
       } else {
-        const created = await createAppCheckpoint(workspaceId, note);
+        const { created } = await createAppCheckpoint(workspaceId, note);
         if (created) {
           toast.success('代码已提交到本地 Git');
           setMessage('上传代码');
@@ -142,7 +142,7 @@ export function AppDevGitPanel({
           </h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {cloudPush
-              ? '「上传代码」与右上角「提交」相同：调用 sai-cli 把代码提交到云端，并写入下方「最近提交」。「发布」会先提交再走 DevOps 流水线。'
+              ? '「上传代码」与右上角「提交」相同：把排除 node_modules 等忽略文件后的源码提交到云端，并写入下方「最近提交」。「发布」会先提交再走 DevOps 流水线。'
               : '「上传代码」会将当前改动提交到本地 Git。「发布」会把代码推到云端并走 DevOps 流水线；进行中的发布会写入本地记录并继续查询到成功或失败。'}
           </p>
         </header>
@@ -184,7 +184,7 @@ export function AppDevGitPanel({
                   ? '已有发布进行中'
                   : canDeploy
                     ? '选择环境并发布到云端'
-                    : '当前无法发布（未绑定云端应用或 sai-cli 不可用）'
+                    : '当前无法发布（未绑定云端应用）'
               }
               onClick={() => onOpenDeploy?.()}
             >

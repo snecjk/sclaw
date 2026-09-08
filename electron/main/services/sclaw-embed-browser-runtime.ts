@@ -184,6 +184,7 @@ export async function bindSclawEmbedBrowserWebContents(input: {
   if (input.pageUrl) entry.pageUrl = input.pageUrl;
   if (input.pageTitle) entry.pageTitle = input.pageTitle;
   attachNetworkMonitor(input.runtimeId, input.webContentsId);
+  attachWillPreventUnloadGuard(input.webContentsId);
   connectSclawEmbedBridge({
     runtimeId: input.runtimeId,
     webContentsId: input.webContentsId,
@@ -216,6 +217,35 @@ export function updateSclawEmbedBrowserPageState(input: {
   if (!entry.bridgeBootstrap && entry.webContentsId) {
     void attachBridgeSession(entry);
   }
+}
+
+/**
+ * D1：渲染层 SclawBrowserFrame 的可见性上报落点（BAP assertPageActionable 数据源）。
+ * 仅登记 meta.visible；未上报过的 runtime 保持 undefined（按可见处理，灰度兼容）。
+ */
+export function reportSclawEmbedBrowserVisibility(input: {
+  runtimeId: string;
+  visible: boolean;
+}): void {
+  const entry = runtimes.get(input.runtimeId);
+  if (!entry) return;
+  entry.visible = input.visible === true;
+}
+
+// ── B2 beforeunload 补丁（embed 侧）：beforeunload 不触发 CDP javascriptDialogOpening ──
+const willPreventUnloadAttached = new Set<number>();
+
+function attachWillPreventUnloadGuard(webContentsId: number): void {
+  if (willPreventUnloadAttached.has(webContentsId)) return;
+  const wc = webContents.fromId(webContentsId);
+  if (!wc || wc.isDestroyed()) return;
+  wc.on('will-prevent-unload', (event) => {
+    event.preventDefault();
+  });
+  willPreventUnloadAttached.add(webContentsId);
+  wc.once('destroyed', () => {
+    willPreventUnloadAttached.delete(webContentsId);
+  });
 }
 
 export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {

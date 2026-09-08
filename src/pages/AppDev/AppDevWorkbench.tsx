@@ -3,7 +3,7 @@
  * 左：项目 Agent 对话（默认注入应用 AGENTS.md 上下文）；
  * 右：所见即所得预览（预览工具栏内可打开系统浏览器）。
  */
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -62,6 +62,7 @@ import {
   APP_DEV_IDE_CHAT_SPLIT_DEFAULT,
   APP_DEV_IDE_CHAT_SPLIT_STORAGE_KEY,
 } from '@/lib/app-dev-split';
+import { wrapUserTextForPlanGate } from '@/lib/app-dev-plan-gate';
 
 const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
@@ -72,7 +73,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey: string;
   appName: string;
   composerSeed?: { text: string; version: number } | null;
-  onBeforeSend?: (text: string) => boolean;
+  onBeforeSend?: (text: string) => boolean | string | void;
 }) {
   const messages = useSessionDisplayMessages(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
@@ -88,6 +89,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingToolResults,
     streamingTools,
     error,
+    phase,
   } = useChatSessionRuntimeView(sessionKey);
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
@@ -110,7 +112,21 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    phase,
   });
+
+  const priorUserMessageCount = useMemo(
+    () => messages.filter((m) => m.role === 'user').length,
+    [messages],
+  );
+
+  const handleBeforeSend = useCallback((text: string): boolean | string => {
+    if (onBeforeSend?.(text) === true) return true;
+    return wrapUserTextForPlanGate({
+      userText: text,
+      priorUserMessageCount,
+    }) ?? false;
+  }, [onBeforeSend, priorUserMessageCount]);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -168,7 +184,8 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
         <AppDevComposer
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}
-          onBeforeSend={onBeforeSend}
+          onBeforeSend={handleBeforeSend}
+          composerDraftSessionKey={sessionKey}
         />
       </div>
     </div>
@@ -316,7 +333,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
 
   const handleGitSubmit = async (message: string) => {
     try {
-      const created = await createAppCheckpoint(workspaceId, message);
+      const { created } = await createAppCheckpoint(workspaceId, message);
       if (created) {
         toast.success('代码已提交到本地 Git');
         setCommitOpen(false);
@@ -538,6 +555,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
           onDismissErrors={dismissErrors}
           onPreviewRuntimeError={handlePreviewRuntimeError}
           onRetryStart={handleRetryStart}
+          onCancelSetup={() => void stopRun()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}

@@ -214,6 +214,7 @@ const electronAPI = {
         'sclaw-browser:bindWebContents',
         'sclaw-browser:updatePageState',
         'sclaw-browser:unregisterRuntime',
+        'sclaw-browser:reportVisibility',
         'sclaw-browser:capturePage',
         'sclaw-browser:executeScript',
         'sclaw-browser:getNetworkLog',
@@ -287,10 +288,13 @@ const electronAPI = {
         'workflow:stream:error',
         'sclaw-browser:toggle-chat',
         'sclaw-browser:open-url',
+        'sclaw-browser:automation-mark',
         'jsbridge:open-tab',
         'jsbridge:close-tab',
         'jsbridge:toast',
         'app-dev-ide:ownership',
+        'browser-bridge:consent',
+        'browser-bridge:install-guide',
       ];
 
       if (validChannels.includes(channel)) {

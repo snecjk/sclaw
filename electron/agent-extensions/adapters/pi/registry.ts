@@ -1,5 +1,4 @@
 import { SCLAW_AGENT_EXTENSIONS, type RegisteredAgentExtension } from '../../registry';
-import { isEmbedAppChatSessionKey } from '../../../../shared/session-type';
 import { buildPiBrowserUseExtension } from '../../extensions/pi-browser-use/pi';
 import type { PiNativeContribution } from './types';
 
@@ -24,15 +23,10 @@ export const PI_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = SCLAW_AG
   },
 );
 
-/** Select exactly one browser implementation for each Pi chat surface. */
+/** Interactive Pi chats drive the user's Chrome (or App Plaza webview) via bridge_*. */
 export function selectPiAgentExtensions(
-  sessionKey: string,
+  _sessionKey: string,
   entries: readonly RegisteredAgentExtension[] = PI_AGENT_EXTENSIONS,
 ): readonly RegisteredAgentExtension[] {
-  const embedChat = isEmbedAppChatSessionKey(sessionKey);
-  return entries.filter((entry) => (
-    embedChat
-      ? entry.common.id !== 'pi-browser-use'
-      : entry.common.id !== 'sto-browser-tool'
-  ));
+  return entries.filter((entry) => entry.common.id !== 'pi-browser-use');
 }

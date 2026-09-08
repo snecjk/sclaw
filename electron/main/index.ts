@@ -953,17 +953,26 @@ async function initialize(): Promise<void> {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
   try {
-    const { ensureStoBrowserBridgePluginInOpenClaw, ensureStoBrowserAutomationPluginInOpenClaw } = await import('../utils/openclaw-auth');
+    const { ensureStoBrowserBridgePluginInOpenClaw } = await import('../utils/openclaw-auth');
+    const { applyBrowserAutomationLevelFromStore } = await import('../services/browser-automation/master-switch');
     const bridgeModified = await ensureStoBrowserBridgePluginInOpenClaw();
     if (bridgeModified) {
       logger.info('[plugin] Enabled sto-browser-bridge in openclaw.json');
     }
-    const automationModified = await ensureStoBrowserAutomationPluginInOpenClaw();
-    if (automationModified) {
-      logger.info('[plugin] Enabled sto-browser-automation in openclaw.json');
-    }
+    const automationLevel = await applyBrowserAutomationLevelFromStore();
+    logger.info(`[plugin] Browser automation level: ${automationLevel}`);
   } catch (error) {
     logger.warn('Failed to enable browser plugins in openclaw.json:', error);
+  }
+
+  try {
+    const { pruneExpiredBrowserArtifacts } = await import('../services/browser-automation/artifact-writer');
+    const pruned = await pruneExpiredBrowserArtifacts();
+    if (pruned.removedDirs.length > 0 || pruned.deletedRows > 0) {
+      logger.info('[browser-automation] pruned expired artifacts', pruned);
+    }
+  } catch (error) {
+    logger.warn('Failed to prune browser automation artifacts:', error);
   }
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)

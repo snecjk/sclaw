@@ -11,6 +11,7 @@ import {
   type DeriveSessionLabelOptions,
 } from '@/lib/workflow-session-hint';
 import { isTemporaryAgentSessionKey } from '@/stores/chat/session-identity';
+import { isWebBridgeChatSessionKey } from '../../shared/session-type';
 
 /** Zustand persist bucket for `useChatStore` sessionLabels (see chat.ts persist name). */
 export const SESSION_LABELS_STORAGE_KEY = 'stoclaw-chat-session-labels';
@@ -115,6 +116,9 @@ export function resolveSessionLabel(input: ResolveSessionLabelInput): string {
     const dn = displayName?.trim();
     if (dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== key) return dn;
     return t('chat:sessionList.mainSessionTitle');
+  }
+  if (isWebBridgeChatSessionKey(key)) {
+    return t('chat:sessionList.webBridgeTitle');
   }
   if (isTemporaryAgentSessionKey(key)) {
     return t('common:sidebar.newChat');
