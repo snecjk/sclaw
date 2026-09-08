@@ -10,6 +10,7 @@ import {
   ensureWorkspaceProjectAgent,
   importLegacySessionLabels,
   importLegacySidebarGroups,
+  listAllCatalogSessions,
   listAllSessionWorkspaceBindings,
   listCatalogSessions,
   listUserWorkspaces,
@@ -121,6 +122,9 @@ async function dispatchSessionCatalogAction(
         return {
           sessions: await listCatalogSessions(String(payload.workspaceId ?? DEFAULT_WORKSPACE_ID)),
         };
+
+      case 'listAllCatalogSessions':
+        return { sessions: await listAllCatalogSessions() };
 
       case 'listBindings':
         return { bindings: await listAllSessionWorkspaceBindings() };

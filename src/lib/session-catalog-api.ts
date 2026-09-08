@@ -112,6 +112,11 @@ export async function listCatalogSessions(workspaceId: string): Promise<CatalogS
   return res.sessions ?? [];
 }
 
+export async function listAllCatalogSessions(): Promise<CatalogSessionDto[]> {
+  const res = await invokeCatalog<{ sessions: CatalogSessionDto[] }>('listAllCatalogSessions');
+  return res.sessions ?? [];
+}
+
 export async function loadCatalogForWorkspace(workspaceId: string): Promise<{
   sessions: CatalogSessionDto[];
   groups: SessionGroupDto[];

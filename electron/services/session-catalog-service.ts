@@ -323,6 +323,11 @@ export async function listCatalogSessions(workspaceId: string) {
   return getCatalogSessionRepository().list({ workspaceId });
 }
 
+export async function listAllCatalogSessions() {
+  await ensureSessionCatalogBootstrapped();
+  return getCatalogSessionRepository().listAll();
+}
+
 export async function upsertCatalogSession(input: {
   workspaceId: string;
   sessionKey: string;

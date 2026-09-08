@@ -189,6 +189,37 @@ function sessionsFromOpenClawStoreMetadata(
     .filter((entry) => Boolean(entry.key) && !isWorkflowOpenClawSessionKey(entry.key));
 }
 
+/** Gateway list is incomplete for project agents; keep disk store keys even when Gateway succeeds. */
+export function mergeOpenClawListedSessions(
+  storeSessions: EngineSessionSummary[],
+  gatewaySessions: EngineSessionSummary[],
+): EngineSessionSummary[] {
+  const byKey = new Map<string, EngineSessionSummary>();
+  for (const session of storeSessions) {
+    if (!session.key) continue;
+    byKey.set(session.key, session);
+  }
+  for (const session of gatewaySessions) {
+    if (!session.key) continue;
+    const existing = byKey.get(session.key);
+    if (!existing) {
+      byKey.set(session.key, session);
+      continue;
+    }
+    byKey.set(session.key, {
+      ...existing,
+      ...session,
+      label: session.label ?? existing.label,
+      displayName: session.displayName ?? existing.displayName,
+      updatedAt: session.updatedAt ?? existing.updatedAt,
+      spawnedBy: session.spawnedBy ?? existing.spawnedBy,
+      thinkingLevel: session.thinkingLevel ?? existing.thinkingLevel,
+      model: session.model ?? existing.model,
+    });
+  }
+  return [...byKey.values()];
+}
+
 export const openClawAdapter: EngineAdapter = {
   historyCapabilities: {
     paginationMode: 'none',
@@ -279,7 +310,10 @@ export const openClawAdapter: EngineAdapter = {
           })
           .filter((entry) => Boolean(entry.key) && !isWorkflowOpenClawSessionKey(entry.key))
         : [];
-      return { success: true, result: { sessions } };
+      return {
+        success: true,
+        result: { sessions: mergeOpenClawListedSessions(sessionsFromOpenClawStoreMetadata(metadataByKey), sessions) },
+      };
     } catch {
       // Gateway down / not connected: still list from agents/*/sessions/sessions.json
       // so the sidebar can show recent OpenClaw history offline.
@@ -292,6 +326,10 @@ export const openClawAdapter: EngineAdapter = {
 
   async getHistory(ctx: EngineAdapterContext, params: { sessionKey: string; limit: number }) {
     try {
+      const projectAgentResult = await ensureProjectAgentForSessionKey(params.sessionKey);
+      if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
+        await requireGatewayManager(ctx).reload({ force: true });
+      }
       const result = await requireGatewayManager(ctx).rpc<Record<string, unknown>>('chat.history', {
         sessionKey: params.sessionKey,
         limit: params.limit,
