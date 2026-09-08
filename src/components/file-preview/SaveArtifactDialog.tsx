@@ -24,6 +24,8 @@ interface SaveArtifactDialogProps {
   file: AttachedFileMeta | null;
   onClose: () => void;
   onSaved: () => void;
+  /** The narrow preview owns Escape outside this modal. */
+  escapeDismiss?: boolean;
 }
 
 const ROOT_ENTRY_ID = 'root';
@@ -76,7 +78,7 @@ function reserveUniqueFileName(requestedName: string, usedNames: Set<string>): s
   return candidate;
 }
 
-export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialogProps) {
+export function SaveArtifactDialog({ file, onClose, onSaved, escapeDismiss = false }: SaveArtifactDialogProps) {
   const { t } = useTranslation('common');
   const authUser = useAuthStore((s) => s.user);
   const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
@@ -222,6 +224,25 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    if (!escapeDismiss) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (saving || createSubmitting || renameSubmitting || deleteSubmitting) return;
+      if (deletingFolder) setDeletingFolder(null);
+      else if (renamingFolder) { setRenamingFolder(null); setRenameName(''); }
+      else if (contextMenu) setContextMenu(null);
+      else if (creatingFolder) { setCreatingFolder(false); setNewFolderName(''); }
+      else if (conflict) setConflict(null);
+      else onClose();
+    };
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [escapeDismiss, saving, createSubmitting, renameSubmitting, deleteSubmitting,
+    deletingFolder, renamingFolder, contextMenu, creatingFolder, conflict, onClose]);
 
   if (!file) return null;
 
@@ -462,7 +483,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4">
+    <div role="dialog" aria-modal="true" aria-label={t('dataCenterPage.saveArtifact.saveToDataCenterTitle')} className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4">
       <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-elevated)]">
         <div className="flex h-11 items-center justify-between px-4">
           <h2 className="text-[13px] font-semibold text-[#1D2129] dark:text-[var(--sto-text-primary)]">{t('dataCenterPage.saveArtifact.saveToDataCenterTitle')}</h2>

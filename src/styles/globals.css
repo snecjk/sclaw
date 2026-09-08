@@ -5,6 +5,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ordinary preview only: fixed siblings preserve the preview frame across breakpoints.
+ * Layers 40/41/42 stay below the existing dialog/popover layer (50).
+ */
+.sto-preview-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  padding: 0;
+  background: rgb(0 0 0 / 40%);
+  cursor: default;
+}
+
+.sto-preview-overlay-panel,
+[data-layout-mode='preview-overlay'] [data-slot='preview-header-zone'] {
+  position: fixed;
+  right: 0;
+  width: var(--sto-preview-overlay-width, 40vw);
+  min-width: 40vw;
+  max-width: 70vw;
+  box-sizing: border-box;
+  background: var(--sto-main-card-bg);
+}
+
+.sto-preview-overlay-panel {
+  top: var(--sto-content-header-h, 44px);
+  bottom: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px 8px 8px 8px;
+  box-shadow: -1px 0 0 var(--sto-border-default);
+  outline: none;
+}
+
+[data-layout-mode='preview-overlay'] [data-slot='preview-header-zone'] {
+  top: 0;
+  z-index: 42;
+  /* Keep controls aligned with the split header's workspace top inset. */
+  height: calc(var(--sto-content-header-h, 44px) + var(--sto-shell-card-gap, 8px));
+  padding: var(--sto-shell-card-gap, 8px) 8px 0;
+  gap: 4px;
+  box-shadow: -1px 0 0 var(--sto-border-default);
+}
+
 @layer base {
   :root {
     --radius: 0.5rem;

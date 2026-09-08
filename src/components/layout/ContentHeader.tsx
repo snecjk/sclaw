@@ -61,6 +61,7 @@ export function ContentHeader() {
   }
 
   const isSplitLayout = layoutMode === 'split';
+  const isPreviewOverlay = layoutMode === 'preview-overlay';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
 
   const titleText = typeof title === 'string' ? title : null;
@@ -182,6 +183,7 @@ export function ContentHeader() {
   const previewHeaderZone = (
     <div
       data-slot="preview-header-zone"
+      id={isPreviewOverlay ? 'sto-preview-overlay-header' : undefined}
       className={cn(
         isSplitLayout
           ? cn(stoSplitGridHeaderPreviewClass, contentHeaderSplitPreviewZoneClass)
@@ -190,7 +192,7 @@ export function ContentHeader() {
             : 'flex min-w-0 shrink-0 items-center gap-1 overflow-hidden',
       )}
     >
-      {isSplitLayout || isPreviewExpanded ? (
+      {isSplitLayout || isPreviewExpanded || isPreviewOverlay ? (
         <div data-slot="preview-tabs" className="flex min-w-0 flex-1 items-center overflow-hidden">
           {previewTabs}
         </div>

@@ -6,7 +6,6 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
-  clampPreviewPanelPercent,
   resolveSplitGridContainerWidth,
   STO_PREVIEW_SPLIT_MAX,
   STO_PREVIEW_SPLIT_MIN,
@@ -17,16 +16,19 @@ function resolveSplitMainEl(anchorEl: HTMLElement | null): HTMLElement | null {
 }
 
 /** 仅 main 持有 --sto-split-preview-col（统一 grid 唯一列宽来源） */
-function applySplitColWidth(anchorEl: HTMLElement | null, value: string): void {
+function applySplitColWidth(anchorEl: HTMLElement | null, value: string, overlay: boolean): void {
   const main = resolveSplitMainEl(anchorEl);
   if (main === null) return;
-  main.style.setProperty('--sto-split-preview-col', value);
+  main.style.setProperty(overlay ? '--sto-preview-overlay-width' : '--sto-split-preview-col', value);
 }
 
 export function useSplitPanelResize(
   previewPanelPercent: number,
   setPreviewSplitPercent: (percent: number) => void,
+  { overlay = false }: { overlay?: boolean } = {},
 ) {
+  const minPercent = overlay ? 40 : STO_PREVIEW_SPLIT_MIN;
+  const unit = overlay ? 'vw' : '%';
   const splitRowRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -37,6 +39,11 @@ export function useSplitPanelResize(
   const unmountedRef = useRef(false);
 
   useLayoutEffect(() => {
+    // Cancel against the old mode before installing the new persistence callback.
+    dragCleanupRef.current?.('cancel');
+  }, [overlay]);
+
+  useLayoutEffect(() => {
     setPreviewSplitPercentRef.current = setPreviewSplitPercent;
   }, [setPreviewSplitPercent]);
 
@@ -44,13 +51,16 @@ export function useSplitPanelResize(
     percentRef.current = previewPanelPercent;
 
     if (!isResizingRef.current) {
-      applySplitColWidth(splitRowRef.current, `${previewPanelPercent}%`);
+      applySplitColWidth(splitRowRef.current, `${previewPanelPercent}${unit}`, overlay);
     }
-  }, [previewPanelPercent]);
+  }, [previewPanelPercent, overlay, unit]);
 
   useEffect(() => {
     unmountedRef.current = false;
+    const cancelResize = () => dragCleanupRef.current?.('cancel');
+    window.addEventListener('resize', cancelResize);
     return () => {
+      window.removeEventListener('resize', cancelResize);
       unmountedRef.current = true;
       dragCleanupRef.current?.('unmount');
       dragCleanupRef.current = null;
@@ -58,7 +68,7 @@ export function useSplitPanelResize(
   }, []);
 
   const syncPercentToDom = (percent: number) => {
-    applySplitColWidth(splitRowRef.current, `${percent}%`);
+    applySplitColWidth(splitRowRef.current, `${percent}${unit}`, overlay);
   };
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -71,7 +81,7 @@ export function useSplitPanelResize(
     const startX = e.clientX;
     const startWidth = previewPanelRef.current?.offsetWidth ?? 0;
     const containerWidth =
-      resolveSplitGridContainerWidth(splitRowRef.current) || window.innerWidth;
+      (overlay ? window.innerWidth : resolveSplitGridContainerWidth(splitRowRef.current)) || window.innerWidth;
     const previousUserSelect = document.body.style.userSelect;
     const previousCursor = document.body.style.cursor;
 
@@ -94,7 +104,7 @@ export function useSplitPanelResize(
 
     const applyWidth = () => {
       rafId = null;
-      applySplitColWidth(splitRowRef.current, `${pendingWidth}px`);
+      applySplitColWidth(splitRowRef.current, `${pendingWidth}px`, overlay);
     };
 
     const endDrag = (mode: 'commit' | 'cancel' | 'unmount') => {
@@ -127,19 +137,19 @@ export function useSplitPanelResize(
       dragCleanupRef.current = null;
 
       if (mode === 'unmount') {
-        applySplitColWidth(splitRowRef.current, `${percentRef.current}%`);
+        applySplitColWidth(splitRowRef.current, `${percentRef.current}${unit}`, overlay);
         return;
       }
 
       if (mode === 'commit') {
         const containerW =
-          resolveSplitGridContainerWidth(splitRowRef.current) || containerWidth;
-        const newPercent = clampPreviewPanelPercent(containerW, pendingWidth);
-        applySplitColWidth(splitRowRef.current, `${newPercent}%`);
+          (overlay ? window.innerWidth : resolveSplitGridContainerWidth(splitRowRef.current)) || containerWidth;
+        const newPercent = Math.max(minPercent, Math.min(STO_PREVIEW_SPLIT_MAX, pendingWidth / containerW * 100));
+        applySplitColWidth(splitRowRef.current, `${newPercent}${unit}`, overlay);
         percentRef.current = newPercent;
         setPreviewSplitPercentRef.current(newPercent);
       } else {
-        applySplitColWidth(splitRowRef.current, `${percentRef.current}%`);
+        applySplitColWidth(splitRowRef.current, `${percentRef.current}${unit}`, overlay);
       }
 
       if (!unmountedRef.current) {
@@ -150,9 +160,9 @@ export function useSplitPanelResize(
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
       const delta = startX - moveEvent.clientX;
-      const width = resolveSplitGridContainerWidth(splitRowRef.current) || containerWidth;
+      const width = (overlay ? window.innerWidth : resolveSplitGridContainerWidth(splitRowRef.current)) || containerWidth;
       pendingWidth = Math.max(
-        width * (STO_PREVIEW_SPLIT_MIN / 100),
+        width * (minPercent / 100),
         Math.min(width * (STO_PREVIEW_SPLIT_MAX / 100), startWidth + delta),
       );
       if (rafId === null) {
@@ -190,7 +200,7 @@ export function useSplitPanelResize(
 
   const adjustPreviewPercent = (deltaPercent: number) => {
     const next = Math.max(
-      STO_PREVIEW_SPLIT_MIN,
+      minPercent,
       Math.min(STO_PREVIEW_SPLIT_MAX, percentRef.current + deltaPercent),
     );
     percentRef.current = next;
