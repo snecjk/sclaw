@@ -210,6 +210,7 @@
     "collapsedSummary": "思考 {{thoughtCount}} 次，使用 {{toolCount}} 个工具",
     "collapsedSummaryThoughtsOnly": "思考 {{thoughtCount}} 次",
     "collapsedSummaryToolsOnly": "使用 {{toolCount}} 个工具",
+    "liveCurrentThinking": "正在思考",
     "omittedEarlierThinkingChars": "已省略前 {{count}} 字",
     "invokeToolLabel": "调用工具-{{toolName}}",
     "toolNoParams": "无参数",
@@ -398,7 +399,9 @@
   "runtime": {
     "errors": {
       "recoveryTimeout": "运行确认超时，请稍后重试。",
-      "rateLimit": "模型请求过于频繁，请稍等片刻后重试。"
+      "rateLimit": "模型请求过于频繁，请稍等片刻后重试。",
+      "gatewayTimeout": "模型网关超时，请稍后重试。",
+      "gatewayUnavailable": "模型服务暂时不可用，请稍后重试。"
     }
   }
 }

@@ -210,6 +210,7 @@
     "collapsedSummary": "Thought {{thoughtCount}} times, used {{toolCount}} tools",
     "collapsedSummaryThoughtsOnly": "Thought {{thoughtCount}} times",
     "collapsedSummaryToolsOnly": "Used {{toolCount}} tools",
+    "liveCurrentThinking": "Thinking",
     "omittedEarlierThinkingChars": "Omitted the first {{count}} characters",
     "invokeToolLabel": "Invoke tool – {{toolName}}",
     "toolNoParams": "No parameters",
@@ -399,7 +400,9 @@
   "runtime": {
     "errors": {
       "recoveryTimeout": "Run confirmation timed out. Please try again shortly.",
-      "rateLimit": "The model is rate-limited. Please wait a moment and try again."
+      "rateLimit": "The model is rate-limited. Please wait a moment and try again.",
+      "gatewayTimeout": "The model gateway timed out. Please try again shortly.",
+      "gatewayUnavailable": "The model service is temporarily unavailable. Please try again shortly."
     }
   }
 }

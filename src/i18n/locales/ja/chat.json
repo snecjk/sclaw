@@ -210,6 +210,7 @@
     "collapsedSummary": "{{thoughtCount}} 回思考、{{toolCount}} 個のツールを使用",
     "collapsedSummaryThoughtsOnly": "{{thoughtCount}} 回思考",
     "collapsedSummaryToolsOnly": "{{toolCount}} 個のツールを使用",
+    "liveCurrentThinking": "思考中",
     "omittedEarlierThinkingChars": "先頭の {{count}} 文字を省略しました",
     "invokeToolLabel": "ツール呼び出し – {{toolName}}",
     "toolNoParams": "パラメータなし",
@@ -388,7 +389,9 @@
   "runtime": {
     "errors": {
       "recoveryTimeout": "実行確認がタイムアウトしました。しばらくしてから再試行してください。",
-      "rateLimit": "モデルのリクエストが多すぎます。しばらく待ってから再試行してください。"
+      "rateLimit": "モデルのリクエストが多すぎます。しばらく待ってから再試行してください。",
+      "gatewayTimeout": "モデルゲートウェイがタイムアウトしました。しばらくしてから再試行してください。",
+      "gatewayUnavailable": "モデルサービスが一時的に利用できません。しばらくしてから再試行してください。"
     }
   }
 }
