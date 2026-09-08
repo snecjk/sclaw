@@ -2,7 +2,7 @@
  * AgentLoop / ARMS 多环境构建期配置解析。
  *
  * 职责：
- * - 按 Vite mode 校验固定应用名映射（SClaw-<Agent框架名>-<环境名>），防止环境串流；
+ * - 按 Vite mode 读取 .env.<mode> 中声明的应用名，不在代码中维护重复映射；
  * - 区分敏感字段（License）与非敏感字段：非敏感字段通过 Vite define 注入主进程 bundle，
  *   License 只写入 dist-electron/main/agentloop.config.json，不参与代码生成与日志输出；
  * - 保持优先级：真实进程环境变量（CI 密钥） > Vite loadEnv 结果（.env.<mode>.local > .env.<mode>）。
@@ -12,13 +12,6 @@
 
 export type AgentLoopMode = 'development' | 'test' | 'staging' | 'production';
 
-export const AGENTLOOP_APP_NAMES: Readonly<Record<AgentLoopMode, string>> = {
-  development: 'SClaw-Claude_Agent_SDK-dev',
-  test: 'SClaw-Claude_Agent_SDK-test',
-  staging: 'SClaw-Claude_Agent_SDK-test',
-  production: 'SClaw-Claude_Agent_SDK-online',
-};
-
 /** 注入 dist-electron/main/agentloop.config.json 的敏感配置（不进入 Vite define）。 */
 export interface AgentLoopSecretsConfig {
   licenseKey?: string;
@@ -26,7 +19,7 @@ export interface AgentLoopSecretsConfig {
 
 export interface AgentLoopBuildConfig {
   mode: AgentLoopMode;
-  /** 固定映射后的应用名，等于 ARMS_APP_NAME（经校验）。 */
+  /** 当前 mode 配置文件声明的应用名。 */
   appName: string;
   /** 非敏感字段：写入 Vite define。 */
   define: Record<string, string>;
@@ -64,15 +57,11 @@ export function resolveAgentLoopBuildConfig(
   processEnv: EnvSource,
 ): AgentLoopBuildConfig {
   const resolvedMode = parseMode(mode);
-  const expectedAppName = AGENTLOOP_APP_NAMES[resolvedMode];
   const warnings: string[] = [];
 
   const configuredAppName = readEnv(loadedEnv, processEnv, 'ARMS_APP_NAME');
-  if (configuredAppName && configuredAppName !== expectedAppName) {
-    // 固定映射优先：忽略与 mode 不一致的 ARMS_APP_NAME，防止复制配置导致环境串流。
-    warnings.push(
-      `[ARMS] mode=${resolvedMode} 配置了与固定映射不一致的 ARMS_APP_NAME，已按 ${expectedAppName} 处理。`,
-    );
+  if (!configuredAppName) {
+    warnings.push(`[ARMS] mode=${resolvedMode} 未配置 ARMS_APP_NAME，探针将在运行时跳过初始化（fail-open）。`);
   }
 
   // ARMS_LICENSE_KEY 为标准字段；ARMS_LICENSE 仅作历史兼容回退。
@@ -85,9 +74,8 @@ export function resolveAgentLoopBuildConfig(
   const regionId = readEnv(loadedEnv, processEnv, 'ARMS_REGION_ID');
   const workspace = readEnv(loadedEnv, processEnv, 'ARMS_WORKSPACE');
 
-  const define: Record<string, string> = {
-    ARMS_APP_NAME: expectedAppName,
-  };
+  const define: Record<string, string> = {};
+  if (configuredAppName) define.ARMS_APP_NAME = configuredAppName;
   if (regionId) define.ARMS_REGION_ID = regionId;
   if (workspace) define.ARMS_WORKSPACE = workspace;
 
@@ -109,7 +97,7 @@ export function resolveAgentLoopBuildConfig(
     );
   }
 
-  return { mode: resolvedMode, appName: expectedAppName, define, secrets, warnings };
+  return { mode: resolvedMode, appName: configuredAppName, define, secrets, warnings };
 }
 
 /** 将 define 记录转为 Vite 的 process.env.* 注入形式（值已 JSON 序列化）。 */

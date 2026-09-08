@@ -4,7 +4,7 @@
  * 职责：
  * - 从构建期注入的 define（应用名 / Region / Workspace / 可选开关）与
  *   agentloop.config.json（License，未进 define）解析运行时配置；
- * - 校验固定应用名映射，防止环境串流；
+ * - 以当前 mode 的环境配置为应用名唯一来源；
  * - 通过 CommonJS require() 注册 @loongsuite/cms_node_sdk/register 探针；
  * - 进程内幂等（只注册一次）；所有日志脱敏，不输出 License 或完整配置值。
  *
@@ -16,15 +16,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-
-export type AgentLoopAppEnv = 'development' | 'test' | 'staging' | 'production';
-
-export const AGENTLOOP_EXPECTED_APP_NAMES: Readonly<Record<AgentLoopAppEnv, string>> = {
-  development: 'SClaw-Claude_Agent_SDK-dev',
-  test: 'SClaw-Claude_Agent_SDK-test',
-  staging: 'SClaw-Claude_Agent_SDK-test',
-  production: 'SClaw-Claude_Agent_SDK-online',
-};
 
 export interface AgentLoopInitResult {
   initialized: boolean;
@@ -116,13 +107,6 @@ function readBuildTimeNonSecret(
   return readNonSecret(env, key) || (env === process.env ? definedValue : '');
 }
 
-function resolveAppEnv(appName: string): AgentLoopAppEnv | null {
-  for (const [env, name] of Object.entries(AGENTLOOP_EXPECTED_APP_NAMES)) {
-    if (name === appName) return env as AgentLoopAppEnv;
-  }
-  return null;
-}
-
 /**
  * 初始化 AgentLoop 探针。进程内幂等：重复调用直接返回首次结果。
  *
@@ -158,21 +142,14 @@ function doInit(ctx: {
   const { log, mainDir, readSecrets, loadProbe, env } = ctx;
 
   try {
-    // 1) 应用名：来自 define 固定映射（dev 由 onstart 环境注入，取值一致）。缺失则无法定位应用，跳过初始化。
+    // 1) 应用名：以当前 mode 的 .env 配置为准，构建后由 define 固化到主进程 bundle。
     const appName = readBuildTimeNonSecret(env, 'ARMS_APP_NAME', DEFINED_APP_NAME);
     if (!appName) {
-      log('warn', '[AgentLoop] 未配置 ARMS_APP_NAME（构建期固定映射缺失），跳过探针初始化。');
+      log('warn', '[AgentLoop] 未配置 ARMS_APP_NAME，跳过探针初始化。');
       return { initialized: false, status: 'skip', reason: 'missing-app-name' };
     }
 
-    // 2) 固定应用名映射校验：不在已知环境枚举内 = 环境串流，拒绝初始化。
-    const appEnv = resolveAppEnv(appName);
-    if (!appEnv) {
-      log('warn', `[AgentLoop] 应用名不属于固定映射（development/test/staging/production），疑似环境串流，跳过探针初始化。`);
-      return { initialized: false, status: 'skip', reason: 'app-name-mismatch' };
-    }
-
-    // 3) License：来自 agentloop.config.json（敏感，不进 define）。
+    // 2) License：来自 agentloop.config.json（敏感，不进 define）。
     const secretsRaw = readSecrets(join(mainDir, 'agentloop.config.json'));
     let licenseKey = '';
     if (secretsRaw) {
@@ -193,8 +170,8 @@ function doInit(ctx: {
       return { initialized: false, status: 'skip', reason: 'license-auto' };
     }
 
-    // 4) 注入运行时环境变量，供 cms_node_sdk register 读取。
-    //    应用名与 License 始终来自可信源（define 固定映射 + secrets 文件），写入 process.env；
+    // 3) 注入运行时环境变量，供 cms_node_sdk register 读取。
+    //    应用名来自当前 mode 的环境配置，License 来自 secrets 文件；
     //    可选非敏感字段仅当当前环境显式提供时才透传（不默认开启调试项）。
     const targetEnv = env === process.env ? process.env : env;
     targetEnv.ARMS_APP_NAME = appName;
@@ -214,9 +191,9 @@ function doInit(ctx: {
     const genaiEmitEvent = readBuildTimeNonSecret(env, 'OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT', DEFINED_GENAI_EMIT_EVENT);
     if (genaiEmitEvent) targetEnv.OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT = genaiEmitEvent;
 
-    // 5) 注册探针（同步 require，保证在 Claude SDK 首次加载前完成）。
+    // 4) 注册探针（同步 require，保证在 Claude SDK 首次加载前完成）。
     loadProbe();
-    log('info', `[AgentLoop] 探针已注册（应用环境=${appEnv}）。`);
+    log('info', '[AgentLoop] 探针已注册。');
     return { initialized: true, status: 'registered' };
   } catch (error) {
     // fail-open：探针加载或初始化异常不阻断主进程。

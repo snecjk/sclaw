@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AGENTLOOP_APP_NAMES,
   resolveAgentLoopBuildConfig,
   serializeAgentLoopSecrets,
   toAgentLoopProcessEnvDefine,
 } from '../../scripts/agentloop-env';
 
 describe('AgentLoop 构建期配置解析（task 1.2）', () => {
-  describe('四种 mode 的固定应用名映射', () => {
+  describe('四种 mode 的环境文件应用名', () => {
     it.each([
-      ['development', 'SClaw-Claude_Agent_SDK-dev'],
-      ['test', 'SClaw-Claude_Agent_SDK-test'],
-      ['staging', 'SClaw-Claude_Agent_SDK-test'],
-      ['production', 'SClaw-Claude_Agent_SDK-online'],
+      ['development', 'SClaw-Claude_Agent_SDK-Dev'],
+      ['test', 'SClaw-Claude_Agent_SDK-Test'],
+      ['staging', 'SClaw-Claude_Agent_SDK-Test'],
+      ['production', 'SClaw-Claude_Agent_SDK-Online'],
     ] as const)('mode=%s 注入 %s', (mode, expected) => {
       const config = resolveAgentLoopBuildConfig(
         mode,
@@ -27,33 +26,34 @@ describe('AgentLoop 构建期配置解析（task 1.2）', () => {
     });
   });
 
-  describe('ARMS_APP_NAME 固定映射校验', () => {
-    it('ARMS_APP_NAME 与 mode 不一致时按固定映射处理并告警', () => {
+  describe('ARMS_APP_NAME 配置来源', () => {
+    it('原样使用当前环境配置，不按 mode 改写', () => {
       const config = resolveAgentLoopBuildConfig(
         'test',
         { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-online', ARMS_LICENSE_KEY: 'lic' },
         {},
       );
-      expect(config.appName).toBe('SClaw-Claude_Agent_SDK-test');
-      expect(config.define.ARMS_APP_NAME).toBe('SClaw-Claude_Agent_SDK-test');
-      expect(config.warnings.some((w) => w.includes('固定映射'))).toBe(true);
+      expect(config.appName).toBe('SClaw-Claude_Agent_SDK-online');
+      expect(config.define.ARMS_APP_NAME).toBe('SClaw-Claude_Agent_SDK-online');
+      expect(config.warnings.some((w) => w.includes('ARMS_APP_NAME'))).toBe(false);
     });
 
-    it('未配置 ARMS_APP_NAME 时直接使用固定映射，不告警串流', () => {
+    it('未配置 ARMS_APP_NAME 时不生成默认值并告警', () => {
       const config = resolveAgentLoopBuildConfig('staging', {}, {});
-      expect(config.appName).toBe('SClaw-Claude_Agent_SDK-test');
-      expect(config.warnings.some((w) => w.includes('固定映射'))).toBe(false);
+      expect(config.appName).toBe('');
+      expect(config.define.ARMS_APP_NAME).toBeUndefined();
+      expect(config.warnings.some((w) => w.includes('ARMS_APP_NAME'))).toBe(true);
     });
   });
 
   describe('development local override 与 CI 密钥优先级', () => {
-    it('development 接受 env 合并结果且应用名仍为 SClaw-Claude_Agent_SDK-dev', () => {
+    it('development 接受 env 合并结果并保留配置的应用名', () => {
       // 模拟 loadEnv 已合并 .env.development + .env.development.local 的结果：
       // local 提供 License/Region/Workspace 与本地调试开关。
       const config = resolveAgentLoopBuildConfig(
         'development',
         {
-          ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-dev',
+          ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-Dev',
           ARMS_LICENSE_KEY: 'lic-local',
           ARMS_REGION_ID: 'cn-shanghai',
           ARMS_WORKSPACE: 'ws-local',
@@ -63,7 +63,7 @@ describe('AgentLoop 构建期配置解析（task 1.2）', () => {
         },
         {},
       );
-      expect(config.appName).toBe(AGENTLOOP_APP_NAMES.development);
+      expect(config.appName).toBe('SClaw-Claude_Agent_SDK-Dev');
       expect(config.appName).not.toBe('SClaw-Claude_Agent_SDK-local');
       expect(config.secrets.licenseKey).toBe('lic-local');
       expect(config.define.ARMS_ENABLE_CONSOLE_EXPORTER).toBe('true');
@@ -116,9 +116,9 @@ describe('AgentLoop 构建期配置解析（task 1.2）', () => {
     });
 
     it('License 不进入 Vite define（仅写入 agentloop.config.json）', () => {
-      const config = resolveAgentLoopBuildConfig('staging', { ARMS_LICENSE_KEY: 'lic-secret' }, {});
+      const config = resolveAgentLoopBuildConfig('staging', { ARMS_APP_NAME: 'configured-name', ARMS_LICENSE_KEY: 'lic-secret' }, {});
       const define = toAgentLoopProcessEnvDefine(config);
-      expect(define['process.env.ARMS_APP_NAME']).toBe(JSON.stringify('SClaw-Claude_Agent_SDK-test'));
+      expect(define['process.env.ARMS_APP_NAME']).toBe(JSON.stringify('configured-name'));
       expect(JSON.stringify(define)).not.toContain('lic-secret');
       expect(JSON.stringify(define)).not.toContain('ARMS_LICENSE');
     });
@@ -150,10 +150,10 @@ describe('AgentLoop 构建期配置解析（task 1.2）', () => {
   });
 
   describe('mode 解析回退', () => {
-    it('未知 mode 回退为 production 映射', () => {
-      const config = resolveAgentLoopBuildConfig('some-custom-mode', {}, {});
+    it('未知 mode 仅回退 mode 标识，不改写应用名', () => {
+      const config = resolveAgentLoopBuildConfig('some-custom-mode', { ARMS_APP_NAME: 'custom-app' }, {});
       expect(config.mode).toBe('production');
-      expect(config.appName).toBe('SClaw-Claude_Agent_SDK-online');
+      expect(config.appName).toBe('custom-app');
     });
   });
 });

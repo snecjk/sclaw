@@ -9,8 +9,7 @@ Claude Agent SDK 已通过 `claude-agent-sdk-loader.ts` 使用 CommonJS `require
 **Goals:**
 
 - 为四种 Vite mode 建立相同的主进程初始化链路。
-- 使用 `SClaw-<Agent框架名>-<环境名>` 映射 AgentLoop 应用；当前 Claude Agent SDK
-  按 dev、test、online 三类发布环境归集。
+- 以当前 `.env.<mode>` 中的 `ARMS_APP_NAME` 作为 AgentLoop 应用名唯一来源。
 - 在开发和安装包中保证探针注册顺序一致。
 - 缺少配置或探针异常时安全降级，并避免泄露 License。
 
@@ -38,23 +37,14 @@ Vite 按当前 mode 读取 `.env.<mode>`。四个 mode 文件直接保存同一�
 
 替代方案是把 `.env` 文件作为安装包资源分发；该方案同样暴露凭证且增加运行时文件查找与篡改风险，因此不采用。
 
-### 3. 固定环境与应用名称映射
+### 3. 环境文件管理应用名称
 
-应用名称映射为：
+应用名称只在 `.env.development`、`.env.test`、`.env.staging`、
+`.env.production` 中维护。构建期原样读取并注入 `ARMS_APP_NAME`，运行时只校验
+其非空，不再维护或校验重复的代码映射。`.env.example` 仅提供无效占位说明。
 
-| Vite mode | AgentLoop 应用名称 |
-| --- | --- |
-| `development` | `SClaw-Claude_Agent_SDK-dev` |
-| `test` | `SClaw-Claude_Agent_SDK-test` |
-| `staging` | `SClaw-Claude_Agent_SDK-test` |
-| `production` | `SClaw-Claude_Agent_SDK-online` |
-
-Agent 框架名当前使用 `Claude_Agent_SDK`；后续接入 Pi Agent SDK 时使用
-`Pi_Agent_SDK`。环境名限定为 `dev`、`test`、`online`，staging 归入测试环境。
-
-初始化时校验配置中的应用名与当前 mode 映射一致，防止测试数据误上报到生产应用。
-
-替代方案是仅依赖自由填写的 `ARMS_APP_NAME`；其灵活性更高，但容易因复制配置造成环境串流，因此采用固定映射校验。
+环境隔离由各 mode 文件和构建流程负责；新增 Agent 或调整命名大小写时只需修改
+对应环境配置，不需要同步修改初始化代码。
 
 ### 4. 初始化失败采用 fail-open
 
@@ -71,7 +61,7 @@ Agent 框架名当前使用 `Claude_Agent_SDK`；后续接入 Pi Agent SDK 时�
 ## Risks / Trade-offs
 
 - [构建期 License 可被提取] → 上线前由安全方确认分发属性，使用最小权限凭证并具备轮换能力；不满足条件时切换到运行时受控配置方案。
-- [错误 mode 或应用名导致环境串流] → 使用固定映射校验，并为四种 mode 增加构建测试。
+- [错误 mode 导致环境串流] → 构建测试验证每种 mode 只加载对应环境文件，并要求 `ARMS_APP_NAME` 非空。
 - [引导入口异步加载改变启动时序] → 保持入口轻量，并回归单实例、窗口创建和主进程初始化流程。
 - [SDK 升级改变 register 行为] → 固定兼容版本，增加探针加载与 `claude_agent` span 冒烟验证。
 - [会话内容造成隐私风险] → 四个 mode 已显式开启内容事件，发布和使用过程必须遵循既定合规要求。

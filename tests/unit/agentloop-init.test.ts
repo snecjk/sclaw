@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  AGENTLOOP_EXPECTED_APP_NAMES,
   __resetAgentLoopForTest,
   initAgentLoop,
   type AgentLoopInitDeps,
@@ -51,8 +50,8 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
       expect(env.ARMS_WORKSPACE).toBe('ws-1');
     });
 
-    it('四种环境应用名均可初始化', () => {
-      for (const appName of Object.values(AGENTLOOP_EXPECTED_APP_NAMES)) {
+    it('环境文件配置的应用名无需代码映射即可初始化', () => {
+      for (const appName of ['SClaw-Claude_Agent_SDK-Dev', 'SClaw-Claude_Agent_SDK-Test', 'SClaw-Pi_Agent_SDK-Test']) {
         __resetAgentLoopForTest();
         const { deps } = makeDeps({
           env: { ARMS_APP_NAME: appName },
@@ -100,17 +99,17 @@ describe('AgentLoop 主进程初始化（task 2.1）', () => {
     });
   });
 
-  describe('应用名不匹配（环境串流防护）', () => {
-    it('应用名不在固定映射内时拒绝初始化', () => {
+  describe('应用名配置校验', () => {
+    it('接受环境文件配置的自定义应用名', () => {
       const { deps, logs, loadProbe } = makeDeps({
         env: { ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-online-copy' },
         readSecretsFile: () => SECRETS_WITH_LICENSE,
       });
       const result = initAgentLoop(deps);
-      expect(result.initialized).toBe(false);
-      expect(result.reason).toBe('app-name-mismatch');
-      expect(loadProbe).not.toHaveBeenCalled();
-      expect(logs.some((l) => l.level === 'warn' && l.message.includes('环境串流'))).toBe(true);
+      expect(result.initialized).toBe(true);
+      expect(result.status).toBe('registered');
+      expect(loadProbe).toHaveBeenCalledTimes(1);
+      expect(logs.some((l) => l.level === 'warn')).toBe(false);
     });
 
     it('缺失应用名时跳过初始化', () => {

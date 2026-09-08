@@ -15,16 +15,20 @@
 - **WHEN** 使用 test、staging 或 production 模式构建的安装包启动且 AgentLoop 必填配置完整
 - **THEN** Electron 主进程完成 AgentLoop 初始化
 
-### Requirement: AgentLoop 应用名称按环境隔离
-系统 SHALL 按 `SClaw-<Agent框架名>-<环境名>` 命名 AgentLoop 应用。当前 Claude Agent SDK 中，development 使用 `SClaw-Claude_Agent_SDK-dev`，test 与 staging 使用 `SClaw-Claude_Agent_SDK-test`，production 使用 `SClaw-Claude_Agent_SDK-online`。
+### Requirement: AgentLoop 应用名称由环境配置管理
+系统 SHALL 将当前 Vite mode 对应 `.env.<mode>` 中的 `ARMS_APP_NAME` 作为应用名称唯一来源，不得通过代码固定映射改写配置值。
 
 #### Scenario: 各环境选择对应应用名称
 - **WHEN** 任一受支持环境初始化 AgentLoop
-- **THEN** 上报服务名称与该 Agent 框架及发布环境约定的 AgentLoop 应用名称一致
+- **THEN** 上报服务名称与当前 `.env.<mode>` 配置的 `ARMS_APP_NAME` 完全一致
 
 #### Scenario: 按 mode 文件加载配置
 - **WHEN** 构建过程加载任一 `.env.<mode>` 文件
-- **THEN** 系统使用该 mode 对应的应用名称，并加载该文件中的 AgentLoop 接入参数
+- **THEN** 系统原样使用该文件中的 `ARMS_APP_NAME`，并加载该文件中的 AgentLoop 接入参数
+
+#### Scenario: 新增或调整 Agent 应用名称
+- **WHEN** 开发人员修改对应 `.env.<mode>` 中的非空 `ARMS_APP_NAME`
+- **THEN** 系统无需修改 AgentLoop 初始化代码即可使用新名称
 
 ### Requirement: 探针先于 Claude Agent SDK 生效
 系统 MUST 在首次运行时加载 Claude Agent SDK 前完成 AgentLoop 探针注册，并 SHALL 保持 Claude Agent SDK 可被自动插桩的加载方式。
