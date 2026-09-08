@@ -237,7 +237,8 @@
     "submitFailed": "Failed to submit the form. Please refresh and try again."
   },
   "sessionList": {
-    "mainSessionTitle": "Main chat"
+    "mainSessionTitle": "Main chat",
+    "webBridgeTitle": "Chrome side panel"
   },
   "messageActions": {
     "copy": "Copy",

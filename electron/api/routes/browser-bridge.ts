@@ -1,14 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { BrowserWindow } from 'electron';
 import type { HostApiContext } from '../context';
 import { browserBridgeService } from '../../services/browser-bridge-service';
 import { parseJsonBody, sendJson, sendNoContent } from '../route-utils';
-import type { BrowserBridgeAction } from '../../../shared/browser-bridge/types';
+import type { BrowserBridgeAction, BrowserBridgeSession } from '../../../shared/browser-bridge/types';
 import {
   BROWSER_BRIDGE_ATTACH_TIMEOUT_MS,
   BROWSER_BRIDGE_CONSENT_TIMEOUT_MS,
+  BROWSER_BRIDGE_POLL_WAIT_MAX_MS,
 } from '../../../shared/browser-bridge/types';
 import { isCdpMethodAllowed } from '../../../shared/browser-automation/cdp-allowlist';
 import { isBrowserAutomationEnabled } from '../../../shared/browser-automation/feature-flag';
@@ -19,6 +21,17 @@ import {
   resolveBrowserBridgeExtensionZipPath,
 } from '../../utils/browser-bridge-extension';
 import { getSclawWebBridgeChromeWebStoreUrl } from '../../../shared/browser-bridge/chrome-web-store';
+import { isAuxiliaryBrowserWindowUrl } from '../../utils/auxiliary-browser-window';
+import { pinWebBridgeExtensionSession } from '../../../shared/browser-bridge/pin-extension-session';
+import { WEB_BRIDGE_CHAT_SESSION_KEY } from '../../../shared/session-type';
+import { submitModelTurn } from '../../services/submit-model-turn';
+import { getChatRuntimeSupervisor } from '../../services/chat-runtime-supervisor';
+import { getAdapterForSession } from '../../engines/manager';
+import { getMemoryTurnCoordinator } from '../../services/memory-turn-coordinator';
+import {
+  buildWebBridgeSystemPromptAppend,
+  webBridgeAgentEventHub,
+} from './browser-bridge-agent';
 
 function setBridgeCors(req: IncomingMessage, res: ServerResponse): void {
   const origin = req.headers.origin;
@@ -57,24 +70,92 @@ function emitBridgeEvent(ctx: HostApiContext, eventName: string, payload: unknow
   ctx.eventBus.emit(eventName, payload);
 }
 
-function broadcastChromeConsent(payload: { url?: string }): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue;
-    window.webContents.send('browser-bridge:consent', payload);
-    if (window.isMinimized()) window.restore();
-    window.show();
-    window.focus();
-  }
+function revealWindow(window: BrowserWindow): void {
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
 }
 
-function broadcastInstallGuide(): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue;
-    window.webContents.send('browser-bridge:install-guide');
-    if (window.isMinimized()) window.restore();
-    window.show();
-    window.focus();
+function resolveMainChatWindow(ctx: HostApiContext): BrowserWindow | null {
+  if (ctx.mainWindow && !ctx.mainWindow.isDestroyed()) {
+    return ctx.mainWindow;
   }
+  return BrowserWindow.getAllWindows().find((window) => (
+    !window.isDestroyed() && !isAuxiliaryBrowserWindowUrl(window.webContents.getURL())
+  )) ?? null;
+}
+
+function broadcastChromeConsent(ctx: HostApiContext, payload: { url?: string }): void {
+  const target = resolveMainChatWindow(ctx);
+  if (!target) return;
+  target.webContents.send('browser-bridge:consent', payload);
+  revealWindow(target);
+}
+
+function broadcastInstallGuide(ctx: HostApiContext): void {
+  const target = resolveMainChatWindow(ctx);
+  if (!target) return;
+  target.webContents.send('browser-bridge:install-guide');
+  revealWindow(target);
+}
+
+type EnsureExtensionResult =
+  | { ok: true; session: BrowserBridgeSession }
+  | { ok: false; status: number; error: string; message: string };
+
+async function ensureExtensionSession(
+  ctx: HostApiContext,
+  urlHint: string,
+): Promise<EnsureExtensionResult> {
+  const existing = browserBridgeService.getExtensionSession();
+  if (existing) return { ok: true, session: existing };
+
+  const started = browserBridgeService.beginChromeConsent();
+  if (started === 'denied' || browserBridgeService.getChromeConsent() === 'denied') {
+    return {
+      ok: false,
+      status: 403,
+      error: 'EXTENSION_ATTACH_DENIED',
+      message: '用户拒绝连接 Google Chrome。',
+    };
+  }
+  if (started === 'need-ui') {
+    broadcastChromeConsent(ctx, { url: urlHint || undefined });
+  }
+  if (started !== 'allowed') {
+    const decision = await browserBridgeService.waitForChromeConsent(BROWSER_BRIDGE_CONSENT_TIMEOUT_MS);
+    if (decision !== 'allowed') {
+      return {
+        ok: false,
+        status: 403,
+        error: decision === 'denied' ? 'EXTENSION_ATTACH_DENIED' : 'EXTENSION_ATTACH_TIMEOUT',
+        message: decision === 'denied'
+          ? '用户拒绝连接 Google Chrome。'
+          : '等待确认连接 Google Chrome 超时。',
+      };
+    }
+  }
+
+  browserBridgeService.enqueueControlAttach(urlHint || undefined);
+  const attached = await browserBridgeService.waitForExtensionSession(BROWSER_BRIDGE_ATTACH_TIMEOUT_MS);
+  if (!attached) {
+    broadcastInstallGuide(ctx);
+    return {
+      ok: false,
+      status: 504,
+      error: 'EXTENSION_ATTACH_WAIT',
+      message: '等待 Chrome 扩展连接超时。请按 SClaw 安装引导安装 SClaw Web Bridge，并保持 Google Chrome 已打开。',
+    };
+  }
+  return { ok: true, session: attached };
+}
+
+function requireAgentTurnAccess(req: IncomingMessage, res: ServerResponse): boolean {
+  if (!isLoopback(req)) {
+    sendJson(res, 403, { success: false, error: 'Agent turn is localhost-only' });
+    return false;
+  }
+  return requireExtensionToken(req, res);
 }
 
 export async function handleBrowserBridgeRoutes(
@@ -478,50 +559,154 @@ export async function handleBrowserBridgeRoutes(
     }
     const body = await parseJsonBody<{ url?: string }>(req);
     const urlHint = typeof body.url === 'string' ? body.url.trim() : '';
-    const existing = browserBridgeService.getExtensionSession();
-    if (existing) {
-      sendJson(res, 200, { success: true, sessionId: existing.sessionId, attached: true });
-      return true;
-    }
-
-    const started = browserBridgeService.beginChromeConsent();
-    if (started === 'denied' || browserBridgeService.getChromeConsent() === 'denied') {
-      sendJson(res, 403, {
+    const ensured = await ensureExtensionSession(ctx, urlHint);
+    if (!ensured.ok) {
+      sendJson(res, ensured.status, {
         success: false,
-        error: 'EXTENSION_ATTACH_DENIED',
-        message: '用户拒绝连接 Google Chrome。',
+        error: ensured.error,
+        message: ensured.message,
       });
       return true;
     }
-    if (started === 'need-ui') {
-      broadcastChromeConsent({ url: urlHint || undefined });
+    sendJson(res, 200, {
+      success: true,
+      sessionId: ensured.session.sessionId,
+      attached: browserBridgeService.getExtensionSession()?.sessionId === ensured.session.sessionId,
+    });
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/agent-turn' && req.method === 'POST') {
+    if (!requireAgentTurnAccess(req, res)) return true;
+    const body = await parseJsonBody<{
+      prompt?: string;
+      tabId?: number;
+      url?: string;
+      title?: string;
+      idempotencyKey?: string;
+    }>(req);
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    if (!prompt) {
+      sendJson(res, 400, { success: false, error: 'prompt is required' });
+      return true;
     }
-    if (started !== 'allowed') {
-      const decision = await browserBridgeService.waitForChromeConsent(BROWSER_BRIDGE_CONSENT_TIMEOUT_MS);
-      if (decision !== 'allowed') {
-        sendJson(res, 403, {
+    const tabId = typeof body.tabId === 'number' ? body.tabId : undefined;
+    const urlHint = typeof body.url === 'string' ? body.url.trim() : '';
+    let pinned = pinWebBridgeExtensionSession(browserBridgeService.listActiveSessions(), tabId);
+    if (!pinned) {
+      const ensured = await ensureExtensionSession(ctx, urlHint);
+      if (!ensured.ok) {
+        sendJson(res, ensured.status, {
           success: false,
-          error: decision === 'denied' ? 'EXTENSION_ATTACH_DENIED' : 'EXTENSION_ATTACH_TIMEOUT',
-          message: decision === 'denied'
-            ? '用户拒绝连接 Google Chrome。'
-            : '等待确认连接 Google Chrome 超时。',
+          error: ensured.error,
+          message: ensured.message,
         });
         return true;
       }
+      pinned = pinWebBridgeExtensionSession(
+        [ensured.session, ...browserBridgeService.listActiveSessions()],
+        tabId,
+      );
     }
-
-    browserBridgeService.enqueueControlAttach(urlHint || undefined);
-    const attached = await browserBridgeService.waitForExtensionSession(BROWSER_BRIDGE_ATTACH_TIMEOUT_MS);
-    if (!attached) {
-      broadcastInstallGuide();
-      sendJson(res, 504, {
+    if (!pinned || pinned.source === 'embed') {
+      sendJson(res, 409, {
         success: false,
-        error: 'EXTENSION_ATTACH_WAIT',
-        message: '等待 Chrome 扩展连接超时。请按 SClaw 安装引导安装 SClaw Web Bridge，并保持 Google Chrome 已打开。',
+        error: 'EXTENSION_SESSION_REQUIRED',
+        message: '没有可驱动的 Google Chrome 标签。请打开 http/https 页面后重试。',
       });
       return true;
     }
-    sendJson(res, 200, { success: true, sessionId: attached.sessionId });
+
+    const supervisor = getChatRuntimeSupervisor(ctx.gatewayManager);
+    webBridgeAgentEventHub.attach(supervisor);
+    const afterSequence = webBridgeAgentEventHub.lastSequence();
+    const idempotencyKey = typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim()
+      : randomUUID();
+    try {
+      const result = await submitModelTurn(ctx.gatewayManager, {
+        sessionKey: WEB_BRIDGE_CHAT_SESSION_KEY,
+        message: prompt,
+        sourceText: prompt,
+        deliver: false,
+        idempotencyKey,
+        systemPromptAppend: buildWebBridgeSystemPromptAppend({
+          sessionId: pinned.sessionId,
+          url: urlHint || pinned.url,
+          title: typeof body.title === 'string' ? body.title : pinned.title,
+        }),
+        runtimePolicy: { origin: 'bridge', ownerId: 'web-bridge' },
+      });
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, {
+        success: true,
+        sessionKey: WEB_BRIDGE_CHAT_SESSION_KEY,
+        sessionId: pinned.sessionId,
+        runId: result.result?.runId ?? null,
+        afterSequence,
+      });
+    } catch (error) {
+      sendJson(res, 500, {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/agent-events' && req.method === 'GET') {
+    if (!requireAgentTurnAccess(req, res)) return true;
+    webBridgeAgentEventHub.attach(getChatRuntimeSupervisor(ctx.gatewayManager));
+    const afterRaw = Number(url.searchParams.get('afterSequence') || 0);
+    const waitRaw = Number(url.searchParams.get('waitMs') || 0);
+    const afterSequence = Number.isFinite(afterRaw) ? afterRaw : 0;
+    const waitMs = Number.isFinite(waitRaw) ? Math.min(Math.max(0, waitRaw), BROWSER_BRIDGE_POLL_WAIT_MAX_MS) : 0;
+    const events = await webBridgeAgentEventHub.wait(afterSequence, waitMs);
+    sendJson(res, 200, {
+      success: true,
+      sessionKey: WEB_BRIDGE_CHAT_SESSION_KEY,
+      events,
+    });
+    return true;
+  }
+
+  if (url.pathname === '/api/browser-bridge/agent-abort' && req.method === 'POST') {
+    if (!requireAgentTurnAccess(req, res)) return true;
+    const body = await parseJsonBody<{ runId?: string }>(req);
+    const sessionKey = WEB_BRIDGE_CHAT_SESSION_KEY;
+    const runtimeSupervisor = getChatRuntimeSupervisor(ctx.gatewayManager);
+    try {
+      const adapter = await getAdapterForSession(sessionKey);
+      await runtimeSupervisor.aborting(sessionKey);
+      let result;
+      try {
+        result = await adapter.abortRun(
+          { gatewayManager: ctx.gatewayManager },
+          { sessionKey, runId: body.runId },
+        );
+      } catch (error) {
+        await runtimeSupervisor.abortFailed(sessionKey, String(error));
+        throw error;
+      }
+      if (result.outcome === 'stale-run') {
+        await runtimeSupervisor.abortFailed(sessionKey, 'stale-run');
+        sendJson(res, 200, { success: true, aborted: false, outcome: 'stale-run' });
+        return true;
+      }
+      if (!result.success) {
+        await runtimeSupervisor.abortFailed(sessionKey, result.error || 'chat.abort failed');
+        sendJson(res, 500, result);
+        return true;
+      }
+      await getMemoryTurnCoordinator(ctx.gatewayManager).aborted(sessionKey, null);
+      await runtimeSupervisor.aborted(sessionKey, null);
+      sendJson(res, 200, { ...result, aborted: result.outcome !== 'idle' });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
     return true;
   }
 

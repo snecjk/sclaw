@@ -807,13 +807,6 @@ export async function handleAppDevRoutes(
       if (!appCode) {
         throw new Error('缺少 appCode：提交后未能注册云端应用');
       }
-      if (cloud && !cloud.gitlabProjectId) {
-        logger.error(
-          `[app-dev] deploy:gitlab-check-failed appCode=${appCode} ` +
-          `cloud=${serializeForAppDevLog(summarizeDeployCloud(cloud))}`,
-        );
-        throw new Error('云端应用尚未创建 Git 项目（gitlabProjectId 为空），无法发布');
-      }
 
       const activated = await ensureSiteAppActiveForDeploy(appCode);
       logger.info(

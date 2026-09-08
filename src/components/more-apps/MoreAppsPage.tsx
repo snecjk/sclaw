@@ -28,7 +28,7 @@ import { AppCard } from './AppCard';
 import { DevAppCard, formatDevAppCardDesc } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { CreateAppDialog } from './CreateAppDialog';
-import { AppDevConversationalCreate } from './AppDevConversationalCreate';
+import { AppDevConversationalCreate, SHOW_APP_DEV_CONVERSATIONAL_CREATE } from './AppDevConversationalCreate';
 import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
 import { ExternalServiceManagerDialog } from './ExternalServiceManagerDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -759,7 +759,7 @@ export function MoreAppsPage() {
           <div className="flex flex-col items-center justify-center gap-4 px-4 py-10">
             {searchQuery ? (
               <div className="more-apps-empty">{emptyMessage}</div>
-            ) : (
+            ) : SHOW_APP_DEV_CONVERSATIONAL_CREATE ? (
               <>
                 <p className="text-sm text-muted-foreground">
                   {t('moreApps.emptyDevAppsHint', {
@@ -768,16 +768,22 @@ export function MoreAppsPage() {
                 </p>
                 <AppDevConversationalCreate onOpenAdvanced={() => setCreateAppOpen(true)} />
               </>
+            ) : (
+              <div className="more-apps-empty">
+                {t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「高级创建」开始' })}
+              </div>
             )}
           </div>
         ) : (
           <>
-            <div className="mb-4 px-1">
-              <AppDevConversationalCreate
-                compact
-                onOpenAdvanced={() => setCreateAppOpen(true)}
-              />
-            </div>
+            {SHOW_APP_DEV_CONVERSATIONAL_CREATE ? (
+              <div className="mb-4 px-1">
+                <AppDevConversationalCreate
+                  compact
+                  onOpenAdvanced={() => setCreateAppOpen(true)}
+                />
+              </div>
+            ) : null}
             <div className="more-apps-grid">
               {filteredDevApps.map((app) => (
                 <DevAppCard

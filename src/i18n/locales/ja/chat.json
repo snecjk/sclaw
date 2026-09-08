@@ -237,7 +237,8 @@
     "submitFailed": "フォームの送信に失敗しました。ページを更新して再試行してください。"
   },
   "sessionList": {
-    "mainSessionTitle": "メインチャット"
+    "mainSessionTitle": "メインチャット",
+    "webBridgeTitle": "Chrome サイドパネル"
   },
   "messageActions": {
     "copy": "コピー",

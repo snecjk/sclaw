@@ -237,7 +237,8 @@
     "submitFailed": "表单提交失败，请刷新页面后重试"
   },
   "sessionList": {
-    "mainSessionTitle": "主会话"
+    "mainSessionTitle": "主会话",
+    "webBridgeTitle": "Chrome 侧栏"
   },
   "messageActions": {
     "copy": "复制",

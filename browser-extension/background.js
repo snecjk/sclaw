@@ -42,9 +42,13 @@ const AX_ELEMENT_LIMIT = 400;
 const AX_TRUNCATED_HINT = '观察已达预算并截断。请先滚动或收窄到目标区域再观察，不要指望一次拿到整页。';
 const STALE_REF_RETRY_HINT = '用本次返回 observation.elements 里的新 @e 直接重试';
 
-chrome.runtime.onInstalled.addListener(() => scheduleAlarms());
+chrome.runtime.onInstalled.addListener(() => {
+  scheduleAlarms();
+  void enableSidePanelAction();
+});
 chrome.runtime.onStartup.addListener(() => {
   scheduleAlarms();
+  void enableSidePanelAction();
   void boot();
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -72,6 +76,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 void boot();
 
+async function enableSidePanelAction() {
+  if (!chrome.sidePanel || typeof chrome.sidePanel.setPanelBehavior !== 'function') return;
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch {
+    /* older Chrome without side panel */
+  }
+}
+
 function scheduleAlarms() {
   chrome.alarms.create(WAKE_ALARM, { periodInMinutes: 1 });
   try {
@@ -91,6 +104,7 @@ async function boot() {
     }
   }
   scheduleAlarms();
+  await enableSidePanelAction();
   if (!token) {
     await tryAutoConnect();
   } else {
@@ -1043,7 +1057,9 @@ async function handlePopupMessage(message) {
       updateAvailable: Boolean(stored.updateAvailable),
       installedVersion: EXTENSION_VERSION,
       bundledVersion: stored.bundledVersion || null,
+      tabId: tab && tab.id != null ? tab.id : null,
       tabUrl: tab?.url || '',
+      tabTitle: tab?.title || '',
       sessionId: rec?.sessionId || null,
       hostBase,
     };

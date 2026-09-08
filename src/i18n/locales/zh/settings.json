@@ -314,7 +314,7 @@
     "browserBridgeGuidePreparing": "正在准备扩展文件…",
     "browserBridgeGuideStep1": "已打开扩展文件夹，安装路径已复制到剪贴板。",
     "browserBridgeGuideStep2": "在 Chrome 地址栏输入 chrome://extensions 并回车。",
-    "browserBridgeGuideStep3": "打开右上角「开发者模式」，点「加载已解压的扩展程序」，粘贴刚才复制的路径。",
+    "browserBridgeGuideStep3": "打开右上角「开发者模式」，点「加载已解压的扩展程序」，粘贴刚才复制的路径。装好后点扩展图标打开侧栏，发一条 Prompt 即可。",
     "browserBridgeGuideDone": "我已安装",
     "browserBridgeGuideLater": "稍后再说",
     "browserBridgeSaveFailed": "保存失败",

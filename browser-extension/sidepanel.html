@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>SClaw Web Bridge</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>SClaw Web Bridge</h1>
+      <p id="connection" class="muted">未连接本机 SClaw</p>
+    </div>
+    <p id="tab-url" class="url">(无标签)</p>
+    <p id="restricted" class="error" hidden>当前是 chrome:// 页面，无法接管。请先打开 http/https 网页。</p>
+    <section id="mismatch" hidden>
+      <p class="error">扩展 major 版本与 SClaw 内置包不一致，请下载新 zip 后重新加载。</p>
+      <p id="mismatch-versions" class="muted"></p>
+    </section>
+    <section id="disconnected">
+      <label>配对码
+        <input id="pairing-code" type="text" autocomplete="off" placeholder="在 SClaw 设置页获取" />
+      </label>
+      <div class="row">
+        <button id="auto-connect" type="button">自动连接</button>
+        <button id="pair" type="button">用配对码连接</button>
+      </div>
+    </section>
+    <section id="connected" hidden>
+      <p id="versions" class="muted"></p>
+      <p id="update" class="warn" hidden>有新版本可升级，功能可继续使用。</p>
+      <button id="disconnect" type="button" class="secondary">断开</button>
+    </section>
+    <p id="status" class="status"></p>
+  </header>
+  <ol id="messages" class="messages"></ol>
+  <form id="composer">
+    <textarea id="prompt" rows="3" placeholder="向本机 SClaw Agent 发一条 Prompt"></textarea>
+    <div class="row">
+      <button id="stop" type="button" class="secondary" hidden>停止</button>
+      <button id="send" type="submit">发送</button>
+    </div>
+  </form>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

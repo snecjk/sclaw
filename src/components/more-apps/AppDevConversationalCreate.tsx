@@ -1,5 +1,8 @@
 /**
  * P5 W2-1：开发应用空态 / 顶部的一句话创建入口。
+ *
+ * 当前功能还不完整，入口默认隐藏；组件与 quick-create 链路保留。
+ * 恢复：将 SHOW_APP_DEV_CONVERSATIONAL_CREATE 改为 true。
  */
 import { useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -8,6 +11,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formFieldFocusClass } from '@/lib/surfaces';
 import { quickCreateAppFromPrompt } from '@/lib/app-dev-quick-create';
+
+/** 一句话建站入口。功能补齐前保持 false，用户走右上角「高级创建」。 */
+export const SHOW_APP_DEV_CONVERSATIONAL_CREATE = false;
 
 interface AppDevConversationalCreateProps {
   className?: string;

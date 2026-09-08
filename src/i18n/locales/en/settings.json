@@ -319,7 +319,7 @@
     "browserBridgeGuidePreparing": "Preparing extension files…",
     "browserBridgeGuideStep1": "The extension folder is open and its path is on the clipboard.",
     "browserBridgeGuideStep2": "In Chrome, open chrome://extensions and press Enter.",
-    "browserBridgeGuideStep3": "Turn on Developer mode, click Load unpacked, and paste the copied path.",
+    "browserBridgeGuideStep3": "Turn on Developer mode, click Load unpacked, and paste the copied path. After it loads, click the extension icon to open the side panel and send a prompt.",
     "browserBridgeGuideDone": "Installed",
     "browserBridgeGuideLater": "Later",
     "browserBridgeSaveFailed": "Save failed",
