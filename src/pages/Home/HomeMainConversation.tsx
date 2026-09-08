@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ChevronDown, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Loader2, RotateCcw, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -329,6 +329,36 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     [onSend, scrollToLatest],
   );
 
+  const retrySourceMessage = useMemo(() => (
+    [...messages]
+      .reverse()
+      .find((message) => message.role === 'user' && Boolean(extractText(message).trim()))
+      ?? null
+  ), [messages]);
+
+  const handleRetryFailedMessage = useCallback(() => {
+    if (sending || !retrySourceMessage) return;
+
+    const text = extractText(retrySourceMessage).trim();
+    if (!text) return;
+
+    clearError();
+    handleComposerSend(
+      text,
+      undefined,
+      undefined,
+      undefined,
+      null,
+      null,
+      null,
+      retrySourceMessage._skillMeta,
+      {
+        skillMetas: retrySourceMessage._skillMetas,
+        composerSegments: retrySourceMessage._composerSegments,
+      },
+    );
+  }, [clearError, handleComposerSend, retrySourceMessage, sending]);
+
   const { composeSeed: subitemComposeSeed } = useStoTaskSubitemEntry({
     scrollToLatest,
     onSend,
@@ -608,6 +638,15 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
             <p className="max-h-40 min-w-0 flex-1 overflow-y-auto break-words text-[13px] leading-5 text-foreground">
               {error}
             </p>
+            <button
+              type="button"
+              onClick={handleRetryFailedMessage}
+              disabled={sending || !retrySourceMessage}
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-[var(--sto-chat-error-border)] bg-background px-2 text-xs font-medium text-foreground transition-colors hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              {t('chat:workflow.retryQuery')}
+            </button>
             <button
               type="button"
               onClick={() => clearError()}

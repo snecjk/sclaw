@@ -80,6 +80,32 @@ describe('consumeClaudeQuery stream projection', () => {
     expect(getContextUsage).not.toHaveBeenCalled();
   });
 
+  it('treats an SDK error result as failed instead of completing the run', async () => {
+    const { chatEvents, notifications, sink } = createSink();
+    await consumeClaudeQuery(
+      'agent:test:session:certificate-error',
+      'session-certificate-error',
+      'D:\\workspace',
+      createQuery([
+        {
+          type: 'result',
+          subtype: 'error_during_execution',
+          result: 'API Error: Unable to connect to API (UNKNOWN_CERTIFICATE_VERIFICATION_ERROR)',
+        },
+      ]),
+      sink,
+      'run-certificate-error',
+    );
+
+    expect(chatEvents.find((event) => event.engineEvent.type === 'turn.failed')?.engineEvent).toMatchObject({
+      type: 'turn.failed',
+      errorMessage: 'API Error: Unable to connect to API (UNKNOWN_CERTIFICATE_VERIFICATION_ERROR)',
+    });
+    expect(notifications).not.toContainEqual(expect.objectContaining({
+      params: expect.objectContaining({ phase: 'completed' }),
+    }));
+  });
+
   it('maps Claude compact status and boundary messages to canonical compaction events', async () => {
     const { chatEvents, sink } = createSink();
     await consumeClaudeQuery(

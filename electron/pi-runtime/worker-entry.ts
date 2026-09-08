@@ -52,6 +52,8 @@ type PiSession = {
   lastRunId?: string;
   lastRunStatus?: 'completed' | 'failed';
   lastRunError?: string;
+  /** Latest provider error in the active turn; Pi may resolve prompt() after it. */
+  terminalAssistantError?: string;
   streamingAssistant?: Record<string, unknown> & { role: 'assistant'; content: Array<Record<string, unknown>> };
   clearExtensionSessionState: () => void;
   setExtensionTurnContext: (context: { runId?: string; systemPromptAppend?: string }) => void;
@@ -61,6 +63,7 @@ type PiSession = {
 type PiSdk = typeof import('@earendil-works/pi-coding-agent');
 const sessions = new Map<string, PiSession>();
 const sessionCommandQueue = new KeyedTaskQueue();
+const PI_PROVIDER_MAX_RETRIES = 2;
 let sdkPromise: Promise<PiSdk> | null = null;
 const parentPort = (process as NodeJS.Process & {
   parentPort?: { on(event: 'message', listener: (event: { data: unknown }) => void): void; postMessage(value: unknown): void };
@@ -125,6 +128,21 @@ function serializeError(error: unknown): SerializedPiError {
   return { message: String(error) };
 }
 
+function isRetryExhaustedNetworkError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes('request timed out')
+    || lower.includes('request timeout')
+    || lower.includes('network error')
+    || lower.includes('network request failed')
+    || lower.includes('connection error')
+    || lower.includes('fetch failed')
+    || lower.includes('socket')
+    || lower.includes('econn')
+    || lower.includes('enotfound')
+    || lower.includes('eai_again')
+    || lower === 'terminated';
+}
+
 function respond(requestId: string, success: boolean, result?: unknown, error?: unknown): void {
   post({
     type: 'response',
@@ -183,7 +201,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
   const sdk = await loadPiSdk();
   const settingsManager = sdk.SettingsManager.inMemory({
     compaction: { enabled: true },
-    retry: { enabled: true, maxRetries: 2 },
+    retry: { enabled: true, maxRetries: PI_PROVIDER_MAX_RETRIES },
   }, {
     projectTrusted: config.projectTrusted === true,
   });
@@ -407,9 +425,11 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
               runId,
               error: errorMessage,
             });
+            entry.terminalAssistantError = errorMessage;
             entry.streamingAssistant = undefined;
             break;
           }
+          entry.terminalAssistantError = undefined;
           emit(config.sessionKey, { type: 'message.final', sessionKey: config.sessionKey, runId, message });
           const contextUsage = entry.session.getContextUsage();
           emit(config.sessionKey, {
@@ -616,6 +636,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       entry.lastRunId = runId;
       entry.lastRunStatus = undefined;
       entry.lastRunError = undefined;
+      entry.terminalAssistantError = undefined;
       entry.streamingAssistant = undefined;
       entry.setExtensionTurnContext({
         runId,
@@ -635,6 +656,32 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       void entry.session.prompt(prepared.message, { images: prepared.images, source: 'rpc' })
         .then(() => {
           if (!shouldCompletePiRun(entry.activeRunId, entry.settledRunId, runId)) return;
+          const errorMessage = entry.terminalAssistantError;
+          if (errorMessage) {
+            entry.lastRunId = runId;
+            entry.lastRunStatus = 'failed';
+            entry.lastRunError = errorMessage;
+            logPiCore('session.prompt.settled-with-error', {
+              sessionKey: config.sessionKey,
+              runId,
+              error: errorMessage,
+            });
+            emit(config.sessionKey, {
+              type: 'turn.failed',
+              sessionKey: config.sessionKey,
+              runId,
+              errorMessage,
+              ...(isRetryExhaustedNetworkError(errorMessage) ? {
+                reason: 'network-retry-exhausted' as const,
+                retryAttempts: PI_PROVIDER_MAX_RETRIES,
+              } : {}),
+            });
+            entry.activeRunId = undefined;
+            entry.settledRunId = undefined;
+            entry.streamingAssistant = undefined;
+            entry.terminalAssistantError = undefined;
+            return;
+          }
           logPiCore('session.prompt.completed', { sessionKey: config.sessionKey, runId });
           entry.lastRunId = runId;
           entry.lastRunStatus = 'completed';
@@ -643,6 +690,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
           entry.activeRunId = undefined;
           entry.settledRunId = undefined;
           entry.streamingAssistant = undefined;
+          entry.terminalAssistantError = undefined;
         })
         .catch((error: unknown) => {
           if (entry.activeRunId !== runId) return;
@@ -651,10 +699,20 @@ async function handle(request: PiWorkerRequest): Promise<void> {
           entry.lastRunStatus = 'failed';
           entry.lastRunError = errorMessage;
           logPiCore('session.prompt.failed', { sessionKey: config.sessionKey, runId, error: errorMessage });
-          emit(config.sessionKey, { type: 'turn.failed', sessionKey: config.sessionKey, runId, errorMessage });
+          emit(config.sessionKey, {
+            type: 'turn.failed',
+            sessionKey: config.sessionKey,
+            runId,
+            errorMessage,
+            ...(isRetryExhaustedNetworkError(errorMessage) ? {
+              reason: 'network-retry-exhausted' as const,
+              retryAttempts: PI_PROVIDER_MAX_RETRIES,
+            } : {}),
+          });
           entry.activeRunId = undefined;
           entry.settledRunId = undefined;
           entry.streamingAssistant = undefined;
+          entry.terminalAssistantError = undefined;
         });
       return;
     }
