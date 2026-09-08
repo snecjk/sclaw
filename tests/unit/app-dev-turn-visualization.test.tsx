@@ -46,8 +46,10 @@ describe('AppDevToolRollupLine 流式摘要行', () => {
     expect(root).toHaveTextContent('home.page.json');
     expect(root).toHaveTextContent('创建');
     expect(root).toHaveTextContent('new.ts');
-    expect(root).toHaveTextContent('执行');
+    expect(root).toHaveTextContent('$');
     expect(root).toHaveTextContent('pnpm run build');
+    expect(root).not.toHaveTextContent('执行');
+    expect(root).not.toHaveTextContent('读取/检索');
 
     const added = screen.getAllByText('+2');
     expect(added.length).toBe(2);
@@ -58,6 +60,15 @@ describe('AppDevToolRollupLine 流式摘要行', () => {
 
   it('空聚合不渲染', () => {
     const { container } = render(<AppDevToolRollupLine rollup={rollupAppDevTools([])} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('仅读取/检索时不渲染摘要行', () => {
+    const rollup = rollupAppDevTools([
+      makeTool({ name: 'Read', input: { file_path: '/app/a.ts' } }),
+      makeTool({ name: 'Grep', input: { pattern: 'foo' } }),
+    ]);
+    const { container } = render(<AppDevToolRollupLine rollup={rollup} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

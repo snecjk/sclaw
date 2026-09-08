@@ -63,6 +63,7 @@ import {
 } from '@/pages/Chat/thinking-turn-segments';
 import { sliceStreamingThinkingTail } from '@/pages/Chat/thinking/streaming-tail-window';
 import { foldThinkingTimelineTools, resolveTurnToolCount } from '@/pages/Chat/thinking/fold-turn-tools';
+import { resolveLiveProcessActivity } from '@/pages/Chat/thinking/live-process-activity';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 
@@ -352,6 +353,7 @@ const TimelineThinkingRow = memo(function TimelineThinkingRow({
       isComplete={isComplete}
       autoExpand={autoExpand}
       isActive={isActive}
+      unmountCollapsedBody={collapsible}
     >
       <ThinkingBlockBody
         content={thinkingContent}
@@ -712,6 +714,8 @@ function ThinkingToolGroupPanel({
   hasFinalReply,
   connectingLabelKey,
   enableProcessTypewriter,
+  expanded,
+  onToggle,
 }: {
   turnStableKey: string | undefined;
   segment: ThinkingToolGroupSegment;
@@ -724,6 +728,8 @@ function ThinkingToolGroupPanel({
   hasFinalReply: boolean;
   connectingLabelKey: ConnectingLabelKey;
   enableProcessTypewriter: boolean;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const { t } = useTranslation('chat');
   const isActive = segment.state === 'active';
@@ -732,17 +738,14 @@ function ThinkingToolGroupPanel({
     segment,
     isLiveStream,
   );
-  const showStreamingBody = isActive || deferSummaryCollapse;
+  const isLiveCompact = isActive || deferSummaryCollapse;
   const stableTimeline = useStableThinkingTimeline(
     turnStableKey,
     segment.key,
     segment.timeline,
     isLiveStream,
   );
-  const [expanded, setExpanded] = useState(false);
   const [collapseAnimationEnabled, setCollapseAnimationEnabled] = useState(false);
-  // 完成态卸载：收起时正文不挂载（不再靠 grid-rows-[0fr] 视觉隐藏全量 DOM）；
-  // 收起动画（300ms，§5.6）期间保留挂载，动画结束后卸载
   const [bodyMounted, setBodyMounted] = useState(false);
 
   useEffect(() => {
@@ -760,63 +763,61 @@ function ThinkingToolGroupPanel({
     return () => clearTimeout(timer);
   }, [expanded, bodyMounted]);
 
-  const handleSummaryToggle = () => {
-    setExpanded((prev) => !prev);
-  };
-
   const summaryLabel = useMemo(
     () => buildThinkingGroupSummaryLabel(segment.timeline, t),
     [segment.timeline, t],
   );
+  const headerLabel = summaryLabel ?? (isLiveCompact ? t('streaming.thinkingBadge') : null);
+  const liveActivity = useMemo(
+    () => (isLiveCompact && !expanded
+      ? resolveLiveProcessActivity(stableTimeline, streamingTools)
+      : { kind: 'idle' as const }),
+    [isLiveCompact, expanded, stableTimeline, streamingTools],
+  );
 
-  if (showStreamingBody) {
-    return (
-      <TimelineBody
-        timeline={stableTimeline}
-        isLiveStream={isLiveStream}
-        hasFinalReply={hasFinalReply}
-        batchIsCompleted={!isActive}
-        streamingTools={streamingTools}
-        enableProcessTypewriter={enableProcessTypewriter}
-        isConnecting={isConnecting}
-        isProcessing={isProcessing}
-        isStillExecuting={isStillExecuting}
-        connectingLabelKey={connectingLabelKey}
-      />
-    );
-  }
-
-  if (!summaryLabel) return null;
+  if (!headerLabel) return null;
 
   return (
     <div className="w-full">
       <button
         type="button"
         className={chatThinkingSegmentSummaryHeaderClass}
-        onClick={handleSummaryToggle}
+        onClick={onToggle}
         aria-expanded={expanded}
       >
-        <span className="truncate">{summaryLabel}</span>
+        <span className="truncate">{headerLabel}</span>
         <ChevronDown
           className={thinkingPanelChevronClass(expanded, collapseAnimationEnabled)}
           aria-hidden
         />
       </button>
+      {isLiveCompact && !expanded && liveActivity.kind !== 'idle' ? (
+        <ChatProcessLoadingInlineIndicator
+          className="mt-2"
+          label={
+            liveActivity.kind === 'tool'
+              ? t('streaming.invokeToolLabel', {
+                  toolName: resolveChatToolDisplayName(liveActivity.name),
+                })
+              : t('streaming.liveCurrentThinking')
+          }
+        />
+      ) : null}
       {bodyMounted ? (
         <div className={thinkingPanelBodyGridClass(expanded, collapseAnimationEnabled)}>
           <div className="min-h-0 overflow-hidden">
             <TimelineBody
               timeline={stableTimeline}
-              isLiveStream={false}
-              hasFinalReply={false}
-              batchIsCompleted
+              isLiveStream={isLiveCompact}
+              hasFinalReply={isLiveCompact ? hasFinalReply : false}
+              batchIsCompleted={!isActive}
               streamingTools={streamingTools}
-              enableProcessTypewriter={false}
-              isConnecting={false}
-              isProcessing={false}
-              isStillExecuting={false}
+              enableProcessTypewriter={isLiveCompact ? enableProcessTypewriter : false}
+              isConnecting={isLiveCompact ? isConnecting : false}
+              isProcessing={isLiveCompact ? isProcessing : false}
+              isStillExecuting={isLiveCompact ? isStillExecuting : false}
               connectingLabelKey={connectingLabelKey}
-              readonlyExpanded
+              readonlyExpanded={!isLiveCompact}
             />
           </div>
         </div>
@@ -889,6 +890,7 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
   const wasLiveStreamRef = useRef(false);
   const typewriterLockedRef = useRef(false);
   const [enableProcessTypewriter, setEnableProcessTypewriter] = useState(false);
+  const [expandedSegmentKey, setExpandedSegmentKey] = useState<string | null>(null);
 
   const isLiveStream =
     isStreaming || isConnecting || isProcessing || isStillExecuting;
@@ -1002,6 +1004,10 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
             hasFinalReply={hasFinalReply}
             connectingLabelKey={connectingLabelKey}
             enableProcessTypewriter={enableProcessTypewriter}
+            expanded={expandedSegmentKey === segment.key}
+            onToggle={() => {
+              setExpandedSegmentKey((current) => (current === segment.key ? null : segment.key));
+            }}
           />
         );
       })}

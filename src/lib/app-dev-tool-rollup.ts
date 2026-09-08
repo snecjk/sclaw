@@ -250,6 +250,14 @@ export function extractAppDevFileOpStat(tool: Pick<ToolStatus, 'name' | 'input'>
   return path ? { path, added: 0, removed: 0, isCreate, edits: [] } : null;
 }
 
+/** 去掉 `cd /abs/path &&` 前缀，露出真正执行的命令（对齐 Cursor 终端摘要）。 */
+export function shortenAppDevCommandDisplay(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed) return trimmed;
+  const stripped = trimmed.replace(/^(?:cd\s+(?:'[^']+'|"[^"]+"|\S+)\s*(?:&&|;)\s*)+/i, '').trim();
+  return stripped || trimmed;
+}
+
 /** 提取命令文本（Bash 类）：command 字段首行，兜底 summary / 工具名。 */
 export function extractAppDevCommandLabel(
   tool: Pick<ToolStatus, 'name' | 'input' | 'summary'>,
@@ -260,7 +268,8 @@ export function extractAppDevCommandLabel(
     : null;
   const firstLine = (raw ?? '').split('\n').map((line) => line.trim()).find(Boolean);
   const label = firstLine ?? (typeof tool.summary === 'string' && tool.summary.trim() ? tool.summary.trim() : tool.name);
-  return label.length > 60 ? `${label.slice(0, 59)}…` : label;
+  const shortened = shortenAppDevCommandDisplay(label);
+  return shortened.length > 60 ? `${shortened.slice(0, 59)}…` : shortened;
 }
 
 export function appDevToolBaseName(path: string): string {

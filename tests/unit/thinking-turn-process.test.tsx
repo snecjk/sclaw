@@ -17,6 +17,8 @@ vi.mock('react-i18next', () => ({
       if (key === 'streaming.deepThinkingLabel') return '深度思考';
       if (key === 'streaming.omittedEarlierThinkingChars') return `已省略前 ${opts?.count} 字`;
       if (key === 'streaming.invokeToolLabel') return `调用工具-${opts?.toolName}`;
+      if (key === 'streaming.liveCurrentThinking') return '正在思考';
+      if (key === 'streaming.thinkingBadge') return 'AI 正在思考';
       if (key === 'streaming.toolNoParams') return '无参数';
       if (key === 'streaming.interrupted') return '已中断';
       return key;
@@ -102,6 +104,12 @@ describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thi
 
     const { container } = render(<ThinkingTurnProcess segments={segments} isStreaming />);
 
+    expect(screen.getByRole('button', { name: /思考 1 次/ })).toBeInTheDocument();
+    expect(screen.getByText('正在思考')).toBeInTheDocument();
+    expect(screen.queryByText('已省略前 8 字')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /思考 1 次/ }));
+
     // 省略占位：超出 8 字（'*'×2 + 4 个汉字）
     expect(screen.getByText('已省略前 8 字')).toBeInTheDocument();
     // 纯文本：markdown 标记原样展示（未解析为 <strong>）
@@ -126,7 +134,8 @@ describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thi
     const { container, rerender } = render(
       <ThinkingTurnProcess segments={liveSegments} isStreaming />,
     );
-    expect(screen.getByText('已省略前 8 字')).toBeInTheDocument();
+    expect(screen.getByText('正在思考')).toBeInTheDocument();
+    expect(screen.queryByText('已省略前 8 字')).not.toBeInTheDocument();
 
     const doneSegments: ThinkingTurnSegment[] = [{
       kind: 'tool-group',
@@ -170,5 +179,48 @@ describe('ThinkingTurnProcess 展开后展示全部工具', () => {
 
     expect(screen.getByText('调用工具-tool_0')).toBeInTheDocument();
     expect(screen.getByText('调用工具-tool_11')).toBeInTheDocument();
+  });
+});
+
+describe('ThinkingTurnProcess 摘要手风琴', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('同一轮只展开一组详情，点另一组会收起上一组', () => {
+    render(
+      <ThinkingTurnProcess
+        segments={[
+          {
+            kind: 'tool-group',
+            key: 'group-a',
+            timeline: [{ type: 'thinking', content: '甲组正文' }],
+            state: 'completed',
+          },
+          {
+            kind: 'tool-group',
+            key: 'group-b',
+            timeline: [{ type: 'thinking', content: '乙组正文' }],
+            state: 'completed',
+          },
+        ]}
+      />,
+    );
+
+    const [first, second] = screen.getAllByRole('button', { name: /思考 1 次/ });
+    fireEvent.click(first);
+    expect(screen.getByText('甲组正文')).toBeInTheDocument();
+    expect(screen.queryByText('乙组正文')).not.toBeInTheDocument();
+
+    fireEvent.click(second);
+    expect(screen.getByText('乙组正文')).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(350);
+    });
+    expect(screen.queryByText('甲组正文')).not.toBeInTheDocument();
   });
 });

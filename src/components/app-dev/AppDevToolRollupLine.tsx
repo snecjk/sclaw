@@ -1,11 +1,11 @@
 /**
  * AppDevToolRollupLine — 生成过程工具聚合摘要行（P1 交互改造 T02）
  *
- * 对话流中实时滚动「编辑 home.page.json +26 −60」「执行 pnpm run build」，
- * 增删行数红绿着色；有 edits 时可展开轻量逐行 diff（P5 W1-2）。
+ * 对照 Cursor Agent：文件行只挂文件名 + 红绿增删；命令收进 `$` 终端块；
+ * 读取/检索不展示。有 edits 时可展开轻量逐行 diff（P5 W1-2）。
  */
 import { memo, useCallback, useState } from 'react';
-import { ChevronDown, ChevronRight, FileEdit, FilePlus2, Search, Terminal, Wrench } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileEdit, FilePlus2, Terminal, Wrench } from 'lucide-react';
 import {
   appDevFileOpVerb,
   appDevToolBaseName,
@@ -25,7 +25,7 @@ interface AppDevToolRollupLineProps {
 function DiffCounts({ added, removed }: { added: number; removed: number }) {
   if (added <= 0 && removed <= 0) return null;
   return (
-    <span className="tabular-nums">
+    <span className="ml-auto shrink-0 tabular-nums">
       {added > 0 ? (
         <span className="text-[var(--sto-success-primary)]">+{added}</span>
       ) : null}
@@ -46,12 +46,18 @@ export const AppDevToolRollupLine = memo(function AppDevToolRollupLine({
     setExpandedPaths((prev) => ({ ...prev, [path]: !prev[path] }));
   }, []);
 
-  if (rollup.totals.completedTools === 0) return null;
-
-  const files = rollup.files.slice(0, MAX_FILE_ROWS);
+  const files = rollup.files.slice(-MAX_FILE_ROWS);
   const overflowFiles = rollup.files.length - files.length;
-  const commands = rollup.commands.slice(0, MAX_COMMAND_ROWS);
+  const commands = rollup.commands.slice(-MAX_COMMAND_ROWS);
   const overflowCommands = rollup.commands.length - commands.length;
+  const hasVisibleRows =
+    files.length > 0
+    || overflowFiles > 0
+    || commands.length > 0
+    || overflowCommands > 0
+    || rollup.others > 0;
+
+  if (!hasVisibleRows) return null;
 
   return (
     <div
@@ -68,7 +74,7 @@ export const AppDevToolRollupLine = memo(function AppDevToolRollupLine({
             <button
               type="button"
               className={cn(
-                'flex h-5 items-center gap-1.5 text-left animate-in fade-in-0 slide-in-from-bottom-1 duration-150',
+                'flex h-5 w-full items-center gap-1.5 text-left animate-in fade-in-0 slide-in-from-bottom-1 duration-150',
                 canExpand
                   ? 'cursor-pointer rounded-sm hover:bg-[var(--sto-bg-inset)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--sto-border-strong)]'
                   : 'cursor-default',
@@ -89,7 +95,7 @@ export const AppDevToolRollupLine = memo(function AppDevToolRollupLine({
                 <Icon className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
               )}
               <span className="text-[var(--sto-text-secondary)]">{appDevFileOpVerb(file)}</span>
-              <span className="truncate text-foreground" title={file.path}>
+              <span className="min-w-0 truncate text-foreground" title={file.path}>
                 {appDevToolBaseName(file.path)}
               </span>
               <DiffCounts added={file.added} removed={file.removed} />
@@ -103,25 +109,26 @@ export const AppDevToolRollupLine = memo(function AppDevToolRollupLine({
           … 另 {overflowFiles} 个文件
         </div>
       ) : null}
-      {commands.map((command, index) => (
+      {commands.length > 0 || overflowCommands > 0 ? (
         <div
-          key={`${command.cmd}-${index}`}
-          className="flex h-5 items-center gap-1.5 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
+          className="mt-0.5 overflow-hidden rounded-md border border-[var(--sto-border-default)] bg-[var(--sto-bg-inset)] px-2 py-1"
+          data-testid="app-dev-tool-rollup-commands"
         >
-          <Terminal className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
-          <span className="text-[var(--sto-text-secondary)]">执行</span>
-          <span className="truncate text-foreground">{command.cmd}</span>
-        </div>
-      ))}
-      {overflowCommands > 0 ? (
-        <div className="flex h-5 items-center gap-1.5 text-[var(--sto-text-tertiary)]">
-          … 另 {overflowCommands} 条命令
-        </div>
-      ) : null}
-      {rollup.reads > 0 ? (
-        <div className="flex h-5 items-center gap-1.5 animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
-          <Search className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
-          <span className="text-[var(--sto-text-secondary)]">读取/检索 {rollup.reads} 次</span>
+          {commands.map((command, index) => (
+            <div
+              key={`${command.cmd}-${index}`}
+              className="flex h-5 items-center gap-1.5 animate-in fade-in-0 slide-in-from-bottom-1 duration-150"
+            >
+              <Terminal className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+              <span className="shrink-0 text-[var(--sto-text-tertiary)]">$</span>
+              <span className="truncate text-foreground" title={command.cmd}>{command.cmd}</span>
+            </div>
+          ))}
+          {overflowCommands > 0 ? (
+            <div className="flex h-5 items-center gap-1.5 text-[var(--sto-text-tertiary)]">
+              … 另 {overflowCommands} 条命令
+            </div>
+          ) : null}
         </div>
       ) : null}
       {rollup.others > 0 ? (

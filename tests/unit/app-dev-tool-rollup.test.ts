@@ -16,6 +16,7 @@ import {
   resolveAppDevTurnDurationMs,
   resolveAppDevTurnTools,
   rollupAppDevTools,
+  shortenAppDevCommandDisplay,
 } from '@/lib/app-dev-tool-rollup';
 import { writeTurnStreamingToolsCache } from '@/lib/thinking-turn-tools-cache';
 
@@ -175,6 +176,15 @@ describe('rollupAppDevTools 聚合', () => {
     const rollup2 = rollupAppDevTools([makeTool({ name: 'Bash', input: { command: singleLong } })]);
     expect(rollup2.commands[0]!.cmd).toHaveLength(60);
     expect(rollup2.commands[0]!.cmd.endsWith('…')).toBe(true);
+  });
+
+  it('命令去掉 cd 前缀，露出真正执行的部分', () => {
+    expect(shortenAppDevCommandDisplay('cd /Users/sto/SClawApps/foo && tsc --noEmit')).toBe('tsc --noEmit');
+    expect(shortenAppDevCommandDisplay("cd '/tmp/a b' && python3 check.py")).toBe('python3 check.py');
+    const rollup = rollupAppDevTools([
+      makeTool({ name: 'Bash', input: { command: 'cd /Users/sto/SClawApps/site && grep -n foo src' } }),
+    ]);
+    expect(rollup.commands[0]!.cmd).toBe('grep -n foo src');
   });
 });
 
