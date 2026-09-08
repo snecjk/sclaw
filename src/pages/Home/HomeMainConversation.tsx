@@ -57,6 +57,7 @@ import {
   attachMissingWorkflowChatCardAnchors,
   workflowAnchorRepairRevision,
 } from '@/lib/workflow-chat-card-registration';
+import { subscribeHostEvent } from '@/lib/host-events';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -120,6 +121,12 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     if (!currentSessionKey || sending) return;
     void loadWorkflowCards(currentSessionKey, true);
   }, [currentSessionKey, sending, loadWorkflowCards]);
+
+  useEffect(() => subscribeHostEvent<{ sessionKey?: string }>('workflow:status-update', (event) => {
+    if (event?.sessionKey === currentSessionKey) {
+      void loadWorkflowCards(currentSessionKey, true);
+    }
+  }), [currentSessionKey, loadWorkflowCards]);
 
   const anchorRepairRevision = workflowAnchorRepairRevision(messages, workflowCards);
   useEffect(() => {

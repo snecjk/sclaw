@@ -683,6 +683,10 @@ export function createEngine(deps: EngineDeps) {
           chat_card_title: args.chatCard?.title ?? null,
           chat_params_summary: args.chatCard?.paramsSummary ?? null,
         });
+        // The initial durable row is sufficient for the renderer to discover
+        // and render the chat card. Broadcast before the potentially slow DSL
+        // fetch so chat completion and workflow progress are fully decoupled.
+        deps.onStatusChange?.(args.runId, 'running');
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
           sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId,
