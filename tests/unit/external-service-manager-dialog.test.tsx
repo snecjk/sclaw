@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExternalServiceManagerDialog } from '@/components/more-apps/ExternalServiceManagerDialog';
@@ -32,6 +32,11 @@ const market = {
   companyCode: '__PLATFORM__', visibility: 'PUBLIC', name: '平台策略服务', description: '',
   owner: 'platform', status: 'ACTIVE', latestVersion: '1.0.0', authType: 'stoToken',
   hasSdk: false, hasUsageGuide: true, updatedAt: '2026-09-02T00:00:00Z',
+};
+const ownedMarket = {
+  ...mine,
+  visibility: 'PUBLIC' as const,
+  latestVersion: '1.0.0',
 };
 const draft = {
   schemaVersion: 'external-service/v1' as const,
@@ -106,6 +111,27 @@ describe('ExternalServiceManagerDialog', () => {
     expect(publishMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '确认发布' }));
     await waitFor(() => expect(publishMock).toHaveBeenCalledWith(mine.serviceUid));
+  });
+
+  it('allows editing an owned service from the marketplace while keeping other services read-only', async () => {
+    pageMarketMock.mockResolvedValueOnce({
+      items: [ownedMarket, market], total: 2, pageNum: 1, pageSize: 100,
+    });
+    render(<ExternalServiceManagerDialog open onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '服务广场' }));
+
+    const platformCard = (await screen.findByText(market.name)).closest('article');
+    const ownedCard = screen.getByText(ownedMarket.name).closest('article');
+    expect(ownedCard).not.toBeNull();
+    expect(platformCard).not.toBeNull();
+    expect(within(ownedCard!).getByRole('button', { name: '编辑' })).toBeInTheDocument();
+    expect(within(platformCard!).queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
+    expect(within(platformCard!).getByRole('button', { name: '查看详情' })).toBeInTheDocument();
+
+    fireEvent.click(within(ownedCard!).getByRole('button', { name: '编辑' }));
+    expect(await screen.findByLabelText('测试环境地址')).toHaveValue(draft.environments.daily);
+    expect(screen.getByRole('button', { name: '发布新版本' })).toBeInTheDocument();
   });
 
   it('filters the current view by service name or service id', async () => {

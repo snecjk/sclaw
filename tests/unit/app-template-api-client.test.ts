@@ -14,8 +14,17 @@ function client() {
 }
 
 describe('AppTemplateApiClient', () => {
+  it('删除模板使用带鉴权的 DELETE 请求并返回软删除状态', async () => {
+    fetchImpl.mockResolvedValueOnce(new Response(JSON.stringify({
+      success: true, data: { templateId: 'custom', status: 'DISABLED' },
+    })));
+    expect(await client().delete('custom')).toEqual({ templateId: 'custom', status: 'DISABLED' });
+    expect(fetchImpl).toHaveBeenCalledWith('https://memory.example.test/agent/v1/app-templates/custom',
+      expect.objectContaining({ method: 'DELETE', headers: { stotoken: 'token-1', Authorization: 'Bearer token-1' } }));
+  });
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchImpl.mockReset();
   });
 
   it('通过 resolveStoBaseUrl + 鉴权头查询模板', async () => {

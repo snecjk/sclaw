@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppTemplateManagerDialog } from '@/components/more-apps/AppTemplateManagerDialog';
@@ -6,9 +6,14 @@ import { AppTemplateManagerDialog } from '@/components/more-apps/AppTemplateMana
 const listMock = vi.fn();
 const openWorkspaceMock = vi.fn();
 const openTabMock = vi.fn();
+const deleteMock = vi.fn();
+const errorMock = vi.fn();
+
+vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => errorMock(...args), success: vi.fn() } }));
 
 vi.mock('@/lib/app-dev-api', () => ({
   listAppTemplates: (...args: unknown[]) => listMock(...args),
+  deleteAppTemplate: (...args: unknown[]) => deleteMock(...args),
   openAppTemplateWorkspace: (...args: unknown[]) => openWorkspaceMock(...args),
 }));
 
@@ -19,6 +24,55 @@ vi.mock('@/stores/app-plaza-shell', () => ({
 }));
 
 describe('AppTemplateManagerDialog', () => {
+  const custom = {
+    templateId: 'custom', pageType: 'site', name: '业务模板', description: '',
+    status: 'ACTIVE', isBuiltin: false, latestVersion: '1.0.0', createdAt: '', updatedAt: '',
+  };
+
+  it('确认删除后移除卡片，取消不发送删除请求', async () => {
+    listMock.mockResolvedValueOnce({ items: [custom] });
+    deleteMock.mockResolvedValue({ templateId: 'custom', status: 'DISABLED' });
+    render(<AppTemplateManagerDialog open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '删除业务模板' }));
+    expect(screen.getByRole('dialog', { name: '删除模板' })).toHaveTextContent('业务模板');
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(deleteMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '删除业务模板' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+    await waitFor(() => expect(screen.queryByText('业务模板')).not.toBeInTheDocument());
+    expect(deleteMock).toHaveBeenCalledWith('custom');
+  });
+
+  it('删除失败保留模板并展示错误', async () => {
+    listMock.mockResolvedValueOnce({ items: [custom] });
+    deleteMock.mockRejectedValueOnce(new Error('没有权限'));
+    render(<AppTemplateManagerDialog open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '删除业务模板' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+    await waitFor(() => expect(errorMock).toHaveBeenCalledWith('没有权限'));
+    expect(screen.getByText('业务模板')).toBeInTheDocument();
+  });
+
+  it('内置模板没有删除入口', async () => {
+    render(<AppTemplateManagerDialog open onClose={vi.fn()} />);
+    await screen.findByText('标准 Site 模版');
+    expect(screen.queryByRole('button', { name: /删除/ })).not.toBeInTheDocument();
+  });
+
+  it('删除请求等待期间禁止重复确认或取消', async () => {
+    listMock.mockResolvedValueOnce({ items: [custom] });
+    let finish!: () => void;
+    deleteMock.mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+    render(<AppTemplateManagerDialog open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '删除业务模板' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+    expect(screen.getByRole('button', { name: '删除中…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '取消' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '删除中…' }));
+    expect(deleteMock).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    expect(screen.queryByRole('dialog', { name: '删除模板' })).not.toBeInTheDocument();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     listMock.mockResolvedValue({

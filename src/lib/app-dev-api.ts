@@ -204,6 +204,10 @@ export async function listAppTemplates(
   return hostApiFetch(`/api/app-templates${query}`);
 }
 
+export async function deleteAppTemplate(templateId: string): Promise<{ templateId: string; status: 'DISABLED' }> {
+  return hostApiFetch(`/api/app-templates/${encodeURIComponent(templateId)}`, { method: 'DELETE' });
+}
+
 export async function openAppTemplateWorkspace(input: {
   templateId?: string;
   pageType: CodeApplicationPageType;

@@ -207,6 +207,15 @@ export async function handleAppTemplateRoutes(
       return true;
     }
 
+    const deleteMatch = url.pathname.match(/^\/api\/app-templates\/([^/]+)$/);
+    if (deleteMatch && req.method === 'DELETE') {
+      assertInternalHostApiRequest(req);
+      const templateId = requireString(decodeURIComponent(deleteMatch[1]!), 'templateId');
+      const result = await appTemplateApiClient.delete(templateId);
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
     const versionsMatch = url.pathname.match(/^\/api\/app-templates\/([^/]+)\/versions$/);
     if (versionsMatch && req.method === 'GET') {
       const versions = await appTemplateApiClient.listVersions(decodeURIComponent(versionsMatch[1]!));

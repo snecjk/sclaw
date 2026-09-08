@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
   const ssoApiProxyTarget = resolveSsoApiProxyTarget(env);
 
   return {
+    base: './',
     plugins: [ssoAuthVite(), react()],
     resolve: {
       alias: {

@@ -69,6 +69,7 @@ function FormSection({
 
 export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [items, setItems] = useState<ExternalServiceSummary[]>([]);
+  const [ownedServiceUids, setOwnedServiceUids] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [marketDetail, setMarketDetail] = useState<ExternalServiceVersionConfig | null>(null);
@@ -85,10 +86,18 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const page = await (view === 'mine'
-        ? pageMyExternalServices({ pageSize: 100 })
-        : pageExternalServices({ pageSize: 100 }));
-      setItems(page.items);
+      if (view === 'mine') {
+        const page = await pageMyExternalServices({ pageSize: 100 });
+        setItems(page.items);
+        setOwnedServiceUids(new Set(page.items.map((item) => item.serviceUid)));
+      } else {
+        const [page, mine] = await Promise.all([
+          pageExternalServices({ pageSize: 100 }),
+          pageMyExternalServices({ pageSize: 100 }),
+        ]);
+        setItems(page.items);
+        setOwnedServiceUids(new Set(mine.items.map((item) => item.serviceUid)));
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '外部服务列表加载失败');
     } finally {
@@ -290,7 +299,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
                               <span className="text-[10px] text-muted-foreground">{item.latestVersion ? `v${item.latestVersion}` : '未发布'}</span>
                             </div>
                           </div>
-                          {view === 'mine' ? (
+                          {view === 'mine' || ownedServiceUids.has(item.serviceUid) ? (
                             <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void edit(item.serviceUid)}>编辑</Button>
                           ) : (
                             <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-xs" disabled={!item.latestVersion} onClick={() => void inspectMarketService(item)}>查看详情</Button>
@@ -311,7 +320,7 @@ export function ExternalServiceManagerDialog({ open, onClose }: { open: boolean;
               </div>
             ) : null}
 
-            {view === 'market' ? (
+            {view === 'market' && editingId === null ? (
               marketDetail ? (
                 <div className="min-h-0 flex-1 overflow-y-auto p-6">
                   <div className="mx-auto max-w-[840px] space-y-4">
