@@ -118,6 +118,20 @@ export class CatalogSessionRepository {
     return rows.map(mapRow);
   }
 
+  async listAll(options?: { includeDeleted?: boolean }): Promise<CatalogSession[]> {
+    const db = getKyselyDatabase();
+    let query = db.selectFrom('catalog_sessions').selectAll();
+    if (options?.includeDeleted !== true) {
+      query = query.where('deleted_at', 'is', null);
+    }
+    const rows = await query
+      .orderBy(sql`CASE WHEN pin_rank IS NULL THEN 1 ELSE 0 END`, 'asc')
+      .orderBy('last_activity_at', 'desc')
+      .orderBy('session_key', 'asc')
+      .execute();
+    return rows.map(mapRow);
+  }
+
   async listAllBindings(): Promise<Array<{ workspaceId: string; sessionKey: string }>> {
     const db = getKyselyDatabase();
     const rows = await db

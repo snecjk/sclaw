@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   appendPendingLocalVirtualTaskSessions,
   filterTaskSidebarCatalogRows,
+  mergeEngineAndCatalogChatSessions,
   mergeEngineAndCatalogScheduledTaskSessions,
   omitSupersededCronDatedAgentTwins,
   preferCatalogTaskTitle,
@@ -414,5 +415,73 @@ describe('resolveCatalogRowTaskName', () => {
       sessionType: 'scheduled_task',
       taskId: null,
     }, nameMaps)).toBe('PI 日报任务');
+  });
+});
+
+describe('mergeEngineAndCatalogChatSessions', () => {
+  it('fills catalog-only project chat rows missing from the engine list', () => {
+    const merged = mergeEngineAndCatalogChatSessions(
+      [{ key: 'agent:main:session-recent' }],
+      [{
+        sessionKey: 'agent:proj-5d8e13f8--main:session-1',
+        sessionType: 'chat',
+        title: null,
+        lastActivityAt: '2026-09-01T01:00:00.000Z',
+      }],
+    );
+    expect(merged.map((session) => session.key)).toEqual([
+      'agent:main:session-recent',
+      'agent:proj-5d8e13f8--main:session-1',
+    ]);
+    expect(merged[1]).toMatchObject({
+      engineType: 'openclaw',
+      updatedAt: Date.parse('2026-09-01T01:00:00.000Z'),
+    });
+  });
+
+  it('does not hide empty-title catalog chats and skips app-dev keys', () => {
+    const merged = mergeEngineAndCatalogChatSessions(
+      [],
+      [
+        {
+          sessionKey: 'agent:proj-a--main:session-1',
+          sessionType: 'chat',
+          title: null,
+          lastActivityAt: null,
+        },
+        {
+          sessionKey: 'agent:proj-a:appdev:workspace-1',
+          sessionType: 'app_dev',
+          title: '建站会话',
+          lastActivityAt: '2026-09-01T01:00:00.000Z',
+        },
+      ],
+    );
+    expect(merged.map((session) => session.key)).toEqual([
+      'agent:proj-a--main:session-1',
+    ]);
+  });
+
+  it('lets engine fields win when the same key already exists', () => {
+    const merged = mergeEngineAndCatalogChatSessions(
+      [{
+        key: 'agent:proj-a--main:session-1',
+        label: '引擎标题',
+        engineType: 'claude',
+        updatedAt: 100,
+      }],
+      [{
+        sessionKey: 'agent:proj-a--main:session-1',
+        sessionType: 'chat',
+        title: 'catalog 标题',
+        lastActivityAt: '2026-09-01T01:00:00.000Z',
+      }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      label: '引擎标题',
+      engineType: 'claude',
+      updatedAt: 100,
+    });
   });
 });
