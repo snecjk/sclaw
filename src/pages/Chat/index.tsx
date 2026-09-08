@@ -65,6 +65,7 @@ import {
   attachMissingWorkflowChatCardAnchors,
   workflowAnchorRepairRevision,
 } from '@/lib/workflow-chat-card-registration';
+import { subscribeHostEvent } from '@/lib/host-events';
 import { getCurrentChatDisplayMessages, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
 
@@ -178,6 +179,15 @@ export function Chat() {
     // workflow tool-result event reaching the renderer.
     void loadWorkflowCards(currentSessionKey, true);
   }, [currentSessionKey, sending, loadWorkflowCards]);
+
+  // A chat-originated run is persisted before its DSL is fetched. Refresh on
+  // that first running broadcast so its card appears while the chat agent is
+  // still composing the acknowledgement, rather than only at turn end.
+  useEffect(() => subscribeHostEvent<{ sessionKey?: string }>('workflow:status-update', (event) => {
+    if (event?.sessionKey === currentSessionKey) {
+      void loadWorkflowCards(currentSessionKey, true);
+    }
+  }), [currentSessionKey, loadWorkflowCards]);
 
   useEffect(() => {
     if (!currentSessionKey || workflowCards.every((card) => card.anchorUserMessageId)) return;
