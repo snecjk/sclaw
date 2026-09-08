@@ -32,4 +32,11 @@ describe('chat runtime error message', () => {
       .toBe(i18n.t('chat:runtime.errors.modelAuthentication'));
     expect(resolveChatRuntimeErrorCode({ error }, 'Chat run failed')).toBe('AUTH_INVALID');
   });
+
+  it('explains when a Pi session no longer has a workspace', () => {
+    const error = 'PI_WORKSPACE_UNAVAILABLE: session agent:proj-example:appdev:project-1 has no cwd';
+    expect(formatChatRuntimeErrorMessage({ error }, 'Chat run failed'))
+      .toBe(i18n.t('chat:runtime.errors.workspaceUnavailable'));
+    expect(resolveChatRuntimeErrorCode({ error }, 'Chat run failed')).toBe('GATEWAY');
+  });
 });

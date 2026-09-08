@@ -398,6 +398,7 @@
       "networkRetryExhausted": "The network connection failed after {{count}} automatic retries. Restore the connection and send again.",
       "modelAuthentication": "Model service authentication has expired or is unavailable. Sign in again and retry; contact your administrator if it persists.",
       "claudeCertificate": "Claude could not connect to the API because certificate verification failed. Check your proxy or corporate certificate configuration, then retry.",
+      "workspaceUnavailable": "The workspace for this conversation is unavailable and may have been deleted, Start a new conversation.",
       "requestTimeout": "The model request timed out. Check your connection and try again.",
       "rateLimit": "The model is rate-limited. Please wait a moment and try again."
     }

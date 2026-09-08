@@ -19,6 +19,10 @@ function isClaudeCertificateErrorMessage(message: string): boolean {
     || lower.includes('certificate verification error');
 }
 
+function isWorkspaceUnavailableErrorMessage(message: string): boolean {
+  return message.includes('PI_WORKSPACE_UNAVAILABLE');
+}
+
 function isModelAuthenticationErrorMessage(message: string): boolean {
   const lower = message.toLowerCase();
   return lower.includes('apikey_notfound')
@@ -36,6 +40,7 @@ export function resolveChatRuntimeErrorCode(
   if (reason === 'recovery-timeout') return 'TIMEOUT';
   if (reason === 'network-retry-exhausted') return 'NETWORK';
   const errorText = String(payload?.error ?? fallbackMessage);
+  if (isWorkspaceUnavailableErrorMessage(errorText)) return 'GATEWAY';
   if (isModelAuthenticationErrorMessage(errorText)) return 'AUTH_INVALID';
   if (isClaudeCertificateErrorMessage(errorText)) return 'NETWORK';
   if (isRequestTimeoutMessage(errorText)) return 'TIMEOUT';
@@ -57,6 +62,9 @@ export function formatChatRuntimeErrorMessage(
     });
   }
   const errorText = String(payload?.error ?? fallbackMessage);
+  if (isWorkspaceUnavailableErrorMessage(errorText)) {
+    return i18n.t('chat:runtime.errors.workspaceUnavailable');
+  }
   if (isModelAuthenticationErrorMessage(errorText)) {
     return i18n.t('chat:runtime.errors.modelAuthentication');
   }
@@ -82,6 +90,9 @@ export function formatChatRuntimeErrorForDisplay(error: AppError): string {
       ? error.details.retryAttempts
       : 0;
     return i18n.t('chat:runtime.errors.networkRetryExhausted', { count: retryAttempts });
+  }
+  if (isWorkspaceUnavailableErrorMessage(error.message)) {
+    return i18n.t('chat:runtime.errors.workspaceUnavailable');
   }
   if (error.code === 'AUTH_INVALID' || isModelAuthenticationErrorMessage(error.message)) {
     return i18n.t('chat:runtime.errors.modelAuthentication');
