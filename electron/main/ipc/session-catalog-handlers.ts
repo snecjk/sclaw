@@ -22,18 +22,12 @@ import {
 import { getSessionGroupRepository } from '../../db/repositories/session-group-repository';
 import type { GatewayManager } from '../../gateway/manager';
 import type { AgentEngineType } from '../../engines/types';
+import { getGatewayManagerRef } from '../runtime-refs';
 
-let gatewayManagerRef: GatewayManager | null = null;
 async function getGatewayManager(): Promise<GatewayManager | null> {
-  if (gatewayManagerRef) return gatewayManagerRef;
-  try {
-    const mainModule = await import('../index');
-    gatewayManagerRef = mainModule.gatewayManager ?? null;
-    return gatewayManagerRef;
-  } catch (error) {
-    logger.warn('[session-catalog] failed to resolve gatewayManager from main module', error);
-    return null;
-  }
+  // gatewayManager 由 main.ts 在构造核心服务后写入 runtime-refs；
+  // 这里直接读取，避免对引导入口模块的动态反向导入。
+  return getGatewayManagerRef();
 }
 
 type SessionCatalogInvokeRequest = {

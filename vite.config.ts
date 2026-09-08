@@ -1,9 +1,14 @@
-import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
 import { resolve } from 'path';
+import {
+  resolveAgentLoopBuildConfig,
+  serializeAgentLoopSecrets,
+  toAgentLoopProcessEnvDefine,
+} from './scripts/agentloop-env';
 
 function copyGatewayPreloadCjs(outDir: string) {
   const src = resolve(__dirname, 'electron/gateway/gateway-fetch-preload.cjs');
@@ -15,16 +20,25 @@ function copyGatewayPreloadCjs(outDir: string) {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 含 .env.development.local；electron 子构建需通过 define 注入，否则读不到
-  const env = loadEnv(mode, process.cwd(), '');
-  const appEnv = env.VITE_APP_ENV || process.env.VITE_APP_ENV || (mode === 'development' ? 'development' : 'production');
-  const stoMemoryCenterBaseUrl = (env.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
-  const stoSclawHubBaseUrl = (env.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
-  const stoWisdomStarBaseUrl = (env.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
+  const loadedEnv = loadEnv(mode, process.cwd(), '');
+  const appEnv = loadedEnv.VITE_APP_ENV || process.env.VITE_APP_ENV || (mode === 'development' ? 'development' : 'production');
+  const stoMemoryCenterBaseUrl = (loadedEnv.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
+  const stoSclawHubBaseUrl = (loadedEnv.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
+  const stoWisdomStarBaseUrl = (loadedEnv.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
+
+  // AgentLoop / ARMS：按 mode 解析固定应用名映射与接入配置。
+  // 非敏感字段走 define 注入主进程 bundle；License 只写入 dist-electron/main/agentloop.config.json，
+  // 由主进程引导入口在运行时读取（构建日志与代码生成中均不出现凭证值）。
+  const agentLoopConfig = resolveAgentLoopBuildConfig(mode, loadedEnv, process.env);
+  for (const warning of agentLoopConfig.warnings) {
+    console.warn(warning);
+  }
   const envDefine = {
     'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
     'process.env.STO_MEMORY_CENTER_BASE_URL': JSON.stringify(stoMemoryCenterBaseUrl),
     'process.env.STO_SCLAW_HUB_BASE_URL': JSON.stringify(stoSclawHubBaseUrl),
     'process.env.STO_WISDOM_STAR_BASE_URL': JSON.stringify(stoWisdomStarBaseUrl),
+    ...toAgentLoopProcessEnvDefine(agentLoopConfig),
   };
 
   return {
@@ -42,9 +56,14 @@ export default defineConfig(({ mode }) => {
           onstart(options) {
             // Cursor/CI may set ELECTRON_RUN_AS_NODE=1, which makes require('electron')
             // resolve to the npm path string instead of the Electron API in the main process.
-            const env = { ...process.env };
-            delete env.ELECTRON_RUN_AS_NODE;
-            options.startup(['.', '--no-sandbox'], { env });
+            const electronEnv = { ...process.env, ...loadedEnv };
+            delete electronEnv.ELECTRON_RUN_AS_NODE;
+
+            // AgentLoop / ARMS：探针改由主进程引导入口（electron/main/index.ts）统一注册，
+            // 覆盖 development 与打包应用。此处不再注入 NODE_OPTIONS --require，
+            // 避免把探针带进 vite / electron-rebuild / zx 等前置脚本进程。
+
+            options.startup(['.', '--no-sandbox'], { env: electronEnv });
           },
           vite: {
             define: envDefine,
@@ -55,6 +74,20 @@ export default defineConfig(({ mode }) => {
                   copyGatewayPreloadCjs(resolve(__dirname, 'dist-electron/main'));
                 },
               },
+              {
+                name: 'write-agentloop-config-json',
+                closeBundle() {
+                  // License 不进 Vite define：构建日志和产物源码中都不出现凭证值，
+                  // 运行时由主进程引导入口读取该文件并注入 process.env。
+                  const outDir = resolve(__dirname, 'dist-electron/main');
+                  mkdirSync(outDir, { recursive: true });
+                  writeFileSync(
+                    resolve(outDir, 'agentloop.config.json'),
+                    serializeAgentLoopSecrets(agentLoopConfig.secrets),
+                    'utf-8',
+                  );
+                },
+              },
             ],
             build: {
               outDir: 'dist-electron/main',
@@ -63,6 +96,15 @@ export default defineConfig(({ mode }) => {
                   'electron',
                   'electron-store',
                   'electron-updater',
+                  // Keep SDK external so @loongsuite/cms_node_sdk can auto-instrument
+                  // claude-agent-sdk at runtime (bundled code cannot be patched).
+                  '@anthropic-ai/claude-agent-sdk',
+                  /^@anthropic-ai\/claude-agent-sdk/,
+                  // Keep the CMS probe itself external too: it uses import-in-the-middle
+                  // to hook claude-agent-sdk at runtime, which requires real module files
+                  // on disk (must not be inlined into the main bundle).
+                  '@loongsuite/cms_node_sdk/register',
+                  /^@loongsuite\/cms_node_sdk/,
                   // mem0's official OSS entry imports its provider peers at runtime.
                   // Keep it external so electron-builder packages those dependencies
                   // once under node_modules instead of duplicating them in this bundle.
@@ -73,9 +115,12 @@ export default defineConfig(({ mode }) => {
                   /^node:/,
                 ],
                 output: {
-                  // Keep main process in a single file so require('electron') resolves
-                  // to the built-in module (not node_modules/electron path string).
-                  inlineDynamicImports: true,
+                  // 主进程为多 chunk 输出：引导入口 index.js（先注册 AgentLoop 探针）
+                  // + 业务入口 main.js（由 index 在探针注册后 require）。两者同为 CJS，
+                  // require('electron') 在任一分片中均解析为内置模块（而非 node_modules
+                  // 路径字符串），故无需再用 inlineDynamicImports 强制单文件——该选项会把
+                  // require('./main') 拆出的 main.js 分片静默丢弃，导致业务逻辑缺失。
+                  inlineDynamicImports: false,
                 },
               },
             },

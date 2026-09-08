@@ -36,19 +36,12 @@ import {
 import { acquireBridgeAiQuota } from './bridge-ai-quota';
 import { logBridgeAiAudit } from './bridge-ai-audit';
 import { logger } from '../../../utils/logger';
-
-let gatewayManagerRef: GatewayManager | null = null;
+import { getGatewayManagerRef } from '../../runtime-refs';
 
 async function resolveGatewayManager(): Promise<GatewayManager | null> {
-  if (gatewayManagerRef) return gatewayManagerRef;
-  try {
-    const mainModule = await import('../../index');
-    gatewayManagerRef = mainModule.gatewayManager ?? null;
-    return gatewayManagerRef;
-  } catch (error) {
-    logger.warn('[bridge-ai] failed to resolve gatewayManager', error);
-    return null;
-  }
+  // gatewayManager 由 main.ts 在构造核心服务后写入 runtime-refs；
+  // 这里直接读取，避免对引导入口模块的动态反向导入。
+  return getGatewayManagerRef();
 }
 
 function bridgeAiError(code: string, message: string): Error & { code: string } {
