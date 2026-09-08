@@ -13,6 +13,7 @@ import {
   type DingTalkPendingContext,
   type StoDingTalkSendGuardPort,
 } from '../../electron/agent-extensions/extensions/sto-dingtalk-send-guard/capability';
+import { resolveDingTalkSendStaticProblem } from '../../electron/agent-extensions/extensions/sto-dingtalk-send-guard/command';
 import { stoDingTalkSendGuardDefinition } from '../../electron/agent-extensions/extensions/sto-dingtalk-send-guard/definition';
 import {
   completeDingTalkSend,
@@ -261,5 +262,40 @@ describe('sto DingTalk send guard common extension', () => {
       sessionKey: 'scheduled', toolCallId: 'scheduled-ok', category: 'text',
       recipientKey: 'user:u2', normalizedText: 'different', scheduledExecution: true, now: 25_000,
     })).toEqual({ allowed: true });
+  });
+});
+
+describe('resolveDingTalkSendStaticProblem', () => {
+  it('blocks shell heredoc --text payloads', () => {
+    const command =
+      "dws chat message send --user xxx --text $(cat <<'EOF'\n# 标题\nEOF)";
+    const problem = resolveDingTalkSendStaticProblem(command);
+    expect(problem).toContain('heredoc');
+    expect(problem).toContain('--text');
+  });
+
+  it('blocks leftover I + CJK heading after shell ate #', () => {
+    const command = 'dws chat message send --user xxx --text "I 标题"';
+    const problem = resolveDingTalkSendStaticProblem(command);
+    expect(problem).toContain('I 中文');
+    expect(problem).toContain('#');
+  });
+
+  it('allows quoted markdown headings and ordinary text', () => {
+    expect(
+      resolveDingTalkSendStaticProblem(
+        'dws chat message send --user xxx --text "### 标题\\n\\n正文"',
+      ),
+    ).toBeNull();
+    expect(
+      resolveDingTalkSendStaticProblem(
+        'dws chat message send --user xxx --text "正常消息"',
+      ),
+    ).toBeNull();
+    expect(
+      resolveDingTalkSendStaticProblem(
+        'dws chat message send --user xxx --text "I like this"',
+      ),
+    ).toBeNull();
   });
 });

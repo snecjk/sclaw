@@ -1,11 +1,18 @@
+import { appendDingTalkAgentSendDisclaimer } from './shared/dingtalk-prompts/dingtalk-disclaimer.js';
 import { DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON } from './shared/dingtalk-prompts/dingtalk-send-rules.js';
-import { dwsChatMessageSendTextContainsLocalArtifactPath } from './shared/dingtalk-send/dws-send-text.js';
+import {
+  buildDwsChatMessageSendAgentCommandExample,
+  dwsChatMessageSendTextContainsLocalArtifactPath,
+} from './shared/dingtalk-send/dws-send-text.js';
 
 const DWS_CHAT_MESSAGE_SEND = /dws\s+chat\s+message\s+send\b/i;
 const DWS_SEND_DRY_RUN = /--dry-run\b/i;
 const SHELL_LOOP_KEYWORD = /\b(?:for|while|until|seq|xargs)\b/i;
 const DWS_SEND_MEDIA_MSG_TYPE = /--msg-type\s+(?:image|file)\b/i;
 const DWS_SEND_MEDIA_FLAG = /(?:--media-id\b|\s--file\s)/i;
+const HEREDOC = /<<\s*['"]?EOF['"]?/i;
+const CAT_HEREDOC = /\$\s*\(\s*cat\s+<</i;
+const LOST_MARKDOWN_HEADING = /--text\s+["']I\s+[一-鿿]/;
 
 const COMMAND_PARAM_KEYS = [
   'command',
@@ -104,6 +111,14 @@ export function isBatchDwsChatMessageSend(commandText: string): boolean {
   return false;
 }
 
+function buildDingTalkSendRetryExample(): string {
+  return buildDwsChatMessageSendAgentCommandExample({
+    recipientKind: 'user',
+    recipientId: '<userId>',
+    text: appendDingTalkAgentSendDisclaimer('{正文}'),
+  });
+}
+
 export function resolveDwsChatMessageSendTextFormatProblem(commandText: string): string | null {
   if (!containsDwsChatMessageSend(commandText) || isDwsChatMessageSendDryRun(commandText)) {
     return null;
@@ -120,6 +135,32 @@ export function resolveDwsChatMessageSendTextFormatProblem(commandText: string):
     '请重试：直接调用 `dws chat message send ... --text "正文\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json`；',
     'SClaw 会在执行前把 `\\n` 转为真实换行（Windows OpenClaw exec 走 PowerShell，并优先改写为直接 dws 调用）。',
   ].join('');
+}
+
+/**
+ * 禁止 Shell heredoc / 标题丢失（`#` 被 shell 当注释吃掉后变成 `I 中文`）。
+ * 不豁免 `--dry-run`：内容问题，预览也应被挡。
+ */
+export function resolveDwsChatMessageSendHeredocOrLostHeadingProblem(
+  commandText: string,
+): string | null {
+  if (!containsDwsChatMessageSend(commandText)) return null;
+  if (HEREDOC.test(commandText) || CAT_HEREDOC.test(commandText)) {
+    return [
+      '[SClaw 安全策略] 钉钉发送正文禁止使用 Shell heredoc（`<<EOF` / `$(cat <<EOF)`）。',
+      'heredoc 会把 Markdown 标题的 `#` 当成注释吃掉，导致标题丢失。',
+      '请改用 --text "..." 直接传正文，示例：',
+      buildDingTalkSendRetryExample(),
+    ].join('\n');
+  }
+  if (LOST_MARKDOWN_HEADING.test(commandText)) {
+    return [
+      '[SClaw 安全策略] 检测到 `--text` 正文以 `I 中文` 开头，这通常是 Markdown 标题 `# 标题` 被 Shell 把 `#` 当成注释吃掉后的残留。',
+      '请改用 --text "### 标题\\n\\n正文"，不要使用 heredoc 或未加引号的 `#`，示例：',
+      buildDingTalkSendRetryExample(),
+    ].join('\n');
+  }
+  return null;
 }
 
 /**
@@ -281,6 +322,16 @@ export function evaluateDingTalkSendGuard(input: {
       allowed: false,
       reason:
         '[SClaw 安全策略] 禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。',
+    };
+  }
+
+  // heredoc / 标题丢失：内容问题，不豁免 --dry-run。
+  const heredocOrHeadingProblem =
+    resolveDwsChatMessageSendHeredocOrLostHeadingProblem(commandText);
+  if (heredocOrHeadingProblem) {
+    return {
+      allowed: false,
+      reason: heredocOrHeadingProblem,
     };
   }
 
