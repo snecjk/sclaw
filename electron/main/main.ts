@@ -1052,6 +1052,11 @@ if (gotTheLock) {
   // Application lifecycle
   app.whenReady().then(async () => {
     _ts('app.whenReady() resolved');
+    void import('../services/pi-runtime-service').then(({ getPiRuntimeService }) =>
+      getPiRuntimeService().warmup().catch((error) => {
+        logger.warn('Pi runtime warmup failed; it will retry on first use:', error);
+      }),
+    );
     if (await migrateLegacyMacAppBundleIfNeeded()) {
       return;
     }
@@ -1121,21 +1126,26 @@ if (gotTheLock) {
 
     if (!gatewayManager) {
       // Gateway never initialized (quit during early startup); nothing to clean up.
-      markQuitCleanupCompleted(quitLifecycleState);
-      app.quit();
+      void import('../services/pi-runtime-service').then(({ getPiRuntimeService }) =>
+        getPiRuntimeService().shutdown(),
+      ).catch(() => {}).finally(() => {
+        markQuitCleanupCompleted(quitLifecycleState);
+        app.quit();
+      });
       return;
     }
 
-    void import('./gateway-quit-cleanup').then(({ shutdownGatewayForQuit }) =>
-      shutdownGatewayForQuit(gatewayManager!)
+    void Promise.all([
+      import('./gateway-quit-cleanup').then(({ shutdownGatewayForQuit }) => shutdownGatewayForQuit(gatewayManager!)),
+      import('../services/pi-runtime-service').then(({ getPiRuntimeService }) => getPiRuntimeService().shutdown()),
+    ])
         .catch((err) => {
-          logger.warn('Gateway quit cleanup failed:', err);
+          logger.warn('Runtime quit cleanup failed:', err);
         })
         .finally(() => {
           markQuitCleanupCompleted(quitLifecycleState);
           app.quit();
-        }),
-    );
+        });
   });
 
   // Best-effort Gateway cleanup on unexpected crashes.

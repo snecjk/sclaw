@@ -47,6 +47,12 @@ import {
   isLikelyPlanningNarration,
   isLikelyUserClarificationReply,
 } from '@/pages/Chat/thinking/classify-text';
+import {
+  findLatestAgentPreparationProgressMessage,
+  findLatestSkillRoutingProgressMessage,
+  isAgentPreparationProgressMessage,
+} from './skill-routing-progress';
+import { AgentPreparationStatusList } from './SkillRoutingStatusCard';
 
 type StreamingTool = ToolStatus;
 const EMPTY_STREAMING_TOOLS: StreamingTool[] = [];
@@ -88,6 +94,8 @@ export interface ActiveTurnStream {
   isConnecting: boolean;
   isProcessing: boolean;
   isStillExecuting?: boolean;
+  isCompacting?: boolean;
+  isCompactionRetrying?: boolean;
 }
 
 interface AssistantTurnMessageProps {
@@ -112,6 +120,14 @@ function collectActiveTurnStreamSources(
   precedingUserMessage: RawMessage | null,
   activeStream: ActiveTurnStream,
 ): RawMessage[] {
+  const contentTurnMessages = turnMessages.filter((message) => !isAgentPreparationProgressMessage(message));
+  const contentStreamingMessages = activeStream.streamingMessages.filter(
+    (message) => !isAgentPreparationProgressMessage(message),
+  );
+  const contentStreamMessage = isAgentPreparationProgressMessage(activeStream.streamMessage)
+    ? null
+    : activeStream.streamMessage;
+
   // Fresh background/cron trigger (no preceding user message): this activeTurn
   // is a brand-new run that must NOT inherit the previous turn's assistant
   // messages. Skip the session-history scan entirely — otherwise
@@ -123,16 +139,16 @@ function collectActiveTurnStreamSources(
   if (!precedingUserMessage) {
     return collectTurnAssistantSources(
       [],
-      [...turnMessages, ...activeStream.streamingMessages],
+      [...contentTurnMessages, ...contentStreamingMessages],
       null,
-      activeStream.streamMessage,
+      contentStreamMessage,
     );
   }
   const sources = collectTurnAssistantSources(
     sessionMessages,
-    [...turnMessages, ...activeStream.streamingMessages],
+    [...contentTurnMessages, ...contentStreamingMessages],
     precedingUserMessage,
-    activeStream.streamMessage,
+    contentStreamMessage,
   );
   return sources;
 }
@@ -223,6 +239,20 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     turnDisplayCacheKey,
   ]);
 
+  const preparationMessages = [
+    ...turnMessages,
+    ...(activeStream?.streamingMessages ?? []),
+    activeStream?.streamMessage,
+  ];
+  const skillRoutingProgressMessage = findLatestSkillRoutingProgressMessage(preparationMessages);
+  const memoryRetrievalProgressMessage = findLatestAgentPreparationProgressMessage(
+    preparationMessages,
+    'memory',
+  );
+  const hasPreparationProgress = Boolean(
+    skillRoutingProgressMessage || memoryRetrievalProgressMessage,
+  );
+
   const cachedToolResultsForTurn = useMemo(
     () => readTurnToolResultsCache(turnDisplayCacheKey, turnCacheAliasKeys),
     [turnDisplayCacheKey, turnCacheAliasKeys],
@@ -301,6 +331,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const isConnecting = activeStream?.isConnecting ?? false;
   const isProcessing = activeStream?.isProcessing ?? false;
   const isStillExecuting = activeStream?.isStillExecuting ?? false;
+  const isCompacting = activeStream?.isCompacting ?? false;
+  const isCompactionRetrying = activeStream?.isCompactionRetrying ?? false;
 
   const precedingUserText = useMemo(() => {
     if (precedingUserMessage) {
@@ -337,12 +369,13 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   );
 
   const showThinkingPanel =
-    showThinking &&
-    (thinkingLayout.segments.length > 0 ||
+    (showThinking && (thinkingLayout.segments.length > 0 ||
       bakedStreamingTools.length > 0 ||
       isConnecting ||
       isProcessing ||
-      isStillExecuting);
+      isStillExecuting))
+    || isCompacting
+    || isCompactionRetrying;
 
   const replyMessage = useMemo(() => {
     // A completed run can still be displayed from the retained overlay while
@@ -532,10 +565,12 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     () =>
       resolveTurnProcessStatus({
         isLiveStream:
-          isStreaming || isConnecting || isProcessing || isStillExecuting,
+          isStreaming || isConnecting || isProcessing || isStillExecuting || isCompacting || isCompactionRetrying,
         isConnecting,
         isProcessing,
         isStillExecuting,
+        isCompacting,
+        isCompactionRetrying,
         streamingTools: bakedStreamingTools,
         hasProcessSegments:
           thinkingSegmentsForDisplay.length > 0 || bakedStreamingTools.length > 0,
@@ -548,15 +583,24 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isConnecting,
       isProcessing,
       isStillExecuting,
+      isCompacting,
+      isCompactionRetrying,
       bakedStreamingTools,
       thinkingSegmentsForDisplay.length,
       replyDisplayHasText,
     ],
   );
 
-  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard && !chatDisplayHasFlowCard) {
+  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard && !chatDisplayHasFlowCard && !hasPreparationProgress) {
     return null;
   }
+
+  const preparationStatusEl = hasPreparationProgress ? (
+    <AgentPreparationStatusList
+      skillMessage={skillRoutingProgressMessage}
+      memoryMessage={memoryRetrievalProgressMessage}
+    />
+  ) : null;
 
   const thinkingPanelEl = showThinkingPanel ? (
     <ThinkingTurnProcess
@@ -584,6 +628,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   if (((replyDisplayHasText || chatDisplayHasWorkflowCard || chatDisplayHasFlowCard) && chatDisplayMessageWithTimestamp) || hasPreambleMessages) {
     return (
       <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
+        {preparationStatusEl}
         {thinkingPanelEl}
         {hasDingTalkSentPreview ? (
           <DingTalkSentPreview previews={dingTalkSentPreviews} />
@@ -641,11 +686,12 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     );
   }
 
-  if (!showThinkingPanel && !hasDingTalkSentPreview) return null;
+  if (!showThinkingPanel && !hasDingTalkSentPreview && !hasPreparationProgress) return null;
 
   if (hasDingTalkSentPreview) {
     return (
       <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
+        {preparationStatusEl}
         {thinkingPanelEl}
         <DingTalkSentPreview previews={dingTalkSentPreviews} />
       </div>
@@ -653,7 +699,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   }
 
   return (
-    <div className="w-full" data-chat-message-role="assistant">
+    <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
+      {preparationStatusEl}
       {thinkingPanelEl}
     </div>
   );

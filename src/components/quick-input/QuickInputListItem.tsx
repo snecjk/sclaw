@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { QuickInputIcon } from '@/components/icons/composer-toolbar-icons';
+import { SidebarSessionTitle } from '@/components/layout/sidebar-session-title';
 import type { QuickInputItem } from './types';
 
 const TOOLTIP_DELAY_MS = 200;
@@ -76,14 +77,15 @@ export function QuickInputListItem({ item, onSelect }: QuickInputListItemProps) 
         onFocus={show}
         onBlur={hide}
         className={cn(
-          'flex h-8 w-full items-center gap-1.5 self-stretch rounded-lg p-2 text-left transition-colors',
+          'sto-sidebar-session-title-trigger flex h-8 w-full items-center gap-1.5 self-stretch rounded-lg p-2 text-left transition-colors',
           'hover:bg-[#F0F2F5] dark:hover:bg-muted',
         )}
       >
         <QuickInputIcon className="h-[14px] w-[14px] shrink-0 text-[#111827] dark:text-foreground" />
-        <span className="min-w-0 flex-1 truncate text-xs font-normal leading-4 text-[#111827] dark:text-foreground">
-          {item.title}
-        </span>
+        <SidebarSessionTitle
+          label={item.title}
+          className="text-xs font-normal leading-4 text-[#111827] dark:text-foreground"
+        />
       </button>
       {tip
         ? createPortal(

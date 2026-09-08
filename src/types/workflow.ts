@@ -335,7 +335,7 @@ export interface WorkflowRunResponse {
   triggerType?: WorkflowRunTriggerType;
   /** Client-local chat session used by the optional “return to conversation” action. */
   sessionKey?: string | null;
-  engineType?: 'claude' | 'openclaw';
+  engineType?: import('../../shared/agent-engine').AgentEngineType;
   engineModel?: string | null;
   startedAt: string;
   completedAt?: string | null;

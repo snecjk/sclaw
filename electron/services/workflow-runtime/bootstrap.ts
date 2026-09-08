@@ -18,6 +18,7 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getStoTokenQuotaService } from '../sto-token-quota-service';
 import { invokeAgent as agentRunnerInvokeAgent } from './agent-runner-claude';
 import { invokeOpenClawWorkflowAgent, releaseOpenClawWorkflowAgentSession } from './agent-runner-openclaw';
+import { invokePiWorkflowAgent, releasePiWorkflowAgentSession } from './agent-runner-pi';
 import type { GatewayManager } from '../../gateway/manager';
 import { getWorkflowRuntimeRepository } from '../../db';
 import { ScheduleTaskRunRepository } from '../../db/repositories/schedule-task-run-repository';
@@ -83,7 +84,9 @@ export function createWorkflowRuntimeEngineDeps(
       if (!effectiveModel) {
         throw new Error('Workflow execution model is missing');
       }
-      const execEngine = run?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
+      const execEngine = run?.engine_type === 'openclaw'
+        ? 'openclaw'
+        : run?.engine_type === 'claude' ? 'claude' : 'pi';
       const persistActualModel = async (model: string): Promise<void> => {
         await getWorkflowRuntimeRepository().updateRunIfActive(args.ctx.runId, { engine_model: model });
         workflowExecLog('info', 'agent-model-selected', 'workflow agent model resolved', {
@@ -101,6 +104,21 @@ export function createWorkflowRuntimeEngineDeps(
           attempt: args.attempt, model: effectiveModel,
           agentSessionId: args.agentSessionId, resumeSession: args.resumeSession,
           noProgressMs: (args as any).noProgressMs, deadlineMs: (args as any).deadlineMs, onStreamEvent: args.onStreamEvent });
+      }
+      if (run?.engine_type === 'pi') {
+        if (!args.agentSessionId) throw new Error('SAgent workflow node session is required');
+        await persistActualModel(effectiveModel);
+        return invokePiWorkflowAgent({
+          ctx: { ...args.ctx, nodeId: args.nodeId },
+          prompt: args.prompt,
+          model: effectiveModel,
+          agentSessionId: args.agentSessionId,
+          originSessionKey: run.session_key ?? '',
+          cwd: workspacePath(args.ctx.runId, args.nodeId),
+          noProgressMs: (args as any).noProgressMs,
+          deadlineMs: (args as any).deadlineMs,
+          onStreamEvent: args.onStreamEvent,
+        });
       }
       const sdk = await getSdk();
       return agentRunnerInvokeAgent({
@@ -146,6 +164,10 @@ export function createWorkflowRuntimeEngineDeps(
       const run = await getWorkflowRuntimeRepository().getRun(runId);
       if (run?.engine_type === 'openclaw') {
         await releaseOpenClawWorkflowAgentSession(nodeSessionId);
+        return;
+      }
+      if (run?.engine_type === 'pi') {
+        await releasePiWorkflowAgentSession(nodeSessionId);
         return;
       }
       const sdk = await getSdk();

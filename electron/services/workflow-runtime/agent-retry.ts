@@ -10,6 +10,7 @@
 import type { RunCtx, AgentRunSpec, AgentNodeResult } from './types';
 import { validateOutputAgainstSchema } from './agent-output';
 import { buildWorkflowNodePrompt } from './prompt-builder';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 import {
   createFailurePacket,
   claudeStructuredOutputEnvelopeJsonSchema,
@@ -97,7 +98,7 @@ export type InvokeAgentFn = (args: {
 export interface RetryDeps {
   invokeAgent: InvokeAgentFn;  // required：引擎绑 sdk 注入；测试注入 mock
   quota?: () => Promise<boolean>;  // 生产注入：调 /api/token-quota/check，超额度返 false
-  execEngine?: 'claude' | 'openclaw';
+  execEngine?: AgentEngineType;
   /** User cancellation terminates this attempt loop instead of scheduling a retry. */
   isCancelled?: () => boolean | Promise<boolean>;
 }
@@ -107,8 +108,8 @@ function isWorkflowPacketProtocolFailure(context: RetryFailureContext | null, er
   return /StructuredOutput[\s\S]{0,300}(root|required property)|完整\s*WorkflowPacket|未返回 SDK 结构化结果|WorkflowPacket[\s\S]{0,120}(root|顶层|缺少)/i.test(detail);
 }
 
-function protocolRetryInstruction(execEngine?: 'claude' | 'openclaw'): string {
-  if (execEngine === 'openclaw') {
+function protocolRetryInstruction(execEngine?: AgentEngineType): string {
+  if (execEngine === 'openclaw' || execEngine === 'pi') {
     return '上次结果不是完整 WorkflowPacket。不要试探 schema，也不要只输出 payload、包装对象或解释文字；请直接按当前模板输出一个完整的 WorkflowPacket 顶层 JSON。';
   }
   return '上次 StructuredOutput 调用没有提交完整 WorkflowPacket。不要试探 schema，也不要只提交 payload、嵌套 WorkflowPacket 或字符串化 JSON；请一次调用 StructuredOutput，并将当前模板的完整 WorkflowPacket 作为唯一顶层输入。';
@@ -214,7 +215,7 @@ export async function runAgentNodeWithRetry(
         allowedTools: spec.allowedTools,
       permissionMode: spec.permissionPolicy?.mode,
       model: spec.target.model,
-      outputSchema: deps.execEngine === 'openclaw'
+      outputSchema: deps.execEngine !== 'claude'
         ? workflowPacketJsonSchema(contract.dataJsonSchema ?? node.config?.outputContract?.schema, {
         runId: ctx.runId, nodeId: node.id, nodeType: node.type, allowedPorts: Array.isArray(node.config?.branches) ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean) : undefined,
         requireSelectedPort: node.type === 'agent_condition',
@@ -306,9 +307,9 @@ export async function runAgentNodeWithRetry(
       continue;
     }
 
-    const claudeEnvelope = deps.execEngine === 'openclaw'
-      ? { packet: result.output, unwrapped: false }
-      : unwrapClaudeStructuredOutputEnvelope(result.output);
+    const claudeEnvelope = deps.execEngine === 'claude'
+      ? unwrapClaudeStructuredOutputEnvelope(result.output)
+      : { packet: result.output, unwrapped: false };
     const structuredOutput = normalizeStructuredOutputPacket(claudeEnvelope.packet);
     const artifactDrafts = normalizeWorkflowArtifactDrafts(structuredOutput.packet);
     const packet = artifactDrafts.packet;

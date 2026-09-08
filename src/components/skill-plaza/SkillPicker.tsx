@@ -24,8 +24,11 @@ import {
   skillPickerShellClass,
 } from '@/lib/surfaces';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { useSettingsStore } from '@/stores/settings';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { PickerEmptyState } from '@/components/picker-empty-state';
+import { Switch } from '@/components/ui/switch';
+import { toast } from 'sonner';
 
 export interface SkillPickerProps {
   open: boolean;
@@ -70,6 +73,9 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     const { t } = useTranslation('chat');
     const [toolbarQuery, setToolbarQuery] = useState('');
     const [position, setPosition] = useState<PickerPosition | null>(null);
+    const [savingSkillDiscovery, setSavingSkillDiscovery] = useState(false);
+    const skillDiscoveryEnabled = useSettingsStore((s) => s.skillDiscoveryEnabled);
+    const setSkillDiscoveryEnabled = useSettingsStore((s) => s.setSkillDiscoveryEnabled);
     const mySkills = useSkillPlazaStore((s) => s.mySkills);
     const loading = useSkillPlazaStore((s) => s.loading);
     const fetchLocalSkills = useSkillPlazaStore((s) => s.fetchLocalSkills);
@@ -97,10 +103,7 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     }, [fetchLocalSkills, loading, mySkills.length, open]);
 
     useLayoutEffect(() => {
-      if (!open) {
-        setPosition(null);
-        return;
-      }
+      if (!open) return;
       if (!anchorRef) return;
 
       const updatePosition = () => {
@@ -161,6 +164,18 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
       localRef.current = node;
       if (typeof ref === 'function') ref(node);
       else if (ref) ref.current = node;
+    };
+
+    const handleSkillDiscoveryChange = async (enabled: boolean) => {
+      if (savingSkillDiscovery) return;
+      setSavingSkillDiscovery(true);
+      try {
+        await setSkillDiscoveryEnabled(enabled);
+      } catch {
+        toast.error(t('composer.skillDiscoverySaveFailed'));
+      } finally {
+        setSavingSkillDiscovery(false);
+      }
     };
 
     const panel = (
@@ -239,6 +254,26 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
             </div>
           </div>
           <OverlayScrollbar viewportRef={listViewportRef} contentRef={listContentRef} />
+        </div>
+
+        <div className="mt-1 flex min-h-11 items-center justify-between gap-3 border-t border-[#E5E6EB] px-2 pt-1 dark:border-white/10">
+          <div className="min-w-0">
+            <div className="text-[12px] font-medium leading-4 text-[#1D2129] dark:text-foreground">
+              {t('composer.skillDiscovery')}
+            </div>
+            <div className="truncate text-[10px] leading-3.5 text-[#86909C] dark:text-muted-foreground">
+              {t(skillDiscoveryEnabled
+                ? 'composer.skillDiscoveryEnabledHint'
+                : 'composer.skillDiscoveryDisabledHint')}
+            </div>
+          </div>
+          <Switch
+            size="compact"
+            checked={skillDiscoveryEnabled}
+            disabled={savingSkillDiscovery}
+            aria-label={t('composer.skillDiscovery')}
+            onCheckedChange={(checked) => void handleSkillDiscoveryChange(checked)}
+          />
         </div>
 
         <button

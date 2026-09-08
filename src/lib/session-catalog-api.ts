@@ -1,6 +1,7 @@
 import { invokeIpc } from '@/lib/api-client';
 import { SESSION_LABELS_STORAGE_KEY } from '@/lib/session-label';
 import type { CatalogSessionType } from '../../shared/session-type';
+import type { AgentEngineType } from '../../shared/agent-engine';
 
 export interface WorkspaceDto {
   id: string;
@@ -139,15 +140,28 @@ export async function patchCatalogSession(input: {
   return res.session;
 }
 
-export async function bindSessionToCatalog(sessionKey: string, workspaceId: string): Promise<void> {
-  await invokeCatalog('bindSession', { sessionKey, workspaceId });
+export async function bindSessionToCatalog(
+  sessionKey: string,
+  workspaceId: string,
+  engineType?: AgentEngineType,
+): Promise<void> {
+  await invokeCatalog('bindSession', {
+    sessionKey,
+    workspaceId,
+    ...(engineType ? { engineType } : {}),
+  });
 }
 
 export async function moveSessionInCatalog(
   sessionKey: string,
   workspaceId: string,
+  engineType?: AgentEngineType,
 ): Promise<CatalogSessionDto> {
-  const res = await invokeCatalog<{ session: CatalogSessionDto }>('moveSession', { sessionKey, workspaceId });
+  const res = await invokeCatalog<{ session: CatalogSessionDto }>('moveSession', {
+    sessionKey,
+    workspaceId,
+    ...(engineType ? { engineType } : {}),
+  });
   return res.session;
 }
 

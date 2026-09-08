@@ -66,7 +66,7 @@ export async function createOrGetSession(
   const agentId = resolveChannelBaseAgentId(params.agentId);
   const channelType = params.channelType;
   const engineType: AgentEngineType =
-    params.engineType === 'openclaw' || params.engineType === 'claude'
+    params.engineType === 'openclaw' || params.engineType === 'claude' || params.engineType === 'pi'
       ? params.engineType
       : 'claude';
   const now = new Date();

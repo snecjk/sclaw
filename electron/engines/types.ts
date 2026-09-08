@@ -1,10 +1,14 @@
 import type { GatewayManager } from '../gateway/manager';
+import type { ChatContextUsage } from '../../shared/chat-runtime-protocol';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
 import type { ChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 import type { ExecutionSnapshot } from './execution-snapshot';
+import type { AgentEngineType } from '../../shared/agent-engine';
+import type { ModelMessageMediaInput, NormalizedModelTurn } from '../services/model-message-normalizer';
+import type { ChatHistoryCapabilities } from '../../shared/chat-history-capabilities';
 
-export type AgentEngineType = 'openclaw' | 'claude';
+export type { AgentEngineType } from '../../shared/agent-engine';
 
 export interface EngineSessionSummary {
   key: string;
@@ -32,6 +36,7 @@ export interface EngineHistoryResult {
   unchanged?: boolean;
   hasMore?: boolean;
   totalCount?: number;
+  historyCapabilities?: ChatHistoryCapabilities;
 }
 
 /**
@@ -52,10 +57,12 @@ export interface EngineSendParams {
   runtimePolicy?: ChatRuntimePolicy;
   /** 定时任务执行时由 executor 透传；交互式 chat 不设（undefined）以保留引擎默认。 */
   permissionProfile?: EnginePermissionProfile;
+  /** Main 已校验的结构化用户轮次；adapter 只负责引擎原生渲染。 */
+  normalizedTurn?: NormalizedModelTurn;
 }
 
 export interface EngineSendWithMediaParams extends EngineSendParams {
-  media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+  media?: ModelMessageMediaInput[];
 }
 
 export interface EngineAbortParams {
@@ -63,11 +70,20 @@ export interface EngineAbortParams {
 }
 
 export interface EngineAdapterContext {
-  gatewayManager: GatewayManager;
+  gatewayManager?: GatewayManager;
+  /** 引擎无关事件出口；迁移期未设置时 adapter 可复用 gatewayManager。 */
+  eventSink?: { emit(event: string, payload: unknown): unknown };
+  /** Main 提供的通用运行时服务集合，避免 adapter 强依赖 Gateway。 */
+  runtimeServices?: Record<string, unknown>;
+}
+
+export function requireGatewayManager(ctx: EngineAdapterContext): GatewayManager {
+  if (!ctx.gatewayManager) throw new Error('ENGINE_RUNTIME_UNAVAILABLE: GatewayManager is required');
+  return ctx.gatewayManager;
 }
 
 export interface EngineRuntimeInspection {
-  status: 'active' | 'completed' | 'not_started' | 'unknown';
+  status: 'active' | 'completed' | 'failed' | 'not_started' | 'unknown';
   runId?: string;
   currentTurnMessages?: unknown[];
   transcriptRevision?: string;
@@ -79,11 +95,22 @@ export interface EngineChatCapabilities {
   hasStructuredReasoningEvents: boolean;
   hasStructuredToolEvents: boolean;
   requiresHistoryProjection: boolean;
+  supportsContextUsage?: boolean;
+  supportsManualCompaction?: boolean;
+}
+
+export interface EngineScheduledTaskCapabilities {
+  defaultPermissionProfile?: EnginePermissionProfile;
+  enforcedPermissionProfile?: EnginePermissionProfile;
+  requiresWorkspacePath: boolean;
+  supportsWorkflow: boolean;
 }
 
 export interface EngineAdapter {
   type: AgentEngineType;
+  historyCapabilities: ChatHistoryCapabilities;
   chatCapabilities: EngineChatCapabilities;
+  scheduledTaskCapabilities: EngineScheduledTaskCapabilities;
   inspectRun(
     ctx: EngineAdapterContext,
     params: { sessionKey: string; runId?: string | null; startedAt: number; limit?: number },
@@ -93,7 +120,19 @@ export interface EngineAdapter {
     phase?: string;
   }): 'completed' | 'awaiting_transcript' | 'progress';
   prepareMemoryInjection(params: EngineSendParams, memory: AgentMemoryContextBlocks): EngineSendParams;
-  abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{ success: boolean; error?: string }>;
+  abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{
+    success: boolean;
+    error?: string;
+    result?: { aborted?: boolean; runIds?: unknown[] };
+  }>;
+  getContextUsage?(
+    ctx: EngineAdapterContext,
+    params: { sessionKey: string },
+  ): Promise<{ success: boolean; result?: ChatContextUsage | null; error?: string }>;
+  compactSession?(
+    ctx: EngineAdapterContext,
+    params: { sessionKey: string },
+  ): Promise<{ success: boolean; result?: { compacted: boolean }; error?: string }>;
   getHistory(
     ctx: EngineAdapterContext,
     params: { sessionKey: string; limit: number; beforeId?: string },

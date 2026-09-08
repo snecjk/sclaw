@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
-import type { ChatRuntimeSnapshot, ChatRunPhase } from '../../../shared/chat-runtime-protocol';
+import type { ChatContextUsage, ChatRuntimeSnapshot, ChatRunPhase, ContextCompactionActivity } from '../../../shared/chat-runtime-protocol';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
+import { parseAgentEngineType } from '../../../shared/agent-engine';
 import { getKyselyDatabase } from '../connection';
 
 const TERMINAL_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -25,6 +26,48 @@ function safeStringifyJson(value: unknown): string | null {
   }
 }
 
+function requireStoredEngineType(value: unknown): ChatRuntimeSnapshot['engineType'] {
+  const engineType = parseAgentEngineType(value);
+  if (!engineType) throw new Error(`UNSUPPORTED_ENGINE: ${String(value)}`);
+  return engineType;
+}
+
+function parseStoredActivity(value: unknown): ContextCompactionActivity | null {
+  const parsed = safeParseJson(value == null ? null : String(value));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const activity = parsed as Partial<ContextCompactionActivity>;
+  if (
+    activity.type !== 'context_compaction'
+    || typeof activity.attemptId !== 'string'
+    || (activity.status !== 'running' && activity.status !== 'retrying')
+    || typeof activity.startedAt !== 'number'
+  ) return null;
+  const reason = activity.reason === 'manual'
+    || activity.reason === 'threshold'
+    || activity.reason === 'overflow'
+    || activity.reason === 'auto'
+    ? activity.reason
+    : 'unknown';
+  return { ...activity, reason } as ContextCompactionActivity;
+}
+
+function parseStoredContextUsage(value: unknown): ChatContextUsage | null {
+  const parsed = safeParseJson(value == null ? null : String(value));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const usage = parsed as Partial<ChatContextUsage>;
+  const optionalNumber = (item: unknown): item is number | null => (
+    item === null || (typeof item === 'number' && Number.isFinite(item) && item >= 0)
+  );
+  if (
+    !optionalNumber(usage.tokens)
+    || !optionalNumber(usage.contextWindow)
+    || !optionalNumber(usage.percent)
+    || (usage.accuracy !== 'exact' && usage.accuracy !== 'estimated' && usage.accuracy !== 'unknown')
+    || typeof usage.updatedAt !== 'number'
+  ) return null;
+  return usage as ChatContextUsage;
+}
+
 function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
   return {
     protocolVersion: 1,
@@ -38,7 +81,7 @@ function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
       ownerId: row.owner_id == null ? undefined : String(row.owner_id),
       deadlineAt: row.deadline_at == null ? null : Number(row.deadline_at),
     },
-    engineType: String(row.engine_type) === 'claude' ? 'claude' : 'openclaw',
+    engineType: requireStoredEngineType(row.engine_type),
     phase: String(row.phase) as ChatRunPhase,
     epoch: Number(row.epoch),
     sequence: Number(row.sequence),
@@ -46,6 +89,8 @@ function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
     lastEventAt: Number(row.last_event_at),
     terminalAt: row.terminal_at == null ? null : Number(row.terminal_at),
     error: row.error == null ? null : String(row.error),
+    activity: parseStoredActivity(row.activity_json),
+    contextUsage: parseStoredContextUsage(row.context_usage_json),
     acceptanceResult: safeParseJson(row.acceptance_result_json == null ? null : String(row.acceptance_result_json)),
     updatedAt: Date.parse(String(row.updated_at)) || Number(row.last_event_at),
   };
@@ -124,6 +169,8 @@ export class ChatRuntimeRepository {
       terminal_at: snapshot.terminalAt,
       error: snapshot.error,
       acceptance_result_json: safeStringifyJson(snapshot.acceptanceResult),
+      activity_json: safeStringifyJson(snapshot.activity),
+      context_usage_json: safeStringifyJson(snapshot.contextUsage),
       created_at: timestamp,
       updated_at: timestamp,
     };
@@ -164,6 +211,8 @@ export class ChatRuntimeRepository {
             terminal_at: values.terminal_at,
             error: values.error,
             acceptance_result_json: values.acceptance_result_json,
+            activity_json: values.activity_json,
+            context_usage_json: values.context_usage_json,
             updated_at: timestamp,
             version: sql<number>`version + 1`,
           }).where('id', '=', row.id).execute();
@@ -171,11 +220,15 @@ export class ChatRuntimeRepository {
         }
         const metadataChanged = row.run_id !== values.run_id
           || row.acceptance_result_json !== values.acceptance_result_json
+          || row.activity_json !== values.activity_json
+          || row.context_usage_json !== values.context_usage_json
           || row.error !== values.error;
         if (!metadataChanged) return 'unchanged';
         await trx.updateTable('chat_runtime_runs').set({
           run_id: values.run_id,
           acceptance_result_json: values.acceptance_result_json,
+          activity_json: values.activity_json,
+          context_usage_json: values.context_usage_json,
           error: values.error,
           updated_at: timestamp,
           version: sql<number>`version + 1`,
@@ -195,6 +248,8 @@ export class ChatRuntimeRepository {
         terminal_at: values.terminal_at,
         error: values.error,
         acceptance_result_json: values.acceptance_result_json,
+        activity_json: values.activity_json,
+        context_usage_json: values.context_usage_json,
         updated_at: timestamp,
         version: sql<number>`version + 1`,
       }).where('id', '=', row.id).execute();

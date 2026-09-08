@@ -13,7 +13,7 @@ export function looksLikeTechnicalTaskGroupLabel(value: string, sessionKey?: str
   if (looksLikeTechnicalSessionDisplay(v)) return true;
   if (isAgentBrandSessionLabel(v)) return true;
   if (AGENT_TASK_KEY_PATTERN.test(v)) return true;
-  if (/^(claude-task|claude-task-run|scheduled-task):/.test(v)) return true;
+  if (/^(claude-task|claude-task-run|pi-task|scheduled-task):/.test(v)) return true;
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return true;
   if (/^\d{4}年\d{2}月\d{2}日/.test(v)) return true;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) return true;
@@ -67,31 +67,39 @@ export function resolveClaudeGroupNameFromSession(session: {
   return pickHumanTaskGroupName([session.displayName, labelClean]);
 }
 
+export function resolvePiGroupNameFromSession(session: {
+  key: string;
+  label?: string;
+  displayName?: string;
+}): string | undefined {
+  return pickHumanTaskGroupName([session.displayName, session.label]);
+}
+
 export type ScheduledTaskNameMaps = {
   cron: Map<string, string>;
   sto: Map<number, string>;
   claude: Map<string, string>;
+  pi: Map<string, string>;
 };
 
 export function buildScheduledTaskGroupDisplayName(
-  kind: 'st' | 'cron' | 'claude',
+  kind: 'st' | 'cron' | 'claude' | 'pi',
   taskId: number | string,
   sessions: Array<{ key: string; label?: string; displayName?: string }>,
   nameMaps: ScheduledTaskNameMaps,
 ): string {
-  const mapName =
-    kind === 'st'
-      ? nameMaps.sto.get(taskId as number)
-      : kind === 'cron'
-        ? nameMaps.cron.get(String(taskId))
-        : nameMaps.claude.get(String(taskId));
+  const mapName = kind === 'st'
+    ? nameMaps.sto.get(taskId as number)
+    : nameMaps[kind].get(String(taskId));
 
   const sessionNames = sessions.map((session) =>
     kind === 'st'
       ? resolveStoScheduledGroupNameFromSession(session)
       : kind === 'cron'
         ? resolveCronGroupNameFromSession(session)
-        : resolveClaudeGroupNameFromSession(session),
+        : kind === 'claude'
+          ? resolveClaudeGroupNameFromSession(session)
+          : resolvePiGroupNameFromSession(session),
   );
 
   const resolved = pickHumanTaskGroupName([mapName, ...sessionNames]);
@@ -100,6 +108,7 @@ export function buildScheduledTaskGroupDisplayName(
   }
 
   if (kind === 'claude') return `Claude 定时任务 ${taskId}`;
+  if (kind === 'pi') return `PI 定时任务 ${taskId}`;
   return `定时任务 ${taskId}`;
 }
 

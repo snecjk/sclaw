@@ -3,17 +3,19 @@ import { looksLikeTechnicalTaskGroupLabel } from '@/lib/scheduled-task-group-nam
 import {
   isClaudeScheduledTaskDatedSessionKey,
   isCronDatedSessionKey,
+  isPiScheduledTaskDatedSessionKey,
   isVirtualTaskSessionKey,
   parseCronSessionKey,
   parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
+  parsePiScheduledTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
 
 export type SessionListEntry = {
   key: string;
   label?: string;
   displayName?: string;
-  engineType?: 'claude' | 'openclaw';
+  engineType?: 'claude' | 'openclaw' | 'pi';
   model?: string;
   updatedAt?: number;
 };
@@ -42,6 +44,7 @@ export function appendPendingLocalVirtualTaskSessions<T extends SessionListEntry
   const cronDatedJobs = new Set<string>();
   const cronDatedJobDates = new Set<string>();
   const claudeTaskDatedIds = new Set<string>();
+  const piTaskDatedIds = new Set<string>();
 
   for (const session of remoteSessions) {
     const cronParts = parseCronSessionKey(session.key);
@@ -52,6 +55,9 @@ export function appendPendingLocalVirtualTaskSessions<T extends SessionListEntry
 
     const claudeParts = parseClaudeScheduledTaskSessionKey(session.key);
     if (claudeParts?.date) claudeTaskDatedIds.add(claudeParts.taskId);
+
+    const piParts = parsePiScheduledTaskSessionKey(session.key);
+    if (piParts?.date) piTaskDatedIds.add(piParts.taskId);
   }
 
   const remoteKeySet = new Set(remoteSessions.map((session) => session.key));
@@ -77,6 +83,9 @@ export function appendPendingLocalVirtualTaskSessions<T extends SessionListEntry
 
     const claudeRunParts = parseClaudeScheduledTaskRunSessionKey(session.key);
     if (claudeRunParts && claudeTaskDatedIds.has(claudeRunParts.taskId)) return false;
+
+    const piParts = parsePiScheduledTaskSessionKey(session.key);
+    if (piParts && !piParts.date && piTaskDatedIds.has(piParts.taskId)) return false;
 
     return true;
   });
@@ -135,7 +144,7 @@ export function findCronDatedTwinKey(
 }
 
 /** catalog_sessions.session_type values that feed the sidebar「任务」section. */
-export const TASK_SIDEBAR_CATALOG_TYPES = new Set(['cron', 'claude_task']);
+export const TASK_SIDEBAR_CATALOG_TYPES = new Set(['cron', 'claude_task', 'scheduled_task']);
 
 /** @deprecated Use TASK_SIDEBAR_CATALOG_TYPES */
 export const SCHEDULED_TASK_CATALOG_TYPES = TASK_SIDEBAR_CATALOG_TYPES;
@@ -150,7 +159,9 @@ export type CatalogScheduledTaskRow = {
 
 /** 按天聚合 key：忽略历史 run/base，只认 dated。 */
 export function isDatedTaskSidebarSessionKey(sessionKey: string): boolean {
-  return isCronDatedSessionKey(sessionKey) || isClaudeScheduledTaskDatedSessionKey(sessionKey);
+  return isCronDatedSessionKey(sessionKey)
+    || isClaudeScheduledTaskDatedSessionKey(sessionKey)
+    || isPiScheduledTaskDatedSessionKey(sessionKey);
 }
 
 function taskSidebarDedupeKey(sessionKey: string): string | null {
@@ -158,12 +169,15 @@ function taskSidebarDedupeKey(sessionKey: string): string | null {
   if (cron?.date) return `cron:${cron.jobId}:${cron.date}`;
   const claude = parseClaudeScheduledTaskSessionKey(sessionKey);
   if (claude?.date) return `claude-task:${claude.taskId}:${claude.date}`;
+  const pi = parsePiScheduledTaskSessionKey(sessionKey);
+  if (pi?.date) return `pi-task:${pi.taskId}:${pi.date}`;
   return null;
 }
 
 /**
  * Sidebar「任务」数据源（store 层只做结构化过滤，不按 title 过滤）：
- * - session_type ∈ {cron, claude_task}
+ * - session_type ∈ {cron, claude_task, scheduled_task}; scheduled_task currently
+ *   contributes dated PI execution keys only
  * - key 必须是 dated（过滤历史 run/base）
  * - 同 task+日 多条时保留 lastActivityAt 最新（兼容 agent twin）
  *
@@ -205,9 +219,11 @@ export function filterTaskSidebarCatalogRows<T extends CatalogScheduledTaskRow>(
 
 function inferEngineTypeFromTaskSessionType(
   sessionType: string,
+  sessionKey: string,
 ): SessionListEntry['engineType'] | undefined {
   if (sessionType === 'claude_task') return 'claude';
   if (sessionType === 'cron') return 'openclaw';
+  if (sessionType === 'scheduled_task' && parsePiScheduledTaskSessionKey(sessionKey)) return 'pi';
   return undefined;
 }
 
@@ -251,10 +267,10 @@ export function resolveTaskSidebarRowTitles(input: {
   return { label, displayName };
 }
 
-/** 取 catalog 行对应任务的定义名（cron → jobId，claude_task → taskId）。 */
+/** 取 catalog 行对应任务的定义名；各执行引擎使用独立名称 map。 */
 export function resolveCatalogRowTaskName(
   row: CatalogScheduledTaskRow,
-  nameMaps: { cron: Map<string, string>; claude: Map<string, string> },
+  nameMaps: { cron: Map<string, string>; claude: Map<string, string>; pi: Map<string, string> },
 ): string | undefined {
   if (row.sessionType === 'cron') {
     const jobId = row.taskId ?? parseCronSessionKey(row.sessionKey)?.jobId ?? null;
@@ -263,6 +279,10 @@ export function resolveCatalogRowTaskName(
   if (row.sessionType === 'claude_task') {
     const taskId = row.taskId ?? parseClaudeScheduledTaskSessionKey(row.sessionKey)?.taskId ?? null;
     return taskId ? nameMaps.claude.get(String(taskId)) : undefined;
+  }
+  if (row.sessionType === 'scheduled_task') {
+    const taskId = row.taskId ?? parsePiScheduledTaskSessionKey(row.sessionKey)?.taskId ?? null;
+    return taskId ? nameMaps.pi.get(String(taskId)) : undefined;
   }
   return undefined;
 }
@@ -278,14 +298,14 @@ export function catalogTaskRowsToSessionEntries(
       label: title,
       displayName: title,
       updatedAt: parseCatalogActivityMs(row.lastActivityAt),
-      engineType: inferEngineTypeFromTaskSessionType(row.sessionType),
+      engineType: inferEngineTypeFromTaskSessionType(row.sessionType, row.sessionKey),
     };
   });
 }
 
 /**
  * Merge engine `sessions.list` with catalog task rows (P2-D).
- * Catalog side only contributes dated `cron` / `claude_task` rows.
+ * Catalog side only contributes dated `cron` / `claude_task` / PI `scheduled_task` rows.
  * Engine rows win on conflict for runtime fields; catalog title wins over agent-brand labels.
  */
 export function mergeEngineAndCatalogScheduledTaskSessions<T extends SessionListEntry>(

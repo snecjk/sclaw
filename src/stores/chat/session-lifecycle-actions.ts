@@ -2,13 +2,14 @@ import {
   applyWorkspaceDefaultToNewSession,
   syncSessionModelToGateway,
 } from '@/lib/sync-workspace-default-to-chat';
-import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
 import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from '../gateway';
 import { useAgentsStore } from '../agents';
+import { useAgentEnginePolicyStore } from '../agent-engine-policy';
+import { useAuthStore } from '../auth';
 import {
   isVirtualTaskSessionKey,
   parseCronSessionKey,
@@ -133,7 +134,8 @@ export function createSessionLifecycleActions(
             const engineType: ChatSession['engineType'] | undefined =
               rawEngineType === 'claude' ? 'claude'
                 : rawEngineType === 'openclaw' ? 'openclaw'
-                  : undefined;
+                  : rawEngineType === 'pi' ? 'pi'
+                    : undefined;
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -393,14 +395,16 @@ export function createSessionLifecycleActions(
             // startTask 异步时本地占位可能缺 displayName，侧栏会降级成技术 ID。
             try {
               const tasks = await hostApiFetch<
-                Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' }>
+                Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' | 'pi' }>
               >('/api/scheduled-tasks');
               const openclawNames = new Map<string, string>();
               const claudeNames = new Map<string, string>();
+              const piNames = new Map<string, string>();
               for (const task of tasks) {
                 if (!task.id || !task.name?.trim()) continue;
                 const name = task.name.trim();
                 if (task.engineType === 'claude') claudeNames.set(task.id, name);
+                else if (task.engineType === 'pi') piNames.set(task.id, name);
                 else openclawNames.set(task.id, name);
               }
               for (const session of labeledSessions) {
@@ -412,9 +416,12 @@ export function createSessionLifecycleActions(
                 }
                 const taskId =
                   parseClaudeScheduledTaskSessionKey(session.key)?.taskId
-                  ?? parseClaudeScheduledTaskRunSessionKey(session.key)?.taskId;
+                  ?? parseClaudeScheduledTaskRunSessionKey(session.key)?.taskId
+                  ?? (session.key.startsWith('pi-task:') ? session.key.split(':')[1] : undefined);
                 if (!taskId) continue;
-                const name = claudeNames.get(taskId);
+                const name = session.key.startsWith('pi-task:')
+                  ? piNames.get(taskId)
+                  : claudeNames.get(taskId);
                 if (name) session.displayName = name;
               }
             } catch {
@@ -591,7 +598,13 @@ export function createSessionLifecycleActions(
 
     // ── New session ──
 
-    newSession: (options?: { projectId?: string; materialize?: boolean }) => {
+    newSession: (options?: { projectId?: string; materialize?: boolean; engineType?: ChatSession['engineType'] }) => {
+      const user = useAuthStore.getState().user;
+      const ownerCode = String(user?.code || user?.empCode || user?.id || '').trim();
+      if (ownerCode) {
+        void useAgentEnginePolicyStore.getState().fetchPolicy(ownerCode);
+      }
+
       // Generate a new unique session key and switch to it.
       // NOTE: We intentionally do NOT call sessions.reset on the old session.
       // sessions.reset archives (renames) the session JSONL file, making old
@@ -612,6 +625,7 @@ export function createSessionLifecycleActions(
       // This avoids empty catalog rows while still carrying project/agent/model context.
       if (projectId && projectId !== 'default' && !shouldMaterialize) {
         const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
+        const draftEngineType = options?.engineType ?? getAgentEngineType(draftAgentId) ?? 'openclaw';
         set((s) => ({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: draftAgentId,
@@ -631,15 +645,17 @@ export function createSessionLifecycleActions(
           }));
         touchSessionReadAt(DEFAULT_SESSION_KEY);
         clearSessionSendReadiness(DEFAULT_SESSION_KEY);
-        const projectAgentReadiness = import('@/lib/session-catalog-api').then(async ({
-          ensureProjectAgentForWorkspace,
-        }) => {
-          await ensureProjectAgentForWorkspace({
-            workspaceId: projectId,
-            baseAgentId,
-          });
-          await useAgentsStore.getState().fetchAgents().catch(() => undefined);
-        });
+        const projectAgentReadiness = draftEngineType === 'openclaw'
+          ? import('@/lib/session-catalog-api').then(async ({
+            ensureProjectAgentForWorkspace,
+          }) => {
+            await ensureProjectAgentForWorkspace({
+              workspaceId: projectId,
+              baseAgentId,
+            });
+            await useAgentsStore.getState().fetchAgents().catch(() => undefined);
+          })
+          : Promise.resolve();
         registerSessionSendReadiness(DEFAULT_SESSION_KEY, projectAgentReadiness);
         if (leavingEmpty) clearSessionSendReadiness(currentSessionKey);
         return;
@@ -653,24 +669,17 @@ export function createSessionLifecycleActions(
             ?? getCanonicalPrefixFromSessions(sessions)
             ?? DEFAULT_CANONICAL_PREFIX
         }:session-${Date.now()}`);
-      const newKey = createTemporaryAgentSessionKey(newAgentId);
-      // Carry over model from home/default session or Claude agent toolbar selection
-      let currentSessionModel = get().pendingNewSessionModel
+      const newEngineType = options?.engineType ?? getAgentEngineType(newAgentId) ?? 'openclaw';
+      const newKey = createTemporaryAgentSessionKey(newAgentId, Date.now(), newEngineType);
+      // Carry over an explicit pending choice or the previous session model.
+      const currentSessionModel = get().pendingNewSessionModel
         ?? (currentSessionKey !== DEFAULT_SESSION_KEY
           ? sessions.find((s) => s.key === currentSessionKey)?.model
           : undefined);
-      if (!currentSessionModel?.trim()) {
-        const carryAgent = useAgentsStore.getState().agents.find(
-          (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
-        );
-        if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
-          currentSessionModel = normalizeModelIdForChat(carryAgent.modelDisplay);
-        }
-      }
       const newSessionEntry: ChatSession = {
         key: newKey,
         label: NEW_SESSION_TEMP_LABEL,
-        engineType: getAgentEngineType(newAgentId),
+        engineType: newEngineType,
         ...(currentSessionModel ? { model: currentSessionModel } : {}),
       };
       const createdAtMs = Date.now();
@@ -715,7 +724,7 @@ export function createSessionLifecycleActions(
         : applyWorkspaceDefaultToNewSession(newKey, newAgentId);
       const setupPromise = projectId && projectId !== 'default'
         ? Promise.resolve().then(async () => {
-          await useSessionCatalogStore.getState().bindSession(newKey, projectId);
+          await useSessionCatalogStore.getState().bindSession(newKey, projectId, newEngineType);
           await syncModel();
         })
         : syncModel();

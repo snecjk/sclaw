@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { workspacePath } from './workspace-paths';
 import { normalizeRuntimeDefinition, validateRuntimeDefinition } from './runtime-definition';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 const nowIso = () => formatShanghaiIso();
 
 export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };
@@ -17,7 +18,7 @@ export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVers
   sessionKey?: string;
   /** 本地业务发起入口，不进入云端 outbox。 */
   triggerType: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
-  engineType: 'claude' | 'openclaw';
+  engineType: AgentEngineType;
   engineModel?: string;
 }
 

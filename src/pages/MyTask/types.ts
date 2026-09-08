@@ -55,7 +55,7 @@ export interface TaskViewModel {
   /** 关联 Agent ID */
   agentId?: string;
   /** 引擎类型 */
-  engineType: 'openclaw' | 'claude';
+  engineType: 'openclaw' | 'claude' | 'pi';
 }
 
 /** 状态计数 */

@@ -27,6 +27,8 @@ export interface AppSettings {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
+  /** Whether answer preparation may retrieve personalized memory from the remote service. */
+  personalizedMemoryEnabled: boolean;
   /** When true, keep the system awake while SClaw is running. */
   preventSystemSleep: boolean;
   telemetryEnabled: boolean;
@@ -62,6 +64,8 @@ export interface AppSettings {
   selectedBundles: string[];
   enabledSkills: string[];
   disabledSkills: string[];
+  /** Route a bounded Skill set per turn. When false, engines load every enabled installed Skill. */
+  skillDiscoveryEnabled: boolean;
 
   // DingTalk dws
   dingTalkDwsEnabled: boolean;
@@ -96,6 +100,7 @@ function createDefaultSettings(): AppSettings {
     language: resolveSupportedLanguage(getSystemLocale()),
     startMinimized: false,
     launchAtStartup: false,
+    personalizedMemoryEnabled: true,
     preventSystemSleep: false,
     // Telemetry is disabled by default for faster cold starts
     // Users can enable it in Settings > Advanced if they want to help improve the product
@@ -129,6 +134,7 @@ function createDefaultSettings(): AppSettings {
     selectedBundles: ['productivity', 'developer'],
     enabledSkills: [],
     disabledSkills: [],
+    skillDiscoveryEnabled: true,
 
     // DingTalk dws
     dingTalkDwsEnabled: true,

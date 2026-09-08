@@ -24,8 +24,19 @@ vi.mock('../../electron/engines/claude-adapter', () => ({
   },
 }));
 
+vi.mock('../../electron/engines/pi-adapter', () => ({
+  piAdapter: {
+    type: 'pi',
+    listSessions: vi.fn(async () => ({ success: true, result: { sessions: [] } })),
+  },
+}));
+
 vi.mock('../../electron/engines/session-registry', () => ({
   getEngineSessionRegistryEntry: (...args: unknown[]) => getEngineSessionRegistryEntryMock(...args),
+}));
+
+vi.mock('../../electron/utils/scheduled-task-poller-store', () => ({
+  filterDeletedSessions: async (sessions: unknown[]) => sessions,
 }));
 
 vi.mock('../../electron/engines/session-engine', async () => {

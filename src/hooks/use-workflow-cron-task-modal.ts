@@ -55,16 +55,19 @@ export function useWorkflowCronTaskModal() {
           myArtifactFolderPath: input.myArtifactFolderPath ?? null,
           sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };
-        if (input.engineType === 'claude') {
+        if (input.engineType === 'claude' || input.engineType === 'pi') {
           if (!selectedAgent?.id) {
-            throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
+            const engineLabel = input.engineType === 'pi' ? 'SAgent' : 'Claude';
+            throw new Error(`所选 ${engineLabel} 代理缺少工作区，无法创建本地定时任务`);
           }
           await createJob({
             ...base,
-            engineType: 'claude',
+            engineType: input.engineType,
             agentId: selectedAgent.id,
             workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
-            permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
+            permissionProfile: input.engineType === 'pi'
+              ? 'workspace-write'
+              : input.claudePermissionProfile || 'dangerous-bypass',
           });
         } else {
           await createJob({

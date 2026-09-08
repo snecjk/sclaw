@@ -11,6 +11,8 @@ import type {
   UpdateScheduleTaskInput,
 } from '../../db/models/dto/schedule-task.dto';
 import { getAuthState } from '../../utils/auth-store';
+import { getEngineSessionRegistryEntry } from '../../engines/session-registry';
+import { getAgentWorkspacePath } from '../../utils/agent-config';
 
 /** 解析当前登录用户（梧桐工号 code）作为 actor，写入 created_by/updated_by。未登录则 null。 */
 async function resolveActor(): Promise<string | null> {
@@ -43,6 +45,27 @@ export async function handleScheduledTaskRoutes(
   url: URL,
   _ctx: HostApiContext,
 ): Promise<boolean> {
+  // Extension capability defaults. Utility Process extensions must not import
+  // Main-process session/database singletons directly.
+  if (url.pathname === '/api/scheduled-tasks/context' && req.method === 'GET') {
+    const sessionKey = url.searchParams.get('sessionKey')?.trim() || '';
+    if (!sessionKey) {
+      sendJson(res, 400, { success: false, error: 'sessionKey is required' });
+      return true;
+    }
+    const entry = await getEngineSessionRegistryEntry(sessionKey);
+    const agentId = entry?.agentId
+      || (sessionKey.startsWith('agent:') ? sessionKey.split(':')[1] : 'main')
+      || 'main';
+    sendJson(res, 200, {
+      accountId: entry?.accountId,
+      agentId,
+      model: entry?.model,
+      workspacePath: entry?.cwd || await getAgentWorkspacePath(agentId) || undefined,
+    });
+    return true;
+  }
+
   // ---- list ----
   if (url.pathname === '/api/scheduled-tasks' && req.method === 'GET') {
     try {

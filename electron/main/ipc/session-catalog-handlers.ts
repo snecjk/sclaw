@@ -21,6 +21,7 @@ import {
 } from '../../services/session-catalog-service';
 import { getSessionGroupRepository } from '../../db/repositories/session-group-repository';
 import type { GatewayManager } from '../../gateway/manager';
+import type { AgentEngineType } from '../../engines/types';
 import { getGatewayManagerRef } from '../runtime-refs';
 
 async function getGatewayManager(): Promise<GatewayManager | null> {
@@ -123,6 +124,9 @@ async function dispatchSessionCatalogAction(
           String(payload.sessionKey ?? ''),
           String(payload.workspaceId ?? DEFAULT_WORKSPACE_ID),
           await getGatewayManager(),
+          payload.engineType === 'claude' || payload.engineType === 'pi' || payload.engineType === 'openclaw'
+            ? payload.engineType as AgentEngineType
+            : undefined,
         );
         return { success: true };
 
@@ -132,6 +136,9 @@ async function dispatchSessionCatalogAction(
             String(payload.sessionKey ?? ''),
             String(payload.workspaceId ?? DEFAULT_WORKSPACE_ID),
             await getGatewayManager(),
+            payload.engineType === 'claude' || payload.engineType === 'pi' || payload.engineType === 'openclaw'
+              ? payload.engineType as AgentEngineType
+              : undefined,
           ),
         };
 

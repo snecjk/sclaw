@@ -208,7 +208,7 @@ export async function syncGatewayConfigBeforeLaunch(
     logger.warn('Failed to sync STO plugins before launch:', err);
   }
 
-  // Group 5: authenticated setup (SSO / models / biz-agents)
+  // Group 5: authenticated setup (SSO / models)
   try {
     const { getAuthState, getStoToken } = await import('../utils/auth-store');
     const { runAuthenticatedSetup } = await import('../services/auth-setup-orchestrator');

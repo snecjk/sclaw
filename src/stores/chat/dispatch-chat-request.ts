@@ -1,11 +1,14 @@
 import { hostApiFetch } from '@/lib/host-api';
 import { logChatFlow } from './chat-flow-log';
 import type { ChatSession } from './types';
+import type { ModelMessageCompositionV1 } from '../../../shared/model-message-composition';
+import type { FileProvenance } from '@/components/attachments/types';
 
 export interface ChatSendAttachment {
   stagedPath: string;
   mimeType: string;
   fileName: string;
+  provenance?: FileProvenance;
 }
 
 export interface DispatchChatRequestInput {
@@ -17,6 +20,7 @@ export interface DispatchChatRequestInput {
   systemPromptAppend?: string;
   attachments?: ChatSendAttachment[];
   extras?: Record<string, unknown>;
+  composition?: ModelMessageCompositionV1;
 }
 
 export interface DispatchChatRequestResult {
@@ -58,9 +62,11 @@ export async function dispatchChatRequest(
             filePath: attachment.stagedPath,
             mimeType: attachment.mimeType,
             fileName: attachment.fileName,
+            provenance: attachment.provenance,
           })),
         } : {}),
         ...input.extras,
+        ...(input.composition ? { composition: input.composition } : {}),
       }),
     },
   );

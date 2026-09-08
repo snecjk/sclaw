@@ -69,6 +69,41 @@ describe('chat runtime transition', () => {
     expect(result.accepted && result.snapshot.phase).toBe('running');
   });
 
+  it('keeps the run phase unchanged for compaction activity events', () => {
+    const result = transitionChatRuntime({
+      snapshot: snapshot(),
+      type: 'context.compaction.started',
+      occurredAt: 20,
+    });
+    expect(result.accepted && result.snapshot).toMatchObject({
+      phase: 'running',
+      sequence: 5,
+      lastEventAt: 20,
+    });
+  });
+
+  it('updates context usage without reopening a terminal run', () => {
+    const result = transitionChatRuntime({
+      snapshot: snapshot({ phase: 'completed', terminalAt: 10 }),
+      type: 'context.usage.updated',
+      occurredAt: 20,
+      patch: {
+        contextUsage: {
+          tokens: 32_000,
+          contextWindow: 128_000,
+          percent: 25,
+          accuracy: 'exact',
+          updatedAt: 20,
+        },
+      },
+    });
+    expect(result.accepted && result.snapshot).toMatchObject({
+      phase: 'completed',
+      sequence: 5,
+      contextUsage: { percent: 25 },
+    });
+  });
+
   it.each<ChatRunPhase>([
     'dispatching',
     'uncertain',

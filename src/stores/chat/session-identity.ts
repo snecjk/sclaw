@@ -5,6 +5,7 @@ export function normalizeAgentId(value: string | undefined | null): string {
 }
 
 export function getAgentIdFromSessionKey(sessionKey: string): string {
+  if (sessionKey.startsWith('pi:')) return sessionKey.split(':')[1] || 'main';
   if (!sessionKey.startsWith('agent:')) return 'main';
   return sessionKey.split(':')[1] || 'main';
 }
@@ -26,15 +27,20 @@ export function buildFallbackMainSessionKey(agentId: string): string {
   return `agent:${normalizeAgentId(agentId)}:main`;
 }
 
-export function createTemporaryAgentSessionKey(agentId: string, now = Date.now()): string {
+export function createTemporaryAgentSessionKey(
+  agentId: string,
+  now = Date.now(),
+  engineType: 'openclaw' | 'claude' | 'pi' = 'openclaw',
+): string {
   const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2, 12);
+  if (engineType === 'pi') return `pi:${normalizeAgentId(agentId)}:${suffix}`;
   return `agent:${normalizeAgentId(agentId)}:session-${now}-${suffix}`;
 }
 
 export function isTemporaryAgentSessionKey(sessionKey: string): boolean {
-  return /^agent:[^:]+:session-\d+/.test(sessionKey);
+  return /^agent:[^:]+:session-\d+/.test(sessionKey) || /^pi:[^:]+:[^:]+$/.test(sessionKey);
 }
 
 export function clearSessionEntryFromMap<T extends Record<string, unknown>>(

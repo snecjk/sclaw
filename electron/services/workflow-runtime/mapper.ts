@@ -191,7 +191,9 @@ export function mapWfRunRowToResponse(
       versionId: row.version_id,
       workflowVersion: resolveWorkflowVersion(row),
       mode: row.mode ?? null,
-      engineType: row.engine_type === 'openclaw' ? 'openclaw' : 'claude',
+      engineType: row.engine_type === 'openclaw'
+        ? 'openclaw'
+        : row.engine_type === 'claude' ? 'claude' : 'pi',
       engineModel: row.engine_model ?? null,
     } : {}),
     ...(diagnostic ? {

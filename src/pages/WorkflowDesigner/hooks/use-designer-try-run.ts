@@ -36,6 +36,11 @@ import {
   resolveTrialRunLaunchConfirmation,
   type TrialRunLaunchConfirmation,
 } from '@/pages/WorkflowDesigner/components/test-run-drawer-model';
+import {
+  resolveWorkflowEngineSelection,
+  useWorkflowEnginePolicy,
+} from '@/hooks/use-workflow-engine-policy';
+import type { WorkflowExecutionEngine } from '@/lib/workflow-session';
 
 export interface RuntimeUploadNode {
   nodeId: string;
@@ -46,7 +51,6 @@ export interface RuntimeUploadNode {
 
 export const DESIGNER_TRY_RUN_SESSION_KEY = 'designer-try-run';
 const EMPTY_STARTUP_DEFAULT_VALUES: Record<string, unknown> = {};
-const DEFAULT_TRIAL_RUN_ENGINE = 'claude' as const;
 
 function resolveConfiguredStartupInputs(
   schema: WorkflowSchema | null,
@@ -135,7 +139,7 @@ export interface UseDesignerTryRunResult {
   runtimeUploadNodes: RuntimeUploadNode[];
   launchError: string | null;
   begin: (snapshot?: WorkflowDraftSnapshot) => void;
-  confirmStartup: (inputs: Record<string, unknown>, engineType: 'claude' | 'openclaw') => Promise<void>;
+  confirmStartup: (inputs: Record<string, unknown>, engineType: WorkflowExecutionEngine) => Promise<void>;
   cancelStartupDialog: () => void;
   cancel: () => Promise<void>;
   continueRun: () => Promise<void>;
@@ -154,6 +158,7 @@ export function useDesignerTryRun({
   workflowVersionId,
   canStart,
 }: UseDesignerTryRunArgs): UseDesignerTryRunResult {
+  const workflowEnginePolicy = useWorkflowEnginePolicy();
   const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<WorkflowRunResponse | null>(null);
   const [runWorkflowVersion, setRunWorkflowVersion] = useState<string | number | null | undefined>();
@@ -254,7 +259,7 @@ export function useDesignerTryRun({
   );
 
   const launch = useCallback(
-    async (inputs: Record<string, unknown>, snapshot = snapshotRef.current, engineType: 'claude' | 'openclaw') => {
+    async (inputs: Record<string, unknown>, snapshot = snapshotRef.current, engineType: WorkflowExecutionEngine) => {
       if (!workflowId) return;
       launchConfirmationRef.current = { inputs: { ...inputs }, engineType };
       setIsStarting(true);
@@ -338,17 +343,23 @@ export function useDesignerTryRun({
       setRuntimeUploadNodes(uploads);
       const hasConfiguredStartupFields = Boolean(nextSchema?.enabled && nextSchema.fields?.length);
       if (hasConfiguredStartupFields && uploads.length === 0) {
-        await launch(configuredStartupInputs, snapshot ?? null, DEFAULT_TRIAL_RUN_ENGINE);
+        const enginePolicy = await workflowEnginePolicy.load();
+        const defaultEngine = resolveWorkflowEngineSelection(
+          undefined,
+          enginePolicy.options,
+          enginePolicy.defaultEngine,
+        );
+        await launch(configuredStartupInputs, snapshot ?? null, defaultEngine);
         return;
       }
       // Runtime file selection remains interactive. Workflows without startup
       // fields keep the existing engine confirmation behavior.
       setIsStartupDialogOpen(true);
     })().catch((error) => setLaunchError(error instanceof Error ? error.message : '无法读取试运行配置'));
-  }, [workflowId, canStart, startupDefaultValues, startupSchema, launch]);
+  }, [workflowId, canStart, startupDefaultValues, startupSchema, launch, workflowEnginePolicy.load]);
 
   const confirmStartup = useCallback(
-    async (inputs: Record<string, unknown>, engineType: 'claude' | 'openclaw') => {
+    async (inputs: Record<string, unknown>, engineType: WorkflowExecutionEngine) => {
       setIsStartupDialogOpen(false);
       await launch({ ...configuredStartupInputsRef.current, ...inputs }, snapshotRef.current, engineType);
     },
@@ -396,8 +407,15 @@ export function useDesignerTryRun({
   const rerun = useCallback(() => {
     const confirmation = resolveTrialRunLaunchConfirmation(run, launchConfirmationRef.current);
     setIsStartupDialogOpen(false);
-    void launch(confirmation.inputs, snapshotRef.current, confirmation.engineType);
-  }, [launch, run]);
+    void workflowEnginePolicy.load().then((enginePolicy) => {
+      const engineType = resolveWorkflowEngineSelection(
+        confirmation.engineType,
+        enginePolicy.options,
+        enginePolicy.defaultEngine,
+      );
+      return launch(confirmation.inputs, snapshotRef.current, engineType);
+    }).catch((error) => setLaunchError(error instanceof Error ? error.message : String(error)));
+  }, [launch, run, workflowEnginePolicy.load]);
 
   const openExistingRun = useCallback(async (id: string): Promise<boolean> => {
     const existingRun = await getRunViaIpc(id, 'detail');

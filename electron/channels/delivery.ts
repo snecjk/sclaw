@@ -120,7 +120,7 @@ export function attachStreamingDelivery(input: {
   gatewayManager: GatewayManager;
   sessionKey: string;
   chatUid: string;
-  engineType?: 'claude' | 'openclaw';
+  engineType?: 'claude' | 'openclaw' | 'pi';
   timeoutMs?: number;
 }): () => void {
   const { gatewayManager, sessionKey, chatUid } = input;

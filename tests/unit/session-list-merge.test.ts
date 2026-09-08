@@ -37,6 +37,16 @@ describe('appendPendingLocalVirtualTaskSessions', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]?.displayName).toBe('远程');
   });
+
+  it('keeps pending local PI task sessions until catalog materializes them', () => {
+    const key = 'pi-task:task-pi:2026-09-03';
+    const merged = appendPendingLocalVirtualTaskSessions(
+      [],
+      [{ key, displayName: 'PI 日报' }],
+      new Set(),
+    );
+    expect(merged).toEqual([{ key, displayName: 'PI 日报' }]);
+  });
 });
 
 describe('omitSupersededCronDatedAgentTwins', () => {
@@ -151,7 +161,25 @@ describe('mergeEngineAndCatalogScheduledTaskSessions', () => {
     });
   });
 
-  it('only accepts dated session_type cron/claude_task; drops run/base/history', () => {
+  it('fills catalog-only dated PI task placeholders with the PI engine', () => {
+    const merged = mergeEngineAndCatalogScheduledTaskSessions(
+      [],
+      [{
+        sessionKey: 'pi-task:task-pi:2026-09-03',
+        sessionType: 'scheduled_task',
+        taskId: 'task-pi',
+        title: 'GitHub 热门项目',
+        lastActivityAt: '2026-09-03T02:00:00.000Z',
+      }],
+    );
+    expect(merged).toEqual([expect.objectContaining({
+      key: 'pi-task:task-pi:2026-09-03',
+      displayName: 'GitHub 热门项目',
+      engineType: 'pi',
+    })]);
+  });
+
+  it('only accepts supported dated task keys and drops summary/run/base history', () => {
     const merged = mergeEngineAndCatalogScheduledTaskSessions(
       [],
       [
@@ -266,6 +294,28 @@ describe('filterTaskSidebarCatalogRows', () => {
       'agent:main:cron:job-1:2026-08-06',
     ]);
   });
+
+  it('keeps dated PI task rows and drops PI base rows', () => {
+    const filtered = filterTaskSidebarCatalogRows([
+      {
+        sessionKey: 'pi-task:task-pi',
+        sessionType: 'scheduled_task',
+        taskId: 'task-pi',
+        title: 'base',
+        lastActivityAt: null,
+      },
+      {
+        sessionKey: 'pi-task:task-pi:2026-09-03',
+        sessionType: 'scheduled_task',
+        taskId: 'task-pi',
+        title: 'GitHub 热门项目',
+        lastActivityAt: '2026-09-03T02:00:00.000Z',
+      },
+    ]);
+    expect(filtered.map((row) => row.sessionKey)).toEqual([
+      'pi-task:task-pi:2026-09-03',
+    ]);
+  });
 });
 
 describe('resolveTaskSidebarRowTitles', () => {
@@ -329,6 +379,7 @@ describe('resolveCatalogRowTaskName', () => {
   const nameMaps = {
     cron: new Map([['job-1', '日报任务']]),
     claude: new Map([['t1', '周报任务']]),
+    pi: new Map([['task-pi', 'PI 日报任务']]),
   };
 
   it('resolves cron rows by taskId, falling back to the parsed jobId', () => {
@@ -355,5 +406,13 @@ describe('resolveCatalogRowTaskName', () => {
       sessionType: 'claude_task',
       taskId: 'unknown',
     }, nameMaps)).toBeUndefined();
+  });
+
+  it('resolves PI scheduled_task rows from the unified task definition map', () => {
+    expect(resolveCatalogRowTaskName({
+      sessionKey: 'pi-task:task-pi:2026-09-03',
+      sessionType: 'scheduled_task',
+      taskId: null,
+    }, nameMaps)).toBe('PI 日报任务');
   });
 });

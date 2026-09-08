@@ -6,10 +6,12 @@ import {
   isClaudeScheduledTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
 
-export type ChatEngineType = 'openclaw' | 'claude';
+import type { AgentEngineType } from '../../shared/agent-engine';
+
+export type ChatEngineType = AgentEngineType;
 
 function normalizeEngineType(value: unknown): ChatEngineType | undefined {
-  return value === 'claude' || value === 'openclaw' ? value : undefined;
+  return value === 'claude' || value === 'openclaw' || value === 'pi' ? value : undefined;
 }
 
 export function resolveChatEngineType(input: {
@@ -26,6 +28,8 @@ export function resolveChatEngineType(input: {
   const sessionEngine = normalizeEngineType(input.sessionEngineType);
   const agentEngine = normalizeEngineType(input.agentEngineType);
   const sessionKey = input.sessionKey ?? undefined;
+
+  if (sessionKey?.startsWith('pi:') || sessionKey?.startsWith('pi-task:')) return 'pi';
 
   if (input.sessionEngineFirst && sessionEngine) {
     return sessionEngine;
@@ -49,7 +53,7 @@ export function resolveChatEngineType(input: {
   if (
     sessionKey
     && input.inferOpenClawTaskKeys
-    && isAnyCronSessionKey(sessionKey)
+    && (isAnyCronSessionKey(sessionKey) || /^agent:[^:]+:scheduled-task:/.test(sessionKey))
   ) {
     return 'openclaw';
   }

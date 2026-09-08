@@ -6,6 +6,10 @@
 
 export function extractAgentIdFromSessionKey(sessionKey: string): string | null {
   const trimmed = sessionKey.trim();
+  if (trimmed.startsWith('pi:')) {
+    const agentId = (trimmed.split(':')[1] || '').trim();
+    return agentId || null;
+  }
   if (!trimmed.startsWith('agent:')) return null;
   const parts = trimmed.split(':');
   const agentId = (parts[1] || '').trim();
@@ -36,6 +40,7 @@ export function isTaskExecutionSessionKey(sessionKey: string): boolean {
   const trimmed = sessionKey.trim();
   if (!trimmed) return false;
   if (trimmed.startsWith('claude-task:') || trimmed.startsWith('claude-task-run:')) return true;
+  if (trimmed.startsWith('pi-task:')) return true;
   if (!trimmed.startsWith('agent:')) return false;
   const parts = trimmed.split(':');
   if (parts.length >= 4 && parts[2] === 'cron') return true;

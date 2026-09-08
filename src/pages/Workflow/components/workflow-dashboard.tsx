@@ -47,7 +47,7 @@ import { Button } from '@/components/ui/button';
 import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
-import { workflowSessionTitle } from '@/lib/workflow-session';
+import { workflowSessionTitle, type WorkflowExecutionEngine } from '@/lib/workflow-session';
 import { WorkflowComposer } from '@/pages/Workflow/components/workflow-composer';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
 import { RECOMMEND_POSITION_KEYS } from '@/lib/recommend-api';
@@ -224,7 +224,7 @@ export function WorkflowDashboard({
 
   /** 立即运行：先选择本次工作流引擎，再跳转首页自动发送。 */
   const runWorkflowInChat = useCallback(
-    (card: Pick<WorkflowCardItem, 'id' | 'name'>, engineType: 'claude' | 'openclaw') => {
+    (card: Pick<WorkflowCardItem, 'id' | 'name'>, engineType: WorkflowExecutionEngine) => {
       navigateToNewSessionWithPrompt(
         navigate,
         location.pathname,

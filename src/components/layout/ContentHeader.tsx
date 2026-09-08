@@ -8,6 +8,8 @@
  */
 import { isValidElement } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { MessageSquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   contentHeaderBarClass,
@@ -23,7 +25,10 @@ import {
 import { ContentHeaderSessionChip } from '@/components/layout/content-header-session-chip';
 import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
+import { SidebarTooltip } from '@/components/layout/sidebar-tooltip';
 import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
+import { useChatStore } from '@/stores/chat';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
@@ -40,6 +45,8 @@ export function ContentHeader() {
     layoutMode,
     onCloseSession,
   } = useContentHeaderDisplay();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { snapshot, setUserCollapsed } = useAppShellLayout();
   const sidebarCollapsed = snapshot.effectiveCollapsed;
   const canUserRestoreSidebar = snapshot.canUserRestoreSidebar;
@@ -73,13 +80,30 @@ export function ContentHeader() {
       )}
     >
       {canUserRestoreSidebar ? (
-        <SidebarHeaderToggle
-          isCollapsed
-          isContentHeaderCompact
-          onToggle={() => setUserCollapsed(false)}
-          collapseLabel={t('sidebar.toggleSidebarCollapse')}
-          expandLabel={t('sidebar.toggleSidebarExpand')}
-        />
+        <>
+          <SidebarHeaderToggle
+            isCollapsed
+            isContentHeaderCompact
+            onToggle={() => setUserCollapsed(false)}
+            collapseLabel={t('sidebar.toggleSidebarCollapse')}
+            expandLabel={t('sidebar.toggleSidebarExpand')}
+          />
+          <SidebarTooltip label={t('sidebar.newChat')} sideOffset={8}>
+            <button
+              type="button"
+              aria-label={t('sidebar.newChat')}
+              data-sclaw-browser-sidebar-preserve="true"
+              onClick={() => {
+                navigateToMainChatHome(navigate, location.pathname, () => {
+                  useChatStore.getState().newSession();
+                });
+              }}
+              className="sto-navigation-item no-drag flex h-[var(--sto-content-header-control-h,28px)] w-[var(--sto-content-header-control-h,28px)] shrink-0 items-center justify-center rounded-md text-[var(--sto-icon-tertiary)] transition-colors hover:text-[var(--sto-icon-secondary)]"
+            >
+              <MessageSquarePlus className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
+            </button>
+          </SidebarTooltip>
+        </>
       ) : null}
       <div
         data-slot="conversation-title"

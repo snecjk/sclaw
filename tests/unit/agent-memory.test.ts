@@ -30,6 +30,20 @@ describe('shared agent-memory helpers', () => {
     expect(blocks.injectedExecutionMemories).toEqual([{ memoryId: 'e1', memory: '执行 sai-cli 查询' }]);
   });
 
+  it('exposes renderer-safe memory text without internal prompt guardrails', () => {
+    const blocks = buildAgentMemoryContextBlocks({ results: [
+      { id: 'p1', memory: '用户喜欢简洁输出', score: 0.91, metadata: {} },
+      { id: 'e1', memory: '执行 sai-cli 查询', score: 0.8, metadata: { memoryScope: 'execution', status: 'active' } },
+    ] });
+
+    expect(blocks.displayMemories).toEqual([
+      { kind: 'preference', memory: '用户喜欢简洁输出' },
+      { kind: 'execution', memory: '执行 sai-cli 查询' },
+    ]);
+    expect(JSON.stringify(blocks.displayMemories)).not.toContain('技能规则优先');
+    expect(JSON.stringify(blocks.displayMemories)).not.toContain('StoClaw-Agent-Memory');
+  });
+
   it('keeps skill priority guardrails when only execution memory is injected', () => {
     const blocks = buildAgentMemoryContextBlocks({ results: [
       { id: 'e1', memory: '历史执行路径', score: 0.8, metadata: { memoryScope: 'execution', status: 'active' } },

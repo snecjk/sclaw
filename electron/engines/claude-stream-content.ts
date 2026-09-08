@@ -3,21 +3,14 @@
  * 供 claude-adapter 在 delta 阶段透出 tool_use + input_json_delta。
  */
 
+import {
+  buildPartialToolInputPreview,
+  DEFAULT_PARTIAL_TOOL_INPUT_PREVIEW_CHARS,
+} from '../../shared/partial-tool-input-preview';
+
 export type ClaudeStreamContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; inputJson: string };
-
-const DEFAULT_PARTIAL_INPUT_PREVIEW_CHARS = 4_096;
-
-function buildPartialInputPreview(inputJson: string, maxChars: number): string {
-  if (inputJson.length <= maxChars) return inputJson;
-  const marker = `\n… [partial tool input: ${inputJson.length} chars] …\n`;
-  const available = Math.max(0, maxChars - marker.length);
-  const headLength = Math.ceil(available * 0.75);
-  const tailLength = available - headLength;
-  const tail = tailLength > 0 ? inputJson.slice(-tailLength) : '';
-  return `${inputJson.slice(0, headLength)}${marker}${tail}`;
-}
 
 export type ClaudeToolResultMessage = {
   role: 'toolresult';
@@ -149,9 +142,9 @@ export class ClaudeStreamContentAccumulator {
           // can show real progress while Claude is still generating JSON. Large
           // Write/Edit payloads are capped here; the accumulator still retains
           // the complete JSON and emits it once parsing succeeds.
-          input = buildPartialInputPreview(
+          input = buildPartialToolInputPreview(
             block.inputJson,
-            options?.maxPartialInputChars ?? DEFAULT_PARTIAL_INPUT_PREVIEW_CHARS,
+            options?.maxPartialInputChars ?? DEFAULT_PARTIAL_TOOL_INPUT_PREVIEW_CHARS,
           );
         }
       }

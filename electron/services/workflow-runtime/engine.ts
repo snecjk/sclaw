@@ -20,6 +20,7 @@ import { recordArtifact as persistArtifact, type ArtifactRow } from './artifact-
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
 import { cancelAgent } from './agent-runner-claude';
 import { cancelOpenClawWorkflowAgent } from './agent-runner-openclaw';
+import { cancelPiWorkflowAgent } from './agent-runner-pi';
 import { findStartNode, generatePlan, validateWorkflowDefinition } from './plan-generator';
 import { buildConditionContext, resolveNodeInput } from './input-resolver';
 import { workspacePath } from './workspace-paths';
@@ -28,6 +29,7 @@ import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 import { hydrateNodeInputFiles } from './node-input-files';
 import { createFailurePacket, createWorkflowPacket, getWorkflowPacketFailureMessage, isWorkflowPacket } from './workflow-packet';
 import { normalizeRuntimeDefinition } from './runtime-definition';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 import { normalizeArtifactFirstPayloadSchema, promoteCarriedOutputArtifacts } from './artifact-output';
 import { executeBrowserNode } from './browser-nodes';
 import { isBrowserAutomationEnabled } from '../../../shared/browser-automation/feature-flag';
@@ -73,7 +75,7 @@ export interface StartWorkflowArgs {
   sessionKey?: string;
   /** 本地业务发起入口，仅落 wf_run，不同步云端。 */
   triggerType?: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
-  engineType: 'claude' | 'openclaw';
+  engineType: AgentEngineType;
   engineModel?: string;
   /**
    * Present only for a workflow started from a chat launch tool. Persisting
@@ -136,7 +138,9 @@ export function createEngine(deps: EngineDeps) {
     const startupSchema = resolveStartupSchema(def);
     let hasExecutedSmartNode = existingNodeRuns.some((nodeRun) => SMART_TYPES.has(nodeRun.node_type) && nodeRun.status === 'SUCCEEDED');
     const runRow = await Promise.resolve(repo.getRun(runId)).catch(() => undefined);
-    const execEngine = runRow?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
+    const execEngine: AgentEngineType = runRow?.engine_type === 'openclaw'
+      ? 'openclaw'
+      : runRow?.engine_type === 'claude' ?'claude' : 'pi';
     const runInput = initialInput ?? parseJson(runRow?.input_json) ?? {};
     const runSnapshotBase = {
       run_id: runId,
@@ -651,7 +655,7 @@ export function createEngine(deps: EngineDeps) {
       if (!Number.isSafeInteger(args.runDatabaseId) || args.runDatabaseId <= 0) {
         throw new Error('workflow runDatabaseId must be a positive JavaScript-safe integer');
       }
-      if (args.engineType !== 'claude' && args.engineType !== 'openclaw') {
+      if (args.engineType !== 'claude' && args.engineType !== 'openclaw' && args.engineType !== 'pi') {
         throw new Error('workflow execution engine is required');
       }
       try {
@@ -777,6 +781,7 @@ export function createEngine(deps: EngineDeps) {
       cancelledRunIds.add(runId);
       cancelAgent(runId, nodeId);
       cancelOpenClawWorkflowAgent(runId, nodeId);
+      cancelPiWorkflowAgent(runId, nodeId);
       const run = await repo.getRun(runId).catch(() => undefined);
       if (run && TERMINAL_STATUSES.has(run.status)) return;
       const changed = await repo.updateRunIfActive(runId, { status: 'CANCELLED', completed_at: nowIso() });

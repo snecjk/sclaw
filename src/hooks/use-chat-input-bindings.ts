@@ -78,7 +78,7 @@ export interface ChatInputBindingsOptions {
   /** 外层 className */
   className?: string;
   /** 当前输入面板所属引擎；仅 openclaw 依赖 Gateway 在线 */
-  engineType?: 'openclaw' | 'claude';
+  engineType?: 'openclaw' | 'claude' | 'pi';
 }
 
 export interface ChatInputBindingsResult {
@@ -106,6 +106,13 @@ export interface ChatInputBindingsResult {
   className?: string;
 }
 
+/** Only OpenClaw chat dispatch is gated by the OpenClaw Gateway lifecycle. */
+export function chatEngineRequiresGateway(
+  engineType: ChatInputBindingsOptions['engineType'],
+): boolean {
+  return engineType === 'openclaw';
+}
+
 /**
  * 获取 ChatInput 组件的绑定 props。
  *
@@ -119,7 +126,7 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
   const { sending } = useCurrentChatRuntimeView();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
-  const requiresGateway = options.engineType !== 'claude';
+  const requiresGateway = chatEngineRequiresGateway(options.engineType);
 
   return useMemo(
     () => ({
@@ -148,7 +155,6 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
       options.seedSkillSlug,
       options.placeholder,
       options.className,
-      options.engineType,
       abortRun,
       requiresGateway,
       isGatewayRunning,

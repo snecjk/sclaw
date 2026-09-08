@@ -4,6 +4,7 @@ import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { logger } from '../utils/logger';
 import { readOpenAiChatCompletionSse } from './openai-chat-completion-sse';
+import { requestMemoryCenter } from './memory-center-http-client';
 
 export interface AgentMemoryBootstrap {
   enabled: boolean;
@@ -66,13 +67,6 @@ export interface AgentMemorySearchResultItem {
   metadata?: Record<string, unknown>;
 }
 
-type MemoryCenterEnvelope<T> = {
-  success?: boolean;
-  errMessage?: string;
-  data?: T;
-  traceId?: string;
-};
-
 const AGENT_MEMORY_BOOTSTRAP_PATH = '/agent/v1/agent-memory/bootstrap';
 const AGENT_MEMORY_EMBEDDER_CREATE_PATH = '/agent/v1/agent-memory/embedder/create';
 const AGENT_MEMORY_VECTOR_UPSERT_PATH = '/agent/v1/agent-memory/vector/upsert';
@@ -117,42 +111,6 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     'Content-Type': 'application/json',
     ...buildStoMemoryCenterAuthHeaders(token),
   };
-}
-
-async function requestMemoryCenter<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
-  const baseUrl = await resolveStoBaseUrl();
-  logger.info('[mem0][remote] request start', {
-    path,
-    method: init?.method || 'GET',
-    timeoutMs: init?.timeoutMs ?? 15_000,
-  });
-  const response = await proxyAwareFetch(`${baseUrl}${path}`, {
-    timeoutMs: 15_000,
-    ...init,
-    headers: {
-      ...(await getAuthHeaders()),
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  const body = await response.json() as MemoryCenterEnvelope<T>;
-  if (!response.ok || body.success === false) {
-    logger.error('[mem0][remote] request failed', {
-      path,
-      method: init?.method || 'GET',
-      status: response.status,
-      errMessage: body.errMessage,
-      traceId: body.traceId,
-    });
-    throw new Error(body.errMessage || `Memory center request failed: ${response.status}`);
-  }
-  // logger.info('[mem0][remote] request success', {
-  //   path,
-  //   method: init?.method || 'GET',
-  //   status: response.status,
-  //   traceId: body.traceId,
-  // });
-  return body.data as T;
 }
 
 export class AgentMemoryRemoteService {

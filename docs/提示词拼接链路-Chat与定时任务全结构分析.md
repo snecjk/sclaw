@@ -394,7 +394,7 @@ GET task → TaskCreateModal(job)
 | 任务创建/存储 | `src/pages/MyTask/components/TaskCreateModal.tsx`、`electron/scheduled-tasks/scheduled-task-service.ts`（L92-156）、`electron/scheduled-tasks/scheduled-task-attachments.ts` |
 | 任务执行 | `electron/scheduled-tasks/scheduled-task-executor.ts`（L82-203）、`shared/dingtalk-send/scheduled-task-dingtalk-lift.ts`（L47-61） |
 | 钉钉规则 | `shared/dingtalk-prompts/dingtalk-mention-context.ts`（L297-310）、`shared/dingtalk-prompts/scheduled-task/scheduled-task-dingtalk.ts` |
-| NL 创建 | `sto-plugin/openclaw/sto-scheduled-task-tool/`、`sto-plugin/claude/claude-scheduled-task-tool/`、`electron/scheduled-tasks/scheduled-task-nl-create.ts` |
+| NL 创建 | `sto-plugin/openclaw/sto-scheduled-task-tool/`（legacy OpenClaw）、`electron/agent-extensions/extensions/sto-scheduled-task-tool/`（Claude/PI 公共扩展）、`electron/scheduled-tasks/scheduled-task-nl-create.ts` |
 
 ---
 

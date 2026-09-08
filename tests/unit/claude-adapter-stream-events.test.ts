@@ -42,6 +42,82 @@ function createSink() {
 }
 
 describe('consumeClaudeQuery stream projection', () => {
+  it('does not query or publish Claude context usage during a normal turn', async () => {
+    const { chatEvents, sink } = createSink();
+    const getContextUsage = vi.fn(async () => ({
+      totalTokens: 12_500,
+      maxTokens: 100_000,
+      percentage: 12.5,
+    }));
+    const query = {
+      ...createQuery([
+        {
+          type: 'assistant',
+          uuid: 'assistant-usage',
+          message: {
+            model: 'claude-sonnet',
+            content: [{ type: 'text', text: 'done' }],
+            usage: { input_tokens: 10_000, output_tokens: 1_000 },
+          },
+        },
+        { type: 'result', subtype: 'success' },
+      ]),
+      getContextUsage,
+    };
+    await consumeClaudeQuery(
+      'agent:test:session:usage',
+      'session-usage',
+      'D:\\workspace',
+      query,
+      sink,
+      'run-usage',
+    );
+
+    const usageEvents = chatEvents
+      .map((item) => item.engineEvent)
+      .filter((item) => item.type === 'context.usage.updated');
+    expect(usageEvents).toHaveLength(0);
+    expect(getContextUsage).not.toHaveBeenCalled();
+  });
+
+  it('maps Claude compact status and boundary messages to canonical compaction events', async () => {
+    const { chatEvents, sink } = createSink();
+    await consumeClaudeQuery(
+      'agent:test:session:compact',
+      'session-compact',
+      'D:\\workspace',
+      createQuery([
+        { type: 'system', subtype: 'status', status: 'compacting' },
+        {
+          type: 'system',
+          subtype: 'compact_boundary',
+          compact_metadata: {
+            trigger: 'auto', pre_tokens: 120_000, duration_ms: 850,
+          },
+        },
+        { type: 'result', subtype: 'success' },
+      ]),
+      sink,
+      'run-compact',
+    );
+
+    const compactionEvents = chatEvents
+      .map((item) => item.engineEvent)
+      .filter((item) => item.type.startsWith('context.compaction.'));
+    expect(compactionEvents).toHaveLength(2);
+    expect(compactionEvents[0]).toMatchObject({
+      type: 'context.compaction.started', reason: 'unknown',
+    });
+    expect(compactionEvents[1]).toMatchObject({
+      type: 'context.compaction.completed',
+      reason: 'auto',
+      tokensBefore: 120_000,
+      durationMs: 850,
+    });
+    expect(chatEvents.map((item) => item.engineEvent)
+      .filter((item) => item.type === 'context.usage.updated')).toHaveLength(0);
+  });
+
   it('emits one canonical delta for each text fragment', async () => {
     const { chatEvents, sink } = createSink();
     await consumeClaudeQuery(

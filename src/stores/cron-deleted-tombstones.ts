@@ -1,7 +1,7 @@
 /** Hide recently deleted local cron jobs while Gateway list may still be stale (esp. on Windows). */
 export const CRON_DELETED_TOMBSTONE_TTL_MS = 60_000;
 
-export type CronJobEngineType = 'openclaw' | 'claude';
+export type CronJobEngineType = 'openclaw' | 'claude' | 'pi';
 
 export interface CronDeletedTombstone {
   id: string;

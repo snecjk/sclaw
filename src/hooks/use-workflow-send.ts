@@ -27,6 +27,8 @@ import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } 
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import type { WorkflowSchemaField } from '@/types/workflow';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import { parseAgentEngineType, type AgentEngineType } from '../../shared/agent-engine';
+import { useAgentEnginePolicyStore } from '@/stores/agent-engine-policy';
 
 export interface WorkflowSendContext {
   sessionKey: string;
@@ -34,11 +36,17 @@ export interface WorkflowSendContext {
 }
 
 /** The list-card selector persists its choice on the workflow chat session. */
-function chooseImmediateWorkflowEngine(): 'claude' | 'openclaw' {
+export function resolveImmediateWorkflowEngine(explicitEngine?: AgentEngineType): AgentEngineType {
+  if (explicitEngine) return explicitEngine;
   const { currentSessionKey, sessions } = useChatStore.getState();
-  return sessions.find((session) => session.key === currentSessionKey)?.engineType === 'openclaw'
-    ? 'openclaw'
-    : 'claude';
+  const sessionEngine = parseAgentEngineType(
+    sessions.find((session) => session.key === currentSessionKey)?.engineType,
+  );
+  const policy = useAgentEnginePolicyStore.getState();
+  if (sessionEngine && policy.engines.some((option) => option.code === sessionEngine)) {
+    return sessionEngine;
+  }
+  return policy.defaultEngine;
 }
 
 /**
@@ -175,7 +183,7 @@ export async function createAndStartWorkflowDirect(
       sessionKey: context.sessionKey,
       agentId: context.agentId,
       triggerType: 'chat',
-      engineType: chooseImmediateWorkflowEngine(),
+      engineType: resolveImmediateWorkflowEngine(),
       chatCard: { title: templateName, paramsSummary: userText },
     });
 
@@ -262,6 +270,7 @@ export async function startExistingWorkflow(
   _sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
   originalText: string,
   _templateName?: string,
+  executionEngine?: AgentEngineType,
 ): Promise<boolean> {
   if (!canStartWorkflow()) {
     toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
@@ -284,7 +293,7 @@ export async function startExistingWorkflow(
       sessionKey: context.sessionKey,
       agentId: context.agentId,
       triggerType: 'chat',
-      engineType: chooseImmediateWorkflowEngine(),
+      engineType: resolveImmediateWorkflowEngine(executionEngine),
       chatCard: { title: displayName, paramsSummary: originalText },
     });
 
@@ -576,6 +585,8 @@ export interface StartRememberedWorkflowSendOptions {
     workflowId?: string | null,
     workflowContext?: unknown,
   ) => Promise<void>;
+  /** Engine explicitly chosen by the workflow run-now dialog. */
+  engineType?: AgentEngineType;
 }
 
 /**
@@ -585,7 +596,7 @@ export interface StartRememberedWorkflowSendOptions {
 export async function tryStartRememberedWorkflowSend(
   options: StartRememberedWorkflowSendOptions,
 ): Promise<boolean> {
-  const { text, context, sendMessage } = options;
+  const { text, context, sendMessage, engineType } = options;
   const trimmed = text.trim();
   if (!trimmed) return false;
 
@@ -646,6 +657,7 @@ export async function tryStartRememberedWorkflowSend(
     sendMessage,
     trimmed,
     templateName,
+    engineType,
   );
   return true;
 }
