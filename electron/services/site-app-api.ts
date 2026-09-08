@@ -360,7 +360,12 @@ export async function refreshSiteAppDeploy(input: {
 export async function syncSiteAppMenus(params: Record<string, unknown>): Promise<unknown> {
   const appCode = typeof params.app_code === 'string' ? params.app_code.trim() : '';
   if (!appCode) throw new Error('缺少 app_code');
-  return postSiteAppCli('action=menu-sync', '/api/v1/cli/site-app/menu/sync', params, SITE_APP_MENU_TIMEOUT_MS);
+  return postSiteAppCli(
+    'action=menu-replace',
+    '/api/v1/cli/site-app/menus/replace',
+    params,
+    SITE_APP_MENU_TIMEOUT_MS,
+  );
 }
 
 export async function listSiteAppMenus(appCode: string): Promise<unknown> {

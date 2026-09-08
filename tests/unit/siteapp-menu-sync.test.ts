@@ -5,7 +5,7 @@ import {
 } from '../../shared/siteapp-menu-sync';
 
 describe('siteapp menu sync', () => {
-  it('builds apply params with confirm and skip_preview', () => {
+  it('builds replace params with app_code and menus only', () => {
     expect(buildSiteappMenuSyncParams({
       appCode: 'app_test',
       menus: [{
@@ -16,9 +16,6 @@ describe('siteapp menu sync', () => {
       }],
     })).toEqual({
       app_code: 'app_test',
-      mode: 'apply',
-      confirm: true,
-      skip_preview: true,
       menus: [{
         menu_code: 'home',
         parent_code: null,
