@@ -35,12 +35,16 @@ export interface WorkflowSendContext {
   agentId: string;
 }
 
-/** The list-card selector persists its choice on the workflow chat session. */
-export function resolveImmediateWorkflowEngine(explicitEngine?: AgentEngineType): AgentEngineType {
+/** Resolve the execution engine from the workflow's owning chat session. */
+export function resolveImmediateWorkflowEngine(
+  explicitEngine?: AgentEngineType,
+  sessionKey?: string,
+): AgentEngineType {
   if (explicitEngine) return explicitEngine;
   const { currentSessionKey, sessions } = useChatStore.getState();
+  const targetSessionKey = sessionKey ?? currentSessionKey;
   const sessionEngine = parseAgentEngineType(
-    sessions.find((session) => session.key === currentSessionKey)?.engineType,
+    sessions.find((session) => session.key === targetSessionKey)?.engineType,
   );
   const policy = useAgentEnginePolicyStore.getState();
   if (sessionEngine && policy.engines.some((option) => option.code === sessionEngine)) {
@@ -183,7 +187,7 @@ export async function createAndStartWorkflowDirect(
       sessionKey: context.sessionKey,
       agentId: context.agentId,
       triggerType: 'chat',
-      engineType: resolveImmediateWorkflowEngine(),
+      engineType: resolveImmediateWorkflowEngine(undefined, context.sessionKey),
       chatCard: { title: templateName, paramsSummary: userText },
     });
 
@@ -293,7 +297,7 @@ export async function startExistingWorkflow(
       sessionKey: context.sessionKey,
       agentId: context.agentId,
       triggerType: 'chat',
-      engineType: resolveImmediateWorkflowEngine(executionEngine),
+      engineType: resolveImmediateWorkflowEngine(executionEngine, context.sessionKey),
       chatCard: { title: displayName, paramsSummary: originalText },
     });
 
