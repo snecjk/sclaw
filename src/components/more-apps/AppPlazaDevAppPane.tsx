@@ -31,7 +31,6 @@ import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { AppDevComposer } from '@/components/app-dev/AppDevComposer';
 import { AppDevSplitBody } from '@/components/app-dev/AppDevSplitBody';
 import { AppDevToolRollupLine } from '@/components/app-dev/AppDevToolRollupLine';
-import { AppDevTodoCapsule } from '@/components/app-dev/AppDevTodoCapsule';
 import { AppDevTurnSummaryCard } from '@/components/app-dev/AppDevTurnSummaryCard';
 import { AppDevTurnVersionActions } from '@/components/app-dev/AppDevTurnVersionActions';
 import { AppDevTunePanel } from '@/components/app-dev/AppDevTunePanel';
@@ -51,7 +50,6 @@ import {
   resolveAppDevTurnTools,
   rollupAppDevTools,
 } from '@/lib/app-dev-tool-rollup';
-import { deriveAppDevTurnPlan } from '@/lib/app-dev-turn-plan';
 import { buildTurnCheckpointSubject, excerptUserText } from '@/lib/app-dev-turn-versions';
 import {
   buildPlanConfirmPrompt,
@@ -209,19 +207,6 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   const rollupSig = appDevCompletedToolsSignature(streamingTools);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const toolRollup = useMemo(() => rollupAppDevTools(streamingTools), [rollupSig]);
-
-  // 待办胶囊：流式阶段叙述 + 工具进度派生
-  const turnPlanTexts = useMemo(() => {
-    const texts = streamingMessages
-      .map((message) => extractText(message))
-      .filter((text) => text.trim().length > 0);
-    if (streamText.trim()) texts.push(streamText);
-    return texts;
-  }, [streamingMessages, streamText]);
-  const turnPlan = useMemo(
-    () => deriveAppDevTurnPlan({ texts: turnPlanTexts, tools: streamingTools, sending }),
-    [turnPlanTexts, streamingTools, sending],
-  );
 
   // 轮结束快照：汇总卡的中断标记 / 耗时 / 工具清单在轮结束瞬间捕获，
   // 静态列表 remount（transcript 接管）后仍可对齐到同一 turnKey
@@ -465,11 +450,6 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
       ) : null}
 
       <div className="relative border-t border-border px-3 py-3">
-        <AppDevTodoCapsule
-          plan={turnPlan}
-          sending={sending}
-          className="absolute inset-x-0 top-0 z-10 -translate-y-[calc(100%+12px)]"
-        />
         <AppDevComposer
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}

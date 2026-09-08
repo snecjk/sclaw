@@ -363,6 +363,18 @@ describe('canonical chat client session reducer', () => {
     expect(replacement.error).toBeNull();
   });
 
+  it('rewrites Tengine 504 HTML from run.failed into a short timeout copy', () => {
+    const html = '504 <!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN"><html><head><title>504 Gateway Time-out</title></head><body><h1>504 Gateway Time-out</h1><hr/>Powered by Tengine</body></html>';
+    const failed = reduceSessionEvent(createClientSessionState(), event({
+      type: 'run.failed',
+      payload: { error: html },
+    })).state;
+
+    expect(failed.error?.code).toBe('TIMEOUT');
+    expect(failed.error?.message).toBe(i18n.t('chat:runtime.errors.gatewayTimeout'));
+    expect(failed.error?.message).not.toMatch(/DOCTYPE|Tengine|<html/i);
+  });
+
   it('does not produce an optimistic user turn for scheduled-task dispatches (X2)', () => {
     // X2: 定时任务执行不再注入乐观 user 消息。supervisor 对 origin === 'scheduled_task'
     // 的 dispatch 不携带 optimisticUserMessage，reducer 因此不会产生乐观气泡。
