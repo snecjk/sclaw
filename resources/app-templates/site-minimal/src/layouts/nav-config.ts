@@ -19,8 +19,6 @@ export type SideNavItem = SideNavPageItem | SideNavDirectoryItem;
 
 export const SIDE_NAV: SideNavPageItem[] = [
   { key: 'home', label: '首页', path: 'home' },
-  { key: 'a2ui-home', label: 'A2UI 首页', path: 'a2ui-home', developerOnly: true },
-  { key: 'customer-list', label: '客户列表', path: 'customer-list', developerOnly: true },
   { key: 'example', label: '开发示例', path: 'example', developerOnly: true },
 ];
 

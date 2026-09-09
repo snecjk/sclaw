@@ -19,10 +19,6 @@ export function isPageId(value: string): value is PageId {
   return value in PAGE_MESSAGES;
 }
 
-export function routePathForPageId(pageId: PageId): string {
-  return pageId === 'home' ? 'a2ui-home' : pageId;
-}
-
 /** Resolve initial page from ?page= or #page= */
 export function resolveInitialPageId(): PageId {
   if (typeof window === 'undefined') return DEFAULT_PAGE_ID;
