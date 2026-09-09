@@ -33,3 +33,32 @@ export function resolveSidebarAccountFooterMode(options: {
 export function shouldRenderAccountGearIcon(mode: SidebarAccountFooterMode): boolean {
   return mode === 'compact-gear';
 }
+
+type SidebarAccountIdentity = {
+  realName?: string | null;
+  userName?: string | null;
+  code?: string | null;
+  empCode?: string | null;
+};
+
+/** 侧栏底部展示用姓名：真名优先，否则登录名 */
+export function resolveSidebarAccountName(
+  user: SidebarAccountIdentity | null | undefined,
+): string {
+  if (!user) return '';
+  return user.realName?.trim() || user.userName?.trim() || '';
+}
+
+/**
+ * 侧栏底部姓名旁的员工账号/工号。
+ * 优先梧桐工号 `code`，其次轩辕 `empCode`，再回落登录名 `userName`；与姓名相同则不重复展示。
+ */
+export function resolveSidebarAccountEmployeeId(
+  user: SidebarAccountIdentity | null | undefined,
+): string {
+  if (!user) return '';
+  const name = resolveSidebarAccountName(user);
+  const empId = user.code?.trim() || user.empCode?.trim() || user.userName?.trim() || '';
+  if (!empId || empId === name) return '';
+  return empId;
+}
