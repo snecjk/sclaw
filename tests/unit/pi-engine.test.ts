@@ -227,6 +227,20 @@ describe('Pi OpenAI compatibility and errors', () => {
     expect(shouldCompletePiRun(undefined, 'run-2', 'run-2')).toBe(false);
   });
 
+  it('does not treat an assistant error message as a settled Pi run', () => {
+    const error = getPiAssistantError({
+      role: 'assistant',
+      content: [],
+      stopReason: 'error',
+      errorMessage: 'transient provider error',
+    });
+
+    expect(error).toBe('transient provider error');
+    // A matching agent_settled event remains mandatory before the prompt can
+    // complete; an intermediate model error may still be retried by Pi.
+    expect(shouldCompletePiRun('run-error', undefined, 'run-error')).toBe(false);
+  });
+
   it('projects Pi token deltas as cumulative canonical snapshots', () => {
     let snapshot = startPiAssistantSnapshot({
       role: 'assistant',

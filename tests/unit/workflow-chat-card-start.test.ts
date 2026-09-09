@@ -121,6 +121,7 @@ describe('workflow chat-card start metadata', () => {
 
   it('persists the card marker in the first wf_run upsert', async () => {
     const upsertRun = vi.fn().mockResolvedValue(undefined);
+    const onStatusChange = vi.fn();
     const repo = {
       upsertRun,
       listNodeRuns: vi.fn().mockResolvedValue([]),
@@ -133,6 +134,7 @@ describe('workflow chat-card start metadata', () => {
       dslClient: {
         fetchVersion: vi.fn().mockRejectedValue(new Error('stop after initial upsert')),
       },
+      onStatusChange,
     });
 
     await expect(engine.startWorkflow({
@@ -155,6 +157,7 @@ describe('workflow chat-card start metadata', () => {
       chat_card_title: '天气笑话',
       chat_params_summary: '{"city":"上海"}',
     }));
+    expect(onStatusChange).toHaveBeenCalledWith('run-new', 'running');
   });
 
   it('classifies a chat workflow from a scheduled-task session', async () => {

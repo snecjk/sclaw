@@ -900,14 +900,12 @@ function useChatModelSelection() {
     key: option.key,
     value: option.modelId,
     label: option.displayName,
-    decoration: (
+    decoration: option.isBuiltin ? undefined : (
       <span className={cn(
         'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
-        option.isBuiltin
-          ? 'bg-link-muted text-link'
-          : 'bg-[var(--sto-model-custom-tag-background)] text-[var(--sto-model-custom-tag-foreground)]',
+        'bg-[var(--sto-model-custom-tag-background)] text-[var(--sto-model-custom-tag-foreground)]',
       )}>
-        {option.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
+        {t('toolbar.modelTagCustom')}
       </span>
     ),
   }));
@@ -958,7 +956,6 @@ function useChatModelSelection() {
     handleModelSwitch,
     handleSetDefaultModel,
     switchTitle: t('toolbar.switchModelTitle'),
-    builtinTag: t('toolbar.modelTagBuiltin'),
     customTag: t('toolbar.modelTagCustom'),
   };
 }
@@ -980,7 +977,6 @@ export function ChatModelSelector({
     modelSaving,
     handleModelSwitch,
     switchTitle,
-    builtinTag,
     customTag,
   } = useChatModelSelection();
 
@@ -1020,14 +1016,11 @@ export function ChatModelSelector({
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
             {modelDisplayText}
           </span>
-          {selectedModel ? (
+          {selectedModel && !selectedModel.isBuiltin ? (
             <span className={cn(
-              'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
-              selectedModel.isBuiltin
-                ? 'bg-link-muted text-link'
-                : 'bg-[var(--sto-model-custom-tag-background)] text-[var(--sto-model-custom-tag-foreground)]',
+              'shrink-0 rounded bg-[var(--sto-model-custom-tag-background)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--sto-model-custom-tag-foreground)]',
             )}>
-              {selectedModel.isBuiltin ? builtinTag : customTag}
+              {customTag}
             </span>
           ) : null}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />

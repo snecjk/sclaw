@@ -251,7 +251,7 @@ describe('Chat and Home resize wiring', () => {
     expect(homeSrc).toContain('isResizing={isResizing}');
   });
 
-  it('mounts resize handle inside Preview body only for split mode', () => {
+  it('mounts resize handle inside Preview body for split and overlay modes', () => {
     const chatSrc = readFileSync(
       resolve(process.cwd(), 'src/pages/Chat/index.tsx'),
       'utf8',
@@ -260,9 +260,9 @@ describe('Chat and Home resize wiring', () => {
       resolve(process.cwd(), 'src/pages/Home/HomeMainConversation.tsx'),
       'utf8',
     );
-    expect(chatSrc).toContain('isSplitChatLayout ? (');
+    expect(chatSrc).toContain('isSplitChatLayout || isPreviewOverlay ? (');
     expect(chatSrc).toContain('SplitPanelResizeHandle');
-    expect(homeSrc).toContain('isSplitChatLayout ? (');
+    expect(homeSrc).toContain('isSplitChatLayout || isPreviewOverlay ? (');
     expect(homeSrc).toContain('SplitPanelResizeHandle');
   });
 });

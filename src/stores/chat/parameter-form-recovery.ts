@@ -382,6 +382,7 @@ function registerWorkflowSubmitHandler(
       });
       const trackStartMs = Date.now();
       const { buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
+      const { resolveImmediateWorkflowEngine } = await import('@/hooks/use-workflow-send');
       const userText = buildWorkflowStartUserText(schema, values);
       const run = await startWorkflowLocal({
         workflowId: created.workflowId,
@@ -390,9 +391,9 @@ function registerWorkflowSubmitHandler(
         sessionKey: chatState.currentSessionKey,
         agentId: chatState.currentAgentId,
         triggerType: 'chat',
-        // Recovery resumes a legacy form submission created before engine choice
-        // was persisted, so retain its historical engine explicitly.
-        engineType: 'claude',
+        // A recovered form still belongs to the current chat session. Preserve
+        // that session's Agent engine instead of falling back to Claude.
+        engineType: resolveImmediateWorkflowEngine(undefined, chatState.currentSessionKey),
         chatCard: { title: templateName, paramsSummary: userText },
       });
       saveWorkflowExecution({

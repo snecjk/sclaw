@@ -6,7 +6,7 @@
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
+import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, RotateCcw, Sparkles, Workflow } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
@@ -44,9 +44,9 @@ import {
   stoPreviewExpandedBodyClass,
   stoSplitRowContentsClass,
 } from '@/lib/surfaces';
-import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
+import { usePreviewLayoutResize } from '@/hooks/use-preview-layout-resize';
+import { PreviewOverlayBackdrop } from '@/components/layout/preview-overlay-backdrop';
 import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
-import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
@@ -65,6 +65,7 @@ import {
   attachMissingWorkflowChatCardAnchors,
   workflowAnchorRepairRevision,
 } from '@/lib/workflow-chat-card-registration';
+import { subscribeHostEvent } from '@/lib/host-events';
 import { getCurrentChatDisplayMessages, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useQuoteFlowCardSessionSync } from '@/hooks/use-quote-flow-card-session-sync';
 
@@ -117,12 +118,6 @@ export function Chat() {
   const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
-  const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
-  const { splitRowRef, previewPanelRef, startResize, adjustPreviewPercent, isResizing } = useSplitPanelResize(
-    previewPanelPercent,
-    setPreviewSplitPercent,
-  );
   const [editDraft, setEditDraft] = useState<{
     text: string;
     skill?: import('@/types/skill-meta').SkillMeta;
@@ -185,6 +180,15 @@ export function Chat() {
     // workflow tool-result event reaching the renderer.
     void loadWorkflowCards(currentSessionKey, true);
   }, [currentSessionKey, sending, loadWorkflowCards]);
+
+  // A chat-originated run is persisted before its DSL is fetched. Refresh on
+  // that first running broadcast so its card appears while the chat agent is
+  // still composing the acknowledgement, rather than only at turn end.
+  useEffect(() => subscribeHostEvent<{ sessionKey?: string }>('workflow:status-update', (event) => {
+    if (event?.sessionKey === currentSessionKey) {
+      void loadWorkflowCards(currentSessionKey, true);
+    }
+  }), [currentSessionKey, loadWorkflowCards]);
 
   useEffect(() => {
     if (!currentSessionKey || workflowCards.every((card) => card.anchorUserMessageId)) return;
@@ -408,6 +412,38 @@ export function Chat() {
     });
   }, [beginSendScroll]);
 
+  const retrySourceMessage = useMemo(() => (
+    [...messages]
+      .reverse()
+      .find((message) => message.role === 'user' && Boolean(extractText(message).trim()))
+      ?? null
+  ), [messages]);
+
+  const handleRetryFailedMessage = useCallback(() => {
+    if (sending || !retrySourceMessage) return;
+
+    const text = extractText(retrySourceMessage).trim();
+    if (!text) return;
+
+    // A retry is a fresh model run of the most recent user request.  Clear the
+    // previous terminal error immediately so there is only one actionable state.
+    clearError();
+    void handleSend(
+      text,
+      undefined,
+      undefined,
+      undefined,
+      null,
+      null,
+      null,
+      retrySourceMessage._skillMeta,
+      {
+        skillMetas: retrySourceMessage._skillMetas,
+        composerSegments: retrySourceMessage._composerSegments,
+      },
+    );
+  }, [clearError, handleSend, retrySourceMessage, sending]);
+
   const handleQueue = useCallback((
     text: string,
     attachments?: FileAttachment[],
@@ -490,6 +526,7 @@ export function Chat() {
 
   const {
     previewMode,
+    isPreviewOverlay,
     showPreviewPanel,
     isPreviewSplit,
     isPreviewExpanded,
@@ -506,6 +543,7 @@ export function Chat() {
     selectPreviewTab,
     dismissPreviewTab,
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
+  const { previewPanelPercent, splitRowRef, previewPanelRef, startResize, adjustPreviewPercent, isResizing } = usePreviewLayoutResize(isPreviewOverlay);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
     navigate(`/workflow/${encodeURIComponent(workflowId)}`);
@@ -630,10 +668,10 @@ export function Chat() {
         ? 'conversation'
         : previewMode === 'expanded'
           ? 'preview-expanded'
-          : 'split',
+          : isPreviewOverlay ? 'preview-overlay' : 'split',
   });
 
-  const isSplitChatLayout = isPreviewSplit;
+  const isSplitChatLayout = isPreviewSplit && !isPreviewOverlay;
   const showPreviewSurface = canShowPreviewPanel && showPreviewPanel;
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
@@ -749,12 +787,24 @@ export function Chat() {
               <AlertCircle className="h-4 w-4" />
               {error}
             </p>
-            <button
-              onClick={clearError}
-              className="text-xs text-destructive/60 hover:text-destructive underline"
-            >
-              {t('common:actions.dismiss')}
-            </button>
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={handleRetryFailedMessage}
+                disabled={sending || !retrySourceMessage}
+                className="inline-flex items-center gap-1 text-xs font-medium text-destructive hover:underline disabled:pointer-events-none disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                {t('workflow.retryQuery')}
+              </button>
+              <button
+                type="button"
+                onClick={clearError}
+                className="text-xs text-destructive/60 hover:text-destructive underline"
+              >
+                {t('common:actions.dismiss')}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -826,24 +876,33 @@ export function Chat() {
         </div>
       )}
       </ChatConversationColumn>
-      {/* Preview — Handle 仅 split；expanded 保持 Conversation 挂载 */}
+      {/* Preview — Handle 用于 split / overlay；expanded 保持 Conversation 挂载 */}
       {showPreviewSurface ? (
         <div
           ref={previewPanelRef}
+          data-preview-overlay-panel={isPreviewOverlay || undefined}
+          role={isPreviewOverlay ? 'dialog' : undefined}
+          aria-modal={isPreviewOverlay || undefined}
+          aria-label={t('chat:artifact.preview')}
+          aria-owns={isPreviewOverlay ? 'sto-preview-overlay-header' : undefined}
+          tabIndex={isPreviewOverlay ? -1 : undefined}
           className={cn(
             isSplitChatLayout && stoSplitGridBodyPreviewClass,
             isPreviewExpanded && stoPreviewExpandedBodyClass,
+            isPreviewOverlay && 'sto-preview-overlay-panel',
           )}
         >
-          {isSplitChatLayout ? (
+          {isSplitChatLayout || isPreviewOverlay ? (
             <SplitPanelResizeHandle
               valuePercent={previewPanelPercent}
+              minPercent={isPreviewOverlay ? 40 : 30}
               isResizing={isResizing}
               onResizeStart={startResize}
               onKeyboardAdjust={adjustPreviewPercent}
             />
           ) : null}
           <ChatPreviewPanel
+            isPreviewOverlay={isPreviewOverlay}
             tabs={previewTabs}
             activeTabId={activePreviewTabId}
             sessionKey={currentSessionKey}
@@ -855,6 +914,7 @@ export function Chat() {
         </div>
       ) : null}
     </div>
+    <PreviewOverlayBackdrop active={isPreviewOverlay} panelRef={previewPanelRef} onClose={closePreviewPanel} />
     <TaskCreateModal
       open={workflowCronModalOpen}
       onClose={closeWorkflowCronTaskModal}

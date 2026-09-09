@@ -1,6 +1,6 @@
 {
   "name": "stoclaw",
-  "version": "2026.9.7-GA.1",
+  "version": "2026.9.8-GA.1",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@discordjs/opus",
@@ -47,7 +47,6 @@
     "bundle:preinstalled-skills": "zx scripts/bundle-preinstalled-skills.mjs",
     "lint": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:chat-ui": "zx scripts/typecheck-chat-ui.mjs",
     "test": "vitest run",
     "comms:replay": "node scripts/comms/replay.mjs",
@@ -65,8 +64,8 @@
     "prep:win-binaries": "pnpm run prep:win-deps && cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" pnpm run uv:download:win && pnpm run node:download:win",
     "icons": "zx scripts/generate-icons.mjs",
     "package": "pnpm run rebuild:native:electron && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && pnpm run vite:build && pnpm run typecheck:chat-ui && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
-    "package:test": "pnpm run rebuild:native:electron && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=test pnpm run vite:build -- --mode test && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
-    "package:staging": "pnpm run rebuild:native:electron && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=staging pnpm run vite:build -- --mode staging && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
+    "package:test": "pnpm run rebuild:native:electron && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=test pnpm run vite:build --mode test && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
+    "package:staging": "pnpm run rebuild:native:electron && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=staging pnpm run vite:build --mode staging && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
     "package:mac": "pnpm run uv:download:mac && pnpm run package && electron-builder --mac --publish never --config electron-builder.config.js",
     "package:mac:test": "pnpm run uv:download:mac && pnpm run package:test && cross-env BUILD_ENV=test electron-builder --mac --publish never --config electron-builder.config.js",
     "package:mac:staging": "pnpm run uv:download:mac && pnpm run package:staging && cross-env BUILD_ENV=staging electron-builder --mac --publish never --config electron-builder.config.js",
@@ -100,6 +99,7 @@
     "@earendil-works/pi-coding-agent": "0.84.4",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.2",
+    "@loongsuite/cms_node_sdk": "^1.0.8",
     "@mistralai/mistralai": "^1.14.1",
     "@monaco-editor/react": "^4.7.0",
     "@qdrant/js-client-rest": "^1.18.0",

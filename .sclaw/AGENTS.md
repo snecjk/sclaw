@@ -78,7 +78,7 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 ## 📁 项目目录说明（SClaw）
 
 - 当前 OpenClaw workspace（本目录）是用户项目内的 `.sclaw/`。
-- 用户真实项目根目录：`/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/`（相对本目录为 `../`）。
+- 用户真实项目根目录：`D:/code/sto-claw/`（相对本目录为 `../`）。
 - 读写业务代码、配置、资源时，请以项目根为准（使用 `../` 或绝对路径）。
 - OpenClaw bootstrap 文件（`AGENTS.md` / `SOUL.md` / `USER.md` 等）只应留在本目录，不要写回项目根。
 - 本地产物写入本目录下的 `./.claw-output/`，不要写到项目根或本目录根。
@@ -89,10 +89,10 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 
 本工作区生成的本地产物（HTML / 报告 / SQL / 代码 / 文档 / 表格等）**必须**写入：
 
-`/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/.sclaw/.claw-output/<文件名>`
+`D:/code/sto-claw/.sclaw/.claw-output/<文件名>`
 
-- ⛔ 禁止写入工作区根目录 `/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/.sclaw/`（不要把产物直接落在 workspace 根）
-- ⛔ 禁止写入用户项目根 `/Users/zzj/Desktop/workspace/sto/backend-project/copy/sto-claw/`（业务目录，不是产物目录）
+- ⛔ 禁止写入工作区根目录 `D:/code/sto-claw/.sclaw/`（不要把产物直接落在 workspace 根）
+- ⛔ 禁止写入用户项目根 `D:/code/sto-claw/`（业务目录，不是产物目录）
 - ⛔ 禁止 `outputs/`、`output/`、桌面、Downloads、skill 目录或其他自定义目录
 - 目录 `.claw-output/` 通常已存在；若不存在先创建再写
 - 回复中的本地文件必须用绝对路径 Markdown 链接：`[文件名](file:///绝对路径)`

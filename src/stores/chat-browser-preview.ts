@@ -12,6 +12,7 @@ export interface ChatBrowserPreviewTab {
 
 interface ChatBrowserPreviewState {
   tabsBySession: Record<string, ChatBrowserPreviewTab[]>;
+  openRevisionBySession: Record<string, number>;
   activeTabIdBySession: Record<string, string | null>;
 
   openTab: (
@@ -42,11 +43,16 @@ function samePreviewIdentity(a: string, b: string): boolean {
 
 export const useChatBrowserPreviewStore = create<ChatBrowserPreviewState>((set, get) => ({
   tabsBySession: {},
+  openRevisionBySession: {},
   activeTabIdBySession: {},
 
   openTab: (sessionKey, input) => {
     const nextUrl = input.url.trim();
     if (!nextUrl) return '';
+    set((state) => ({ openRevisionBySession: {
+      ...state.openRevisionBySession,
+      [sessionKey]: (state.openRevisionBySession[sessionKey] ?? 0) + 1,
+    } }));
 
     const prev = get().tabsBySession[sessionKey] ?? [];
     const existing = prev.find((item) => samePreviewIdentity(item.url, nextUrl));

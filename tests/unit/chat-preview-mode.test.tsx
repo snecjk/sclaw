@@ -9,6 +9,7 @@ import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import type { AttachedFileMeta, RawMessage } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
+import { useChatBrowserPreviewStore } from '@/stores/chat-browser-preview';
 
 vi.mock('@/stores/chat', () => ({
   useChatStore: (selector: (s: { workflowCardStates: Record<string, never> }) => unknown) =>
@@ -118,6 +119,49 @@ describe('useChatPreviewPanel PreviewMode', () => {
 
     expect(result.current.previewMode).toBe('split');
     expect(result.current.isPreviewSplit).toBe(true);
+    expect(result.current.showPreviewPanel).toBe(true);
+  });
+
+  it('switches only ordinary preview at 1080px, preserving the active file and sidebar preference', () => {
+    const { result } = renderHook(() => useChatPreviewPanel([messageStub()], 'agent:main:s1'));
+    const resize = (width: number) => act(() => {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+      window.dispatchEvent(new Event('resize'));
+    });
+    act(() => result.current.openArtifactPreview(previewFile));
+    expect(result.current.isPreviewOverlay).toBe(false);
+    resize(1080);
+    expect(result.current.isPreviewOverlay).toBe(true);
+    act(() => useSettingsStore.setState({ sidebarCollapsed: true }));
+    expect(result.current.isPreviewOverlay).toBe(true);
+    act(() => result.current.expandPreview());
+    expect(result.current.isPreviewOverlay).toBe(false);
+    resize(960);
+    expect(result.current.previewMode).toBe('expanded');
+    act(() => result.current.restorePreview());
+    expect(result.current.isPreviewOverlay).toBe(true);
+    resize(1081);
+    expect(result.current.isPreviewOverlay).toBe(false);
+    expect(result.current.activePreviewFilePath).toBe('/tmp/a.md');
+    expect(useSettingsStore.getState().sidebarCollapsed).toBe(true);
+    act(() => result.current.closePreviewPanel());
+    resize(1080);
+    expect(result.current.isPreviewOverlay).toBe(false);
+  });
+
+  it('keeps browser preview dismissed after closing the narrow overlay', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1080 });
+    const sessionKey = 'overlay-browser-dismiss';
+    const { result } = renderHook(() => useChatPreviewPanel([messageStub()], sessionKey));
+    act(() => useChatBrowserPreviewStore.getState().openTab(sessionKey, { url: 'https://example.com', title: 'Example' }));
+    expect(result.current.showPreviewPanel).toBe(true);
+    act(() => result.current.closePreviewPanel());
+    expect(result.current.showPreviewPanel).toBe(false);
+    act(() => useChatBrowserPreviewStore.getState().openTab(sessionKey, { url: 'https://example.com', title: 'Example', force: true }));
+    expect(result.current.showPreviewPanel).toBe(true);
+    act(() => result.current.closePreviewPanel());
+    expect(result.current.showPreviewPanel).toBe(false);
+    act(() => result.current.openPreviewPanel());
     expect(result.current.showPreviewPanel).toBe(true);
   });
 

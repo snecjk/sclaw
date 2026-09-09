@@ -14,6 +14,7 @@ import {
   STO_WORKFLOW_SYSTEM_PROMPT,
   stoWorkflowToolDefinition,
 } from '../../electron/agent-extensions/extensions/sto-workflow-tool/definition';
+import { WORKFLOW_EXECUTION_STARTED_STATE_KEY } from '../../electron/agent-extensions/extensions/sto-workflow-tool/operations';
 
 function dependencies() {
   const port: StoWorkflowPort = {
@@ -93,10 +94,41 @@ describe('sto-workflow-tool common guard', () => {
     expect(result?.hookSpecificOutput).toMatchObject({ permissionDecision: 'deny' });
   });
 
+  it('blocks same-turn interactive status polling after a successful launch', () => {
+    const deps = dependencies();
+    const state = deps.stateManager.forExtension('agent:main:workflow', 'sto-workflow-tool');
+    state.turn.set(WORKFLOW_EXECUTION_STARTED_STATE_KEY, 'run-1');
+    const guard = stoWorkflowToolDefinition.policies?.[0]?.beforeTool;
+    if (!guard) throw new Error('missing workflow guard');
+
+    expect(guard({
+      rawToolName: 'get_workflow_status',
+      toolName: 'get_workflow_status',
+      toolKind: 'other',
+      toolCallId: 'tool-status',
+      input: { runId: 'run-1' },
+    }, {
+      engine: 'claude', sessionKey: 'agent:main:workflow', mode: 'interactive', commandShell: 'bash',
+      capabilities: deps.capabilities, state, logger: deps.logger,
+    })).toMatchObject({ action: 'deny' });
+
+    expect(guard({
+      rawToolName: 'get_workflow_status',
+      toolName: 'get_workflow_status',
+      toolKind: 'other',
+      toolCallId: 'tool-status-scheduled',
+      input: { runId: 'run-1' },
+    }, {
+      engine: 'claude', sessionKey: 'agent:main:workflow', mode: 'scheduled', commandShell: 'bash',
+      capabilities: deps.capabilities, state, logger: deps.logger,
+    })).toMatchObject({ action: 'allow' });
+  });
+
   it('keeps the prompt aligned with the narrower shell policy', () => {
     expect(STO_WORKFLOW_SYSTEM_PROMPT).toContain('【意图分流】');
     expect(STO_WORKFLOW_SYSTEM_PROMPT).toContain('【创建工作流】');
     expect(STO_WORKFLOW_SYSTEM_PROMPT).toContain('【执行与查询】');
+    expect(STO_WORKFLOW_SYSTEM_PROMPT).toContain('对话卡片会独立刷新进度和结果');
     expect(STO_WORKFLOW_SYSTEM_PROMPT).toContain('【工具边界与失败处理】');
     expect(STO_WORKFLOW_SYSTEM_PROMPT).toContain('`dws chat message send`');
   });

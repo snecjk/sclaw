@@ -22,9 +22,45 @@ function classifyGatewayHtmlError(message: string): 'timeout' | 'unavailable' | 
   return isHtml ? 'unavailable' : null;
 }
 
+function isRequestTimeoutMessage(message: string): boolean {
+  const lower = message.trim().toLowerCase();
+  return lower === 'request timed out.' || lower === 'request timed out' || lower === 'request timeout';
+}
+
+function isClaudeCertificateErrorMessage(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes('unknown_certificate_verification_error')
+    || lower.includes('certificate verification error');
+}
+
+function isWorkspaceUnavailableErrorMessage(message: string): boolean {
+  return message.includes('PI_WORKSPACE_UNAVAILABLE');
+}
+
+function isModelAuthenticationErrorMessage(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes('apikey_notfound')
+    || lower.includes('api key')
+    || lower.includes('invalid api key')
+    || lower.includes('大模型令牌无效')
+    || lower.includes('大模型令牌未找到');
+}
+
 function friendlyRuntimeError(message: string): { code: AppErrorCode; text: string } | null {
   if (isRateLimitMessage(message)) {
     return { code: 'RATE_LIMIT', text: i18n.t('chat:runtime.errors.rateLimit') };
+  }
+  if (isWorkspaceUnavailableErrorMessage(message)) {
+    return { code: 'GATEWAY', text: i18n.t('chat:runtime.errors.workspaceUnavailable') };
+  }
+  if (isModelAuthenticationErrorMessage(message)) {
+    return { code: 'AUTH_INVALID', text: i18n.t('chat:runtime.errors.modelAuthentication') };
+  }
+  if (isClaudeCertificateErrorMessage(message)) {
+    return { code: 'NETWORK', text: i18n.t('chat:runtime.errors.claudeCertificate') };
+  }
+  if (isRequestTimeoutMessage(message)) {
+    return { code: 'TIMEOUT', text: i18n.t('chat:runtime.errors.requestTimeout') };
   }
   const gatewayKind = classifyGatewayHtmlError(message);
   if (gatewayKind === 'timeout') {
@@ -42,6 +78,7 @@ export function resolveChatRuntimeErrorCode(
 ): AppError['code'] {
   const reason = String(payload?.reason ?? '');
   if (reason === 'recovery-timeout') return 'TIMEOUT';
+  if (reason === 'network-retry-exhausted') return 'NETWORK';
   const errorText = String(payload?.error ?? fallbackMessage);
   return friendlyRuntimeError(errorText)?.code ?? 'GATEWAY';
 }
@@ -54,6 +91,11 @@ export function formatChatRuntimeErrorMessage(
   if (reason === 'recovery-timeout') {
     return i18n.t('chat:runtime.errors.recoveryTimeout');
   }
+  if (reason === 'network-retry-exhausted') {
+    return i18n.t('chat:runtime.errors.networkRetryExhausted', {
+      count: Number(payload?.retryAttempts) || 0,
+    });
+  }
   const errorText = String(payload?.error ?? fallbackMessage);
   return friendlyRuntimeError(errorText)?.text || errorText || fallbackMessage;
 }
@@ -63,7 +105,19 @@ export function formatChatRuntimeErrorForDisplay(error: AppError): string {
   if (reason === 'recovery-timeout') {
     return i18n.t('chat:runtime.errors.recoveryTimeout');
   }
-  if (error.code === 'RATE_LIMIT') {
+  if (reason === 'network-retry-exhausted') {
+    const retryAttempts = typeof error.details?.retryAttempts === 'number'
+      ? error.details.retryAttempts
+      : 0;
+    return i18n.t('chat:runtime.errors.networkRetryExhausted', { count: retryAttempts });
+  }
+  if (error.code === 'AUTH_INVALID' || isModelAuthenticationErrorMessage(error.message)) {
+    return i18n.t('chat:runtime.errors.modelAuthentication');
+  }
+  if (isClaudeCertificateErrorMessage(error.message)) {
+    return i18n.t('chat:runtime.errors.claudeCertificate');
+  }
+  if (error.code === 'RATE_LIMIT' || isRateLimitMessage(error.message)) {
     return i18n.t('chat:runtime.errors.rateLimit');
   }
   return friendlyRuntimeError(error.message)?.text || error.message;

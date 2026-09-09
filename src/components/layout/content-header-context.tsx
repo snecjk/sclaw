@@ -18,7 +18,7 @@ import { matchPath, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isSidebarPrimaryNavRoute } from '@/lib/sidebar-primary-nav';
 
-export type ContentHeaderLayoutMode = 'conversation' | 'split' | 'preview-expanded';
+export type ContentHeaderLayoutMode = 'conversation' | 'split' | 'preview-expanded' | 'preview-overlay';
 
 export interface ContentHeaderSlot {
   /** 左侧标题（字符串或节点） */

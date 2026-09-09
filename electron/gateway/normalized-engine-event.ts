@@ -61,6 +61,10 @@ export type NormalizedEngineEvent =
   | (EngineEventBase & {
       type: 'turn.failed';
       errorMessage: string;
+      /** Structured terminal cause exposed by engines after their own retries settle. */
+      reason?: 'network-retry-exhausted';
+      /** Number of automatic retries attempted before the terminal failure. */
+      retryAttempts?: number;
     })
   | (EngineEventBase & {
       type: 'turn.aborted';
@@ -161,6 +165,8 @@ export function normalizeLegacyChatPayload(payload: unknown): NormalizedEngineEv
         ...common,
         type: 'turn.failed',
         errorMessage: getString(payload.errorMessage) ?? getString(payload.error) ?? 'Engine error',
+        ...(payload.reason === 'network-retry-exhausted' ? { reason: payload.reason } : {}),
+        ...(getNumber(payload.retryAttempts) != null ? { retryAttempts: getNumber(payload.retryAttempts) } : {}),
       };
     case 'aborted':
       return { ...common, type: 'turn.aborted' };
@@ -208,7 +214,12 @@ export function toLegacyChatMessagePayload(event: NormalizedEngineEvent): Legacy
       return legacyPayload(event, message);
     }
     case 'turn.failed':
-      return legacyPayload(event, withCommonFields({ state: 'error', errorMessage: event.errorMessage }, event));
+      return legacyPayload(event, withCommonFields({
+        state: 'error',
+        errorMessage: event.errorMessage,
+        ...(event.reason ? { reason: event.reason } : {}),
+        ...(event.retryAttempts != null ? { retryAttempts: event.retryAttempts } : {}),
+      }, event));
     case 'turn.aborted':
       return legacyPayload(event, withCommonFields({ state: 'aborted' }, event));
     case 'turn.interrupted':
