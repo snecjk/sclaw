@@ -143,6 +143,33 @@ function normalizeDwsSendInvocation(cmd: string, argsList: string[]): string[] {
   return args;
 }
 
+function isPowerShellExecutable(cmd: string): boolean {
+  const base = cmd.trim().replace(/^"(.*)"$/, '$1');
+  return /(?:^|[\\/])(?:powershell|pwsh)(?:\.exe)?$/i.test(base)
+    || /^(?:powershell|pwsh)(?:\.exe)?$/i.test(base);
+}
+
+function ensureSilentPowerShellArgs(args: string[]): string[] {
+  const lower = args.map((arg) => String(arg).toLowerCase());
+  const prefix: string[] = [];
+  if (!lower.includes('-nologo')) prefix.push('-NoLogo');
+  if (!lower.includes('-noprofile')) prefix.push('-NoProfile');
+  if (!lower.includes('-noninteractive')) prefix.push('-NonInteractive');
+  if (!lower.includes('-windowstyle')) prefix.push('-WindowStyle', 'Hidden');
+  return prefix.length > 0 ? [...prefix, ...args] : args;
+}
+
+function applySilentPowerShellIfNeeded(
+  cmd: string,
+  mutable: unknown[],
+  cmdArgs: string[],
+): string[] {
+  if (!isPowerShellExecutable(cmd) || !Array.isArray(mutable[1])) return cmdArgs;
+  const silenced = ensureSilentPowerShellArgs(cmdArgs.map(String));
+  mutable[1] = silenced;
+  return silenced;
+}
+
 const BLOCKED_FETCH_URL_PATTERNS = [
   /\/api\/v1\/cli\/update/i,
   /\/api\/v1\/cli\/download/i,
@@ -366,6 +393,8 @@ function patchChildProcess(): void {
         }
       }
 
+      cmdArgs = applySilentPowerShellIfNeeded(cmd, mutable, cmdArgs);
+
       const blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
       if (blockedErr) {
         for (let i = mutable.length - 1; i >= 1; i -= 1) {
@@ -441,6 +470,8 @@ function patchChildProcess(): void {
           cmdArgs = mutable[1] as string[];
         }
       }
+
+      cmdArgs = applySilentPowerShellIfNeeded(cmd, mutable, cmdArgs);
 
       const blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
       if (blockedErr) throw blockedErr;

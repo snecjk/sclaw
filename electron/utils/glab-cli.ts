@@ -19,6 +19,7 @@ import { Readable } from 'node:stream';
 
 import { logger } from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
+import { buildSilentPowerShellArgs } from './win-shell';
 
 export interface GlabCliResult {
   ok: boolean;
@@ -256,8 +257,11 @@ async function extractArchive(archivePath: string, destDir: string): Promise<voi
   if (archivePath.endsWith('.zip')) {
     if (process.platform === 'win32') {
       const r = spawnSync(
-        'powershell',
-        ['-NoProfile', '-Command', `Expand-Archive -Path "${archivePath}" -DestinationPath "${destDir}" -Force`],
+        'powershell.exe',
+        buildSilentPowerShellArgs([
+          '-Command',
+          `Expand-Archive -Path "${archivePath}" -DestinationPath "${destDir}" -Force`,
+        ]),
         { encoding: 'utf8', windowsHide: true },
       );
       if (r.status !== 0) throw new Error(r.stderr || '解压 zip 失败');

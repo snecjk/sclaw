@@ -16,6 +16,7 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { getOpenClawDir, getOpenClawEntryPath, getResourcesDir } from './paths';
 import { logger } from './logger';
+import { buildSilentPowerShellArgs } from './win-shell';
 
 // ── Quoting helpers ──────────────────────────────────────────────────────────
 
@@ -207,9 +208,7 @@ function ensureWindowsCliOnPath(): Promise<'updated' | 'already-present'> {
 
     const child = spawn(
       getWindowsPowerShellPath(),
-      [
-        '-NoProfile',
-        '-NonInteractive',
+      buildSilentPowerShellArgs([
         '-ExecutionPolicy',
         'Bypass',
         '-File',
@@ -218,7 +217,7 @@ function ensureWindowsCliOnPath(): Promise<'updated' | 'already-present'> {
         'add',
         '-CliDir',
         cliDir,
-      ],
+      ]),
       {
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],

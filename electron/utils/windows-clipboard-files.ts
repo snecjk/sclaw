@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { join, normalize } from 'node:path';
 import { buildWindowsHDrop } from './clipboard-rich-write';
 import { getOpenClawResolvedDir } from './paths';
+import { buildSilentPowerShellArgs } from './win-shell';
 
 const execFileAsync = promisify(execFile);
 const localRequire = createRequire(import.meta.url);
@@ -144,7 +145,7 @@ async function writeViaSetClipboardCmdlet(filePaths: string[]): Promise<void> {
   const script = buildSetClipboardLiteralPathScript(paths);
   await execFileAsync(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodePowerShellCommand(script)],
+    buildSilentPowerShellArgs(['-EncodedCommand', encodePowerShellCommand(script)]),
     { windowsHide: true, timeout: 20000 },
   );
 }

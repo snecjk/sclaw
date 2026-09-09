@@ -93,3 +93,39 @@ export function appendNodeRequireToNodeOptions(
   const normalized = normalizeNodeRequirePathForNodeOptions(modulePath);
   return `${nodeOptions ?? ''} --require "${normalized}"`.trim();
 }
+
+/**
+ * Flags that keep powershell.exe from allocating a visible console.
+ * Must appear before `-Command` / `-File` / `-EncodedCommand`.
+ */
+const SILENT_POWERSHELL_PREFIX = [
+  '-NoLogo',
+  '-NoProfile',
+  '-NonInteractive',
+  '-WindowStyle',
+  'Hidden',
+] as const;
+
+export function silentPowerShellPrefix(): string[] {
+  return [...SILENT_POWERSHELL_PREFIX];
+}
+
+/** Build powershell.exe argv: silent prefix + caller flags (`-Command` / `-File` / …). */
+export function buildSilentPowerShellArgs(rest: string[]): string[] {
+  return [...SILENT_POWERSHELL_PREFIX, ...rest];
+}
+
+function hasPowerShellSwitch(args: string[], name: string): boolean {
+  const needle = name.toLowerCase();
+  return args.some((arg) => String(arg).toLowerCase() === needle);
+}
+
+/** Prepend missing hide flags without duplicating switches already present. */
+export function ensureSilentPowerShellArgs(args: string[]): string[] {
+  const prefix: string[] = [];
+  if (!hasPowerShellSwitch(args, '-NoLogo')) prefix.push('-NoLogo');
+  if (!hasPowerShellSwitch(args, '-NoProfile')) prefix.push('-NoProfile');
+  if (!hasPowerShellSwitch(args, '-NonInteractive')) prefix.push('-NonInteractive');
+  if (!hasPowerShellSwitch(args, '-WindowStyle')) prefix.push('-WindowStyle', 'Hidden');
+  return prefix.length > 0 ? [...prefix, ...args] : args;
+}

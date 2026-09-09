@@ -252,3 +252,34 @@ describe('appendNodeRequireToNodeOptions', () => {
       .toBe('--max-old-space-size=4096 --require "D:/app/data/preload.cjs"');
   });
 });
+
+describe('silent PowerShell args', () => {
+  let buildSilentPowerShellArgs: (rest: string[]) => string[];
+  let ensureSilentPowerShellArgs: (args: string[]) => string[];
+
+  beforeEach(async () => {
+    const mod = await import('@electron/utils/win-shell');
+    buildSilentPowerShellArgs = mod.buildSilentPowerShellArgs;
+    ensureSilentPowerShellArgs = mod.ensureSilentPowerShellArgs;
+  });
+
+  it('places hide flags before -Command', () => {
+    const args = buildSilentPowerShellArgs(['-Command', 'Get-Date']);
+    expect(args).toEqual([
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
+      '-Command',
+      'Get-Date',
+    ]);
+  });
+
+  it('does not duplicate flags already present', () => {
+    const args = ensureSilentPowerShellArgs(['-NoProfile', '-Command', 'echo 1']);
+    expect(args.filter((arg) => arg.toLowerCase() === '-noprofile')).toHaveLength(1);
+    expect(args).toEqual(expect.arrayContaining(['-WindowStyle', 'Hidden', '-NonInteractive', '-NoLogo']));
+    expect(args.indexOf('-WindowStyle')).toBeLessThan(args.indexOf('-Command'));
+  });
+});

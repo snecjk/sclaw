@@ -19,6 +19,9 @@ export {
   prepareWinSpawn,
   normalizeNodeRequirePathForNodeOptions,
   appendNodeRequireToNodeOptions,
+  silentPowerShellPrefix,
+  buildSilentPowerShellArgs,
+  ensureSilentPowerShellArgs,
 } from './win-shell';
 
 /**

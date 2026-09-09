@@ -10,6 +10,7 @@ import { join } from 'node:path';
 
 import { logger } from '../../utils/logger';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
+import { buildSilentPowerShellArgs } from '../../utils/win-shell';
 
 export interface ShellScriptInstallOptions {
   binary: string;
@@ -56,15 +57,12 @@ export function buildWindowsInstallScriptCommand(
   if (kind === 'powershell') {
     return {
       command: 'powershell.exe',
-      args: [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
+      args: buildSilentPowerShellArgs([
         '-ExecutionPolicy',
         'Bypass',
         '-File',
         scriptPath,
-      ],
+      ]),
     };
   }
   return { command: 'cmd.exe', args: ['/d', '/c', scriptPath] };
@@ -90,13 +88,10 @@ function refreshWindowsProcessPath(): void {
     '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()',
     '@{ machine = [Environment]::GetEnvironmentVariable("Path", "Machine"); user = [Environment]::GetEnvironmentVariable("Path", "User") } | ConvertTo-Json -Compress',
   ].join('; ');
-  const result = spawnSync('powershell.exe', [
-    '-NoLogo',
-    '-NoProfile',
-    '-NonInteractive',
+  const result = spawnSync('powershell.exe', buildSilentPowerShellArgs([
     '-Command',
     command,
-  ], {
+  ]), {
     encoding: 'utf8',
     windowsHide: true,
   });
