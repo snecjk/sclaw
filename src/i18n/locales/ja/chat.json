@@ -66,10 +66,9 @@
     "contextUsageTooltip": "コンテキスト使用率 {{percent}}%",
     "contextUsagePending": "コンテキスト使用率は次の応答後に更新されます",
     "contextCompactAfterReply": "この応答の完了後にコンテキストを圧縮できます",
-    "contextCompactTitle": "この会話を圧縮しますか？",
-    "contextCompactDescription": "以前の内容を要約し、今後の会話用の空き容量を確保します。",
-    "contextCompactNotice": "元のメッセージは残りますが、モデルは以前の内容を要約に基づいて理解します。",
-    "contextCompactConfirm": "今すぐ圧縮",
+    "contextCompactTitle": "会話を圧縮",
+    "contextCompactDescription": "以前の内容を要約し、以降のコンテキストで使用します。元のメッセージは残り、使用量が30%に達すると圧縮できます。",
+    "contextCompactConfirm": "圧縮",
     "contextCompactThresholdHint": "コンテキスト使用率が {{percent}}% に達すると手動で圧縮できます",
     "contextCompactingShort": "整理中",
     "contextCompactSuccess": "コンテキストを圧縮しました。現在の使用率は {{percent}}% です",
@@ -389,6 +388,11 @@
   "runtime": {
     "errors": {
       "recoveryTimeout": "実行確認がタイムアウトしました。しばらくしてから再試行してください。",
+      "networkRetryExhausted": "ネットワーク接続に失敗し、{{count}} 回の自動再試行後も成功しませんでした。接続を復旧してから再送信してください。",
+      "modelAuthentication": "モデルサービスの認証が無効または利用できません。再ログインして再試行してください。解決しない場合は管理者に連絡してください。",
+      "claudeCertificate": "証明書の検証に失敗したため、Claude が API に接続できませんでした。プロキシまたは企業証明書の設定を確認してから再試行してください。",
+      "workspaceUnavailable": "この会話のワークスペースは利用できず、削除された可能性があります。新しい会話を開始してください。",
+      "requestTimeout": "モデルリクエストがタイムアウトしました。接続を確認してから再試行してください。",
       "rateLimit": "モデルのリクエストが多すぎます。しばらく待ってから再試行してください。",
       "gatewayTimeout": "モデルゲートウェイがタイムアウトしました。しばらくしてから再試行してください。",
       "gatewayUnavailable": "モデルサービスが一時的に利用できません。しばらくしてから再試行してください。"

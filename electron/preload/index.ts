@@ -243,6 +243,7 @@ const electronAPI = {
      */
     on: (channel: string, callback: (...args: unknown[]) => void) => {
       const validChannels = [
+        'preview:frame-escape',
         'gateway:status-changed',
         'gateway:message',
         'chat-runtime:event',

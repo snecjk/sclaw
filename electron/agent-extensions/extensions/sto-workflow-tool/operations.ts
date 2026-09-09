@@ -8,6 +8,8 @@ import { STO_WORKFLOW_MANAGEMENT_ACTIVATION } from './activation';
 import { STO_WORKFLOW_CAPABILITY, type StoWorkflowPort } from './capability';
 
 const MAX_PAGE_SIZE = 50;
+/** A successful interactive launch is owned by the chat card, not the agent loop. */
+export const WORKFLOW_EXECUTION_STARTED_STATE_KEY = 'workflow-execution-started-in-turn';
 const WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE =
   '未查询到可访问的工作流模板，您可能没有相关权限。请联系管理员申请工作流访问权限。';
 
@@ -181,6 +183,10 @@ export const stoWorkflowTools = [
           templateName: input.templateName,
           engineType: context.engine,
         });
+        // Prevent a model from turning a successful launch into a long-running
+        // chat turn by immediately polling the run it just started. The card
+        // receives the persisted run reference and owns progress observation.
+        context.state.turn.set(WORKFLOW_EXECUTION_STARTED_STATE_KEY, run.runId);
         return {
           workflowId: run.workflowId ?? input.workflowId,
           runId: run.runId,

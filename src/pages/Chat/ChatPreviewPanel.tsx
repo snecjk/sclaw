@@ -8,6 +8,7 @@
  * Tab 行（文件 + 网页混排 pill）由 ChatPreviewHeaderTabs 渲染在 ContentHeader。
  */
 import { useCallback, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CloudUpload,
   RefreshCw,
@@ -54,6 +55,7 @@ export interface ChatPreviewPanelProps {
   workflowId?: string | null;
   onEditWorkflow?: OnEditWorkflowNavigate;
   className?: string;
+  isPreviewOverlay?: boolean;
 }
 
 export function ChatPreviewPanel({
@@ -64,6 +66,7 @@ export function ChatPreviewPanel({
   workflowId = null,
   onEditWorkflow,
   className,
+  isPreviewOverlay = false,
 }: ChatPreviewPanelProps) {
   const { t } = useTranslation(['chat', 'common']);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -246,14 +249,16 @@ export function ChatPreviewPanel({
           toast.error(error instanceof Error ? error.message : t('preview.shareDialog.failed'));
         }}
       />
-      {saveArtifactOpen ? (
+      {saveArtifactOpen ? createPortal(
         <SaveArtifactDialog
+          escapeDismiss={isPreviewOverlay}
           file={saveableActiveFile}
           onClose={() => setSaveArtifactOpen(false)}
           onSaved={() => {
             setSaveArtifactOpen(false);
           }}
-        />
+        />,
+        document.body,
       ) : null}
     </div>
   );

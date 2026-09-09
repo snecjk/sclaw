@@ -611,13 +611,17 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.scheduleHistoryPoll(sessionKey);
     }
     if (event.type === 'turn.failed') {
-      if ((engineType ?? current.engineType) === 'pi') {
+      if ((engineType ?? current.engineType) === 'pi' || (engineType ?? current.engineType) === 'claude') {
         await this.publish({
           ...current,
           runId: event.runId ?? current.runId,
-          engineType: 'pi',
+          engineType: engineType ?? current.engineType,
           error: event.errorMessage,
-        }, 'run.failed', { error: event.errorMessage }, true);
+        }, 'run.failed', {
+          error: event.errorMessage,
+          ...(event.reason ? { reason: event.reason } : {}),
+          ...(event.retryAttempts != null ? { retryAttempts: event.retryAttempts } : {}),
+        }, true);
         return;
       }
       this.scheduleErrorFinalization(sessionKey, event.runId ?? current.runId, event.errorMessage);

@@ -41,6 +41,7 @@ export function ChatConversationColumn({
 }: ChatConversationColumnProps) {
   return (
     <div
+      data-preview-background
       className={cn(
         stoSplitChatPaneClass,
         splitGridChatClass,

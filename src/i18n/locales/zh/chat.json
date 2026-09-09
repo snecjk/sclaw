@@ -66,10 +66,9 @@
     "contextUsageTooltip": "上下文已使用 {{percent}}%",
     "contextUsagePending": "上下文使用率将在下一次回复后更新",
     "contextCompactAfterReply": "本轮回答结束后可压缩上下文",
-    "contextCompactTitle": "压缩当前会话？",
-    "contextCompactDescription": "将较早内容整理为摘要，为后续对话释放空间。",
-    "contextCompactNotice": "原始消息仍会保留，但模型后续将基于摘要理解较早内容。",
-    "contextCompactConfirm": "立即压缩",
+    "contextCompactTitle": "压缩会话",
+    "contextCompactDescription": "将早期内容整理为摘要，后续上下文使用摘要，原始消息仍保留。使用率达到30%后可主动压缩。",
+    "contextCompactConfirm": "压缩",
     "contextCompactThresholdHint": "上下文使用率达到 {{percent}}% 后可手动压缩",
     "contextCompactingShort": "整理中",
     "contextCompactSuccess": "上下文已压缩，当前使用 {{percent}}%",
@@ -399,6 +398,11 @@
   "runtime": {
     "errors": {
       "recoveryTimeout": "运行确认超时，请稍后重试。",
+      "networkRetryExhausted": "网络连接异常，模型已自动重试 {{count}} 次仍未成功。请恢复网络后重新发送。",
+      "modelAuthentication": "模型服务认证已失效或不可用，请重新登录后重试；若仍失败，请联系管理员。",
+      "claudeCertificate": "Claude 无法连接 API，证书验证失败。请检查网络代理或企业证书配置后重试。",
+      "workspaceUnavailable": "该会话对应的工作区不存在，可能已被删除，建议开启一个新的会话。",
+      "requestTimeout": "模型请求超时，请检查网络后重试。",
       "rateLimit": "模型请求过于频繁，请稍等片刻后重试。",
       "gatewayTimeout": "模型网关超时，请稍后重试。",
       "gatewayUnavailable": "模型服务暂时不可用，请稍后重试。"

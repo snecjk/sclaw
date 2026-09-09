@@ -1027,4 +1027,33 @@ describe('main chat runtime supervisor', () => {
       interruptCause: 'stream_closed',
     });
   });
+
+  it('preserves the exhausted network retry reason from a Pi terminal event', async () => {
+    const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+    const events: CanonicalChatEvent[] = [];
+    supervisor.on('event', (event) => events.push(event));
+
+    await supervisor.handleEngineEvent({
+      type: 'turn.started',
+      sessionKey: 'pi:main:network-retry',
+      runId: 'pi-network-run',
+    });
+    await supervisor.handleEngineEvent({
+      type: 'turn.failed',
+      sessionKey: 'pi:main:network-retry',
+      runId: 'pi-network-run',
+      errorMessage: 'Request timed out.',
+      reason: 'network-retry-exhausted',
+      retryAttempts: 2,
+    });
+
+    expect(events.at(-1)).toMatchObject({
+      type: 'run.failed',
+      payload: {
+        error: 'Request timed out.',
+        reason: 'network-retry-exhausted',
+        retryAttempts: 2,
+      },
+    });
+  });
 });

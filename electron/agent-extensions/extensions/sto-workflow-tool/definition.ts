@@ -1,7 +1,11 @@
 import type { SclawAgentExtensionDefinition } from '../../../../shared/agent-extensions';
 import { matchesStoWorkflowIntent, STO_WORKFLOW_MANAGEMENT_ACTIVATION } from './activation';
 import { STO_WORKFLOW_CAPABILITY } from './capability';
-import { isWorkflowShellCommand, stoWorkflowTools } from './operations';
+import {
+  isWorkflowShellCommand,
+  stoWorkflowTools,
+  WORKFLOW_EXECUTION_STARTED_STATE_KEY,
+} from './operations';
 
 export const STO_WORKFLOW_SYSTEM_PROMPT = [
   'STO 工作流工具使用规则：',
@@ -19,8 +23,8 @@ export const STO_WORKFLOW_SYSTEM_PROMPT = [
   '',
   '【执行与查询】',
   '- execute_workflow 只接收已知的 workflowId，用于启动或重新运行工作流实例；不得把 templateId 或 runId 当作 workflowId。',
-  '- execute_workflow 成功后保存其返回的 runId；使用 get_workflow_status(runId) 查询本次运行的进度和结果。',
-  '- 需要等待最终结果时，可以查询至 completed、failed 或 cancelled 等终态，但禁止无间隔地高频轮询。',
+  '- 在交互式聊天中，execute_workflow 成功后立即结束工作流工具调用并正常回复“工作流已启动，进度见卡片”。保存 runId，但不要在本轮调用 get_workflow_status，也不要等待最终结果；对话卡片会独立刷新进度和结果。',
+  '- get_workflow_status 仅用于定时任务等后台场景，或用户在后续新一轮明确要求查询某个 runId 的状态。需要等待最终结果时，可以查询至 completed、failed 或 cancelled 等终态，但禁止无间隔地高频轮询。',
   '- 工具超时或状态暂时未知时，不得擅自再次调用 execute_workflow，以免重复执行业务；应优先继续使用原 runId 查询状态。',
   '',
   '【工具边界与失败处理】',
@@ -48,6 +52,16 @@ export const stoWorkflowToolDefinition: SclawAgentExtensionDefinition = {
     id: 'workflow-management-guard',
     engines: ['claude', 'pi'],
     beforeTool(event, context) {
+      if (
+        event.toolName === 'get_workflow_status'
+        && context.mode === 'interactive'
+        && context.state.turn.get<string>(WORKFLOW_EXECUTION_STARTED_STATE_KEY)
+      ) {
+        return {
+          action: 'deny',
+          reason: 'The workflow was started in this chat turn. Do not poll it here: finish the reply and let the workflow card refresh progress. A later user request may query the run status.',
+        };
+      }
       if (event.toolName === 'get_workflow_schema') {
         context.state.turn.set(SCHEMA_FETCHED_STATE_KEY, true);
         return { action: 'allow' };

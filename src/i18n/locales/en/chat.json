@@ -66,10 +66,9 @@
     "contextUsageTooltip": "Context {{percent}}% used",
     "contextUsagePending": "Context usage will update after the next response",
     "contextCompactAfterReply": "Context can be compacted after this response finishes",
-    "contextCompactTitle": "Compact this conversation?",
-    "contextCompactDescription": "Summarize earlier content to free space for the conversation.",
-    "contextCompactNotice": "Original messages remain visible, but the model will rely on the summary for earlier context.",
-    "contextCompactConfirm": "Compact now",
+    "contextCompactTitle": "Compact conversation",
+    "contextCompactDescription": "Summarize earlier content for future context while keeping the original messages. Available once usage reaches 30%.",
+    "contextCompactConfirm": "Compact",
     "contextCompactThresholdHint": "Manual compaction is available once context usage reaches {{percent}}%",
     "contextCompactingShort": "Compacting",
     "contextCompactSuccess": "Context compacted. Current usage: {{percent}}%",
@@ -400,6 +399,11 @@
   "runtime": {
     "errors": {
       "recoveryTimeout": "Run confirmation timed out. Please try again shortly.",
+      "networkRetryExhausted": "The network connection failed after {{count}} automatic retries. Restore the connection and send again.",
+      "modelAuthentication": "Model service authentication has expired or is unavailable. Sign in again and retry; contact your administrator if it persists.",
+      "claudeCertificate": "Claude could not connect to the API because certificate verification failed. Check your proxy or corporate certificate configuration, then retry.",
+      "workspaceUnavailable": "The workspace for this conversation is unavailable and may have been deleted, Start a new conversation.",
+      "requestTimeout": "The model request timed out. Check your connection and try again.",
       "rateLimit": "The model is rate-limited. Please wait a moment and try again.",
       "gatewayTimeout": "The model gateway timed out. Please try again shortly.",
       "gatewayUnavailable": "The model service is temporarily unavailable. Please try again shortly."
