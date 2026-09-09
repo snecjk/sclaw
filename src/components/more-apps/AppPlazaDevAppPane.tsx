@@ -494,6 +494,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     executeJS: (code: string) => Promise<unknown>;
     getWebContentsId: () => number | null;
   } | null>(null);
+  const [tunePickedElements, setTunePickedElements] = useState<AppDevPickedElement[]>([]);
   const [auditsByTurn, setAuditsByTurn] = useState<Record<string, AppDevResponsiveAuditResult>>({});
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
@@ -1218,7 +1219,9 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               <AppDevTunePanel
                 workspaceId={workspaceId}
                 executeJS={previewBridge ? (code) => previewBridge.executeJS(code) : null}
+                pickedElements={tunePickedElements}
                 onClose={() => setTuneMode('chat')}
+                onPersisted={() => setSourceRevision((n) => n + 1)}
               />
             )
             : appDevSessionKey
@@ -1282,6 +1285,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           }}
           inspectActive={inspectActive}
           onSubmitElementIntent={handleSubmitElementIntent}
+          onPickedElementsChange={setTunePickedElements}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
           canDeploy={canDeploy}

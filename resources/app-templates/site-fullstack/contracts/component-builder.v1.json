@@ -1,0 +1,97 @@
+{
+  "version": "v1",
+  "components": [
+    {
+      "id": "AntdText",
+      "nameZh": "文本",
+      "category": "text",
+      "styleFields": [{ "key": "strong", "label": "加粗", "type": "boolean" }],
+      "dataFields": [{ "key": "text", "label": "文案", "type": "string", "bindable": true, "format": ["prefix", "suffix"] }],
+      "slots": [],
+      "actions": []
+    },
+    {
+      "id": "AntdStack",
+      "nameZh": "纵向堆叠",
+      "category": "layout",
+      "styleFields": [],
+      "dataFields": [],
+      "slots": ["children"],
+      "actions": [],
+      "parentHint": "AntdStack"
+    },
+    {
+      "id": "AntdButton",
+      "nameZh": "按钮",
+      "category": "action",
+      "styleFields": [{ "key": "type", "label": "类型", "type": "enum", "options": ["primary", "default", "dashed", "link", "text"] }],
+      "dataFields": [{ "key": "text", "label": "文案", "type": "string", "bindable": true, "format": [] }],
+      "slots": [],
+      "actions": [{ "key": "onClick", "label": "点击" }]
+    },
+    {
+      "id": "AntdInput",
+      "nameZh": "文本框",
+      "category": "input",
+      "styleFields": [],
+      "dataFields": [
+        { "key": "value", "label": "值", "type": "string", "bindable": true, "format": [] },
+        { "key": "placeholder", "label": "占位", "type": "string", "bindable": true, "format": [] }
+      ],
+      "slots": [],
+      "actions": []
+    },
+    {
+      "id": "AntdFilterBar",
+      "nameZh": "筛选条",
+      "category": "filter",
+      "styleFields": [],
+      "dataFields": [
+        { "key": "keyword", "label": "关键词", "type": "string", "bindable": true, "format": [] },
+        { "key": "placeholder", "label": "占位", "type": "string", "bindable": true, "format": [] }
+      ],
+      "slots": [],
+      "actions": [{ "key": "onSearch", "label": "查询" }]
+    },
+    {
+      "id": "AntdTable",
+      "nameZh": "表格",
+      "category": "table",
+      "styleFields": [{ "key": "size", "label": "密度", "type": "enum", "options": ["small", "middle", "large"] }],
+      "dataFields": [
+        { "key": "columns", "label": "列", "type": "list", "bindable": true, "format": [] },
+        { "key": "dataSource", "label": "行数据", "type": "list", "bindable": true, "format": [] }
+      ],
+      "slots": [],
+      "actions": []
+    },
+    {
+      "id": "AntdPagination",
+      "nameZh": "分页",
+      "category": "table",
+      "styleFields": [],
+      "dataFields": [
+        { "key": "current", "label": "当前页", "type": "number", "bindable": true, "format": [] },
+        { "key": "pageSize", "label": "每页条数", "type": "number", "bindable": true, "format": [] },
+        { "key": "total", "label": "总数", "type": "number", "bindable": true, "format": [] }
+      ],
+      "slots": [],
+      "actions": [{ "key": "onChange", "label": "翻页" }]
+    },
+    {
+      "id": "AntdStatCard",
+      "nameZh": "指标卡",
+      "category": "metric",
+      "styleFields": [],
+      "dataFields": [
+        { "key": "title", "label": "标题", "type": "string", "bindable": true, "format": [] },
+        { "key": "value", "label": "数值", "type": "string", "bindable": true, "format": ["prefix", "suffix", "precision"] },
+        { "key": "prefix", "label": "前缀", "type": "string", "bindable": true, "format": [] },
+        { "key": "suffix", "label": "后缀", "type": "string", "bindable": true, "format": [] }
+      ],
+      "slots": [],
+      "actions": [],
+      "parentHint": "AntdStack"
+    }
+  ]
+}

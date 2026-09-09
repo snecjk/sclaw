@@ -12,12 +12,22 @@ export interface AppDevElementRect {
   height: number;
 }
 
+export type AppDevElementTuneKind = 'text' | 'image' | 'button' | 'container';
+
 export interface AppDevPickedElement {
   selector: string;
   tag: string;
   text?: string;
   styles?: Record<string, string>;
   rect?: AppDevElementRect;
+  kind?: AppDevElementTuneKind;
+  src?: string;
+  alt?: string;
+  href?: string;
+  a2uiPageId?: string;
+  a2uiSurfaceId?: string;
+  a2uiComponentId?: string;
+  a2uiComponent?: string;
 }
 
 export interface AppDevElementIntentView {

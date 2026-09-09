@@ -49,8 +49,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { normalizeAppDevPickedElement } from '@/lib/app-dev-element-tune';
 import {
-  ELEMENT_PICKER_SCRIPT,
+  buildElementPickerScript,
   ELEMENT_PICKER_TEARDOWN_SCRIPT,
   SCLAW_TUNE_EVENT_PREFIX,
 } from '@/lib/app-dev-tune-scripts';
@@ -137,6 +138,8 @@ interface AppDevWorkbenchStageProps {
   inspectActive?: boolean;
   /** 选中区域对话修改：直接发给 AI（不再只回填 composer）。 */
   onSubmitElementIntent?: (intent: string, elements: AppDevPickedElement[]) => void | Promise<void>;
+  /** 手动微调消费同一圈选结果，不打开对话浮条。 */
+  onPickedElementsChange?: (elements: AppDevPickedElement[]) => void;
   /**
    * Bumped when AI / restore writes files on disk.
    * Open code tabs reload from disk (no manual「刷新代码」按钮).
@@ -175,6 +178,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onToggleInspect,
   inspectActive = false,
   onSubmitElementIntent,
+  onPickedElementsChange,
   sourceRevision = 0,
   previewRevision = 0,
   initialMode,
@@ -205,10 +209,20 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   const [searchLoading, setSearchLoading] = useState(false);
   const inspectActiveFromStore = useAppDevWorkbenchStore((s) => s.inspectActive);
   const setInspectActive = useAppDevWorkbenchStore((s) => s.setInspectActive);
-  const pickerRequested = inspectActive || inspectActiveFromStore;
+  const inspectOn = inspectActive || inspectActiveFromStore;
+  const pickerRequested = inspectOn || tuneActive;
+  const pickerMode: 'inspect' | 'tune' = inspectOn ? 'inspect' : 'tune';
   const [pickerActive, setPickerActive] = useState(false);
   const [pickedElements, setPickedElements] = useState<AppDevPickedElement[]>([]);
   const pickerActiveRef = useRef(false);
+  const pickerModeRef = useRef(pickerMode);
+  pickerModeRef.current = pickerMode;
+  const inspectOnRef = useRef(inspectOn);
+  inspectOnRef.current = inspectOn;
+  const tuneActiveRef = useRef(tuneActive);
+  tuneActiveRef.current = tuneActive;
+  const onPickedElementsChangeRef = useRef(onPickedElementsChange);
+  onPickedElementsChangeRef.current = onPickedElementsChange;
 
   const phase = status?.phase ?? 'created';
   const isRunning = phase === 'ready' && Boolean(status?.previewUrl);
@@ -273,9 +287,15 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     pickerActiveRef.current = pickerActive;
   }, [pickerActive]);
 
+  const emitPicks = (next: AppDevPickedElement[]) => {
+    const tagged = next.map(normalizeAppDevPickedElement);
+    setPickedElements(tagged);
+    onPickedElementsChangeRef.current?.(tagged);
+  };
+
   const stopElementPicker = async () => {
     setPickerActive(false);
-    setPickedElements([]);
+    emitPicks([]);
     try {
       await previewFrameRef.current?.executeJS(ELEMENT_PICKER_TEARDOWN_SCRIPT);
     } catch {
@@ -283,27 +303,27 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     }
   };
 
-  const startElementPicker = async () => {
+  const startElementPicker = async (mode: 'inspect' | 'tune' = pickerModeRef.current) => {
     setMode('preview');
     setPickerActive(true);
-    setPickedElements([]);
+    emitPicks([]);
     try {
-      await previewFrameRef.current?.executeJS(ELEMENT_PICKER_SCRIPT);
+      await previewFrameRef.current?.executeJS(buildElementPickerScript(mode));
     } catch (err) {
       setPickerActive(false);
-      setInspectActive(false);
+      if (mode === 'inspect') setInspectActive(false);
       toast.error(err instanceof Error ? err.message : '无法启动元素圈选');
     }
   };
 
   useEffect(() => {
     if (pickerRequested) {
-      void startElementPicker();
+      void startElementPicker(pickerMode);
       return;
     }
     void stopElementPicker();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅跟随 inspect 开关
-  }, [pickerRequested]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 跟随 inspect / tune 开关
+  }, [pickerRequested, pickerMode]);
 
   const loadFileList = async () => {
     setFilesLoading(true);
@@ -724,7 +744,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
               onOpenTune={onOpenTune}
               tuneActive={tuneActive}
               onToggleInspect={onToggleInspect}
-              inspectActive={pickerRequested}
+              inspectActive={inspectOn}
             />
             {/*
               设备切换只改变外层视口宽度与设备框样式（200ms CSS 过渡），
@@ -746,7 +766,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                   }
                   onWebviewLifecycle={(event) => {
                     if (event.type === 'did-finish-load' && pickerActiveRef.current) {
-                      void previewFrameRef.current?.executeJS(ELEMENT_PICKER_SCRIPT).catch(() => undefined);
+                      void previewFrameRef.current?.executeJS(buildElementPickerScript(pickerModeRef.current)).catch(() => undefined);
                     }
                   }}
                   onConsoleMessage={({ message }) => {
@@ -757,12 +777,12 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                           payload?: { elements?: AppDevPickedElement[] } | null;
                         };
                         if (payload.type === 'select' && Array.isArray(payload.payload?.elements)) {
-                          setPickedElements(payload.payload.elements);
+                          emitPicks(payload.payload.elements);
                         }
                         if (payload.type === 'cancel') {
-                          setInspectActive(false);
-                          setPickerActive(false);
-                          setPickedElements([]);
+                          emitPicks([]);
+                          if (inspectOnRef.current) setInspectActive(false);
+                          if (!tuneActiveRef.current) setPickerActive(false);
                         }
                       } catch {
                         // ignore malformed tune events
@@ -780,10 +800,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     onPreviewRuntimeError(formatHiddenPreviewFailureForAgent(message, cleanPageUrl));
                   }}
                 />
-                {pickerRequested ? (
+                {inspectOn ? (
                   <AppDevElementIntentBar
                     elements={pickedElements}
-                    pickerActive={pickerRequested}
+                    pickerActive={inspectOn}
                     onCancel={() => setInspectActive(false)}
                     onOpenCode={() => setMode('code')}
                     onSubmit={(intent, elements) => {

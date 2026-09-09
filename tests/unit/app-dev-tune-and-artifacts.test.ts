@@ -19,6 +19,7 @@ import {
 describe('app-dev tune tokens helpers', () => {
   it('parses oklch and hex', () => {
     expect(parseColorToOklch('oklch(0.7 0.15 50)')).toEqual({ l: 0.7, c: 0.15, h: 50 });
+    expect(parseColorToOklch('rgb(255, 111, 0)')).not.toBeNull();
     const fromHex = hexToOklch('#FF6700');
     expect(fromHex).not.toBeNull();
     expect(fromHex!.l).toBeGreaterThan(0.2);

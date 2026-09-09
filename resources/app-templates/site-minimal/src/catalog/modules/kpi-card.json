@@ -1,0 +1,24 @@
+{
+  "id": "kpi-card",
+  "name": "指标卡",
+  "catalogId": "antd",
+  "parentHint": "AntdStack",
+  "components": [
+    {
+      "id": "kpi-card",
+      "component": "AntdStatCard",
+      "title": { "path": "/kpi/title" },
+      "value": { "path": "/kpi/value" },
+      "prefix": { "path": "/kpi/prefix" },
+      "suffix": { "path": "/kpi/suffix" }
+    }
+  ],
+  "dataDefaults": {
+    "kpi": {
+      "title": "指标",
+      "value": "0",
+      "prefix": "",
+      "suffix": ""
+    }
+  }
+}

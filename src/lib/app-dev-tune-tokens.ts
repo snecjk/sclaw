@@ -92,9 +92,27 @@ export function hexToOklch(hex: string): OklchColor | null {
   return { l: clamp(l, 0, 1), c: clamp(c, 0, 0.4), h: clamp(h, 0, 360) };
 }
 
+export function rgbToOklch(input: string): OklchColor | null {
+  const trimmed = input.trim();
+  const match = trimmed.match(
+    /^rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/i,
+  );
+  if (!match) return null;
+  const hex = `#${[match[1], match[2], match[3]]
+    .map((part) => Math.round(Number(part)).toString(16).padStart(2, '0'))
+    .join('')}`;
+  return hexToOklch(hex);
+}
+
+export function isTransparentCssColor(input: string | undefined): boolean {
+  const value = (input ?? '').trim().toLowerCase();
+  if (!value || value === 'transparent' || value === 'none') return true;
+  return /^rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0(?:\.0+)?\s*\)$/.test(value);
+}
+
 export function parseColorToOklch(input: string): OklchColor | null {
   const trimmed = input.trim();
-  return parseOklch(trimmed) ?? hexToOklch(trimmed);
+  return parseOklch(trimmed) ?? hexToOklch(trimmed) ?? rgbToOklch(trimmed);
 }
 
 export function parseRem(input: string): number | null {

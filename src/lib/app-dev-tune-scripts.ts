@@ -48,12 +48,63 @@ export function buildClearTokenOverridesScript(names: string[]): string {
 })()`;
 }
 
+export type AppDevElementLivePatch = {
+  styles?: Record<string, string>;
+  text?: string;
+  src?: string;
+  alt?: string;
+};
+
+/** 按选择器覆写选中节点的样式 / 文案 / 图片（即时预览，不改文件）。 */
+export function buildApplyElementPatchScript(selector: string, patch: AppDevElementLivePatch): string {
+  return `(function(){
+  var selector = ${JSON.stringify(selector)};
+  var patch = ${JSON.stringify(patch)};
+  var el = document.querySelector(selector);
+  if (!el) return { ok: false, reason: 'missing' };
+  var styles = patch.styles || {};
+  var keys = Object.keys(styles);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var v = styles[k];
+    if (v == null || v === '') el.style.removeProperty(k);
+    else el.style.setProperty(k, v);
+  }
+  function setText(node, text) {
+    if (node.childElementCount === 0) {
+      node.textContent = text;
+      return;
+    }
+    var child = node.firstChild;
+    while (child) {
+      if (child.nodeType === 3 && String(child.textContent || '').trim()) {
+        child.textContent = text;
+        return;
+      }
+      child = child.nextSibling;
+    }
+    var nested = node.querySelector('span,p,h1,h2,h3,h4,h5,h6,label,a,button,strong,em');
+    if (nested && nested.childElementCount === 0) {
+      nested.textContent = text;
+      return;
+    }
+    node.textContent = text;
+  }
+  if (typeof patch.text === 'string') setText(el, patch.text);
+  if (typeof patch.src === 'string' && 'src' in el) el.src = patch.src;
+  if (typeof patch.alt === 'string' && 'alt' in el) el.alt = patch.alt;
+  return { ok: true };
+})()`;
+}
+
 /**
  * 元素圈选脚本：挂载一次即可；重复执行会先 teardown。
- * 事件：hover / select / multi-select / cancel
+ * inspect：Esc 卸载圈选；tune：Esc 只清空选区。
  */
-export const ELEMENT_PICKER_SCRIPT = `(function(){
+export function buildElementPickerScript(mode: 'inspect' | 'tune' = 'inspect'): string {
+  return `(function(){
   var PREFIX = ${JSON.stringify(SCLAW_TUNE_EVENT_PREFIX)};
+  var MODE = ${JSON.stringify(mode)};
   var NS = '__sclawTunePicker';
   if (window[NS] && typeof window[NS].teardown === 'function') {
     try { window[NS].teardown(); } catch (e) {}
@@ -65,11 +116,35 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
     } catch (e) {}
   }
 
+  function closestStamp(el) {
+    var cur = el;
+    while (cur && cur.nodeType === 1) {
+      var id = cur.getAttribute && cur.getAttribute('data-a2ui-component-id');
+      if (id) {
+        var host = cur.closest ? cur.closest('[data-a2ui-page-id],[data-a2ui-surface-id]') : null;
+        return {
+          a2uiComponentId: id,
+          a2uiComponent: cur.getAttribute('data-a2ui-component') || '',
+          a2uiSurfaceId: (cur.getAttribute('data-a2ui-surface-id') || (host && host.getAttribute('data-a2ui-surface-id')) || ''),
+          a2uiPageId: (host && host.getAttribute('data-a2ui-page-id')) || ''
+        };
+      }
+      cur = cur.parentElement;
+    }
+    var page = el.closest ? el.closest('[data-a2ui-page-id]') : null;
+    if (page) return { a2uiPageId: page.getAttribute('data-a2ui-page-id') || '' };
+    return null;
+  }
+
   function cssPath(el) {
     if (!el || el.nodeType !== 1) return '';
     if (el.id) return '#' + CSS.escape(el.id);
     var testId = el.getAttribute && el.getAttribute('data-testid');
     if (testId) return '[data-testid="' + String(testId).replace(/"/g, '\\\\"') + '"]';
+    var stamp = closestStamp(el);
+    if (stamp && stamp.a2uiComponentId) {
+      return '[data-a2ui-component-id="' + String(stamp.a2uiComponentId).replace(/"/g, '\\\\"') + '"]';
+    }
     var parts = [];
     var cur = el;
     var depth = 0;
@@ -104,9 +179,14 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
       color: s.color,
       background: s.backgroundColor,
       fontSize: s.fontSize,
+      fontWeight: s.fontWeight,
+      fontFamily: s.fontFamily,
+      textAlign: s.textAlign,
+      lineHeight: s.lineHeight,
       padding: s.padding,
       margin: s.margin,
-      borderRadius: s.borderRadius
+      borderRadius: s.borderRadius,
+      objectFit: s.objectFit
     };
   }
 
@@ -153,13 +233,33 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
   }
 
   function describe(el) {
-    var selector = cssPath(el);
+    var tag = (el.tagName || '').toLowerCase();
+    var src = '';
+    var alt = '';
+    var href = '';
+    if (tag === 'img') {
+      src = el.currentSrc || el.getAttribute('src') || '';
+      alt = el.getAttribute('alt') || '';
+    } else {
+      var bg = getComputedStyle(el).backgroundImage;
+      var m = bg && bg.match(/url\\(["']?([^"')]+)["']?\\)/);
+      if (m) src = m[1];
+    }
+    if (tag === 'a') href = el.getAttribute('href') || '';
+    var stamp = closestStamp(el) || {};
     return {
-      selector: selector,
-      tag: (el.tagName || '').toLowerCase(),
+      selector: cssPath(el),
+      tag: tag,
       text: (el.innerText || '').trim().slice(0, 80),
       styles: styleSummary(el),
-      rect: rectOf(el)
+      rect: rectOf(el),
+      src: src,
+      alt: alt,
+      href: href,
+      a2uiPageId: stamp.a2uiPageId || '',
+      a2uiSurfaceId: stamp.a2uiSurfaceId || '',
+      a2uiComponentId: stamp.a2uiComponentId || '',
+      a2uiComponent: stamp.a2uiComponent || ''
     };
   }
 
@@ -205,11 +305,21 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
     pinSelection(t);
   }
 
+  function clearSelection() {
+    selected = [];
+    selectedSet = new Set();
+    selectBox.node.style.display = 'none';
+    emit('select', { multi: false, elements: [] });
+  }
+
   function onKey(ev) {
-    if (ev.key === 'Escape') {
-      teardown();
-      emit('cancel', null);
+    if (ev.key !== 'Escape') return;
+    if (MODE === 'tune') {
+      clearSelection();
+      return;
     }
+    teardown();
+    emit('cancel', null);
   }
 
   function teardown() {
@@ -229,6 +339,9 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
   emit('ready', null);
   return true;
 })()`;
+}
+
+export const ELEMENT_PICKER_SCRIPT = buildElementPickerScript('inspect');
 
 export const ELEMENT_PICKER_TEARDOWN_SCRIPT = `(function(){
   var NS = '__sclawTunePicker';
