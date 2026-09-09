@@ -26,16 +26,22 @@ export function quoteForCmd(value: string): string {
   return `"${value}"`;
 }
 
+/** True when `bin` is a cmd.exe script that Node cannot spawn without a shell. */
+export function isWinBatchFile(bin: string): boolean {
+  return /\.(cmd|bat)$/i.test(bin);
+}
+
 /**
  * Determine whether a spawn call needs `shell: true` on Windows.
  *
- * Full (absolute) paths can be executed directly by the OS via
- * CreateProcessW, which handles spaces correctly without a shell.
- * Simple command names (e.g. 'uv', 'node') need shell for PATH/PATHEXT
- * resolution on Windows.
+ * Full (absolute) `.exe` paths can be executed directly by the OS via
+ * CreateProcessW. Simple command names (e.g. 'uv', 'node') need shell for
+ * PATH/PATHEXT resolution. `.cmd` / `.bat` files always need a shell:
+ * Node 18.20+/20.12+ rejects them with `spawn EINVAL` (CVE-2024-27980).
  */
 export function needsWinShell(bin: string): boolean {
   if (process.platform !== 'win32') return false;
+  if (isWinBatchFile(bin)) return true;
   return !path.win32.isAbsolute(bin);
 }
 
@@ -51,7 +57,7 @@ export function prepareWinSpawn(
   forceShell?: boolean,
 ): { shell: boolean; command: string; args: string[] } {
   const isWin = process.platform === 'win32';
-  const useShell = forceShell ?? (isWin && !path.win32.isAbsolute(command));
+  const useShell = forceShell ?? needsWinShell(command);
 
   if (!useShell || !isWin) {
     return { shell: useShell, command, args };

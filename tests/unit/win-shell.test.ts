@@ -88,7 +88,14 @@ describe('needsWinShell', () => {
     expect(needsWinShell('pnpm')).toBe(true);
   });
 
-  it('returns false on Windows for absolute paths', () => {
+  it('returns true on Windows for .cmd/.bat even when the path is absolute', () => {
+    setPlatform('win32');
+    expect(needsWinShell('C:\\Users\\admin\\.stoclaw\\runtime\\node\\npm.cmd')).toBe(true);
+    expect(needsWinShell('C:\\Users\\admin\\AppData\\Roaming\\npm\\snpm.cmd')).toBe(true);
+    expect(needsWinShell('D:\\tools\\run.bat')).toBe(true);
+  });
+
+  it('returns false on Windows for absolute .exe paths', () => {
     setPlatform('win32');
     expect(needsWinShell('C:\\Program Files\\uv.exe')).toBe(false);
     expect(needsWinShell('D:\\tools\\bin\\uv.exe')).toBe(false);
@@ -158,6 +165,31 @@ describe('prepareWinSpawn', () => {
       ['python', 'find', '3.12'],
     );
     expect(relResult.shell).toBe(true);
+  });
+
+  it('forces shell for absolute .cmd/.bat on Windows without extra forceShell', () => {
+    setPlatform('win32');
+    const npmResult = prepareWinSpawn(
+      'C:\\Users\\admin\\.stoclaw\\runtime\\node\\npm.cmd',
+      ['run', 'dev', '--', '--port', '56022'],
+    );
+    expect(npmResult.shell).toBe(true);
+    expect(npmResult.command).toBe('C:\\Users\\admin\\.stoclaw\\runtime\\node\\npm.cmd');
+    expect(npmResult.args).toEqual(['run', 'dev', '--', '--port', '56022']);
+
+    const spaced = prepareWinSpawn(
+      'C:\\Program Files\\nodejs\\npm.cmd',
+      ['run', 'dev'],
+    );
+    expect(spaced.shell).toBe(true);
+    expect(spaced.command).toBe('"C:\\Program Files\\nodejs\\npm.cmd"');
+  });
+
+  it('does not force shell for .cmd on non-Windows', () => {
+    setPlatform('linux');
+    const result = prepareWinSpawn('/usr/bin/npm.cmd', ['run', 'dev']);
+    expect(result.shell).toBe(false);
+    expect(result.command).toBe('/usr/bin/npm.cmd');
   });
 });
 

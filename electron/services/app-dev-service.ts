@@ -1709,8 +1709,7 @@ function spawnSnpmInstallOnce(
   },
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const forceShell = process.platform === 'win32' && /\.(cmd|bat)$/i.test(snpmBin);
-    const prepared = prepareWinSpawn(snpmBin, args, forceShell || needsWinShell(snpmBin));
+    const prepared = prepareWinSpawn(snpmBin, args);
     const child = spawn(prepared.command, prepared.args, {
       cwd: npmCwd,
       env: getSnpmInstallEnv(),
@@ -2826,10 +2825,11 @@ function collectSpawnOutput(
   options: { cwd: string; env?: NodeJS.ProcessEnv; shell?: boolean },
 ): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const prepared = prepareWinSpawn(command, args, options.shell || undefined);
+    const child = spawn(prepared.command, prepared.args, {
       cwd: options.cwd,
       env: options.env,
-      shell: options.shell ?? false,
+      shell: prepared.shell,
       windowsHide: true,
     });
     const chunks: string[] = [];

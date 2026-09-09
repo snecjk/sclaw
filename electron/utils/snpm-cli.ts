@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { delimiter, join } from 'path';
 import { getManagedNodePaths, getNodeSpawnEnv } from './node-runtime';
+import { prepareWinSpawn } from './win-shell';
 import { logger } from './logger';
 
 export const STO_SNPM_REGISTRY = 'http://snpm-registry.sto.cn';
@@ -44,10 +45,12 @@ export function resolveSnpmBin(): string | null {
 
 function spawnOnce(command: string, args: string[], cwd?: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const prepared = prepareWinSpawn(command, args);
+    const child = spawn(prepared.command, prepared.args, {
       cwd,
       env: getNodeSpawnEnv() as NodeJS.ProcessEnv,
       windowsHide: true,
+      shell: prepared.shell,
     });
     const tail: string[] = [];
     const onData = (chunk: unknown) => {

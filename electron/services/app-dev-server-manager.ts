@@ -13,6 +13,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { isDevServerRepairWorthyLine } from '../../shared/app-dev-preview-noise';
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
+import { prepareWinSpawn } from '../utils/win-shell';
 import { logger } from '../utils/logger';
 import { getPort } from '../utils/config';
 import { findAvailablePort } from '../utils/port-utils';
@@ -233,17 +234,17 @@ async function startDevServerImpl(
   logger.info(`[app-dev] starting dev server for ${workspaceId} on port ${port} cwd=${cwd}`);
   let child: ChildProcess;
   try {
-    child = spawn(
-      npmBin,
-      ['run', 'dev', '--', '--port', String(port), '--strictPort', '--host', '127.0.0.1'],
-      {
-        cwd,
-        env: childEnvironment,
-        windowsHide: true,
-        detached: process.platform !== 'win32',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
+    const prepared = prepareWinSpawn(npmBin, [
+      'run', 'dev', '--', '--port', String(port), '--strictPort', '--host', '127.0.0.1',
+    ]);
+    child = spawn(prepared.command, prepared.args, {
+      cwd,
+      env: childEnvironment,
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: prepared.shell,
+    });
   } catch (error) {
     destroySsoAuthLocalSession(workspaceId, ssoAuthSession.secret);
     throw error;

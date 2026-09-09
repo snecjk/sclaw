@@ -9,6 +9,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { isBackendRepairWorthyLine } from '../../shared/app-dev-backend-noise';
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
+import { prepareWinSpawn } from '../utils/win-shell';
 import { getPort } from '../utils/config';
 import { logger } from '../utils/logger';
 import { getAppDevSecretsEnv } from './app-dev-secrets';
@@ -112,6 +113,27 @@ function killProcessTree(child: ChildProcess): void {
   }
 }
 
+function spawnNpm(
+  args: string[],
+  options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    detached?: boolean;
+  },
+): ChildProcess {
+  const { npmBin } = getManagedNodePaths();
+  if (!npmBin) throw new Error('未找到可用的 npm');
+  const prepared = prepareWinSpawn(npmBin, args);
+  return spawn(prepared.command, prepared.args, {
+    cwd: options.cwd,
+    env: options.env,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: options.detached,
+    shell: prepared.shell,
+  });
+}
+
 function cancelCrashRestart(workspaceId: string): void {
   const timer = crashRestartTimers.get(workspaceId);
   if (timer) clearTimeout(timer);
@@ -173,15 +195,8 @@ async function updateAppBackendProxy(appPath: string, backendUrl: string): Promi
 }
 
 async function runMigrate(appPath: string, env: NodeJS.ProcessEnv): Promise<void> {
-  const { npmBin } = getManagedNodePaths();
-  if (!npmBin) throw new Error('未找到可用的 npm');
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(npmBin, ['run', 'db:migrate'], {
-      cwd: appPath,
-      env,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const child = spawnNpm(['run', 'db:migrate'], { cwd: appPath, env });
     let output = '';
     child.stdout?.on('data', (d) => { output += String(d); });
     child.stderr?.on('data', (d) => { output += String(d); });
@@ -235,9 +250,6 @@ export async function startBackend(
   }
   if (existing) stopBackend(workspaceId);
 
-  const { npmBin } = getManagedNodePaths();
-  if (!npmBin) throw new Error('未找到可用的 npm');
-
   const secrets = await getAppDevSecretsEnv(workspaceId);
   const port = await allocateDevServerPort();
   const url = `http://127.0.0.1:${port}`;
@@ -268,12 +280,10 @@ export async function startBackend(
   await updateAppBackendProxy(appPath, url);
 
   logger.info(`[app-runtime] starting backend ${workspaceId} on ${url}`);
-  const child = spawn(npmBin, ['run', 'dev:server'], {
+  const child = spawnNpm(['run', 'dev:server'], {
     cwd: appPath,
     env,
-    windowsHide: true,
     detached: process.platform !== 'win32',
-    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   const entry: BackendEntry = {
@@ -428,19 +438,12 @@ export async function migrateAppDatabase(workspaceId: string, appPath: string): 
 
 /** Run template smoke against a live backend URL; returns stdout or throws. */
 export async function runAppSmoke(appPath: string, backendUrl: string): Promise<string> {
-  const { npmBin } = getManagedNodePaths();
-  if (!npmBin) throw new Error('未找到可用的 npm');
   const env: NodeJS.ProcessEnv = {
     ...(getNodeSpawnEnv() as NodeJS.ProcessEnv),
     SMOKE_BASE_URL: backendUrl.replace(/\/$/, ''),
   };
   return new Promise((resolve, reject) => {
-    const child = spawn(npmBin, ['run', 'smoke'], {
-      cwd: appPath,
-      env,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const child = spawnNpm(['run', 'smoke'], { cwd: appPath, env });
     let output = '';
     child.stdout?.on('data', (d) => { output += String(d); });
     child.stderr?.on('data', (d) => { output += String(d); });
