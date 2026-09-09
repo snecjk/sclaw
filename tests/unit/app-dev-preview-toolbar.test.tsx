@@ -140,6 +140,16 @@ describe('AppDevPreviewToolbar 预览工具条升级（T03）', () => {
     expect(mocks.unmounts).toBe(0);
   });
 
+  it('opens system browser from an icon inside the device cluster', async () => {
+    await renderStage();
+    const openExternal = screen.getByRole('button', { name: '在系统浏览器打开' });
+    expect(openExternal).toHaveAttribute('title', '在系统浏览器打开');
+    expect(openExternal).not.toHaveTextContent('在系统浏览器打开');
+    expect(openExternal.closest('[aria-label="预览视口"]')).not.toBeNull();
+    fireEvent.click(openExternal);
+    expect(mocks.openExternalUrl).toHaveBeenCalled();
+  });
+
   it('路由下拉列出应用页面，选择后跳转且地址栏同步', async () => {
     await renderStage();
     await waitFor(() => {

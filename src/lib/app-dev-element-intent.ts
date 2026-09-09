@@ -12,7 +12,7 @@ export interface AppDevElementRect {
   height: number;
 }
 
-export type AppDevElementTuneKind = 'text' | 'image' | 'button' | 'container';
+export type AppDevElementTuneKind = 'text' | 'image' | 'button' | 'container' | 'table';
 
 export interface AppDevPickedElement {
   selector: string;

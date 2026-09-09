@@ -8,7 +8,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
-  History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
@@ -32,7 +31,6 @@ import { StoAppDeployHistoryDialog } from '@/components/app-dev/StoAppDeployHist
 import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -50,7 +48,6 @@ import {
   pushStoApp,
   type CodeDeployEnv,
   type StoAppStatus,
-  restoreAppCheckpoint,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
@@ -198,7 +195,6 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   const [status, setStatus] = useState<AppDevStatus | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [composerSeed, setComposerSeed] = useState<{ text: string; version: number } | null>(null);
-  const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
@@ -303,16 +299,6 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
   }, []);
-
-  const handleRestore = async () => {
-    const result = await restoreAppCheckpoint(workspaceId);
-    if (result.restored) {
-      setSourceRevision((n) => n + 1);
-      toast.success('已恢复到上一版，页面稍后自动刷新');
-    } else {
-      toast.error('暂时无法恢复，请稍后再试');
-    }
-  };
 
   const handleSubmit = async (message: string) => {
     try {
@@ -516,18 +502,6 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
             }}
           />
         ) : null}
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn('gap-1 text-xs', !gitAvailable && 'hidden')}
-          disabled={!gitAvailable}
-          onClick={() => setConfirmRestore(true)}
-        >
-          <History className="h-3.5 w-3.5" aria-hidden />
-          恢复上一版
-        </Button>
       </header>
 
       <AppDevSplitBody
@@ -573,19 +547,6 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
         />
       </AppDevSplitBody>
 
-      <ConfirmDialog
-        open={confirmRestore}
-        title="恢复上一版"
-        message="将把应用恢复到上一次对话修改前的样子。当前内容会自动备份，可以放心恢复。"
-        confirmLabel="恢复"
-        confirmingLabel="恢复中…"
-        variant="destructive"
-        onConfirm={async () => {
-          await handleRestore();
-          setConfirmRestore(false);
-        }}
-        onCancel={() => setConfirmRestore(false)}
-      />
       <StoAppCommitDialog
         open={commitOpen}
         appName={appName}

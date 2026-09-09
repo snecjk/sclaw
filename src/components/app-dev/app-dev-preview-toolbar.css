@@ -58,11 +58,51 @@
   white-space: nowrap;
 }
 
-/* 设备分段控件：复用 sto-segment 配方，压缩到工具条 32px 节奏。 */
-.app-dev-preview-device-tabs .sto-segment-track {
+/* 设备 + 系统浏览器：同一视口框，外链只出图标，悬停看 title。 */
+.app-dev-preview-device-cluster {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
   height: 32px;
-  padding: 2px;
   gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--sto-control-field-border);
+  border-radius: 8px;
+  background: var(--sto-segment-track-background);
+}
+
+.app-dev-preview-device-cluster .sto-segment-track {
+  height: 28px;
+  padding: 0;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-dev-preview-device-cluster__divider {
+  width: 1px;
+  height: 16px;
+  background: var(--sto-control-field-border);
+}
+
+.app-dev-preview-device-cluster__action {
+  display: inline-flex;
+  width: 32px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sto-segment-default-foreground);
+  cursor: pointer;
+}
+
+.app-dev-preview-device-cluster__action:hover {
+  background: var(--sto-segment-hover-background);
 }
 
 .app-dev-preview-device-tabs .sto-segment-item {

@@ -20,6 +20,8 @@ import {
 import type { AppDevPickedElement } from '@/lib/app-dev-element-intent';
 import {
   draftHasChanges,
+  emptyElementTuneStyles,
+  expandElementTunePaintStyles,
   persistAppDevElementTune,
   type AppDevElementTuneDraft,
 } from '@/lib/app-dev-element-tune';
@@ -136,15 +138,8 @@ function ElementTuneSection({
         text: selected.text,
         src: selected.src,
         alt: selected.alt,
-        styles: {
-          color: '',
-          'background-color': '',
-          'font-size': '',
-          'font-weight': '',
-          'text-align': '',
-          'border-radius': '',
-          'object-fit': '',
-        },
+        cascadeAlign: true,
+        styles: emptyElementTuneStyles(),
       }));
     } catch {
       // ignore
@@ -162,26 +157,35 @@ function ElementTuneSection({
         return;
       }
       const result = await persistAppDevElementTune(workspaceId, selected, draft);
+      if (executeJS) {
+        await executeJS(buildApplyElementPatchScript(selected.selector, {
+          text: draft.text,
+          src: draft.src,
+          alt: draft.alt,
+          cascadeAlign: 'text-align' in draft.styles || 'justify-content' in draft.styles,
+          styles: expandElementTunePaintStyles(draft.styles),
+        }));
+      }
       const parts = [
         result.cssPath ? `样式 ${result.cssPath}` : '',
         result.sourcePath ? `源码 ${result.sourcePath}` : '',
         ...result.notes,
       ].filter(Boolean);
       setHint(parts.join('；') || '已应用');
-      onPersisted?.();
+      if (result.sourcePath) onPersisted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [draft, onPersisted, selected, workspaceId]);
+  }, [draft, executeJS, onPersisted, selected, workspaceId]);
 
   if (!selected) {
     return (
       <div className="flex h-full min-h-0 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-6">
           <p className="text-xs leading-relaxed text-muted-foreground" data-testid="app-dev-element-tune-empty">
-            点击预览中的元素进行微调。文字、按钮和图片会显示不同的调整项。
+            点击预览中的元素进行微调。文字、按钮、图片、容器和表格会显示不同的调整项。
           </p>
         </div>
       </div>
