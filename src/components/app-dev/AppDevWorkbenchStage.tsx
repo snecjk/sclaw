@@ -132,8 +132,11 @@ interface AppDevWorkbenchStageProps {
   /** 打开手动微调（T06）。 */
   onOpenTune?: () => void;
   tuneActive?: boolean;
-  /** 父层请求进入元素圈选（T07）。 */
-  elementPickerRequest?: number;
+  /** 预览圈选对话修改，不经过手动微调。 */
+  onToggleInspect?: () => void;
+  inspectActive?: boolean;
+  /** 选中区域对话修改：直接发给 AI（不再只回填 composer）。 */
+  onSubmitElementIntent?: (intent: string, elements: AppDevPickedElement[]) => void | Promise<void>;
   /**
    * Bumped when AI / restore writes files on disk.
    * Open code tabs reload from disk (no manual「刷新代码」按钮).
@@ -169,7 +172,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   onPreviewBridgeChange,
   onOpenTune,
   tuneActive = false,
-  elementPickerRequest = 0,
+  onToggleInspect,
+  inspectActive = false,
+  onSubmitElementIntent,
   sourceRevision = 0,
   previewRevision = 0,
   initialMode,
@@ -198,6 +203,9 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHits, setSearchHits] = useState<AppSourceSearchHit[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const inspectActiveFromStore = useAppDevWorkbenchStore((s) => s.inspectActive);
+  const setInspectActive = useAppDevWorkbenchStore((s) => s.setInspectActive);
+  const pickerRequested = inspectActive || inspectActiveFromStore;
   const [pickerActive, setPickerActive] = useState(false);
   const [pickedElements, setPickedElements] = useState<AppDevPickedElement[]>([]);
   const pickerActiveRef = useRef(false);
@@ -283,16 +291,19 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
       await previewFrameRef.current?.executeJS(ELEMENT_PICKER_SCRIPT);
     } catch (err) {
       setPickerActive(false);
+      setInspectActive(false);
       toast.error(err instanceof Error ? err.message : '无法启动元素圈选');
     }
   };
 
-  // 父层（微调面板）请求圈选
   useEffect(() => {
-    if (!elementPickerRequest) return;
-    void startElementPicker();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅响应 request 递增
-  }, [elementPickerRequest]);
+    if (pickerRequested) {
+      void startElementPicker();
+      return;
+    }
+    void stopElementPicker();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅跟随 inspect 开关
+  }, [pickerRequested]);
 
   const loadFileList = async () => {
     setFilesLoading(true);
@@ -712,6 +723,8 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
               onNavigateRoute={navigatePreviewRoute}
               onOpenTune={onOpenTune}
               tuneActive={tuneActive}
+              onToggleInspect={onToggleInspect}
+              inspectActive={pickerRequested}
             />
             {/*
               设备切换只改变外层视口宽度与设备框样式（200ms CSS 过渡），
@@ -747,6 +760,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                           setPickedElements(payload.payload.elements);
                         }
                         if (payload.type === 'cancel') {
+                          setInspectActive(false);
                           setPickerActive(false);
                           setPickedElements([]);
                         }
@@ -766,18 +780,23 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     onPreviewRuntimeError(formatHiddenPreviewFailureForAgent(message, cleanPageUrl));
                   }}
                 />
+                {pickerRequested ? (
+                  <AppDevElementIntentBar
+                    elements={pickedElements}
+                    pickerActive={pickerRequested}
+                    onCancel={() => setInspectActive(false)}
+                    onOpenCode={() => setMode('code')}
+                    onSubmit={(intent, elements) => {
+                      if (onSubmitElementIntent) {
+                        void onSubmitElementIntent(intent, elements);
+                      } else {
+                        onFillComposerFromDiagnostics?.(buildElementIntentPrompt(intent, elements));
+                      }
+                      setInspectActive(false);
+                    }}
+                  />
+                ) : null}
               </div>
-              {pickerActive ? (
-                <AppDevElementIntentBar
-                  elements={pickedElements}
-                  onCancel={() => void stopElementPicker()}
-                  onSubmit={(intent, elements) => {
-                    const prompt = buildElementIntentPrompt(intent, elements);
-                    onFillComposerFromDiagnostics?.(prompt);
-                    void stopElementPicker();
-                  }}
-                />
-              ) : null}
             </div>
           </div>
         ) : (

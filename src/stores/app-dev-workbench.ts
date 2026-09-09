@@ -51,8 +51,10 @@ interface AppDevWorkbenchState {
   stageCollapsed: boolean;
   /** 预览设备（T03 使用），默认桌面。 */
   device: AppDevPreviewDevice;
-  /** 右列 对话 ↔ 手动微调面板 切换（T06 使用）。 */
+  /** 右列 对话 ↔ 手动微调面板 切换（T06 使用）。与 inspectActive 独立。 */
   tuneMode: AppDevTuneMode;
+  /** 预览圈选「对话修改」：不依赖手动微调面板。 */
+  inspectActive: boolean;
   /** 「查看修改」diff 请求（T04/T10），消费方处理后自行清空。 */
   diffRequest: AppDevHashRequest | null;
   /** 「恢复版本」请求（T04 使用），消费方处理后自行清空。 */
@@ -64,6 +66,7 @@ interface AppDevWorkbenchState {
   toggleStageCollapsed: () => void;
   setDevice: (device: AppDevPreviewDevice) => void;
   setTuneMode: (tuneMode: AppDevTuneMode) => void;
+  setInspectActive: (inspectActive: boolean) => void;
   setDiffRequest: (request: AppDevHashRequest | null) => void;
   setVersionRestoreRequest: (request: AppDevHashRequest | null) => void;
   setAssetRevealPath: (path: string | null) => void;
@@ -76,6 +79,7 @@ export const useAppDevWorkbenchStore = create<AppDevWorkbenchState>()(
       stageCollapsed: false,
       device: 'desktop',
       tuneMode: 'chat',
+      inspectActive: false,
       diffRequest: null,
       versionRestoreRequest: null,
       assetRevealPath: null,
@@ -87,7 +91,14 @@ export const useAppDevWorkbenchStore = create<AppDevWorkbenchState>()(
       setStageCollapsed: (collapsed) => set({ stageCollapsed: collapsed }),
       toggleStageCollapsed: () => set((s) => ({ stageCollapsed: !s.stageCollapsed })),
       setDevice: (device) => set({ device }),
-      setTuneMode: (tuneMode) => set({ tuneMode }),
+      setTuneMode: (tuneMode) => set((state) => ({
+        tuneMode,
+        inspectActive: tuneMode === 'tune' ? false : state.inspectActive,
+      })),
+      setInspectActive: (inspectActive) => set((state) => ({
+        inspectActive,
+        tuneMode: inspectActive ? 'chat' : state.tuneMode,
+      })),
       setDiffRequest: (request) => set({ diffRequest: request }),
       setVersionRestoreRequest: (request) => set({ versionRestoreRequest: request }),
       setAssetRevealPath: (path) => set({ assetRevealPath: path }),

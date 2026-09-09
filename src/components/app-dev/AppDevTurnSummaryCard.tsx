@@ -11,11 +11,15 @@ import { memo, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, ListTodo, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { ToolStatus } from '@/stores/chat';
 import {
+  appDevFileOpVerb,
+  appDevToolBaseName,
+  classifyAppDevTool,
   describeAppDevTool,
   extractAppDevFileOpStat,
   formatAppDevDurationMs,
   rollupAppDevTools,
 } from '@/lib/app-dev-tool-rollup';
+import { AppDevFileJumpLink } from '@/components/app-dev/AppDevFileJumpLink';
 import {
   formatResponsiveAuditSummary,
   type AppDevResponsiveAuditResult,
@@ -107,14 +111,24 @@ export const AppDevTurnSummaryCard = memo(function AppDevTurnSummaryCard({
             .filter((tool) => tool.status === 'completed')
             .map((tool, index) => {
               const fileStat = extractAppDevFileOpStat(tool);
+              const kind = classifyAppDevTool(tool.name ?? '');
               return (
                 <div
                   key={tool.toolCallId ?? tool.id ?? `${tool.name}-${index}`}
                   className="flex h-5 items-center gap-1.5 font-mono"
                 >
-                  <span className="truncate text-[var(--sto-text-secondary)]">
-                    {describeAppDevTool(tool)}
-                  </span>
+                  {kind === 'file' && fileStat?.path ? (
+                    <span className="flex min-w-0 items-center gap-1.5 truncate text-[var(--sto-text-secondary)]">
+                      <span className="shrink-0">{appDevFileOpVerb({ hasCreate: fileStat.isCreate, hasEdit: !fileStat.isCreate })}{' '}</span>
+                      <AppDevFileJumpLink path={fileStat.path}>
+                        {appDevToolBaseName(fileStat.path)}
+                      </AppDevFileJumpLink>
+                    </span>
+                  ) : (
+                    <span className="truncate text-[var(--sto-text-secondary)]">
+                      {describeAppDevTool(tool)}
+                    </span>
+                  )}
                   {fileStat && (fileStat.added > 0 || fileStat.removed > 0) ? (
                     <span className="shrink-0 tabular-nums">
                       {fileStat.added > 0 ? (

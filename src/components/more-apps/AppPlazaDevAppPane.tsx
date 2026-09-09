@@ -18,7 +18,7 @@ import {
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import type { ToolStatus } from '@/stores/chat';
-import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
+import { getSessionDisplayMessages, useSessionDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatSessionRuntimeView, useChatSessionSending } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { ChatStaticItemsList } from '@/components/chat/ChatStaticItemsList';
@@ -55,7 +55,9 @@ import {
   buildPlanConfirmPrompt,
   extractSclawPlan,
   extractSclawStyles,
+  shouldTriggerPlanGate,
   wrapUserTextForPlanGate,
+  buildPlanFirstPrompt,
 } from '@/lib/app-dev-plan-gate';
 import {
   RESPONSIVE_AUDIT_SCRIPT,
@@ -91,6 +93,11 @@ import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useAppDevVersionsStore } from '@/stores/app-dev-versions';
 import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
+import { sendAppDevChatPrompt } from '@/lib/send-app-dev-chat-prompt';
+import {
+  buildElementIntentPrompt,
+  type AppDevPickedElement,
+} from '@/lib/app-dev-element-intent';
 import {
   createAppCheckpoint,
   continueStoAppMerge,
@@ -479,6 +486,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const toggleStageCollapsed = useAppDevWorkbenchStore((s) => s.toggleStageCollapsed);
   const tuneMode = useAppDevWorkbenchStore((s) => s.tuneMode);
   const setTuneMode = useAppDevWorkbenchStore((s) => s.setTuneMode);
+  const inspectActive = useAppDevWorkbenchStore((s) => s.inspectActive);
+  const setInspectActive = useAppDevWorkbenchStore((s) => s.setInspectActive);
   const setMode = useAppDevWorkbenchStore((s) => s.setMode);
   const device = useAppDevWorkbenchStore((s) => s.device);
   const [previewBridge, setPreviewBridge] = useState<{
@@ -486,7 +495,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     getWebContentsId: () => number | null;
   } | null>(null);
   const [auditsByTurn, setAuditsByTurn] = useState<Record<string, AppDevResponsiveAuditResult>>({});
-  const [elementPickerRequest, setElementPickerRequest] = useState(0);
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -522,6 +530,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   );
   const sending = useChatSessionSending(appDevSessionKey ?? '');
   const clearDevAppPendingPrompt = useAppPlazaShellStore((s) => s.clearDevAppPendingPrompt);
+
+  useEffect(() => {
+    setInspectActive(false);
+  }, [workspaceId, setInspectActive]);
 
   // P5 W2-1：对话式创建后自动发送首条（已包装 Plan 闸门）
   useEffect(() => {
@@ -824,6 +836,28 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
     setChatOpen(true);
   }, []);
+
+  const handleSubmitElementIntent = useCallback(async (
+    intent: string,
+    elements: AppDevPickedElement[],
+  ) => {
+    const trimmed = intent.trim();
+    if (!trimmed || !appDevSessionKey) return;
+    if (interceptRestartIntent(trimmed)) return;
+    setTuneMode('chat');
+    setChatOpen(true);
+    const packed = buildElementIntentPrompt(trimmed, elements);
+    const priorUserMessageCount = getSessionDisplayMessages(appDevSessionKey)
+      .filter((message) => message.role === 'user').length;
+    const outbound = shouldTriggerPlanGate({ userText: trimmed, priorUserMessageCount })
+      ? buildPlanFirstPrompt(packed)
+      : packed;
+    try {
+      await sendAppDevChatPrompt(appDevSessionKey, outbound);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [appDevSessionKey, interceptRestartIntent, setTuneMode]);
 
   // T05：用户消息「编辑重发」——点击编辑后回填 composer（复用 composerSeed），
   // 用户改完手动发送，即作为新一轮对话发出（不截断历史，与主会话 handleEditMessage 语义一致）
@@ -1185,10 +1219,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 workspaceId={workspaceId}
                 executeJS={previewBridge ? (code) => previewBridge.executeJS(code) : null}
                 onClose={() => setTuneMode('chat')}
-                onStartElementPicker={() => {
-                  setChatOpen(true);
-                  setElementPickerRequest((n) => n + 1);
-                }}
               />
             )
             : appDevSessionKey
@@ -1237,11 +1267,21 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           onPreviewBridgeChange={setPreviewBridge}
           onOpenTune={() => {
+            if (tuneMode === 'tune') {
+              setTuneMode('chat');
+              return;
+            }
             setTuneMode('tune');
             setChatOpen(true);
           }}
           tuneActive={tuneMode === 'tune'}
-          elementPickerRequest={elementPickerRequest}
+          onToggleInspect={() => {
+            const next = !inspectActive;
+            setInspectActive(next);
+            if (next) setChatOpen(true);
+          }}
+          inspectActive={inspectActive}
+          onSubmitElementIntent={handleSubmitElementIntent}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
           canDeploy={canDeploy}

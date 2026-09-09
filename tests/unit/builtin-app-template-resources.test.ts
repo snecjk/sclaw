@@ -168,6 +168,7 @@ describe('built-in app template resources', () => {
       'layouts.md',
       'page-head.md',
       'tabs.md',
+      'content.md',
       'reference.html',
       'assets/sto-mark.svg',
       'assets/opentab.svg',
@@ -178,6 +179,13 @@ describe('built-in app template resources', () => {
     for (const template of ['site-minimal', 'assets-minimal']) {
       const skillRoot = join(resources, template, 'openspec', 'skill-catalog', 'sto-pc-visual');
       requiredFiles.forEach((file) => expect(existsSync(join(skillRoot, file))).toBe(true));
+      const skillMd = readFileSync(join(skillRoot, 'SKILL.md'), 'utf8');
+      const contentMd = readFileSync(join(skillRoot, 'content.md'), 'utf8');
+      expect(skillMd).toContain('content.md');
+      expect(skillMd).toContain('#FF6700');
+      expect(contentMd).toContain('src/theme/theme.css');
+      expect(contentMd).toContain('这不是报告 HTML');
+      expect(contentMd).not.toContain('build.py 注入');
     }
   });
 });

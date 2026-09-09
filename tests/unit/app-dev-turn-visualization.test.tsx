@@ -7,6 +7,7 @@ import { AppDevTodoCapsule } from '@/components/app-dev/AppDevTodoCapsule';
 import { AppDevTurnSummaryCard } from '@/components/app-dev/AppDevTurnSummaryCard';
 import { rollupAppDevTools } from '@/lib/app-dev-tool-rollup';
 import { deriveAppDevTurnPlan } from '@/lib/app-dev-turn-plan';
+import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import type { ChatDisplayItem } from '@/pages/Chat/chat-display';
 
 vi.mock('@/pages/Chat/AssistantTurnMessage', () => ({
@@ -70,6 +71,26 @@ describe('AppDevToolRollupLine 流式摘要行', () => {
     ]);
     const { container } = render(<AppDevToolRollupLine rollup={rollup} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('点击文件名会跳转到代码页对应路径', () => {
+    useAppDevWorkbenchStore.setState({
+      mode: 'preview',
+      stageCollapsed: true,
+      assetRevealPath: null,
+    });
+    const rollup = rollupAppDevTools([
+      makeTool({
+        name: 'Edit',
+        input: { file_path: '/app/src/components/ProductCard.tsx', old_string: 'a', new_string: 'b' },
+      }),
+    ]);
+    render(<AppDevToolRollupLine rollup={rollup} />);
+    fireEvent.click(screen.getByRole('button', { name: '跳转到 ProductCard.tsx' }));
+    const state = useAppDevWorkbenchStore.getState();
+    expect(state.mode).toBe('code');
+    expect(state.stageCollapsed).toBe(false);
+    expect(state.assetRevealPath).toBe('src/components/ProductCard.tsx');
   });
 });
 
@@ -143,6 +164,19 @@ describe('AppDevTurnSummaryCard 轮次汇总卡', () => {
     expect(details).toHaveTextContent('−1');
     expect(details).toHaveTextContent('执行 pnpm run build');
     expect(details).toHaveTextContent('21s');
+  });
+
+  it('明细里的文件名可跳转到代码页', () => {
+    useAppDevWorkbenchStore.setState({
+      mode: 'preview',
+      stageCollapsed: false,
+      assetRevealPath: null,
+    });
+    render(<AppDevTurnSummaryCard tools={tools} durationMs={24_000} />);
+    fireEvent.click(screen.getByRole('button', { name: '展开明细' }));
+    fireEvent.click(screen.getByRole('button', { name: '跳转到 home.page.json' }));
+    expect(useAppDevWorkbenchStore.getState().mode).toBe('code');
+    expect(useAppDevWorkbenchStore.getState().assetRevealPath).toBe('home.page.json');
   });
 
   it('中断时显示「已中断 · 已完成 N 个任务」', () => {

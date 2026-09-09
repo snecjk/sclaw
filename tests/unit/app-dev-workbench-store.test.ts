@@ -12,6 +12,7 @@ const DEFAULT_STATE = {
   stageCollapsed: false,
   device: 'desktop',
   tuneMode: 'chat',
+  inspectActive: false,
   diffRequest: null,
   versionRestoreRequest: null,
   assetRevealPath: null,
@@ -29,6 +30,7 @@ describe('useAppDevWorkbenchStore', () => {
     expect(state.stageCollapsed).toBe(false);
     expect(state.device).toBe('desktop');
     expect(state.tuneMode).toBe('chat');
+    expect(state.inspectActive).toBe(false);
     expect(state.diffRequest).toBeNull();
     expect(state.versionRestoreRequest).toBeNull();
   });
@@ -79,10 +81,30 @@ describe('useAppDevWorkbenchStore', () => {
     expect(useAppDevWorkbenchStore.getState().versionRestoreRequest).toBeNull();
   });
 
-  it('persists only mode and stageCollapsed under the v1 key', () => {
+  it('starts inspect without entering 手动微调', () => {
+    useAppDevWorkbenchStore.getState().setInspectActive(true);
+    const next = useAppDevWorkbenchStore.getState();
+    expect(next.inspectActive).toBe(true);
+    expect(next.tuneMode).toBe('chat');
+  });
+
+  it('keeps inspect and tune exclusive but independently toggleable', () => {
+    const store = useAppDevWorkbenchStore.getState();
+    store.setInspectActive(true);
+    store.setTuneMode('tune');
+    expect(useAppDevWorkbenchStore.getState().inspectActive).toBe(false);
+    expect(useAppDevWorkbenchStore.getState().tuneMode).toBe('tune');
+
+    useAppDevWorkbenchStore.getState().setInspectActive(true);
+    expect(useAppDevWorkbenchStore.getState().tuneMode).toBe('chat');
+    expect(useAppDevWorkbenchStore.getState().inspectActive).toBe(true);
+  });
+
+  it('does not persist inspectActive', () => {
     useAppDevWorkbenchStore.getState().setMode('code');
     useAppDevWorkbenchStore.getState().setStageCollapsed(true);
     useAppDevWorkbenchStore.getState().setDevice('mobile');
+    useAppDevWorkbenchStore.getState().setInspectActive(true);
     useAppDevWorkbenchStore.getState().setDiffRequest({ hash: 'abc' });
 
     const raw = localStorage.getItem(STORAGE_KEY);

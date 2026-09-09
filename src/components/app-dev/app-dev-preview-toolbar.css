@@ -73,3 +73,34 @@
   transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
     color 150ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+
+.app-dev-preview-mode-toggles {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-dev-preview-mode-toggle {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--sto-control-default-foreground);
+  cursor: pointer;
+}
+
+.app-dev-preview-mode-toggle:hover {
+  background: var(--sto-navigation-menu-hover-background);
+}
+
+.app-dev-preview-mode-toggle--active {
+  border-color: color-mix(in srgb, var(--sto-brand-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--sto-brand-primary) 12%, transparent);
+  color: var(--sto-brand-primary);
+}

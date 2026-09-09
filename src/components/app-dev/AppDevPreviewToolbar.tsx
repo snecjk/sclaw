@@ -15,9 +15,10 @@ import {
   Maximize,
   Minimize,
   Monitor,
+  Pencil,
   RotateCw,
-  SlidersHorizontal,
   Smartphone,
+  Sparkles,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -53,9 +54,12 @@ interface AppDevPreviewToolbarProps {
   onOpenExternal: () => void;
   /** 选中路由条目（兜底单条不会触发）；完整地址由宿主按当前预览 URL 拼接。 */
   onNavigateRoute: (route: AppRouteEntry) => void;
-  /** 打开手动微调面板（T06）。 */
+  /** 打开手动微调面板（T06）。与对话修改独立。 */
   onOpenTune?: () => void;
   tuneActive?: boolean;
+  /** 预览圈选对话修改，不经过手动微调。 */
+  onToggleInspect?: () => void;
+  inspectActive?: boolean;
 }
 
 export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
@@ -74,6 +78,8 @@ export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
   onNavigateRoute,
   onOpenTune,
   tuneActive = false,
+  onToggleInspect,
+  inspectActive = false,
 }: AppDevPreviewToolbarProps) {
   const device = useAppDevWorkbenchStore((s) => s.device);
   const setDevice = useAppDevWorkbenchStore((s) => s.setDevice);
@@ -253,20 +259,41 @@ export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
         </TabsList>
       </Tabs>
 
-      {onOpenTune ? (
-        <button
-          type="button"
-          className={cn(
-            'app-plaza-browser-toolbar__nav-btn',
-            tuneActive && 'bg-muted text-foreground',
-          )}
-          onClick={onOpenTune}
-          aria-pressed={tuneActive}
-          title="手动微调"
-          aria-label="手动微调"
-        >
-          <SlidersHorizontal className="h-4 w-4" aria-hidden />
-        </button>
+      {onToggleInspect || onOpenTune ? (
+        <div className="app-dev-preview-mode-toggles">
+          {onToggleInspect ? (
+            <button
+              type="button"
+              className={cn(
+                'app-dev-preview-mode-toggle',
+                inspectActive && 'app-dev-preview-mode-toggle--active',
+              )}
+              onClick={onToggleInspect}
+              aria-pressed={inspectActive}
+              title="对话修改"
+              aria-label="对话修改"
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              对话修改
+            </button>
+          ) : null}
+          {onOpenTune ? (
+            <button
+              type="button"
+              className={cn(
+                'app-dev-preview-mode-toggle',
+                tuneActive && 'app-dev-preview-mode-toggle--active',
+              )}
+              onClick={onOpenTune}
+              aria-pressed={tuneActive}
+              title="手动微调"
+              aria-label="手动微调"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden />
+              手动微调
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       <button

@@ -2,7 +2,7 @@
  * 手动微调面板（T06）：契约驱动 token 编辑；实时覆写预览；应用落盘 theme.css。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MousePointer2, RotateCcw, Check } from 'lucide-react';
+import { RotateCcw, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { OklchColorField } from '@/components/app-dev/OklchColorField';
 import {
@@ -16,7 +16,6 @@ import {
   buildReadTokensScript,
 } from '@/lib/app-dev-tune-scripts';
 import { formatRem, parseRem } from '@/lib/app-dev-tune-tokens';
-import { cn } from '@/lib/utils';
 
 export type AppDevTuneExecuteJS = (code: string) => Promise<unknown>;
 
@@ -24,18 +23,13 @@ interface AppDevTunePanelProps {
   workspaceId: string;
   executeJS: AppDevTuneExecuteJS | null;
   onClose: () => void;
-  onStartElementPicker: () => void;
 }
-
-type PanelTab = 'page' | 'global';
 
 export function AppDevTunePanel({
   workspaceId,
   executeJS,
   onClose,
-  onStartElementPicker,
 }: AppDevTunePanelProps) {
-  const [tab, setTab] = useState<PanelTab>('global');
   const [tokens, setTokens] = useState<AppDevDesignTokenDef[]>([]);
   const [degraded, setDegraded] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -140,31 +134,8 @@ export function AppDevTunePanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-9 shrink-0 items-center border-b border-border px-2">
-        <button
-          type="button"
-          className={cn(
-            'h-9 px-3 text-xs',
-            tab === 'page'
-              ? 'border-b-2 border-[var(--sto-brand-primary)] font-medium text-foreground'
-              : 'text-muted-foreground',
-          )}
-          onClick={() => setTab('page')}
-        >
-          Page
-        </button>
-        <button
-          type="button"
-          className={cn(
-            'h-9 px-3 text-xs',
-            tab === 'global'
-              ? 'border-b-2 border-[var(--sto-brand-primary)] font-medium text-foreground'
-              : 'text-muted-foreground',
-          )}
-          onClick={() => setTab('global')}
-        >
-          调整全局样式
-        </button>
+      <div className="flex h-9 shrink-0 items-center border-b border-border px-3">
+        <span className="text-xs font-medium text-foreground">手动微调</span>
         <div className="flex-1" />
         <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={onClose}>
           返回对话
@@ -186,54 +157,26 @@ export function AppDevTunePanel({
           <p className="mb-3 text-xs text-[var(--sto-danger-primary,#FA3C3C)]">{error}</p>
         ) : null}
 
-        {tab === 'page' ? (
-          <div className="space-y-3 text-xs text-muted-foreground">
-            <p>选择预览中的元素，用一句话描述要改什么；会填入对话框由 AI 精准修改。</p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={onStartElementPicker}
-              disabled={!executeJS}
-            >
-              <MousePointer2 className="h-3.5 w-3.5" />
-              选择元素调整样式
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {groups.map(([group, list]) => (
-              <section key={group} className="space-y-3">
-                <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {group}
-                </h3>
-                {list.map((token) => (
-                  <TokenEditor
-                    key={token.name}
-                    token={token}
-                    value={values[token.name] ?? ''}
-                    onChange={(next) => void patchValue(token.name, next)}
-                  />
-                ))}
-              </section>
-            ))}
-          </div>
-        )}
+        <div className="space-y-5">
+          {groups.map(([group, list]) => (
+            <section key={group} className="space-y-3">
+              <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                {group}
+              </h3>
+              {list.map((token) => (
+                <TokenEditor
+                  key={token.name}
+                  token={token}
+                  value={values[token.name] ?? ''}
+                  onChange={(next) => void patchValue(token.name, next)}
+                />
+              ))}
+            </section>
+          ))}
+        </div>
       </div>
 
       <div className="flex h-12 shrink-0 items-center gap-2 border-t border-border px-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1 text-xs"
-          onClick={onStartElementPicker}
-          disabled={!executeJS}
-        >
-          <MousePointer2 className="h-3.5 w-3.5" />
-          选元素
-        </Button>
         <div className="flex-1 truncate text-[11px] text-muted-foreground">
           {appliedHint}
         </div>

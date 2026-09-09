@@ -17,6 +17,8 @@ import { SegmentedMarkdown } from '@/pages/Chat/segmented-markdown';
 import { useAiResourceAdmin } from '@/hooks/use-ai-resource-admin';
 import { useTurnTokenUsage } from '@/hooks/use-turn-token-usage';
 import { TurnTokenMeta } from '@/components/chat/TurnTokenMeta';
+import { parseAppDevElementIntent } from '@/lib/app-dev-element-intent';
+import { AppDevElementIntentCard } from '@/components/app-dev/AppDevElementIntentCard';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
@@ -241,14 +243,22 @@ export const ChatMessage = memo(function ChatMessage({
       attachedFiles,
     );
   }, [isUser, message, text, skillMeta, attachedFiles]);
+  const elementIntent = useMemo(
+    () => (isUser ? parseAppDevElementIntent(text) : null),
+    [isUser, text],
+  );
+  const userVisibleText = elementIntent?.intent ?? text;
   /** 复制 / 保存快捷输入：有 segments 时按 chip 原位展开，避免空位与技能名前置 */
   const userActionText = useMemo(
-    () => (
-      composerSegmentsForRender?.length
-        ? serializePersistedComposerSegmentsToActionText(composerSegmentsForRender)
-        : resolveUserBubbleActionText(text, skillMeta)
-    ),
-    [composerSegmentsForRender, text, skillMeta],
+    () => {
+      if (elementIntent?.intent) return elementIntent.intent;
+      return (
+        composerSegmentsForRender?.length
+          ? serializePersistedComposerSegmentsToActionText(composerSegmentsForRender)
+          : resolveUserBubbleActionText(text, skillMeta)
+      );
+    },
+    [composerSegmentsForRender, elementIntent, text, skillMeta],
   );
   const useSegmentBubble = isUser && Boolean(composerSegmentsForRender?.length);
   const messageIndex = useMemo(
@@ -820,9 +830,9 @@ export const ChatMessage = memo(function ChatMessage({
         {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? (hasText || showUserSkillBubble || useSegmentBubble) : showAssistantTextBubble) ? (
           isUser ? (
             <MessageBubble
-              text={text}
+              text={userVisibleText}
               skillMeta={skillMeta}
-              composerSegments={composerSegmentsForRender ?? undefined}
+              composerSegments={elementIntent ? undefined : composerSegmentsForRender ?? undefined}
               isUser={isUser}
               isStreaming={isStreaming}
               onPreviewFile={onPreviewFile}
@@ -838,6 +848,10 @@ export const ChatMessage = memo(function ChatMessage({
               workflowGuidanceShell={workflowGuidanceStreamingShell}
             />
           )
+        ) : null}
+
+        {isUser && elementIntent ? (
+          <AppDevElementIntentCard elements={elementIntent.elements} />
         ) : null}
 
         {/* B4：分组参数（助手 A / 旧数据 fallback，无标题无白底） */}
@@ -942,7 +956,7 @@ export const ChatMessage = memo(function ChatMessage({
         {isUser && showUserMessageMeta ? (
           <UserMessageMetaRow
             copyText={userActionText}
-            editText={text}
+            editText={elementIntent?.intent ?? text}
             skillMeta={skillMeta}
             composerSegments={composerSegmentsForRender ?? undefined}
             attachedFiles={attachedFiles}

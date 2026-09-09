@@ -80,7 +80,7 @@ outputs/
 .tmp/
 
 plans/
-openspec/
+/openspec/
 .roo/
 docs/superpowers/
 reports/

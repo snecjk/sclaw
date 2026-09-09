@@ -110,37 +110,73 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
     };
   }
 
-  var overlay = document.createElement('div');
-  overlay.setAttribute('data-sclaw-picker-overlay', '1');
-  overlay.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;outline:2px solid #FF6F00;background:rgba(255,111,0,0.08);display:none;';
-  document.documentElement.appendChild(overlay);
+  function makeOverlay(kind) {
+    var node = document.createElement('div');
+    node.setAttribute('data-sclaw-picker-overlay', kind);
+    node.style.cssText = kind === 'select'
+      ? 'position:fixed;pointer-events:none;z-index:2147483646;outline:2px solid #FF6F00;background:rgba(255,111,0,0.10);display:none;box-sizing:border-box;'
+      : 'position:fixed;pointer-events:none;z-index:2147483645;outline:1px solid rgba(255,111,0,0.7);background:rgba(255,111,0,0.04);display:none;box-sizing:border-box;';
+    var tag = document.createElement('div');
+    tag.setAttribute('data-sclaw-picker-label', '1');
+    tag.style.cssText = 'position:absolute;left:0;top:-18px;height:16px;padding:0 6px;border-radius:4px 4px 0 0;background:#FF6F00;color:#fff;font:11px/16px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;';
+    node.appendChild(tag);
+    document.documentElement.appendChild(node);
+    return { node: node, tag: tag };
+  }
+
+  var hoverBox = makeOverlay('hover');
+  var selectBox = makeOverlay('select');
 
   var selected = [];
   var selectedSet = new Set();
   var raf = 0;
   var lastTarget = null;
 
-  function placeOverlay(el) {
+  function placeOverlay(box, el, label) {
     if (!el || !el.getBoundingClientRect) {
-      overlay.style.display = 'none';
+      box.node.style.display = 'none';
       return;
     }
     var r = el.getBoundingClientRect();
-    overlay.style.display = 'block';
-    overlay.style.left = r.left + 'px';
-    overlay.style.top = r.top + 'px';
-    overlay.style.width = Math.max(0, r.width) + 'px';
-    overlay.style.height = Math.max(0, r.height) + 'px';
+    box.node.style.display = 'block';
+    box.node.style.left = r.left + 'px';
+    box.node.style.top = r.top + 'px';
+    box.node.style.width = Math.max(0, r.width) + 'px';
+    box.node.style.height = Math.max(0, r.height) + 'px';
+    box.tag.textContent = label || '';
+    box.tag.style.display = label ? 'block' : 'none';
+  }
+
+  function rectOf(el) {
+    var r = el.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  }
+
+  function describe(el) {
+    var selector = cssPath(el);
+    return {
+      selector: selector,
+      tag: (el.tagName || '').toLowerCase(),
+      text: (el.innerText || '').trim().slice(0, 80),
+      styles: styleSummary(el),
+      rect: rectOf(el)
+    };
+  }
+
+  function pinSelection(el) {
+    var label = cssPath(el);
+    if (label.length > 28) label = label.slice(0, 26) + '…';
+    placeOverlay(selectBox, el, label);
   }
 
   function onMove(ev) {
     var t = ev.target;
-    if (!t || t === overlay || (t.getAttribute && t.getAttribute('data-sclaw-picker-overlay'))) return;
+    if (!t || (t.getAttribute && t.getAttribute('data-sclaw-picker-overlay'))) return;
     lastTarget = t;
     if (raf) return;
     raf = requestAnimationFrame(function(){
       raf = 0;
-      placeOverlay(lastTarget);
+      placeOverlay(hoverBox, lastTarget, '');
       emit('hover', { selector: cssPath(lastTarget), tag: (lastTarget.tagName || '').toLowerCase() });
     });
   }
@@ -149,14 +185,9 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
     ev.preventDefault();
     ev.stopPropagation();
     var t = ev.target;
-    if (!t || t === overlay) return;
+    if (!t || (t.getAttribute && t.getAttribute('data-sclaw-picker-overlay'))) return;
     var selector = cssPath(t);
-    var entry = {
-      selector: selector,
-      tag: (t.tagName || '').toLowerCase(),
-      text: (t.innerText || '').trim().slice(0, 80),
-      styles: styleSummary(t)
-    };
+    var entry = describe(t);
     if (ev.metaKey || ev.ctrlKey) {
       if (selectedSet.has(selector)) {
         selected = selected.filter(function(x){ return x.selector !== selector; });
@@ -171,6 +202,7 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
       selectedSet = new Set([selector]);
       emit('select', { multi: false, elements: selected.slice() });
     }
+    pinSelection(t);
   }
 
   function onKey(ev) {
@@ -184,7 +216,8 @@ export const ELEMENT_PICKER_SCRIPT = `(function(){
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('click', onClick, true);
     document.removeEventListener('keydown', onKey, true);
-    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    if (hoverBox.node.parentNode) hoverBox.node.parentNode.removeChild(hoverBox.node);
+    if (selectBox.node.parentNode) selectBox.node.parentNode.removeChild(selectBox.node);
     if (raf) cancelAnimationFrame(raf);
     delete window[NS];
   }

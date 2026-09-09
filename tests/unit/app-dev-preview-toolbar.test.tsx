@@ -105,6 +105,7 @@ describe('AppDevPreviewToolbar 预览工具条升级（T03）', () => {
       stageCollapsed: false,
       device: 'desktop',
       tuneMode: 'chat',
+      inspectActive: false,
       diffRequest: null,
       versionRestoreRequest: null,
     });
@@ -202,5 +203,32 @@ describe('AppDevPreviewToolbar 预览工具条升级（T03）', () => {
     // 全屏进出同样不 remount 预览帧
     expect(mocks.mounts).toBe(1);
     expect(mocks.unmounts).toBe(0);
+  });
+
+  it('对话修改 and 手动微调 are independent toolbar actions', async () => {
+    const onOpenTune = vi.fn();
+    const onToggleInspect = vi.fn();
+    const { AppDevWorkbenchStage } = await import('@/components/app-dev/AppDevWorkbenchStage');
+    render(
+      <AppDevWorkbenchStage
+        workspaceId="ws-1"
+        appName="测试应用"
+        status={READY_STATUS}
+        pendingErrors={[]}
+        onFixErrors={vi.fn()}
+        onDismissErrors={vi.fn()}
+        onRetryStart={vi.fn()}
+        onOpenTune={onOpenTune}
+        onToggleInspect={onToggleInspect}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '对话修改' }));
+    expect(onToggleInspect).toHaveBeenCalledTimes(1);
+    expect(onOpenTune).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '手动微调' }));
+    expect(onOpenTune).toHaveBeenCalledTimes(1);
+    expect(onToggleInspect).toHaveBeenCalledTimes(1);
   });
 });

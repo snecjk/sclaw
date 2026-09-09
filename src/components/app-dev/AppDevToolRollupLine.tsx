@@ -12,6 +12,7 @@ import {
   type AppDevToolRollup,
 } from '@/lib/app-dev-tool-rollup';
 import { AppDevInlineDiff } from '@/components/app-dev/AppDevInlineDiff';
+import { AppDevFileJumpLink } from '@/components/app-dev/AppDevFileJumpLink';
 import { cn } from '@/lib/utils';
 
 const MAX_FILE_ROWS = 5;
@@ -71,35 +72,43 @@ export const AppDevToolRollupLine = memo(function AppDevToolRollupLine({
         const expanded = Boolean(expandedPaths[file.path]);
         return (
           <div key={file.path} className="flex flex-col">
-            <button
-              type="button"
+            <div
               className={cn(
                 'flex h-5 w-full items-center gap-1.5 text-left animate-in fade-in-0 slide-in-from-bottom-1 duration-150',
-                canExpand
-                  ? 'cursor-pointer rounded-sm hover:bg-[var(--sto-bg-inset)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--sto-border-strong)]'
-                  : 'cursor-default',
+                canExpand && 'rounded-sm hover:bg-[var(--sto-control-hover-bg)]',
               )}
-              disabled={!canExpand}
-              aria-expanded={canExpand ? expanded : undefined}
-              onClick={() => {
-                if (canExpand) togglePath(file.path);
-              }}
             >
-              {canExpand ? (
-                expanded ? (
-                  <ChevronDown className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+              <button
+                type="button"
+                className={cn(
+                  'inline-flex h-5 w-4 shrink-0 items-center justify-center rounded-sm',
+                  canExpand
+                    ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--sto-border-strong)]'
+                    : 'cursor-default',
+                )}
+                disabled={!canExpand}
+                aria-expanded={canExpand ? expanded : undefined}
+                aria-label={canExpand ? (expanded ? `收起 ${appDevToolBaseName(file.path)} 的修改` : `展开 ${appDevToolBaseName(file.path)} 的修改`) : undefined}
+                onClick={() => {
+                  if (canExpand) togglePath(file.path);
+                }}
+              >
+                {canExpand ? (
+                  expanded ? (
+                    <ChevronDown className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+                  )
                 ) : (
-                  <ChevronRight className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
-                )
-              ) : (
-                <Icon className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
-              )}
+                  <Icon className="h-3 w-3 shrink-0 text-[var(--sto-text-tertiary)]" aria-hidden />
+                )}
+              </button>
               <span className="text-[var(--sto-text-secondary)]">{appDevFileOpVerb(file)}</span>
-              <span className="min-w-0 truncate text-foreground" title={file.path}>
+              <AppDevFileJumpLink path={file.path}>
                 {appDevToolBaseName(file.path)}
-              </span>
+              </AppDevFileJumpLink>
               <DiffCounts added={file.added} removed={file.removed} />
-            </button>
+            </div>
             {canExpand && expanded ? <AppDevInlineDiff edits={file.edits} /> : null}
           </div>
         );

@@ -11,7 +11,10 @@ import {
   parseRem,
   normalizeDesignTokensContract,
 } from '@/lib/app-dev-tune-tokens';
-import { buildElementIntentPrompt } from '@/components/app-dev/AppDevElementIntentBar';
+import {
+  buildElementIntentPrompt,
+  parseAppDevElementIntent,
+} from '@/lib/app-dev-element-intent';
 
 describe('app-dev tune tokens helpers', () => {
   it('parses oklch and hex', () => {
@@ -62,5 +65,23 @@ describe('app-dev suggestions / element intent', () => {
     ]);
     expect(prompt).toContain('#submit');
     expect(prompt).toContain('把按钮改大');
+    expect(prompt).toContain('sclaw_element_intent');
+    const parsed = parseAppDevElementIntent(prompt);
+    expect(parsed).toEqual({
+      intent: '把按钮改大',
+      elements: [{ selector: '#submit', tag: 'button', text: '提交' }],
+    });
+  });
+
+  it('parses legacy element intent prompts without the fence', () => {
+    const legacy = [
+      '请只修改下列选中元素相关代码，不要改动无关区域。',
+      '1. 选择器 `#hero`（h1 / "山丘咖啡"）；当前样式摘要：{}',
+      '修改意图：字体颜色改成红色',
+    ].join('\n');
+    expect(parseAppDevElementIntent(legacy)).toEqual({
+      intent: '字体颜色改成红色',
+      elements: [{ selector: '#hero', tag: 'h1', text: '山丘咖啡' }],
+    });
   });
 });

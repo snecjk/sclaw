@@ -479,13 +479,14 @@ ${pagePriorityBlock}
 - 不要同步 404、redirect、\`developerOnly\`；\`app_code\` 以 \`.sto/workspace.json\` 为准
 
 ## 设计规范（强制）
-- 颜色/圆角/阴影/间距**只允许**使用 \`src/theme/theme.css\` 中声明的 token（含 \`--sto-*\` 与 shadcn 别名 \`--background/--foreground/--primary/--muted/--border/--radius\`）；**禁止**在页面或组件中硬编码 hex/rgb（违禁示例：\`#1677ff\` antd 默认蓝、\`#FF6700\` 散落写死）
-- 字阶只用 12 / 13 / 14 / 16 / 20 / 28 / 36；行高 1.5 或 1.7；标题字重 600、正文字重 400
-- 间距只用 \`--sto-space-1\` ~ \`--sto-space-8\`（4px 网格）；section 垂直间距 ≥ 48px；内容最大宽建议 1120px 居中
+- 业务页视觉以 \`openspec/skills/sto-pc-visual/\` 为准：壳层读 SKILL.md / shell.md；卡内列表、表格、指标、状态读 content.md。营销落地页才仿 \`HomePage\` 的 1120 居中与大间距
+- 颜色/圆角/阴影/间距**只允许**使用 \`src/theme/theme.css\` 中声明的 token（含 \`--sto-*\` 与 shadcn 别名 \`--background/--foreground/--primary/--muted/--border/--radius\`）；**禁止**在页面或组件中硬编码 hex/rgb（违禁示例：\`#1677ff\` antd 默认蓝、\`#FF6700\` 散落写死）。content.md 里的 hex 只是对照值，落盘写成 \`var(--sto-*)\`
+- 字阶优先 12 / 14 / 16 / 28；行高 1.5；标题字重 600、正文字重 400；指标主值 28
+- 间距只用 \`--sto-space-1\` ~ \`--sto-space-8\`（4px 网格）。工作台主区/白卡 pad 16、卡缝 16，不要套营销页的 section ≥ 48px / 1120 居中
 - 圆角语义：控件 6px（\`--sto-radius-md\`）/ 卡片 8px（\`--sto-radius-lg\`）/ 面板 12px（\`--sto-radius-panel\`）；阴影只用 \`--sto-shadow-1\` / \`--sto-shadow-3\`
 - 每个页面须在 ≥390px 与 ≥1280px 双宽度可用，禁止横向溢出（自查 \`overflow-x\`）
 - 图片/图标未生成时必须用语义化占位（渐变块 + 居中文案），并在总结中披露「当前为模拟内容」
-- 起始页 \`HomePage\` / \`home.page.json\` 是设计规范实例，新页面优先仿写其层级与 token 用法
+- ⛔ 不要把业务页做成独立 HTML 报告：禁止 \`build.py\`、\`<!-- STO:DAILY -->\`、日报类名 \`.mc/.masthead\`、页尾设计师水印
 
 ## 输出协议（可选增强，失败时宿主会降级）
 - 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"...","overview":"...","audience":"...","scenarios":"...","steps":[{"id":"1","title":"...","fileHints":["src/pages/..."],"assets":["..."]}]}\\n\`\`\`（契约见工作台 plan-gate v2），可选再输出 \`\`\`sclaw_styles\`\`\` 风格预设；**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
@@ -642,6 +643,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
         if (
           !entry.name.startsWith('pkg-')
           && entry.name !== 'nl-page-from-sai'
+          && entry.name !== 'sto-pc-visual'
         ) continue;
         const src = join(catalogRoot, entry.name);
         if (existsSync(join(src, 'SKILL.md'))) {
