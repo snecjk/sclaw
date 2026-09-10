@@ -9,7 +9,7 @@
 import { app } from 'electron';
 import { spawn, type ChildProcess } from 'child_process';
 import { createServer } from 'net';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { isDevServerRepairWorthyLine } from '../../shared/app-dev-preview-noise';
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
@@ -42,6 +42,35 @@ const LOG_BUFFER_LINES = 500;
 const MAX_CRASH_RESTARTS = 3;
 const CRASH_BACKOFF_BASE_MS = 1_000;
 const DEV_SERVER_START_PORT = 8801;
+
+interface AppPackageJson {
+  scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}
+
+function isIceApp(cwd: string): boolean {
+  try {
+    const packageJson = JSON.parse(
+      readFileSync(join(cwd, 'package.json'), 'utf8'),
+    ) as AppPackageJson;
+    const dependencies = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
+    return Boolean(dependencies['@ice/app'])
+      || /(^|\s)ice\s+start(?:\s|$)/.test(packageJson.scripts?.dev ?? '');
+  } catch {
+    return false;
+  }
+}
+
+export function buildDevServerNpmArgs(cwd: string, port: number): string[] {
+  const args = ['run', 'dev', '--', '--port', String(port)];
+  if (!isIceApp(cwd)) args.push('--strictPort');
+  args.push('--host', '127.0.0.1');
+  return args;
+}
 
 export interface DevServerEntry {
   workspaceId: string;
@@ -234,9 +263,7 @@ async function startDevServerImpl(
   logger.info(`[app-dev] starting dev server for ${workspaceId} on port ${port} cwd=${cwd}`);
   let child: ChildProcess;
   try {
-    const prepared = prepareWinSpawn(npmBin, [
-      'run', 'dev', '--', '--port', String(port), '--strictPort', '--host', '127.0.0.1',
-    ]);
+    const prepared = prepareWinSpawn(npmBin, buildDevServerNpmArgs(cwd, port));
     child = spawn(prepared.command, prepared.args, {
       cwd,
       env: childEnvironment,
