@@ -12,6 +12,7 @@ function _ts(label: string): void {
 import { app, BrowserWindow, dialog, nativeTheme, session, shell } from 'electron';
 import { forwardPreviewFrameEscape } from './preview-frame-escape';
 import type { Server } from 'node:http';
+import { spawn } from 'node:child_process';
 import { basename, dirname, join, resolve } from 'path';
 import { existsSync } from 'node:fs';
 import { rename } from 'node:fs/promises';
@@ -46,6 +47,8 @@ import {
   requestQuitLifecycleAction,
 } from './quit-lifecycle';
 import { createSignalQuitHandler } from './signal-quit';
+import { initOpenIMMainSDK, shutdownOpenIMMainSDK } from '../openim/init-main-sdk';
+import { registerOpenIMIpcHandlers } from '../openim/paths';
 import {
   acquireProcessInstanceFileLock,
   shouldContinueWithElectronLock,
@@ -347,6 +350,48 @@ let hostEventBus: HostEventBus | null = null;
 let hostApiServer: Server | null = null;
 const mainWindowFocusState = createMainWindowFocusState();
 const quitLifecycleState = createQuitLifecycleState();
+const QUIT_CLEANUP_MAX_MS = 4500;
+
+function forceProcessExit(code = 0): void {
+  logger.warn(`[Quit] Forcing hard exit (${code})`);
+  try {
+    app.exit(code);
+  } catch {
+    // ignore
+  }
+  try {
+    process.exit(code);
+  } catch {
+    // ignore
+  }
+  // Native OpenIM Go runtime can keep the process alive after process.exit.
+  try {
+    process.kill(process.pid, 'SIGKILL');
+  } catch {
+    // ignore
+  }
+}
+
+/** OpenIM native logout can block the main thread; arm an OS-level watchdog. */
+function armQuitWatchdog(timeoutMs = QUIT_CLEANUP_MAX_MS + 1500): void {
+  const seconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+  try {
+    if (process.platform === 'win32') {
+      spawn(
+        'cmd.exe',
+        ['/d', '/c', `timeout /t ${seconds} /nobreak >nul & taskkill /F /PID ${process.pid}`],
+        { detached: true, stdio: 'ignore', windowsHide: true },
+      ).unref();
+      return;
+    }
+    spawn('sh', ['-c', `sleep ${seconds}; kill -9 ${process.pid} >/dev/null 2>&1`], {
+      detached: true,
+      stdio: 'ignore',
+    }).unref();
+  } catch (error) {
+    logger.warn('[Quit] Failed to arm quit watchdog:', error);
+  }
+}
 
 function isLikelyPreviewDownloadUrl(url: string): boolean {
   try {
@@ -399,6 +444,8 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
   });
   attachAppearanceReplay(win);
   forwardPreviewFrameEscape(win.webContents);
+  // 在 loadURL 之前初始化，避免 Renderer 抢先调用 openim-sdk-ipc-methods
+  initOpenIMMainSDK(win.webContents);
 
   // Show the window IMMEDIATELY — before loading content.
   // On first run, ready-to-show can take 5-10s because the renderer process
@@ -563,6 +610,9 @@ async function initialize(): Promise<void> {
   // + in-memory ring buffer; file writing begins after init().
   logger.init();
   logger.info('=== StoClaw Application Starting ===');
+  if (!initOpenIMMainSDK(window.webContents)) {
+    logger.error('[OpenIM] Main SDK unavailable; Messages IM will fail until app restart');
+  }
   logger.debug(
     `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}, pid=${process.pid}, ppid=${process.ppid}`
   );
@@ -1017,6 +1067,7 @@ if (gotTheLock) {
   const requestQuitOnSignal = createSignalQuitHandler({
     logInfo: (message) => logger.info(message),
     requestQuit: () => app.quit(),
+    forceExit: forceProcessExit,
   });
 
   process.on('exit', () => {
@@ -1054,6 +1105,7 @@ if (gotTheLock) {
   // Application lifecycle
   app.whenReady().then(async () => {
     _ts('app.whenReady() resolved');
+    registerOpenIMIpcHandlers();
     void import('../services/pi-runtime-service').then(({ getPiRuntimeService }) =>
       getPiRuntimeService().warmup().catch((error) => {
         logger.warn('Pi runtime warmup failed; it will retry on first use:', error);
@@ -1101,6 +1153,7 @@ if (gotTheLock) {
   app.on('before-quit', (event) => {
     setQuitting();
     releasePreventSystemSleepOnQuit();
+    armQuitWatchdog();
 
     // Reset sprite and float icon visibility so they don't auto-show on next launch
     void import('./sprite-window').then(({ resetSpriteVisibilityOnQuit }) =>
@@ -1128,9 +1181,10 @@ if (gotTheLock) {
 
     if (!gatewayManager) {
       // Gateway never initialized (quit during early startup); nothing to clean up.
-      void import('../services/pi-runtime-service').then(({ getPiRuntimeService }) =>
-        getPiRuntimeService().shutdown(),
-      ).catch(() => {}).finally(() => {
+      void Promise.all([
+        import('../services/pi-runtime-service').then(({ getPiRuntimeService }) => getPiRuntimeService().shutdown()),
+        shutdownOpenIMMainSDK(),
+      ]).catch(() => {}).finally(() => {
         markQuitCleanupCompleted(quitLifecycleState);
         app.quit();
       });
@@ -1140,6 +1194,7 @@ if (gotTheLock) {
     void Promise.all([
       import('./gateway-quit-cleanup').then(({ shutdownGatewayForQuit }) => shutdownGatewayForQuit(gatewayManager!)),
       import('../services/pi-runtime-service').then(({ getPiRuntimeService }) => getPiRuntimeService().shutdown()),
+      shutdownOpenIMMainSDK(),
     ])
         .catch((err) => {
           logger.warn('Runtime quit cleanup failed:', err);

@@ -25,6 +25,11 @@ export default defineConfig(({ mode }) => {
   const stoMemoryCenterBaseUrl = (loadedEnv.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
   const stoSclawHubBaseUrl = (loadedEnv.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
   const stoWisdomStarBaseUrl = (loadedEnv.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
+  const openimEnabled = (loadedEnv.VITE_OPENIM_ENABLED || process.env.VITE_OPENIM_ENABLED || '').trim();
+  const openimApiAddr = (loadedEnv.VITE_OPENIM_API_ADDR || process.env.VITE_OPENIM_API_ADDR || '').trim();
+  const openimWsAddr = (loadedEnv.VITE_OPENIM_WS_ADDR || process.env.VITE_OPENIM_WS_ADDR || '').trim();
+  const openimUserId = (loadedEnv.VITE_OPENIM_USER_ID || process.env.VITE_OPENIM_USER_ID || '').trim();
+  const openimToken = (loadedEnv.VITE_OPENIM_TOKEN || process.env.VITE_OPENIM_TOKEN || '').trim();
 
   // AgentLoop / ARMS：按 mode 读取对应环境文件中的接入配置，ARMS_APP_NAME 以配置值为准。
   // 非敏感字段走 define 注入主进程 bundle；License 只写入 dist-electron/main/agentloop.config.json，
@@ -39,6 +44,11 @@ export default defineConfig(({ mode }) => {
     'process.env.STO_SCLAW_HUB_BASE_URL': JSON.stringify(stoSclawHubBaseUrl),
     'process.env.STO_WISDOM_STAR_BASE_URL': JSON.stringify(stoWisdomStarBaseUrl),
     ...toAgentLoopProcessEnvDefine(agentLoopConfig),
+    'import.meta.env.VITE_OPENIM_ENABLED': JSON.stringify(openimEnabled),
+    'import.meta.env.VITE_OPENIM_API_ADDR': JSON.stringify(openimApiAddr),
+    'import.meta.env.VITE_OPENIM_WS_ADDR': JSON.stringify(openimWsAddr),
+    'import.meta.env.VITE_OPENIM_USER_ID': JSON.stringify(openimUserId),
+    'import.meta.env.VITE_OPENIM_TOKEN': JSON.stringify(openimToken),
   };
 
   return {

@@ -8,6 +8,7 @@ import { matchPath } from 'react-router-dom';
 
 const SIDEBAR_PRIMARY_NAV_ROUTE_MATCHERS: ReadonlyArray<{ path: string; end?: boolean }> = [
   { path: '/', end: true },
+  { path: '/messages' },
   { path: '/my-tasks' },
   { path: '/skills' },
   { path: '/workflow' },

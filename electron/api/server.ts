@@ -62,6 +62,7 @@ import { handleAppDevRoutes } from './routes/app-dev';
 import { handleLearningCenterRoutes } from './routes/learning-center';
 import { handleAppExternalServiceRoutes } from './routes/app-external-services';
 import { handleAppTemplateRoutes } from './routes/app-templates';
+import { handleOpenIMRoutes } from './routes/openim';
 
 import { sendJson } from './route-utils';
 
@@ -78,6 +79,7 @@ const routeHandlers: RouteHandler[] = [
 	// /ai-memory/agent/v1/xxx 即可，详见文件顶部「AI 编码开发须知」。
 	handleAiMemoryAgentV1Routes,
   handleAuthRoutes,
+  handleOpenIMRoutes,
   handleAppRoutes,
   handleGatewayRoutes,
   handleSettingsRoutes,

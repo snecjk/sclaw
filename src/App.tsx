@@ -31,6 +31,7 @@ import { DataCenter } from './pages/DataCenter';
 import { ReportHistoryPage } from './pages/DataCenter/reports/ReportHistoryPage';
 import { TutorialDetailPage } from './pages/LearningCenter/TutorialDetailPage';
 import { LearningCenterPage } from './pages/LearningCenter/LearningCenterPage';
+import { MessagesPage } from './pages/Messages';
 import { useSettingsStore } from './stores/settings';
 import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
@@ -43,6 +44,7 @@ import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 import { ChatResultNotificationNavigator } from './components/chat/ChatResultNotificationNavigator';
 import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
+import { OpenIMSessionProvider } from './components/openim/OpenIMSessionProvider';
 import { ThemeController } from './components/theme/ThemeController';
 
 /**
@@ -215,6 +217,9 @@ function App() {
         isAuthenticated: false,
         user: null,
       });
+      void import('@/stores/openim-session').then(({ useOpenIMSessionStore }) => {
+        void useOpenIMSessionStore.getState().disconnect();
+      });
       // Clear both top-level and session-level chat errors so the error bar
       // doesn't persist after re-login
       useChatStore.getState().clearError();
@@ -300,6 +305,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeController>
+        <OpenIMSessionProvider />
         <TooltipProvider delayDuration={300}>
           <AppShellLayoutProvider>
             <ChatResultNotificationNavigator />
@@ -331,6 +337,8 @@ function App() {
                 <Route path="/more-apps" element={<AppPlazaRouteSlot />} />
                 <Route path="/subscriptions" element={<Subscriptions />} />
                 <Route path="/my-tasks" element={<MyTask />} />
+                <Route path="/messages" element={<MessagesPage />} />
+                <Route path="/messages/:conversationId" element={<MessagesPage />} />
                 <Route path="/data-center" element={<DataCenter />} />
                 <Route path="/data-center/reports/history" element={<ReportHistoryPage />} />
                 <Route path="/learning-center" element={<LearningCenterPage />} />

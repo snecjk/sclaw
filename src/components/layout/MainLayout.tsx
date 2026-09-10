@@ -49,6 +49,7 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
   const isSplitLayout = layoutMode === 'split';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
   const isLearningCenter = pathname === '/learning-center';
+  const isMessages = pathname.startsWith('/messages');
 
   // 三栏与双栏 body 类互斥：cn 合并时 px-[var(--sto-content-pad-x)] 可能压过 px-0，split row 会比 header 窄 ~32–40px
   if (isSplitLayout) {
@@ -80,8 +81,8 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
       className={cn(
         hideContentHeader
           ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-[var(--sto-content-pad-x)]'
-          : isLearningCenter
-            ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain pb-5 pt-0'
+          : isLearningCenter || isMessages
+            ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain pb-0 pt-0'
             : stoMainCardBodyClass,
       )}
     >

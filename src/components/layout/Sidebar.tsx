@@ -12,6 +12,7 @@ import {
   Bookmark,
   ClipboardList,
   MessageSquarePlus,
+  MessageSquare,
   BarChart3,
   Bot,
   Radio,
@@ -56,6 +57,7 @@ import { useChatRuntimeIndicators } from '@/stores/chat/runtime-selectors';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore } from '@/stores/auth';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
+import { useOpenIMSessionStore } from '@/stores/openim-session';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
@@ -767,6 +769,8 @@ export function Sidebar() {
   const authUser = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLogout = useAuthStore((s) => s.logout);
+  const openimTotalUnread = useOpenIMSessionStore((s) => s.totalUnread);
+  const openimStatus = useOpenIMSessionStore((s) => s.status);
   const learningCenterAccountKey = isAuthenticated && authUser
     ? [authUser.userName, authUser.companyCode, authUser.departmentCode, authUser.categoryCode].join('\u0000')
     : null;
@@ -1813,6 +1817,12 @@ export function Sidebar() {
   };
 
   const primaryNav = useMemo(() => {
+    const messagesBadge = openimStatus === 'ready' && openimTotalUnread > 0 ? (
+      <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium leading-none text-white">
+        {openimTotalUnread > 99 ? '99+' : openimTotalUnread}
+      </span>
+    ) : undefined;
+
     const all: Array<{
       to: string;
       end?: boolean;
@@ -1821,6 +1831,12 @@ export function Sidebar() {
       badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
+      {
+        to: '/messages',
+        icon: <MessageSquare className="h-4 w-4" strokeWidth={1.75} />,
+        label: t('common:sidebar.messages'),
+        badge: messagesBadge,
+      },
       {
         to: '/my-tasks',
         icon: <SidebarTimerIcon />,
@@ -1838,7 +1854,7 @@ export function Sidebar() {
       learningCenterVisible,
       isProduction: getCurrentEnvConfig().isProduction,
     }));
-  }, [learningCenterVisible, sidebarVis.primaryMyData, t]);
+  }, [learningCenterVisible, openimStatus, openimTotalUnread, sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
