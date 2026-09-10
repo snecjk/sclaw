@@ -255,6 +255,7 @@ body.sclaw-browser-split-dragging * {
   min-height: 0;
   overflow: hidden;
   background: var(--sto-surface-canvas);
+  display: flex;
 }
 
 .sclaw-browser-split__chat {
