@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Loader2, X } from 'lucide-react';
@@ -146,6 +146,7 @@ export function ReportHistoryPage() {
   const [downloadCenterPage, setDownloadCenterPage] = useState(1);
   const [downloadCenterTotal, setDownloadCenterTotal] = useState(0);
   const [downloadCenterBump, setDownloadCenterBump] = useState(false);
+  const autoQueryKeyRef = useRef('');
 
   const selectedBatch = useMemo(
     () => batches.find((b) => b.batchCode === selectedBatchCode) || null,
@@ -262,17 +263,35 @@ export function ReportHistoryPage() {
     void loadModelOptions();
   }, [loadModelOptions]);
 
-  useEffect(() => {
-    if (!selectedModelId) {
+  /** 对齐 preview DataModelHistory.reloadRunRecordsByForm */
+  const reloadRunRecordsByForm = useCallback(async (
+    modelId: string,
+    dateRange: ReportDateRangeValue,
+    options?: { resetDate?: boolean },
+  ) => {
+    const nextRange = options?.resetDate ? null : dateRange;
+    if (options?.resetDate) setRunDateRange(null);
+    autoQueryKeyRef.current = '';
+    resetPreviewState();
+    setFilterStateByTable({ detail: emptyFilterState(), summary: emptyFilterState() });
+    if (!modelId) {
       setBatches([]);
       setSelectedBatchCode('');
       return;
     }
-    // 运行日期与运行记录不做联动：仅模板变化时加载运行记录
-    void loadRunRecords(selectedModelId);
-    resetPreviewState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅模板变化时重载运行记录
-  }, [selectedModelId, loadRunRecords]);
+    await loadRunRecords(modelId, nextRange?.[0], nextRange?.[1]);
+  }, [loadRunRecords]);
+
+  useEffect(() => {
+    // 模板变化：清空运行日期后重新拉取运行记录（与 preview onFormModelChange 一致）
+    void reloadRunRecordsByForm(selectedModelId, null, { resetDate: true });
+  }, [selectedModelId, reloadRunRecordsByForm]);
+
+  const handleRunDateChange = (value: ReportDateRangeValue) => {
+    setRunDateRange(value);
+    // 运行日期变化：按 dateStart/dateEnd 过滤运行记录（与 preview onFormRunDateChange 一致）
+    void reloadRunRecordsByForm(selectedModelId, value);
+  };
 
   const resolvePreviewRecordCode = (batch: FinanceBiProductBatch, tableType: 'detail' | 'summary') => {
     const record = pickFinanceBiProductRecord(batch.recordList, tableType);
@@ -351,7 +370,7 @@ export function ReportHistoryPage() {
     }
   };
 
-  const handleQuery = async () => {
+  const handleQuery = useCallback(async () => {
     if (!selectedModelId) {
       toast.warning('请选择模板');
       return;
@@ -370,15 +389,31 @@ export function ReportHistoryPage() {
     setFilterStateByTable({ detail: emptyFilterState(), summary: emptyFilterState() });
     setFilterAreaExpanded(false);
     await loadPreview(selectedBatch, 'detail', 1, []);
-  };
+  }, [selectedModelId, selectedBatch]);
+
+  useEffect(() => {
+    if (recordsLoading || queryLoading) return;
+    if (!selectedModelId || !selectedBatchCode) return;
+    const batch = batches.find((item) => item.batchCode === selectedBatchCode);
+    if (!batch || batch.batchStatus !== 'done') return;
+
+    const autoQueryKey = `${selectedModelId}:${selectedBatchCode}`;
+    if (autoQueryKeyRef.current === autoQueryKey) return;
+    autoQueryKeyRef.current = autoQueryKey;
+
+    void handleQuery();
+  }, [
+    batches,
+    handleQuery,
+    queryLoading,
+    recordsLoading,
+    selectedBatchCode,
+    selectedModelId,
+  ]);
 
   const handleReset = () => {
-    setRunDateRange(null);
-    resetPreviewState();
-    setFilterStateByTable({ detail: emptyFilterState(), summary: emptyFilterState() });
-    if (selectedModelId) {
-      void loadRunRecords(selectedModelId);
-    }
+    // 对齐 preview resetQueryForm：清空运行日期并重载运行记录
+    void reloadRunRecordsByForm(selectedModelId, null, { resetDate: true });
   };
 
   const handleSwitchTableType = async (type: 'detail' | 'summary') => {
@@ -595,7 +630,7 @@ export function ReportHistoryPage() {
                 <Label className="text-[12px] text-[#4E5969] dark:text-muted-foreground">运行日期</Label>
                 <ReportDateRangePicker
                   value={runDateRange}
-                  onChange={setRunDateRange}
+                  onChange={handleRunDateChange}
                   disabled={!selectedModelId}
                 />
               </div>
