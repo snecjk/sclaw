@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSiteappApplicationCreate, parseSiteappSavedFiles } from '../../shared/siteapp-cli-payload';
+import { parseSiteappApplicationCreate, parseSiteappRevision, parseSiteappSavedFiles } from '../../shared/siteapp-cli-payload';
 import { buildSiteAppCreateParams } from '../../electron/utils/siteapp-cli';
 
 describe('siteapp application create params', () => {
@@ -64,6 +64,29 @@ describe('parseSiteappApplicationCreate', () => {
       appCode: 'app_test',
       name: undefined,
       status: undefined,
+    });
+  });
+});
+
+describe('parseSiteappRevision', () => {
+  it('reads file_count from HTTP source commit payload', () => {
+    expect(parseSiteappRevision({
+      success: true,
+      data: {
+        app_code: 'app_test',
+        revision_id: '01J00000000000000000000000',
+        status: 'ready',
+        commit_sha: 'abc',
+        source_sha256: 'aa',
+        archive_sha256: 'bb',
+        file_count: 4,
+      },
+    })).toMatchObject({
+      appCode: 'app_test',
+      revisionId: '01J00000000000000000000000',
+      status: 'ready',
+      commitSha: 'abc',
+      fileCount: 4,
     });
   });
 });

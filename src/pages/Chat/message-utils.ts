@@ -18,6 +18,7 @@ import { stripFlowCardFences } from '@/lib/flow-card-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { AttachedFileMeta, RawMessage, ContentBlock } from '@/stores/chat';
+import { readLiveStreamParts, liveTextTail } from '../../../shared/chat-live-append';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
@@ -762,7 +763,7 @@ export function extractThinking(message: RawMessage | unknown): string | null {
 }
 
 export type ThinkingTimelineItem =
-  | { type: 'thinking'; content: string }
+  | { type: 'thinking'; content: string; liveParts?: string[] }
   /** 思考区内的阶段旁白（原 phase-text，按时序夹在 thinking/tool 之间） */
   | { type: 'narration'; content: string }
   | { type: 'tool'; index: number; id: string; name: string; input: unknown };
@@ -780,13 +781,27 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
 
   const items: ThinkingTimelineItem[] = [];
   let toolIndex = 0;
+  const live = readLiveStreamParts(msg);
 
   if (Array.isArray(content)) {
-    for (const block of content as ContentBlock[]) {
-      if (block.type === 'thinking' && block.thinking) {
-        const cleaned = cleanThinkingText(block.thinking.trim());
-        if (cleaned) {
-          items.push({ type: 'thinking', content: cleaned });
+    for (const [blockIndex, block] of (content as ContentBlock[]).entries()) {
+      if (block.type === 'thinking') {
+        const isGrow = live
+          && live.field === 'thinking'
+          && live.blockIndex === blockIndex;
+        if (isGrow) {
+          items.push({
+            type: 'thinking',
+            content: live.tail || liveTextTail(live.parts),
+            liveParts: live.parts,
+          });
+          continue;
+        }
+        if (block.thinking) {
+          const cleaned = cleanThinkingText(block.thinking.trim());
+          if (cleaned) {
+            items.push({ type: 'thinking', content: cleaned });
+          }
         }
       } else if ((block.type === 'tool_use' || block.type === 'toolCall') && block.name) {
         toolIndex += 1;

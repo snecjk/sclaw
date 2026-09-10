@@ -183,6 +183,8 @@
     "connectingModel": "Connecting to model...",
     "understandingQuestion": "Understanding your question…",
     "stillExecuting": "Still executing…",
+    "startingRuntime": "Starting runtime…",
+    "readingProjectContext": "Reading project context…",
     "thinkingNow": "Thinking…",
     "preparingToolInput": "Preparing tool parameters…",
     "runningTool": "Running tool…",
@@ -207,6 +209,8 @@
     "collapsedSummary": "Thought {{thoughtCount}} times, used {{toolCount}} tools",
     "collapsedSummaryThoughtsOnly": "Thought {{thoughtCount}} times",
     "collapsedSummaryToolsOnly": "Used {{toolCount}} tools",
+    "liveCurrentThinking": "Thinking",
+    "liveCallingTool": "Calling a tool",
     "omittedEarlierThinkingChars": "Omitted the first {{count}} characters",
     "invokeToolLabel": "Invoke tool – {{toolName}}",
     "toolNoParams": "No parameters",
@@ -234,7 +238,8 @@
     "submitFailed": "Failed to submit the form. Please refresh and try again."
   },
   "sessionList": {
-    "mainSessionTitle": "Main chat"
+    "mainSessionTitle": "Main chat",
+    "webBridgeTitle": "Chrome side panel"
   },
   "messageActions": {
     "copy": "Copy",
@@ -400,7 +405,9 @@
       "claudeCertificate": "Claude could not connect to the API because certificate verification failed. Check your proxy or corporate certificate configuration, then retry.",
       "workspaceUnavailable": "The workspace for this conversation is unavailable and may have been deleted, Start a new conversation.",
       "requestTimeout": "The model request timed out. Check your connection and try again.",
-      "rateLimit": "The model is rate-limited. Please wait a moment and try again."
+      "rateLimit": "The model is rate-limited. Please wait a moment and try again.",
+      "gatewayTimeout": "The model gateway timed out. Please try again shortly.",
+      "gatewayUnavailable": "The model service is temporarily unavailable. Please try again shortly."
     }
   }
 }

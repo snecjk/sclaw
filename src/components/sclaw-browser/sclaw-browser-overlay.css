@@ -255,6 +255,7 @@ body.sclaw-browser-split-dragging * {
   min-height: 0;
   overflow: hidden;
   background: var(--sto-surface-canvas);
+  display: flex;
 }
 
 .sclaw-browser-split__chat {
@@ -406,6 +407,27 @@ body.sclaw-browser-split-dragging * {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  position: relative;
+}
+
+.sclaw-browser-drawer__automation-mark {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-shadow: inset 0 0 0 2px var(--sto-brand-primary);
+}
+
+.sclaw-browser-drawer__automation-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  background: var(--sto-brand-primary);
+  color: hsl(var(--primary-foreground));
 }
 
 .sclaw-browser-drawer__frame {

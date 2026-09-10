@@ -1,0 +1,104 @@
+[
+  {
+    "version": "v0.9",
+    "createSurface": {
+      "surfaceId": "customer-list",
+      "catalogId": "antd"
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateComponents": {
+      "surfaceId": "customer-list",
+      "components": [
+        {
+          "id": "root",
+          "component": "AntdStack",
+          "children": ["title", "filter", "table", "pager", "back"]
+        },
+        {
+          "id": "title",
+          "component": "AntdText",
+          "text": { "path": "/title" },
+          "strong": true
+        },
+        {
+          "id": "filter",
+          "component": "AntdFilterBar",
+          "keyword": { "path": "/keyword" },
+          "placeholder": { "path": "/placeholder" },
+          "onSearch": {
+            "event": {
+              "name": "customer.list",
+              "context": {
+                "keyword": { "path": "/keyword" }
+              }
+            }
+          }
+        },
+        {
+          "id": "table",
+          "component": "AntdTable",
+          "columns": { "path": "/columns" },
+          "dataSource": { "path": "/rows" },
+          "loading": { "path": "/loading" },
+          "rowKey": "id",
+          "size": "middle"
+        },
+        {
+          "id": "pager",
+          "component": "AntdPagination",
+          "current": { "path": "/current" },
+          "pageSize": { "path": "/pageSize" },
+          "total": { "path": "/total" },
+          "onChange": {
+            "event": {
+              "name": "customer.list",
+              "context": {
+                "page": { "path": "/current" },
+                "pageSize": { "path": "/pageSize" },
+                "keyword": { "path": "/keyword" }
+              }
+            }
+          }
+        },
+        {
+          "id": "back",
+          "component": "AntdButton",
+          "text": "返回首页",
+          "type": "default",
+          "onClick": {
+            "event": {
+              "name": "app.navigate",
+              "context": { "pageId": "home" }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "v0.9",
+    "updateDataModel": {
+      "surfaceId": "customer-list",
+      "path": "/",
+      "value": {
+        "title": "客户列表（antd Catalog 示例）",
+        "keyword": "",
+        "placeholder": "客户名称",
+        "columns": [
+          { "title": "客户ID", "dataIndex": "id" },
+          { "title": "客户名称", "dataIndex": "name" }
+        ],
+        "rows": [
+          { "id": "C001", "name": "示例客户甲" },
+          { "id": "C002", "name": "示例客户乙" }
+        ],
+        "current": 1,
+        "pageSize": 10,
+        "total": 2,
+        "loading": false
+      }
+    }
+  }
+]

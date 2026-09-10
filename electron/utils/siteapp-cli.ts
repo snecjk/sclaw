@@ -211,6 +211,28 @@ export async function siteappDeployRefresh(input: {
   });
 }
 
+export async function siteappDeployResourceList(input: {
+  appCode: string;
+  pipelineInstanceId: string | number;
+}) {
+  const appCode = input.appCode.trim();
+  const pipelineInstanceId = Number(input.pipelineInstanceId);
+  if (!appCode || !Number.isSafeInteger(pipelineInstanceId) || pipelineInstanceId <= 0) {
+    return {
+      ok: false,
+      error: '缺少有效的 app_code 或 pipeline_instance_id',
+      exitCode: 1,
+    };
+  }
+  logger.info(
+    `[siteapp] deploy-resource list appCode=${appCode} pipelineInstanceId=${pipelineInstanceId}`,
+  );
+  return runSiteapp(['siteapp', 'deploy-resource', 'list'], {
+    params: { app_code: appCode, pipeline_instance_id: pipelineInstanceId },
+    timeoutMs: 60_000,
+  });
+}
+
 export async function siteappMenuList(appCode: string) {
   const code = appCode.trim();
   if (!code) return { ok: false, error: '缺少 app_code', exitCode: 1 };

@@ -12,6 +12,7 @@ export interface SiteAppRecord {
   updatedAt?: string;
   headRevisionId?: string;
   headCommitSha?: string;
+  headSourceSha256?: string;
   description?: string;
   previewUrl?: string;
   /** Permission-management URL configured by memory-center. */
@@ -63,6 +64,7 @@ export function normalizeSiteApp(item: unknown): SiteAppRecord | null {
     updatedAt: pickString(row.updatedAt, row.updated_at),
     headRevisionId: pickString(row.headRevisionId, row.head_revision_id, row.revisionId),
     headCommitSha: pickString(row.headCommitSha, row.head_commit_sha, row.commitSha),
+    headSourceSha256: pickString(row.headSourceSha256, row.head_source_sha256, row.sourceSha256),
     description: pickString(row.description),
     previewUrl: pickString(
       row.previewUrl,
@@ -144,6 +146,7 @@ export function mergeSiteAppRecords(
     updatedAt: overlay.updatedAt ?? base.updatedAt,
     headRevisionId: overlay.headRevisionId ?? base.headRevisionId,
     headCommitSha: overlay.headCommitSha ?? base.headCommitSha,
+    headSourceSha256: overlay.headSourceSha256 ?? base.headSourceSha256,
     description: overlay.description ?? base.description,
     previewUrl: overlay.previewUrl ?? base.previewUrl,
     permissionsUrl: overlay.permissionsUrl ?? base.permissionsUrl,

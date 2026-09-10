@@ -14,6 +14,8 @@ describe('isSidebarHiddenChatSessionKey', () => {
     expect(isSidebarHiddenChatSessionKey('pi:workflow:550e8400-e29b-41d4-a716-446655440000')).toBe(true);
     expect(isSidebarHiddenChatSessionKey('pi:main:session-123')).toBe(false);
     expect(isSidebarHiddenChatSessionKey('agent:main:session-123')).toBe(false);
+    expect(isSidebarHiddenChatSessionKey('agent:main:web-bridge')).toBe(false);
+    expect(isSidebarHiddenChatSessionKey('agent:proj-a:appdev:workspace-1')).toBe(true);
   });
 });
 

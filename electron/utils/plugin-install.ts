@@ -25,6 +25,10 @@ import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promi
 import { join } from 'node:path';
 import { logger } from './logger';
 import {
+  filterPluginSpecsByManifest,
+  parseStoBuiltinToolsManifest,
+} from './builtin-tools-manifest';
+import {
   getOpenClawConfigDir,
   getOpenClawDir,
   getBundledPluginSourceCandidates,
@@ -394,6 +398,10 @@ const PLUGIN_CONTENT_SYNC_FILES: Record<string, readonly string[]> = {
     'index.ts',
     'shared/retired-skills.ts',
     'shared/workspace-paths.ts',
+  ],
+  'sto-browser-automation': [
+    'openclaw.plugin.json',
+    'index.ts',
   ],
 };
 
@@ -1402,6 +1410,18 @@ export function ensureStoBrowserBridgePluginInstalled(): { installed: boolean; w
   return result;
 }
 
+export function ensureStoBrowserAutomationPluginInstalled(): { installed: boolean; warning?: string } {
+  const result = ensurePluginInstalled(
+    'sto-browser-automation',
+    buildCandidateSources('sto-browser-automation'),
+    'STO Browser Automation',
+  );
+  if (result.installed) {
+    ensureStoBrowserAutomationToolkitInstalled();
+  }
+  return result;
+}
+
 export function ensureStoSkillCallMonitorPluginInstalled(): { installed: boolean; warning?: string } {
   return ensurePluginInstalled(
     'sto-skill-call-monitor',
@@ -1447,6 +1467,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoWorkflowToolPluginInstalled, label: 'STO Workflow Tool' },
   { fn: ensureStoUserSkillToolPluginInstalled, label: 'STO User Skill Tool' },
   { fn: ensureStoBrowserBridgePluginInstalled, label: 'STO Browser Bridge' },
+  { fn: ensureStoBrowserAutomationPluginInstalled, label: 'STO Browser Automation' },
   { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
   { fn: ensureStoMediaUnderstandingPluginInstalled, label: 'STO Media Understanding' },
   { fn: ensureStoDingTalkSendGuardPluginInstalled, label: 'STO DingTalk Send Guard' },
@@ -1577,7 +1598,7 @@ export async function ensureAllBundledPluginsInstalled(): Promise<void> {
  * fs worker threads instead of blocking the Electron main thread.
  */
 export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
-  const pluginSpecs = [
+  const fallbackPluginSpecs = [
     // { dirName: 'dingtalk', label: 'DingTalk' },
     { dirName: 'wecom', label: 'WeCom' },
     { dirName: 'qqbot', label: 'QQ Bot' },
@@ -1593,6 +1614,22 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-media-understanding', label: 'STO Media Understanding' },
     { dirName: 'sto-dingtalk-send-guard', label: 'STO DingTalk Send Guard' },
   ] as const;
+
+  let manifest = null as ReturnType<typeof parseStoBuiltinToolsManifest>;
+  for (const manifestPath of [
+    join(app.getAppPath(), 'sto-plugin', 'sto-builtin-tools.manifest.json'),
+    join(__dirname, '../../sto-plugin/sto-builtin-tools.manifest.json'),
+  ]) {
+    if (!existsSync(fsPath(manifestPath))) continue;
+    try {
+      manifest = parseStoBuiltinToolsManifest(readFileSync(fsPath(manifestPath), 'utf8'));
+      if (manifest) break;
+    } catch (error) {
+      logger.warn('[plugin] Failed to read sto-builtin-tools.manifest.json:', error);
+    }
+  }
+
+  const pluginSpecs = filterPluginSpecsByManifest(fallbackPluginSpecs, manifest);
 
   for (const { dirName, label } of pluginSpecs) {
     try {

@@ -17,6 +17,13 @@ function copyGatewayPreloadCjs(outDir: string) {
   copyFileSync(src, resolve(outDir, 'gateway-fetch-preload.cjs'));
 }
 
+function copyPiWindowsHidePreloadCjs(outDir: string) {
+  const src = resolve(__dirname, 'electron/pi-runtime/windows-hide-preload.cjs');
+  if (!existsSync(src)) return;
+  mkdirSync(outDir, { recursive: true });
+  copyFileSync(src, resolve(outDir, 'windows-hide-preload.cjs'));
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 含 .env.development.local；electron 子构建需通过 define 注入，否则读不到
@@ -72,6 +79,7 @@ export default defineConfig(({ mode }) => {
                 name: 'copy-gateway-preload-cjs',
                 closeBundle() {
                   copyGatewayPreloadCjs(resolve(__dirname, 'dist-electron/main'));
+                  copyPiWindowsHidePreloadCjs(resolve(__dirname, 'dist-electron/main'));
                 },
               },
               {
@@ -147,6 +155,14 @@ export default defineConfig(({ mode }) => {
           entry: 'electron/pi-runtime/worker-entry.ts',
           vite: {
             define: envDefine,
+            plugins: [
+              {
+                name: 'copy-pi-windows-hide-preload-cjs',
+                closeBundle() {
+                  copyPiWindowsHidePreloadCjs(resolve(__dirname, 'dist-electron/pi-runtime'));
+                },
+              },
+            ],
             build: {
               outDir: 'dist-electron/pi-runtime',
               rollupOptions: {

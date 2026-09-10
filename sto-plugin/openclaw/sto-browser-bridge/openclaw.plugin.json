@@ -1,6 +1,6 @@
 {
   "id": "sto-browser-bridge",
-  "name": "StoClaw Browser Bridge",
+  "name": "SClaw Web Bridge",
   "description": "通过 Chrome 扩展操作用户真实浏览器页面（bridge_* 工具）",
   "activation": {
     "onStartup": true
@@ -32,7 +32,12 @@
     "bridge_fill",
     "bridge_navigate",
     "bridge_screenshot",
-    "bridge_list_sessions"
+    "bridge_list_sessions",
+    "bridge_read_page",
+    "bridge_print_pdf",
+    "bridge_cdp",
+    "bridge_group_tabs",
+    "bridge_mark_tabs"
   ],
   "toolConfig": {
     "bridge_snapshot": {
@@ -58,6 +63,26 @@
     "bridge_list_sessions": {
       "label": "检查扩展连接",
       "help": "查看 Chrome 扩展是否已连接"
+    },
+    "bridge_read_page": {
+      "label": "读取页面正文",
+      "help": "滚动收集当前页面可见正文"
+    },
+    "bridge_print_pdf": {
+      "label": "导出 PDF",
+      "help": "将当前标签页导出为 PDF"
+    },
+    "bridge_cdp": {
+      "label": "白名单 CDP",
+      "help": "调用允许的 CDP 方法"
+    },
+    "bridge_group_tabs": {
+      "label": "任务标签组",
+      "help": "仅真实 Chrome 扩展会话；需配套扩展执行"
+    },
+    "bridge_mark_tabs": {
+      "label": "驱动标签标记",
+      "help": "给被驱动的 Chrome 标签加/清视觉标记"
     }
   }
 }

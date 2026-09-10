@@ -1,8 +1,9 @@
 #!/usr/bin/env zx
 
 /**
- * Bundle gateway-preload-entry.ts → gateway-fetch-preload.cjs
- * 与 shared/dingtalk-send/dws-send-text.ts 同源，供 Gateway NODE_OPTIONS -r 预加载。
+ * Bundle Gateway and Pi utilityProcess --require preloads.
+ * Gateway: security + DWS send normalization (NODE_OPTIONS / execArgv).
+ * Pi: hide Windows console windows for powershell/tool spawns.
  */
 
 import 'zx/globals';
@@ -39,3 +40,27 @@ if (fs.existsSync(path.dirname(distOut))) {
 }
 
 echo`✅ Gateway preload bundled: ${outFile}`;
+
+const piHideEntry = path.join(ROOT, 'electron/pi-runtime/windows-hide-preload-entry.ts');
+const piHideOut = path.join(ROOT, 'electron/pi-runtime/windows-hide-preload.cjs');
+const piHideDistMain = path.join(ROOT, 'dist-electron/main/windows-hide-preload.cjs');
+const piHideDistWorker = path.join(ROOT, 'dist-electron/pi-runtime/windows-hide-preload.cjs');
+
+await esbuild.build({
+  entryPoints: [piHideEntry],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  target: 'node18',
+  outfile: piHideOut,
+  sourcemap: false,
+  logLevel: 'info',
+});
+
+for (const dest of [piHideDistMain, piHideDistWorker]) {
+  if (!fs.existsSync(path.dirname(dest))) continue;
+  fs.copyFileSync(piHideOut, dest);
+  echo`Copied Pi windows-hide preload → ${dest}`;
+}
+
+echo`✅ Pi windows-hide preload bundled: ${piHideOut}`;

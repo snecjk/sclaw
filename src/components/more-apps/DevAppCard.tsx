@@ -32,12 +32,10 @@ import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
-import { appendSkipLoginReturnUrl, fetchAppPlazaSkipLoginLink } from '@/lib/app-plaza-api';
 import {
   buildAppPermissionsCallbackUrl,
   buildDirectAppPermissionsLoginUrl,
   buildAppPermissionsUrl,
-  usesDirectPortalAuth,
 } from '@/lib/app-permissions-url';
 import { getWorkflowStoToken } from '@/lib/workflow-api';
 import { getAppEnv } from '../../../shared/env-config';
@@ -135,35 +133,19 @@ export function DevAppCard({ app }: DevAppCardProps) {
     const env = getAppEnv();
     const permissionsUrl = buildAppPermissionsUrl(app.appCode, env, app.permissionsUrl);
     const callbackUrl = buildAppPermissionsCallbackUrl(permissionsUrl);
-    if (usesDirectPortalAuth(env)) {
-      const stoToken = getWorkflowStoToken();
-      if (!stoToken) {
-        toast.error('当前登录缺少 StoToken，请重新登录后再试');
-        return;
-      }
-      openInSclawBrowser({
-        url: buildDirectAppPermissionsLoginUrl(callbackUrl, stoToken),
-        title: `${app.name} · 权限配置`,
-        appId: `dev-app-permissions:${app.appCode}`,
-        sourceUrl: callbackUrl,
-        systemCode: 'SCLAW_PORTAL',
-        skipLoginEligible: false,
-      });
+    const stoToken = getWorkflowStoToken();
+    if (!stoToken) {
+      toast.error('当前登录缺少 StoToken，请重新登录后再试');
       return;
     }
-    try {
-      const skipLoginUrl = await fetchAppPlazaSkipLoginLink('SCLAW_PORTAL');
-      openInSclawBrowser({
-        url: appendSkipLoginReturnUrl(skipLoginUrl, callbackUrl),
-        title: `${app.name} · 权限配置`,
-        appId: `dev-app-permissions:${app.appCode}`,
-        sourceUrl: callbackUrl,
-        systemCode: 'SCLAW_PORTAL',
-        skipLoginEligible: true,
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '权限配置免登链接获取失败');
-    }
+    openInSclawBrowser({
+      url: buildDirectAppPermissionsLoginUrl(callbackUrl, stoToken),
+      title: `${app.name} · 权限配置`,
+      appId: `dev-app-permissions:${app.appCode}`,
+      sourceUrl: callbackUrl,
+      systemCode: 'SCLAW_PORTAL',
+      skipLoginEligible: false,
+    });
   };
 
   const handleReveal = async () => {

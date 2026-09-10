@@ -86,7 +86,6 @@ describe('saveProviderKeyToOpenClaw', () => {
       'utf8',
     );
 
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const { saveProviderKeyToOpenClaw } = await import('@electron/utils/openclaw-auth');
 
     await saveProviderKeyToOpenClaw('openrouter', 'sk-test');
@@ -104,11 +103,6 @@ describe('saveProviderKeyToOpenClaw', () => {
         key: 'legacy-key',
       },
     });
-    expect(logSpy).toHaveBeenCalledWith(
-      'Saved API key for provider "openrouter" to OpenClaw auth-profiles (agents: main, test3)',
-    );
-
-    logSpy.mockRestore();
   });
 });
 

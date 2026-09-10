@@ -57,6 +57,8 @@ export interface AppPlazaDevAppTab {
   workspaceId: string;
   title: string;
   kind?: 'app' | 'template';
+  /** P5 W2：打开工作台后自动发送的首条消息（用完即清）。 */
+  pendingPrompt?: string;
 }
 
 export interface AppPlazaBrowserTab {
@@ -137,9 +139,11 @@ interface AppPlazaShellState {
     workspaceId: string,
     title: string,
     kind?: 'app' | 'template',
+    options?: { pendingPrompt?: string },
   ) => string;
   closeDevAppTab: (tabId: string) => void;
   closeDevAppTabsByWorkspaceId: (workspaceId: string) => void;
+  clearDevAppPendingPrompt: (tabId: string) => void;
   submitBlankTabUrl: (tabId: string, rawUrl: string) => void;
   /**
    * Navigate an existing live/suspended/blank tab to a manually entered URL.
@@ -582,19 +586,44 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     set({ browserTabs: remaining, activeTabId: nextActive });
   },
 
-  openOrFocusDevAppTab: (workspaceId, title, kind: 'app' | 'template' = 'app') => {
+  openOrFocusDevAppTab: (workspaceId, title, kind: 'app' | 'template' = 'app', options) => {
     const existing = get().devAppTabs.find((t) => t.workspaceId === workspaceId);
     if (existing) {
-      set({ activeTabId: existing.id });
+      set((prev) => ({
+        activeTabId: existing.id,
+        devAppTabs: options?.pendingPrompt
+          ? prev.devAppTabs.map((t) => (
+            t.id === existing.id
+              ? { ...t, pendingPrompt: options.pendingPrompt }
+              : t
+          ))
+          : prev.devAppTabs,
+      }));
       return existing.id;
     }
     const id = `devapp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const tab: AppPlazaDevAppTab = { id, workspaceId, title, kind };
+    const tab: AppPlazaDevAppTab = {
+      id,
+      workspaceId,
+      title,
+      kind,
+      pendingPrompt: options?.pendingPrompt,
+    };
     set((prev) => ({
       devAppTabs: [...prev.devAppTabs, tab],
       activeTabId: id,
     }));
     return id;
+  },
+
+  clearDevAppPendingPrompt: (tabId) => {
+    set((prev) => ({
+      devAppTabs: prev.devAppTabs.map((t) => (
+        t.id === tabId && t.pendingPrompt
+          ? { ...t, pendingPrompt: undefined }
+          : t
+      )),
+    }));
   },
 
   closeDevAppTab: (tabId) => {

@@ -23,3 +23,24 @@ export function thinkingPanelChevronClass(expanded: boolean, animate: boolean): 
     expanded && 'rotate-180',
   );
 }
+
+/** 展开后的过程 peek：内容多高算多高，上限 200px，列不再跟着思考长高。 */
+export const THINKING_PEEK_MAX_CLASS = 'max-h-[200px]';
+
+export function thinkingPeekShellClass(expanded: boolean, animate: boolean): string {
+  return cn(
+    'grid transition-[grid-template-rows]',
+    animate ? 'duration-200 ease-[ease]' : 'transition-none',
+    expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+  );
+}
+
+export const thinkingPeekScrollClass = cn(
+  'sto-chat-content-scrollbar min-h-0 overflow-x-hidden overflow-y-auto',
+  THINKING_PEEK_MAX_CLASS,
+);
+
+export const thinkingPeekFadeClass = cn(
+  'pointer-events-none absolute inset-x-0 top-0 h-4',
+  'bg-[linear-gradient(to_bottom,var(--sto-surface-canvas),transparent)]',
+);

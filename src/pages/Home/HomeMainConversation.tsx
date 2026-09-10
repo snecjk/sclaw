@@ -100,6 +100,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingToolResults,
     streamingTools,
     activity: runtimeActivity,
+    phase,
     error,
   } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
@@ -201,6 +202,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingTools,
     turnAnchorAt,
     runtimeActivity,
+    phase,
   });
 
   useEffect(() => {

@@ -25,10 +25,11 @@ import {
   appendPendingLocalVirtualTaskSessions,
   filterTaskSidebarCatalogRows,
   findCronDatedTwinKey,
+  mergeEngineAndCatalogChatSessions,
   mergeEngineAndCatalogScheduledTaskSessions,
   omitSupersededCronDatedAgentTwins,
 } from '@/stores/chat/session-list-merge';
-import { DEFAULT_WORKSPACE_ID, listCatalogSessions } from '@/lib/session-catalog-api';
+import { listAllCatalogSessions } from '@/lib/session-catalog-api';
 import { getSessionDisplayMessages } from './display-selectors';
 import {
   buildInitialSidebarRecentOrder,
@@ -151,18 +152,22 @@ export function createSessionLifecycleActions(
             };
           }).filter((s: ChatSession) => s.key);
 
-          // P2-D: 侧栏任务会话以 catalog 占位补齐（取代已 404 的 /api/cron|claude…/sessions）。
-          let catalogRows: Awaited<ReturnType<typeof listCatalogSessions>> = [];
+          // Catalog is the durable sidebar source: all workspaces, not just default.
+          // Engine list may omit OpenClaw project agents; catalog rows still paint 项目树.
+          let catalogRows: Awaited<ReturnType<typeof listAllCatalogSessions>> = [];
           try {
-            catalogRows = await listCatalogSessions(DEFAULT_WORKSPACE_ID);
+            catalogRows = await listAllCatalogSessions();
             useSessionCatalogStore.setState({
               taskCatalogSessions: filterTaskSidebarCatalogRows(catalogRows),
             });
           } catch (err) {
             console.warn('[loadSessions] catalog list failed', err);
           }
-          const sessions = mergeEngineAndCatalogScheduledTaskSessions(
-            engineSessions,
+          const sessions = mergeEngineAndCatalogChatSessions(
+            mergeEngineAndCatalogScheduledTaskSessions(
+              engineSessions,
+              catalogRows,
+            ),
             catalogRows,
           ) as ChatSession[];
 

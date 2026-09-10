@@ -4,8 +4,10 @@ import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   listAppTemplates,
+  deleteAppTemplate,
   openAppTemplateWorkspace,
   type AppTemplateSummary,
   type CodeApplicationPageType,
@@ -24,6 +26,7 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
   const [filter, setFilter] = useState<Filter>('all');
   const [loading, setLoading] = useState(false);
   const [openingId, setOpeningId] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AppTemplateSummary | null>(null);
   const [newName, setNewName] = useState('');
   const [newPageType, setNewPageType] = useState<CodeApplicationPageType>('site');
 
@@ -40,7 +43,13 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
   }, []);
 
   useEffect(() => {
-    if (open) void load();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (open) void load();
+      else setDeleteTarget(null);
+    });
+    return () => { cancelled = true; };
   }, [load, open]);
 
   const visibleItems = useMemo(
@@ -49,6 +58,19 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
   );
 
   if (!open) return null;
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteTarget.isBuiltin || deleteTarget.source === 'local-resource') return;
+    try {
+      await deleteAppTemplate(deleteTarget.templateId);
+      setItems((current) => current.filter((item) => itemKey(item) !== itemKey(deleteTarget)));
+      setDeleteTarget(null);
+      toast.success('模板已删除');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '模板删除失败');
+    }
+  };
 
   const enterWorkspace = async (input: Parameters<typeof openAppTemplateWorkspace>[0]) => {
     setOpeningId(input.templateId
@@ -176,6 +198,19 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
                         ? '打开中…'
                         : item.source === 'local-resource' ? '调试' : '编辑'}
                     </Button>
+                    {!item.isBuiltin && item.source !== 'local-resource' ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        aria-label={`删除${item.name}`}
+                        disabled={openingId !== ''}
+                        onClick={() => setDeleteTarget(item)}
+                      >
+                        删除
+                      </Button>
+                    ) : null}
                   </div>
                 </article>
               ))}
@@ -183,6 +218,18 @@ export function AppTemplateManagerDialog({ open, onClose }: { open: boolean; onC
           )}
         </div>
       </section>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        overlayClassName="z-[260]"
+        title="删除模板"
+        message={`确定删除「${deleteTarget?.name ?? ''}」吗？删除后不再出现在模板列表中；已创建的应用和本地工作区不受影响。`}
+        confirmLabel="确认删除"
+        confirmingLabel="删除中…"
+        cancelLabel="取消"
+        variant="destructive"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>,
     document.body,
   );

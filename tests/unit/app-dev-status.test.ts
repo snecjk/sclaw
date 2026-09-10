@@ -3,6 +3,7 @@ import type { AppDevStatus } from '@/lib/app-dev-api';
 import {
   APP_DEV_STATUS_POLL_MS_ACTIVE,
   APP_DEV_STATUS_POLL_MS_IDLE,
+  APP_DEV_STATUS_POLL_MS_INSTALLING,
   APP_DEV_STATUS_POLL_MS_READY,
   appDevStatusPollIntervalMs,
   isSameAppDevStatus,
@@ -21,10 +22,11 @@ describe('isSameAppDevStatus', () => {
     expect(isSameAppDevStatus(ready, { ...ready })).toBe(true);
   });
 
-  it('detects phase / url / error changes', () => {
+  it('detects phase / url / error / log changes', () => {
     expect(isSameAppDevStatus(ready, { ...ready, phase: 'stopped' })).toBe(false);
     expect(isSameAppDevStatus(ready, { ...ready, previewUrl: 'http://127.0.0.1:5174' })).toBe(false);
     expect(isSameAppDevStatus(ready, { ...ready, error: 'boom' })).toBe(false);
+    expect(isSameAppDevStatus(ready, { ...ready, log: 'http fetch' })).toBe(false);
   });
 
   it('handles null', () => {
@@ -36,7 +38,8 @@ describe('isSameAppDevStatus', () => {
 describe('appDevStatusPollIntervalMs', () => {
   it('polls frequently while starting, then backs off once ready', () => {
     expect(appDevStatusPollIntervalMs('starting')).toBe(APP_DEV_STATUS_POLL_MS_ACTIVE);
-    expect(appDevStatusPollIntervalMs('installing')).toBe(APP_DEV_STATUS_POLL_MS_ACTIVE);
+    expect(appDevStatusPollIntervalMs('installing')).toBe(APP_DEV_STATUS_POLL_MS_INSTALLING);
+    expect(appDevStatusPollIntervalMs('checking-snpm')).toBe(APP_DEV_STATUS_POLL_MS_INSTALLING);
     expect(appDevStatusPollIntervalMs('ready')).toBe(APP_DEV_STATUS_POLL_MS_READY);
     expect(appDevStatusPollIntervalMs('stopped')).toBe(APP_DEV_STATUS_POLL_MS_IDLE);
     expect(appDevStatusPollIntervalMs('error')).toBe(APP_DEV_STATUS_POLL_MS_IDLE);

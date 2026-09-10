@@ -24,7 +24,14 @@ import { gunzipSync } from 'node:zlib';
 import { createGzip } from 'node:zlib';
 
 const SOURCE_DIGEST_DOMAIN = 'sto-source-v1';
-const DEFAULT_EXCLUDED_DIRECTORIES = new Set(['.git', '.sto', 'node_modules']);
+const DEFAULT_EXCLUDED_DIRECTORIES = new Set(['.git', '.sto', 'node_modules', '.data']);
+const ALLOWED_ENV_FILES = new Set(['.env.example', '.env.sample', '.env.template']);
+
+interface GitIgnoreRule {
+  regex: RegExp;
+  /** gitignore patterns without `/` match in any directory. */
+  unanchored: boolean;
+}
 
 export interface SourceSnapshot {
   archivePath: string;
@@ -57,7 +64,7 @@ function assertAllowed(path: string): void {
 }
 
 function globPatternToRegExp(pattern: string): RegExp {
-  const normalized = pattern.replace(/\\/g, '/');
+  const normalized = pattern.replace(/\\/g, '/').replace(/^\//, '');
   const escaped = normalized
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*\*/g, '§§')
@@ -67,19 +74,29 @@ function globPatternToRegExp(pattern: string): RegExp {
   return new RegExp(`^${escaped}$`);
 }
 
-async function loadGitignorePatterns(workspace: string): Promise<RegExp[]> {
+function isSecretEnvFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (ALLOWED_ENV_FILES.has(lower)) return false;
+  return lower === '.env' || lower.startsWith('.env.');
+}
+
+async function loadGitignorePatterns(workspace: string): Promise<GitIgnoreRule[]> {
   try {
     const text = await readFile(join(workspace, '.gitignore'), 'utf8');
-    const patterns: RegExp[] = [];
+    const patterns: GitIgnoreRule[] = [];
     for (const line of text.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
       if (trimmed.startsWith('!')) continue;
-      const normalized = trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+      const withoutSlash = trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+      const unanchored = !withoutSlash.includes('/');
       try {
-        patterns.push(globPatternToRegExp(normalized));
+        patterns.push({
+          regex: globPatternToRegExp(withoutSlash),
+          unanchored,
+        });
       } catch {
-        // ignore
+        // ignore invalid globs
       }
     }
     return patterns;
@@ -88,20 +105,26 @@ async function loadGitignorePatterns(workspace: string): Promise<RegExp[]> {
   }
 }
 
-function isIgnored(relativePath: string, patterns: RegExp[]): boolean {
+function isIgnored(relativePath: string, patterns: GitIgnoreRule[]): boolean {
   const normalized = relativePath.replace(/\\/g, '/');
-  return patterns.some((pattern) => pattern.test(normalized));
+  const segments = normalized.split('/');
+  return patterns.some((pattern) => {
+    if (pattern.regex.test(normalized)) return true;
+    if (!pattern.unanchored) return false;
+    return segments.some((_, index) => pattern.regex.test(segments.slice(index).join('/')));
+  });
 }
 
 async function walk(
   workspace: string,
   directory: string,
   output: string[],
-  ignorePatterns: RegExp[],
+  ignorePatterns: GitIgnoreRule[],
 ): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory() && DEFAULT_EXCLUDED_DIRECTORIES.has(entry.name)) continue;
+    if (entry.isFile() && isSecretEnvFile(entry.name)) continue;
     const absolute = join(directory, entry.name);
     const info = await lstat(absolute);
     const normalized = normalizeRelativePath(workspace, absolute);
@@ -118,6 +141,16 @@ async function walk(
       throw new Error(`源码目录包含不支持的文件类型：${normalized}`);
     }
   }
+}
+
+/** Relative paths that would be packed into a source snapshot. */
+export async function listSourceSnapshotFiles(workspace: string): Promise<string[]> {
+  const ignorePatterns = await loadGitignorePatterns(workspace);
+  const absoluteFiles: string[] = [];
+  await walk(workspace, workspace, absoluteFiles, ignorePatterns);
+  return absoluteFiles
+    .map((filePath) => normalizeRelativePath(workspace, filePath))
+    .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
 }
 
 function writeOctal(header: Buffer, offset: number, length: number, value: number): void {

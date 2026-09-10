@@ -6,6 +6,7 @@ import {
   reduceSessionEvent,
 } from '@/stores/chat/client-session-reducer';
 import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
+import { materializeLiveMessage } from '../../shared/chat-live-append';
 
 function event(overrides: Partial<CanonicalChatEvent> = {}): CanonicalChatEvent {
   return {
@@ -253,6 +254,37 @@ describe('canonical chat client session reducer', () => {
     expect(reduceSessionEvent(started, event({ sequence: 3 })).needsHydration).toBe(true);
   });
 
+  it('applies coalesced thinking appends and allows delta sequence jumps without hydration', () => {
+    const started = reduceSessionEvent(createClientSessionState(), event()).state;
+    const first = reduceSessionEvent(started, event({
+      eventId: 'delta-2',
+      sequence: 2,
+      type: 'message.delta',
+      payload: { id: 'a1', role: 'assistant', content: [{ type: 'thinking', thinking: '先看结构' }] },
+    })).state;
+    const jumped = reduceSessionEvent(first, event({
+      eventId: 'delta-5',
+      sequence: 5,
+      type: 'message.delta',
+      payload: {
+        id: 'a1',
+        role: 'assistant',
+        _liveAppend: {
+          append: '，再改首页',
+          totalLength: '先看结构，再改首页'.length,
+          blockIndex: 0,
+          field: 'thinking',
+        },
+      },
+    }));
+    expect(jumped.needsHydration).toBe(false);
+    expect(jumped.accepted).toBe(true);
+    expect(materializeLiveMessage(jumped.state.overlay.streamingMessage)).toMatchObject({
+      content: [{ type: 'thinking', thinking: '先看结构，再改首页' }],
+    });
+    expect(jumped.state.runtime?.sequence).toBe(5);
+  });
+
   it('accepts a same-sequence terminal event and terminal hydration snapshot', () => {
     const running = reduceSessionEvent(createClientSessionState(), event({
       sequence: 14,
@@ -361,6 +393,18 @@ describe('canonical chat client session reducer', () => {
 
     expect(replacement.runtime?.phase).toBe('dispatching');
     expect(replacement.error).toBeNull();
+  });
+
+  it('rewrites Tengine 504 HTML from run.failed into a short timeout copy', () => {
+    const html = '504 <!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN"><html><head><title>504 Gateway Time-out</title></head><body><h1>504 Gateway Time-out</h1><hr/>Powered by Tengine</body></html>';
+    const failed = reduceSessionEvent(createClientSessionState(), event({
+      type: 'run.failed',
+      payload: { error: html },
+    })).state;
+
+    expect(failed.error?.code).toBe('TIMEOUT');
+    expect(failed.error?.message).toBe(i18n.t('chat:runtime.errors.gatewayTimeout'));
+    expect(failed.error?.message).not.toMatch(/DOCTYPE|Tengine|<html/i);
   });
 
   it('does not produce an optimistic user turn for scheduled-task dispatches (X2)', () => {

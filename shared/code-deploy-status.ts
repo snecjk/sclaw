@@ -117,6 +117,8 @@ export function codeDeployProgressLabel(fields: CodeDeployRecordFields): string 
 export interface CodeDeployRecordFields {
   deploymentId?: string;
   applicationId?: string;
+  /** Site App naming alias used by the app-dev renderer. */
+  appCode?: string;
   env?: string;
   status?: string;
   failureStage?: string;
@@ -195,9 +197,11 @@ export function pickCodeDeployFields(data: unknown): CodeDeployRecordFields {
   const unwrapped = unwrapCodeDeployPayload(data);
   if (!unwrapped || typeof unwrapped !== 'object' || Array.isArray(unwrapped)) return {};
   const row = unwrapped as Record<string, unknown>;
+  const applicationId = asTrimmedString(row.applicationId, row.application_id, row.appCode, row.app_code);
   return {
     deploymentId: asTrimmedString(row.deploymentId, row.deployment_id),
-    applicationId: asTrimmedString(row.applicationId, row.application_id, row.appCode, row.app_code),
+    applicationId,
+    appCode: applicationId,
     env: asTrimmedString(row.env),
     status: asTrimmedString(row.status),
     failureStage: asTrimmedString(row.failureStage, row.failure_stage),

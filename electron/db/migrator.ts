@@ -189,6 +189,79 @@ function getAppliedMigrationRows(db: SqliteDatabase): Array<{ version: number; n
 }
 
 /**
+ * Side-branch databases recorded browser-automation-artifacts as v34 and
+ * chat-runtime-interrupt-cause as v35. After merging main, those numbers belong
+ * to chat-runtime-pi-engine and session-skill-states. Move the older records to
+ * v39/v40 so the missing main migrations can run once.
+ */
+function rebaseOccupiedMigrationSlots(db: SqliteDatabase): void {
+  const rows = getAppliedMigrationRows(db);
+  const byVersion = new Map(rows.map((row) => [row.version, row.name]));
+
+  const slots = [
+    {
+      occupiedVersion: 34,
+      occupiedName: 'browser-automation-artifacts',
+      canonicalVersion: 39,
+      canonicalName: 'browser-automation-artifacts',
+    },
+    {
+      occupiedVersion: 35,
+      occupiedName: 'chat-runtime-interrupt-cause',
+      canonicalVersion: 40,
+      canonicalName: 'chat-runtime-interrupt-cause',
+    },
+  ] as const;
+
+  const pending = slots.filter((slot) => byVersion.get(slot.occupiedVersion) === slot.occupiedName);
+  if (pending.length === 0) return;
+
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    for (const slot of pending) {
+      const atCanonical = byVersion.get(slot.canonicalVersion);
+      if (atCanonical === slot.canonicalName) {
+        db.prepare('DELETE FROM schema_migrations WHERE version = ? AND name = ?').run(
+          slot.occupiedVersion,
+          slot.occupiedName,
+        );
+        byVersion.delete(slot.occupiedVersion);
+        logger.info(
+          `[sqlite] freed v${slot.occupiedVersion} previously occupied by ${slot.occupiedName} (kept v${slot.canonicalVersion})`,
+        );
+        continue;
+      }
+      if (atCanonical && atCanonical !== slot.canonicalName) {
+        const freeVersion = nextFreeMigrationVersion(db);
+        db.prepare('UPDATE schema_migrations SET version = ? WHERE version = ?').run(
+          freeVersion,
+          slot.canonicalVersion,
+        );
+        byVersion.delete(slot.canonicalVersion);
+        byVersion.set(freeVersion, atCanonical);
+        logger.info(
+          `[sqlite] relocated conflicting migration "${atCanonical}" from v${slot.canonicalVersion} → v${freeVersion}`,
+        );
+      }
+      db.prepare('UPDATE schema_migrations SET version = ? WHERE version = ? AND name = ?').run(
+        slot.canonicalVersion,
+        slot.occupiedVersion,
+        slot.occupiedName,
+      );
+      byVersion.delete(slot.occupiedVersion);
+      byVersion.set(slot.canonicalVersion, slot.occupiedName);
+      logger.info(
+        `[sqlite] remapped ${slot.occupiedName} v${slot.occupiedVersion} → v${slot.canonicalVersion}`,
+      );
+    }
+    db.exec('COMMIT;');
+  } catch (error) {
+    db.exec('ROLLBACK;');
+    throw error;
+  }
+}
+
+/**
  * Older local databases recorded the same migration SQL under different version
  * numbers (e.g. memory/catalog/types/channel as v6/v7/v8/v10). Treat those names
  * as already applied and backfill the current canonical version without re-running SQL.
@@ -224,6 +297,7 @@ function backfillCanonicalMigrationVersions(db: SqliteDatabase): void {
 export function runDatabaseMigrations(db: SqliteDatabase): void {
   ensureMigrationTable(db);
   normalizeLegacySessionCatalogMigrationVersions(db);
+  rebaseOccupiedMigrationSlots(db);
   backfillCanonicalMigrationVersions(db);
   const appliedVersions = new Set(getAppliedMigrationRows(db).map((row) => row.version));
 

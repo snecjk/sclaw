@@ -20,6 +20,8 @@ interface AppDevSplitBodyProps {
   chat: ReactNode;
   children: ReactNode;
   chatOpen?: boolean;
+  /** 收起工作区：对话列全宽，工作台保活隐藏（0 宽，避免 webview 重载）。 */
+  stageCollapsed?: boolean;
   defaultPercent?: number;
   storageKey?: string;
 }
@@ -28,6 +30,7 @@ export function AppDevSplitBody({
   chat,
   children,
   chatOpen = true,
+  stageCollapsed = false,
   defaultPercent = APP_DEV_CHAT_SPLIT_DEFAULT,
   storageKey = APP_DEV_CHAT_SPLIT_STORAGE_KEY,
 }: AppDevSplitBodyProps) {
@@ -51,6 +54,21 @@ export function AppDevSplitBody({
     return (
       <div className="flex min-h-0 min-w-0 flex-1">
         {children}
+      </div>
+    );
+  }
+
+  if (stageCollapsed) {
+    // 工作台保留挂载（0 宽 + overflow hidden）：display:none 会触发
+    // Electron <webview> 销毁重建，展开时预览会被强制刷新。
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="h-full w-0 shrink-0 overflow-hidden" aria-hidden>
+          {children}
+        </div>
+        <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col transition-[width] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]">
+          {chat}
+        </section>
       </div>
     );
   }

@@ -125,6 +125,9 @@ export function timelineBlockResetKey(
     }
     return `narration-${index}`;
   }
+  if (item.liveParts && item.liveParts.length > 0) {
+    return 'thinking-live';
+  }
   const probe = item.content.trim().slice(0, 64);
   if (probe.length > 0) {
     return `thinking-${hashTimelineTextProbe(probe)}`;
@@ -137,6 +140,7 @@ function isGrowingThinkingSnapshot(
   incoming: ThinkingTimelineItem,
 ): boolean {
   if (cached.type !== 'thinking' || incoming.type !== 'thinking') return false;
+  if (cached.liveParts?.length && incoming.liveParts?.length) return true;
   const cachedText = cached.content.trim();
   const incomingText = incoming.content.trim();
   if (!cachedText || !incomingText) return false;
@@ -170,11 +174,14 @@ export function mergeTimelineMonotonic(
   if (positionallyCompatible) {
     return incoming.map((item, index) => {
       const previous = cached[index];
-      if (
-        previous?.type !== 'thinking'
-        || item.type !== 'thinking'
-        || !isGrowingThinkingSnapshot(previous, item)
-      ) return item;
+      if (previous?.type !== 'thinking' || item.type !== 'thinking') return item;
+      if (item.liveParts?.length || previous.liveParts?.length) {
+        return {
+          ...item,
+          liveParts: item.liveParts ?? previous.liveParts,
+        };
+      }
+      if (!isGrowingThinkingSnapshot(previous, item)) return item;
       return item.content.trim().length >= previous.content.trim().length ? item : previous;
     });
   }

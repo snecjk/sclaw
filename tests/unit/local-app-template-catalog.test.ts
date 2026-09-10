@@ -18,6 +18,13 @@ describe('local built-in app template catalog', () => {
         latestVersion: 'local',
         source: 'local-resource',
       }),
+      expect.objectContaining({
+        templateId: 'assets-iframe-analysis',
+        pageType: 'assets',
+        name: 'iframe 分析子应用',
+        latestVersion: 'local',
+        source: 'local-resource',
+      }),
     ]);
   });
 
@@ -33,16 +40,19 @@ describe('local built-in app template catalog', () => {
     }))).toEqual([
       { templateId: 'assets-minimal', pageType: 'assets', source: 'local-resource' },
       { templateId: 'site-minimal', pageType: 'site', source: 'local-resource' },
+      { templateId: 'assets-iframe-analysis', pageType: 'assets', source: 'local-resource' },
+      { templateId: 'site-fullstack', pageType: 'site', source: 'local-resource' },
     ]);
   });
 
-  it('lists both local templates for Site', async () => {
+  it('lists only the site-minimal local template for 独立站点', async () => {
     const items = await listLocalBuiltinAppTemplates(
       join(process.cwd(), 'resources', 'app-templates'),
       'site',
     );
     expect(items.map((item) => item.templateId)).toEqual([
       'site-minimal',
+      'site-fullstack',
     ]);
   });
 });

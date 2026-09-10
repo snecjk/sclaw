@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import type { ChatContextUsage, ChatRuntimeSnapshot, ChatRunPhase, ContextCompactionActivity } from '../../../shared/chat-runtime-protocol';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
+import { isChatRunInterruptCause, type ChatRunInterruptCause } from '../../../shared/chat-run-interrupt';
 import { parseAgentEngineType } from '../../../shared/agent-engine';
 import { getKyselyDatabase } from '../connection';
 
@@ -89,6 +90,7 @@ function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
     lastEventAt: Number(row.last_event_at),
     terminalAt: row.terminal_at == null ? null : Number(row.terminal_at),
     error: row.error == null ? null : String(row.error),
+    interruptCause: isChatRunInterruptCause(row.interrupt_cause) ? row.interrupt_cause : null,
     activity: parseStoredActivity(row.activity_json),
     contextUsage: parseStoredContextUsage(row.context_usage_json),
     acceptanceResult: safeParseJson(row.acceptance_result_json == null ? null : String(row.acceptance_result_json)),
@@ -168,6 +170,7 @@ export class ChatRuntimeRepository {
       last_event_at: snapshot.lastEventAt,
       terminal_at: snapshot.terminalAt,
       error: snapshot.error,
+      interrupt_cause: snapshot.interruptCause ?? null,
       acceptance_result_json: safeStringifyJson(snapshot.acceptanceResult),
       activity_json: safeStringifyJson(snapshot.activity),
       context_usage_json: safeStringifyJson(snapshot.contextUsage),
@@ -210,6 +213,7 @@ export class ChatRuntimeRepository {
             last_event_at: values.last_event_at,
             terminal_at: values.terminal_at,
             error: values.error,
+            interrupt_cause: values.interrupt_cause,
             acceptance_result_json: values.acceptance_result_json,
             activity_json: values.activity_json,
             context_usage_json: values.context_usage_json,
@@ -220,9 +224,10 @@ export class ChatRuntimeRepository {
         }
         const metadataChanged = row.run_id !== values.run_id
           || row.acceptance_result_json !== values.acceptance_result_json
+          || row.error !== values.error
+          || (row.interrupt_cause ?? null) !== (values.interrupt_cause ?? null)
           || row.activity_json !== values.activity_json
-          || row.context_usage_json !== values.context_usage_json
-          || row.error !== values.error;
+          || row.context_usage_json !== values.context_usage_json;
         if (!metadataChanged) return 'unchanged';
         await trx.updateTable('chat_runtime_runs').set({
           run_id: values.run_id,
@@ -230,6 +235,7 @@ export class ChatRuntimeRepository {
           activity_json: values.activity_json,
           context_usage_json: values.context_usage_json,
           error: values.error,
+          interrupt_cause: values.interrupt_cause,
           updated_at: timestamp,
           version: sql<number>`version + 1`,
         }).where('id', '=', row.id).execute();
@@ -247,6 +253,7 @@ export class ChatRuntimeRepository {
         last_event_at: values.last_event_at,
         terminal_at: values.terminal_at,
         error: values.error,
+        interrupt_cause: values.interrupt_cause,
         acceptance_result_json: values.acceptance_result_json,
         activity_json: values.activity_json,
         context_usage_json: values.context_usage_json,
@@ -259,6 +266,16 @@ export class ChatRuntimeRepository {
 
   async upsert(snapshot: ChatRuntimeSnapshot): Promise<void> {
     await this.upsertIfNewer(snapshot);
+  }
+
+  async stampInterruptCause(sessionKey: string, cause: ChatRunInterruptCause): Promise<void> {
+    const latest = await this.getLatestForSession(sessionKey);
+    if (!latest) return;
+    await this.upsertIfNewer({
+      ...latest,
+      interruptCause: cause,
+      updatedAt: Date.now(),
+    });
   }
 
   async prune(now = Date.now()): Promise<void> {

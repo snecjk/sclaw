@@ -182,6 +182,12 @@ export class AppTemplateApiClient {
     });
   }
 
+  delete(templateId: string): Promise<{ templateId: string; status: 'DISABLED' }> {
+    return this.request(`/agent/v1/app-templates/${encodeURIComponent(templateId)}`, {
+      method: 'DELETE',
+    });
+  }
+
   listVersions(templateId: string): Promise<AppTemplateVersion[]> {
     return this.request(
       `/agent/v1/app-templates/${encodeURIComponent(templateId)}/versions`,

@@ -69,3 +69,11 @@ export function appDevSetupHeadline(phase: AppDevPhase): string {
       return '正在准备应用…';
   }
 }
+
+/** Which setup step owns the current command log. */
+export function appDevSetupLogStepId(phase: AppDevPhase): AppDevSetupStepId | null {
+  if (phase === 'installing') return 'deps';
+  if (phase === 'starting') return 'start';
+  if (phase === 'preparing-env' || phase === 'checking-snpm' || phase === 'created') return 'tools';
+  return null;
+}

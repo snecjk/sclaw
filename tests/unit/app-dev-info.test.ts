@@ -13,6 +13,9 @@ import {
   stripInheritedNpmRegistryEnv,
   substituteTemplateVars,
   buildSnpmInstallArgs,
+  lastInstallLogLine,
+  pushInstallLogTail,
+  stripInstallLogAnsi,
 } from '../../electron/utils/app-dev-info';
 
 describe('app-dev-info', () => {
@@ -122,6 +125,18 @@ describe('app-dev-info', () => {
       );
       expect(needsAppNpmInstall(root)).toBe(false);
     });
+
+    it('needs install when a declared direct dependency is missing', async () => {
+      const root = await tmpRoot();
+      await writeFile(join(root, 'package.json'), JSON.stringify({
+        dependencies: { react: '^19.0.0' },
+        devDependencies: { vite: '^5.4.0', '@vitejs/plugin-react': '^4.7.0' },
+      }));
+      await mkdir(join(root, 'node_modules', 'vite'), { recursive: true });
+      await writeFile(join(root, 'node_modules', 'vite', 'package.json'), '{"name":"vite"}');
+
+      expect(needsAppNpmInstall(root)).toBe(true);
+    });
   });
 
   it('stripInheritedNpmRegistryEnv drops host registry overrides', () => {
@@ -165,5 +180,14 @@ describe('app-dev-info', () => {
       ),
     ).toBe(true);
     expect(isTransientNpmInstallFailure('npm error code E404')).toBe(false);
+  });
+
+  it('keeps a readable snpm log tail for the workbench', () => {
+    expect(stripInstallLogAnsi('\u001B[32mhttp fetch\u001B[0m GET lodash')).toBe('http fetch GET lodash');
+    expect(pushInstallLogTail('line-1\n', 'line-2\rline-3\n')).toBe('line-1\nline-2\nline-3');
+    expect(lastInstallLogLine('a\n  b  \n')).toBe('b');
+    const many = Array.from({ length: 80 }, (_, i) => `pkg ${i}`).join('\n');
+    const tail = pushInstallLogTail('', many, 8, 2000);
+    expect(tail.split('\n')).toEqual(['pkg 72', 'pkg 73', 'pkg 74', 'pkg 75', 'pkg 76', 'pkg 77', 'pkg 78', 'pkg 79']);
   });
 });

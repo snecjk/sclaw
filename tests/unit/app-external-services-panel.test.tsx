@@ -19,10 +19,15 @@ vi.mock('@/lib/app-dev-api', () => ({
 
 describe('AppExternalServicesPanel', () => {
   beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     listMock.mockResolvedValue([]);
     searchMock.mockResolvedValue({
       items: [{
         serviceId: 'sto-policy-ontology',
+        serviceUid: 'service-1',
+        scopeType: 'PLATFORM',
+        companyCode: '__PLATFORM__',
+        visibility: 'PUBLIC',
         name: '策略本体服务',
         description: '策略查询',
         owner: 'policy-platform',
@@ -45,7 +50,7 @@ describe('AppExternalServicesPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '添加到应用' }));
     await waitFor(() => expect(bindMock).toHaveBeenCalledWith({
       workspaceId: 'ws-1',
-      serviceId: 'sto-policy-ontology',
+      serviceUid: 'service-1',
       version: '1.0.0',
       alias: 'stoPolicyOntology',
     }));

@@ -88,7 +88,14 @@ describe('needsWinShell', () => {
     expect(needsWinShell('pnpm')).toBe(true);
   });
 
-  it('returns false on Windows for absolute paths', () => {
+  it('returns true on Windows for .cmd/.bat even when the path is absolute', () => {
+    setPlatform('win32');
+    expect(needsWinShell('C:\\Users\\admin\\.stoclaw\\runtime\\node\\npm.cmd')).toBe(true);
+    expect(needsWinShell('C:\\Users\\admin\\AppData\\Roaming\\npm\\snpm.cmd')).toBe(true);
+    expect(needsWinShell('D:\\tools\\run.bat')).toBe(true);
+  });
+
+  it('returns false on Windows for absolute .exe paths', () => {
     setPlatform('win32');
     expect(needsWinShell('C:\\Program Files\\uv.exe')).toBe(false);
     expect(needsWinShell('D:\\tools\\bin\\uv.exe')).toBe(false);
@@ -159,6 +166,31 @@ describe('prepareWinSpawn', () => {
     );
     expect(relResult.shell).toBe(true);
   });
+
+  it('forces shell for absolute .cmd/.bat on Windows without extra forceShell', () => {
+    setPlatform('win32');
+    const npmResult = prepareWinSpawn(
+      'C:\\Users\\admin\\.stoclaw\\runtime\\node\\npm.cmd',
+      ['run', 'dev', '--', '--port', '56022'],
+    );
+    expect(npmResult.shell).toBe(true);
+    expect(npmResult.command).toBe('C:\\Users\\admin\\.stoclaw\\runtime\\node\\npm.cmd');
+    expect(npmResult.args).toEqual(['run', 'dev', '--', '--port', '56022']);
+
+    const spaced = prepareWinSpawn(
+      'C:\\Program Files\\nodejs\\npm.cmd',
+      ['run', 'dev'],
+    );
+    expect(spaced.shell).toBe(true);
+    expect(spaced.command).toBe('"C:\\Program Files\\nodejs\\npm.cmd"');
+  });
+
+  it('does not force shell for .cmd on non-Windows', () => {
+    setPlatform('linux');
+    const result = prepareWinSpawn('/usr/bin/npm.cmd', ['run', 'dev']);
+    expect(result.shell).toBe(false);
+    expect(result.command).toBe('/usr/bin/npm.cmd');
+  });
 });
 
 describe('normalizeNodeRequirePathForNodeOptions', () => {
@@ -218,5 +250,106 @@ describe('appendNodeRequireToNodeOptions', () => {
     setPlatform('win32');
     expect(appendNodeRequireToNodeOptions('--max-old-space-size=4096', 'D:\\app\\data\\preload.cjs'))
       .toBe('--max-old-space-size=4096 --require "D:/app/data/preload.cjs"');
+  });
+});
+
+describe('silent PowerShell args', () => {
+  let buildSilentPowerShellArgs: (rest: string[]) => string[];
+  let ensureSilentPowerShellArgs: (args: string[]) => string[];
+
+  beforeEach(async () => {
+    const mod = await import('@electron/utils/win-shell');
+    buildSilentPowerShellArgs = mod.buildSilentPowerShellArgs;
+    ensureSilentPowerShellArgs = mod.ensureSilentPowerShellArgs;
+  });
+
+  it('places quiet flags before -Command without -WindowStyle', () => {
+    const args = buildSilentPowerShellArgs(['-Command', 'Get-Date']);
+    expect(args).toEqual([
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      'Get-Date',
+    ]);
+  });
+
+  it('does not duplicate flags already present and strips -WindowStyle', () => {
+    const args = ensureSilentPowerShellArgs([
+      '-NoProfile',
+      '-WindowStyle',
+      'Hidden',
+      '-Command',
+      'echo 1',
+    ]);
+    expect(args.filter((arg) => arg.toLowerCase() === '-noprofile')).toHaveLength(1);
+    expect(args).toEqual(expect.arrayContaining(['-NonInteractive', '-NoLogo']));
+    expect(args).not.toEqual(expect.arrayContaining(['-WindowStyle', 'Hidden']));
+    expect(args.indexOf('-NoLogo')).toBeLessThan(args.indexOf('-Command'));
+  });
+});
+
+describe('Windows hidden spawn args', () => {
+  let applyWindowsHiddenSpawnArgs: (args: unknown[]) => unknown[];
+  let isPowerShellExecutable: (cmd: string) => boolean;
+
+  beforeEach(async () => {
+    const mod = await import('@electron/utils/win-shell');
+    applyWindowsHiddenSpawnArgs = mod.applyWindowsHiddenSpawnArgs;
+    isPowerShellExecutable = mod.isPowerShellExecutable;
+  });
+
+  it('recognizes powershell executables', () => {
+    expect(isPowerShellExecutable('powershell.exe')).toBe(true);
+    expect(isPowerShellExecutable('pwsh')).toBe(true);
+    expect(isPowerShellExecutable('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe')).toBe(true);
+    expect(isPowerShellExecutable('cmd.exe')).toBe(false);
+  });
+
+  it('leaves argv unchanged on non-Windows', () => {
+    setPlatform('darwin');
+    expect(applyWindowsHiddenSpawnArgs(['powershell.exe', ['-Command', 'Get-Date']]))
+      .toEqual(['powershell.exe', ['-Command', 'Get-Date']]);
+  });
+
+  it('injects windowsHide and silent PowerShell flags on Windows', () => {
+    setPlatform('win32');
+    const next = applyWindowsHiddenSpawnArgs([
+      'powershell.exe',
+      ['-Command', 'Get-ChildItem'],
+      { detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
+    ]);
+    expect(next[0]).toBe('powershell.exe');
+    expect(next[1]).toEqual([
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      'Get-ChildItem',
+    ]);
+    expect(next[2]).toEqual({
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+  });
+
+  it('adds windowsHide when spawn options are omitted', () => {
+    setPlatform('win32');
+    expect(applyWindowsHiddenSpawnArgs(['where', ['bash.exe']])).toEqual([
+      'where',
+      ['bash.exe'],
+      { windowsHide: true },
+    ]);
+  });
+
+  it('clears detached for console hosts so CREATE_NO_WINDOW can apply', () => {
+    setPlatform('win32');
+    const next = applyWindowsHiddenSpawnArgs([
+      'cmd.exe',
+      ['/c', 'echo hi'],
+      { detached: true },
+    ]);
+    expect(next[2]).toEqual({ detached: false, windowsHide: true });
   });
 });

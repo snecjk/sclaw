@@ -7,6 +7,7 @@ const afterPack = require('../../scripts/after-pack.cjs') as {
   OPENCLAW_ASAR_UNPACK: string;
   packDirectoryToAsar: (sourceDir: string, asarPath: string, label: string) => Promise<boolean>;
   validateAsarNativeUnpack: (asarPath: string, label: string) => void;
+  restampWinAsarIntegrity: (exePath: string, asarPath: string) => Promise<boolean>;
 };
 
 const tempDirs: string[] = [];
@@ -85,5 +86,29 @@ describe('after-pack ASAR native unpack', () => {
     const asarPath = join(tmp, 'openclaw-plugins.asar');
 
     expect(() => afterPack.validateAsarNativeUnpack(asarPath, 'OpenClaw plugins')).not.toThrow();
+  });
+
+  it('restampWinAsarIntegrity rewrites the ELECTRONASAR SHA256 to match app.asar', async () => {
+    const tmp = makeTempDir('after-pack-integrity-');
+    const asarPath = join(tmp, 'app.asar');
+    const exePath = join(tmp, 'SClaw.exe');
+    writeFileSync(asarPath, 'fake-asar-body');
+    const stale = 'bb158b4bdca3b05d0fce85af3c63c8feaeb05fcd104b461d04a1696989f5d41f';
+    writeFileSync(
+      exePath,
+      Buffer.concat([
+        Buffer.from('PE-STUB'),
+        Buffer.from(`{"file":"resources\\\\app.asar","alg":"SHA256","value":"${stale}"}`),
+        Buffer.from('TAIL'),
+      ]),
+    );
+
+    await expect(afterPack.restampWinAsarIntegrity(exePath, asarPath)).resolves.toBe(true);
+
+    const { createHash } = require('node:crypto');
+    const digest = createHash('sha256').update('fake-asar-body').digest('hex');
+    const patched = require('node:fs').readFileSync(exePath, 'utf8');
+    expect(patched).toContain(digest);
+    expect(patched).not.toContain(stale);
   });
 });

@@ -19,6 +19,10 @@ import {
   type AppTemplateSummary,
   type CodeApplicationPageType,
 } from '@/lib/app-dev-api';
+import {
+  APP_DEV_FULLSTACK_TEMPLATE_ID,
+  isAppDevFullstackCreateEnabled,
+} from '@/lib/app-dev-fullstack-create';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
@@ -75,11 +79,17 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     void listAppTemplates(pageType)
       .then((result) => {
         if (cancelled) return;
-        const items = result.items.filter((item) => item.pageType === pageType && item.latestVersion);
+        const items = result.items.filter((item) => {
+          if (item.pageType !== pageType || !item.latestVersion) return false;
+          if (!isAppDevFullstackCreateEnabled() && item.templateId === APP_DEV_FULLSTACK_TEMPLATE_ID) return false;
+          return true;
+        });
         setTemplates(items);
+        const preferredId = `${pageType}-minimal`;
         const preferred = items.find(
-          (item) => item.templateId === `${pageType}-minimal` && item.source === 'local-resource',
-        ) ?? items.find((item) => item.templateId === `${pageType}-minimal`);
+          (item) => item.templateId === preferredId && item.source === 'local-resource',
+        ) ?? items.find((item) => item.templateId === preferredId)
+          ?? items.find((item) => item.templateId === `${pageType}-minimal`);
         setTemplateId(preferred ? templateSelectionKey(preferred) : '');
         if (!preferred) {
           setTemplateError(

@@ -8,6 +8,10 @@ import {
   parseDwsChatMessageSendShellCommandArgs,
   rewriteDwsSendSpawnInvocation,
 } from '../../shared/dingtalk-send/dws-send-text';
+import {
+  ensureSilentPowerShellArgs,
+  isPowerShellExecutable,
+} from '../utils/win-shell';
 
 /** Must match electron/utils/sai-client-id.ts — keep inline to avoid pulling Electron utils into preload. */
 const SAI_CLIENT_ID_VALUE = 'sto-claw';
@@ -141,6 +145,17 @@ function normalizeDwsSendInvocation(cmd: string, argsList: string[]): string[] {
     }
   }
   return args;
+}
+
+function applySilentPowerShellIfNeeded(
+  cmd: string,
+  mutable: unknown[],
+  cmdArgs: string[],
+): string[] {
+  if (!isPowerShellExecutable(cmd) || !Array.isArray(mutable[1])) return cmdArgs;
+  const silenced = ensureSilentPowerShellArgs(cmdArgs.map(String));
+  mutable[1] = silenced;
+  return silenced;
 }
 
 const BLOCKED_FETCH_URL_PATTERNS = [
@@ -366,6 +381,8 @@ function patchChildProcess(): void {
         }
       }
 
+      cmdArgs = applySilentPowerShellIfNeeded(cmd, mutable, cmdArgs);
+
       const blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
       if (blockedErr) {
         for (let i = mutable.length - 1; i >= 1; i -= 1) {
@@ -441,6 +458,8 @@ function patchChildProcess(): void {
           cmdArgs = mutable[1] as string[];
         }
       }
+
+      cmdArgs = applySilentPowerShellIfNeeded(cmd, mutable, cmdArgs);
 
       const blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
       if (blockedErr) throw blockedErr;

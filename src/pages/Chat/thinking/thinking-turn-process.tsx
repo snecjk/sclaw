@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
@@ -20,6 +20,17 @@ import {
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { chatThinkingSegmentSummaryHeaderClass } from '@/lib/surfaces';
 import {
+  thinkingPanelChevronClass,
+  thinkingPanelRootClass,
+  thinkingPeekFadeClass,
+  thinkingPeekScrollClass,
+  thinkingPeekShellClass,
+  thinkingProcessSegmentStackClass,
+} from '@/pages/Chat/thinking/process-panel-styles';
+import {
+  resolveCollapsedLivePreview,
+} from '@/pages/Chat/thinking/collapsed-thinking-preview';
+import {
   timelineBlockResetKey,
   toolRowKey,
   streamingToolKey,
@@ -33,6 +44,7 @@ import {
   maskDwsSensitiveIdsForDisplay,
   type ThinkingTimelineItem,
 } from '@/pages/Chat/message-utils';
+import loadingGif from '@/assets/loading.gif';
 import { OPENING_PHASE_TEXT_KEY, INTERRUPTED_PHASE_TEXT_KEY } from '@/pages/Chat/thinking/types';
 import { PhaseTextBlock } from '@/pages/Chat/thinking/phase-text-block';
 import {
@@ -58,39 +70,23 @@ import {
 import {
   rebalanceThinkingTimelineForDisplay,
   buildThinkingGroupSummaryLabel,
+  type ThinkingPhaseTextSegment,
   type ThinkingToolGroupSegment,
   type ThinkingTurnSegment,
 } from '@/pages/Chat/thinking-turn-segments';
-import { sliceStreamingThinkingTail } from '@/pages/Chat/thinking/streaming-tail-window';
 import { foldThinkingTimelineTools, resolveTurnToolCount } from '@/pages/Chat/thinking/fold-turn-tools';
+import { resolveLiveProcessActivity } from '@/pages/Chat/thinking/live-process-activity';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 
-/** 无外层卡片：思考过程直接铺在对话区底色上 */
-const thinkingPanelRootClass = 'w-full';
-
-/** 一级摘要 / phase-text / loading 之间垂直间距 */
-const thinkingProcessSegmentStackClass = 'flex flex-col gap-3';
-
-/** chat-interaction-style-spec §5.6：高度 0↔auto，300ms ease */
-const thinkingPanelBodyGridClass = (expanded: boolean, animate: boolean) =>
-  cn(
-    'grid transition-[grid-template-rows]',
-    animate ? 'duration-300 ease-[ease]' : 'transition-none',
-    expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-  );
-
-/** §5.6 / §6.2：箭头 200ms ease；收起向下，展开向上（rotate-180） */
-const thinkingPanelChevronClass = (expanded: boolean, animate: boolean) =>
-  cn(
-    'h-3.5 w-3.5 shrink-0 text-[var(--sto-content-process-icon-foreground)] opacity-[var(--sto-content-process-icon-opacity)] transition-transform',
-    animate ? 'duration-200 ease-[ease]' : 'transition-none',
-    expanded && 'rotate-180',
-  );
-
 type StreamingTool = ToolStatus;
 
-export type ConnectingLabelKey = 'connectingModel' | 'understandingQuestion' | 'stillExecuting';
+export type ConnectingLabelKey =
+  | 'connectingModel'
+  | 'understandingQuestion'
+  | 'stillExecuting'
+  | 'startingRuntime'
+  | 'readingProjectContext';
 
 export interface ConnectingModelIndicatorProps {
   className?: string;
@@ -124,22 +120,18 @@ export function AwaitingReplyIndicator({ className }: { className?: string }) {
 
 const ThinkingBlockBody = memo(function ThinkingBlockBody({
   content,
-  omittedChars = 0,
   isTypewriterActive,
   isStreamActive = false,
   resetKey,
   onRevealComplete,
 }: {
   content: string;
-  /** 父级已按流式尾部窗口截断后传入的省略字数（未截断为 0） */
-  omittedChars?: number;
   isTypewriterActive: boolean;
   /** 流式当前块：整个流式期间保持纯文本（含顺序打字机已锁定的兜底路径），完成帧才转 ReactMarkdown */
   isStreamActive?: boolean;
   resetKey: string;
   onRevealComplete?: () => void;
 }) {
-  const { t } = useTranslation('chat');
   const { text: displayed, isAnimating } = useTypewriterReveal(content, isTypewriterActive, {
     resetKey,
   });
@@ -157,11 +149,6 @@ const ThinkingBlockBody = memo(function ThinkingBlockBody({
         className={cn(chatProcessBlockBodyClass, 'whitespace-pre-wrap')}
         aria-busy={isTypewriterActive || isAnimating || isStreamActive ? true : undefined}
       >
-        {omittedChars > 0 ? (
-          <span className="mb-1 block opacity-70">
-            {t('streaming.omittedEarlierThinkingChars', { count: omittedChars })}
-          </span>
-        ) : null}
         {source}
         {isTypewriterActive ? <ChatProcessLoadingEllipsis /> : null}
       </p>
@@ -301,6 +288,7 @@ function toolInputEqual(left: unknown, right: unknown): boolean {
 
 interface TimelineThinkingRowProps {
   content: string;
+  liveParts?: string[];
   skills: { id: string; slug?: string; name: string; title?: string }[];
   title: string;
   icon: ReturnType<typeof resolveChatThinkingIcon>;
@@ -313,9 +301,27 @@ interface TimelineThinkingRowProps {
   onRevealComplete: (resetKey: string) => void;
 }
 
+function useExpandedLiveThinking(content: string, liveParts?: string[]) {
+  const [text, setText] = useState(() => (liveParts?.length ? liveParts.join('') : content));
+  useEffect(() => {
+    if (liveParts?.length) return undefined;
+    setText(content);
+    return undefined;
+  }, [content, liveParts]);
+  useEffect(() => {
+    if (!liveParts?.length) return undefined;
+    const sync = () => setText(liveParts.join(''));
+    sync();
+    const timer = window.setInterval(sync, 250);
+    return () => window.clearInterval(timer);
+  }, [liveParts]);
+  return liveParts?.length ? text : content;
+}
+
 /** 单个深度思考块：props 全为基础类型/稳定引用，块内容未变时跳过整棵子树（含 ReactMarkdown） */
 const TimelineThinkingRow = memo(function TimelineThinkingRow({
   content,
+  liveParts,
   skills,
   title,
   icon,
@@ -327,17 +333,12 @@ const TimelineThinkingRow = memo(function TimelineThinkingRow({
   resetKey,
   onRevealComplete,
 }: TimelineThinkingRowProps) {
-  // 流式当前块先截尾再脱敏/替换技能名：截尾 O(1)（只取最后 3000 字），
-  // 避免 10 万字时每帧对全文跑正则。
-  const tailWindow = useMemo(
-    () => (isActive ? sliceStreamingThinkingTail(content) : { text: content, omittedChars: 0 }),
-    [content, isActive],
-  );
+  const source = useExpandedLiveThinking(content, liveParts);
   const thinkingContent = useMemo(
     () => maskDwsSensitiveIdsForDisplay(
-      resolveSkillNamesInThinkingCached(tailWindow.text, skills),
+      resolveSkillNamesInThinkingCached(source, skills),
     ),
-    [tailWindow.text, skills],
+    [source, skills],
   );
   return (
     <ChatProcessBlock
@@ -347,10 +348,11 @@ const TimelineThinkingRow = memo(function TimelineThinkingRow({
       isComplete={isComplete}
       autoExpand={autoExpand}
       isActive={isActive}
+      unmountCollapsedBody={collapsible}
+      scrollOnExpand={false}
     >
       <ThinkingBlockBody
         content={thinkingContent}
-        omittedChars={tailWindow.omittedChars}
         isTypewriterActive={isTypewriterActive}
         isStreamActive={isActive}
         resetKey={resetKey}
@@ -507,6 +509,7 @@ function TimelineBody({
             <TimelineThinkingRow
               key={blockResetKey}
               content={item.content}
+              liveParts={item.liveParts}
               skills={skills}
               title={t('streaming.deepThinkingLabel')}
               icon={ThinkingIcon}
@@ -695,6 +698,29 @@ function useStableThinkingSegments(
   }, [turnStableKey, segments, isLiveStream, finalReplyText]);
 }
 
+function useThinkingPeekStick(enabled: boolean, followKey: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  const pinnedRef = useRef(true);
+  const [showFade, setShowFade] = useState(false);
+
+  const sync = () => {
+    const el = ref.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    pinnedRef.current = distance < 24;
+    setShowFade(el.scrollTop > 2);
+  };
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !enabled) return;
+    if (pinnedRef.current) el.scrollTop = el.scrollHeight;
+    sync();
+  }, [enabled, followKey]);
+
+  return { ref, showFade, onScroll: sync };
+}
+
 function ThinkingToolGroupPanel({
   turnStableKey,
   segment,
@@ -706,7 +732,10 @@ function ThinkingToolGroupPanel({
   streamingTools,
   hasFinalReply,
   connectingLabelKey,
-  enableProcessTypewriter,
+  enableProcessTypewriter: _enableProcessTypewriter,
+  expanded,
+  onToggle,
+  phaseText,
 }: {
   turnStableKey: string | undefined;
   segment: ThinkingToolGroupSegment;
@@ -719,6 +748,9 @@ function ThinkingToolGroupPanel({
   hasFinalReply: boolean;
   connectingLabelKey: ConnectingLabelKey;
   enableProcessTypewriter: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  phaseText?: string | null;
 }) {
   const { t } = useTranslation('chat');
   const isActive = segment.state === 'active';
@@ -727,17 +759,14 @@ function ThinkingToolGroupPanel({
     segment,
     isLiveStream,
   );
-  const showStreamingBody = isActive || deferSummaryCollapse;
+  const isLiveCompact = isActive || deferSummaryCollapse;
   const stableTimeline = useStableThinkingTimeline(
     turnStableKey,
     segment.key,
     segment.timeline,
     isLiveStream,
   );
-  const [expanded, setExpanded] = useState(false);
   const [collapseAnimationEnabled, setCollapseAnimationEnabled] = useState(false);
-  // 完成态卸载：收起时正文不挂载（不再靠 grid-rows-[0fr] 视觉隐藏全量 DOM）；
-  // 收起动画（300ms，§5.6）期间保留挂载，动画结束后卸载
   const [bodyMounted, setBodyMounted] = useState(false);
 
   useEffect(() => {
@@ -755,64 +784,98 @@ function ThinkingToolGroupPanel({
     return () => clearTimeout(timer);
   }, [expanded, bodyMounted]);
 
-  const handleSummaryToggle = () => {
-    setExpanded((prev) => !prev);
-  };
-
   const summaryLabel = useMemo(
     () => buildThinkingGroupSummaryLabel(segment.timeline, t),
     [segment.timeline, t],
   );
+  const liveActivity = useMemo(
+    () => (isLiveCompact
+      ? resolveLiveProcessActivity(stableTimeline, streamingTools)
+      : { kind: 'idle' as const }),
+    [isLiveCompact, stableTimeline, streamingTools],
+  );
+  const headerLabel = isLiveCompact
+    ? (liveActivity.kind === 'tool' ? t('streaming.liveCallingTool') : t('streaming.thinkingBadge'))
+    : summaryLabel;
+  const livePreview = useMemo(() => {
+    if (!isLiveCompact) return '';
+    const toolDisplayName = liveActivity.kind === 'tool'
+      ? resolveChatToolDisplayName(liveActivity.name)
+      : undefined;
+    return resolveCollapsedLivePreview({
+      activity: liveActivity,
+      timeline: stableTimeline,
+      toolDisplayName,
+      phaseText,
+    }) || t('streaming.liveCurrentThinking');
+  }, [isLiveCompact, liveActivity, stableTimeline, phaseText, t]);
+  const lastThinking = [...stableTimeline].reverse().find((item) => item.type === 'thinking');
+  const peekFollowKey = `${stableTimeline.length}:${lastThinking && lastThinking.type === 'thinking' ? (lastThinking.liveParts?.length ?? lastThinking.content.length) : 0}:${liveActivity.kind === 'tool' ? liveActivity.name : ''}`;
+  const peekStick = useThinkingPeekStick(expanded && isLiveCompact, peekFollowKey);
 
-  if (showStreamingBody) {
-    return (
-      <TimelineBody
-        timeline={stableTimeline}
-        isLiveStream={isLiveStream}
-        hasFinalReply={hasFinalReply}
-        batchIsCompleted={!isActive}
-        streamingTools={streamingTools}
-        enableProcessTypewriter={enableProcessTypewriter}
-        isConnecting={isConnecting}
-        isProcessing={isProcessing}
-        isStillExecuting={isStillExecuting}
-        connectingLabelKey={connectingLabelKey}
-      />
-    );
-  }
-
-  if (!summaryLabel) return null;
+  if (!headerLabel) return null;
 
   return (
     <div className="w-full">
       <button
         type="button"
         className={chatThinkingSegmentSummaryHeaderClass}
-        onClick={handleSummaryToggle}
+        onClick={onToggle}
         aria-expanded={expanded}
       >
-        <span className="truncate">{summaryLabel}</span>
+        <span
+          className={cn(
+            'min-w-0 truncate',
+            isLiveCompact && !expanded && 'chat-interaction-shimmer-text',
+          )}
+        >
+          {headerLabel}
+        </span>
         <ChevronDown
           className={thinkingPanelChevronClass(expanded, collapseAnimationEnabled)}
           aria-hidden
         />
       </button>
+      {isLiveCompact && !expanded ? (
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+          <img
+            src={loadingGif}
+            alt=""
+            width={14}
+            height={14}
+            className="h-[14px] w-[14px] shrink-0 object-contain"
+            aria-hidden
+          />
+          <p className="min-w-0 truncate text-[13px] leading-5 text-[var(--sto-text-tertiary)]">
+            {livePreview}
+          </p>
+        </div>
+      ) : null}
       {bodyMounted ? (
-        <div className={thinkingPanelBodyGridClass(expanded, collapseAnimationEnabled)}>
-          <div className="min-h-0 overflow-hidden">
-            <TimelineBody
-              timeline={stableTimeline}
-              isLiveStream={false}
-              hasFinalReply={false}
-              batchIsCompleted
-              streamingTools={streamingTools}
-              enableProcessTypewriter={false}
-              isConnecting={false}
-              isProcessing={false}
-              isStillExecuting={false}
-              connectingLabelKey={connectingLabelKey}
-              readonlyExpanded
-            />
+        <div className={thinkingPeekShellClass(expanded, collapseAnimationEnabled)}>
+          <div className="relative min-h-0 overflow-hidden">
+            <div
+              ref={peekStick.ref}
+              className={thinkingPeekScrollClass}
+              onScroll={peekStick.onScroll}
+            >
+              <TimelineBody
+                timeline={stableTimeline}
+                isLiveStream={isLiveCompact}
+                hasFinalReply={isLiveCompact ? hasFinalReply : false}
+                batchIsCompleted={!isActive}
+                streamingTools={streamingTools}
+                enableProcessTypewriter={false}
+                isConnecting={isLiveCompact ? isConnecting : false}
+                isProcessing={isLiveCompact ? isProcessing : false}
+                isStillExecuting={isLiveCompact ? isStillExecuting : false}
+                connectingLabelKey={connectingLabelKey}
+                readonlyExpanded={!isLiveCompact}
+              />
+            </div>
+            {expanded && peekStick.showFade ? (
+              <div className={thinkingPeekFadeClass} aria-hidden />
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -884,6 +947,7 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
   const wasLiveStreamRef = useRef(false);
   const typewriterLockedRef = useRef(false);
   const [enableProcessTypewriter, setEnableProcessTypewriter] = useState(false);
+  const [expandedSegmentKey, setExpandedSegmentKey] = useState<string | null>(null);
 
   const isLiveStream =
     isStreaming || isConnecting || isProcessing || isStillExecuting;
@@ -946,15 +1010,19 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
 
   if (!hasContent && !isStreaming) return null;
 
-  const lastSegmentIndex = segments.length - 1;
   const statusLabelKey = resolveProcessStatusLabelKey(processStatus, connectingLabelKey);
   const showStatusLoading = isLiveStream
     && shouldShowProcessStatusLoading(processStatus)
     && !isCompactionStatus;
+  const livePhaseText = isLiveStream
+    ? [...displaySegments].reverse().find((item): item is ThinkingPhaseTextSegment => (
+      item.kind === 'phase-text' && item.key !== INTERRUPTED_PHASE_TEXT_KEY
+    ))?.text ?? null
+    : null;
 
   return (
     <div className={cn(thinkingPanelRootClass, thinkingProcessSegmentStackClass, className)}>
-      {displaySegments.map((segment, index) => {
+      {displaySegments.map((segment) => {
         if (segment.kind === 'phase-text') {
           if (segment.key === INTERRUPTED_PHASE_TEXT_KEY) {
             return (
@@ -973,12 +1041,12 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
           ) {
             return null;
           }
-          const isStreamingPhaseText = isLiveStream && index === lastSegmentIndex;
+          // 流式中旁白折进折叠预览，避免在摘要外再堆一段正文
+          if (isLiveStream) return null;
           return (
             <PhaseTextBlock
               key={segment.key}
               text={segment.text}
-              isStreaming={isStreamingPhaseText}
             />
           );
         }
@@ -997,6 +1065,11 @@ export const ThinkingTurnProcess = memo(function ThinkingTurnProcess({
             hasFinalReply={hasFinalReply}
             connectingLabelKey={connectingLabelKey}
             enableProcessTypewriter={enableProcessTypewriter}
+            expanded={expandedSegmentKey === segment.key}
+            onToggle={() => {
+              setExpandedSegmentKey((current) => (current === segment.key ? null : segment.key));
+            }}
+            phaseText={livePhaseText}
           />
         );
       })}

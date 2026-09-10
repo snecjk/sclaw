@@ -89,10 +89,12 @@ describe('syncStoPluginsToOpenClaw', () => {
     expect(writtenConfig.plugins.allow).toContain('sto-user-skill-tool');
     expect(writtenConfig.plugins.allow).toContain('sto-browser-bridge');
     expect(writtenConfig.plugins.allow).not.toContain('sto-distinctive-design-guard');
+    // baseUrl 是桌面端 Host API（见 sto-workflow-tool/openclaw.plugin.json 的 schema 描述），
+    // 不是 STO 远端；远端地址只用于遥测/技能上报类插件。
     expect(writtenConfig.plugins.entries['sto-workflow-tool']).toEqual({
       enabled: true,
       config: {
-        baseUrl: 'https://sto.example.com',
+        baseUrl: 'http://127.0.0.1:3210',
         ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
         timeoutMs: 30000,
       },
@@ -119,10 +121,12 @@ describe('syncStoPluginsToOpenClaw', () => {
     });
     expect(writtenConfig.plugins.entries['sto-browser-bridge']).toEqual({
       enabled: true,
+      // 不注入 commandTimeoutMs：超时预算归客户端按动作决定
+      // （shared/browser-bridge/command-budget.ts），注入固定 30s 会盖过
+      // snapshot 的 45s 预算。
       config: {
         hostApiHost: '127.0.0.1',
         hostApiPort: 3210,
-        commandTimeoutMs: 30_000,
       },
     });
   });

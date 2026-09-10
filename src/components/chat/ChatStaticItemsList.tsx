@@ -5,6 +5,7 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import {
@@ -59,7 +60,20 @@ export interface ChatStaticItemsListProps {
       attachments?: AttachedFileMeta[];
     },
   ) => void;
+  /**
+   * 显式放开用户消息「编辑重发」入口（P1 交互改造 T05）。
+   * 缺省沿用旧判定：仅 `variant === 'page'`（主会话）透出编辑；
+   * 传 `true` 后 home 等工作台变体同样把 onEditMessage 透传给消息组件。
+   */
+  enableEditMessage?: boolean;
   onOpenWorkflow?: (workflowId: string) => void;
+  /**
+   * 轮次 footer 注入点（P1 交互改造 T02）：渲染于 assistant-turn 消息之后，
+   * 缺省不渲染，主会话零影响；T04 版本操作按钮也经此挂载。
+   */
+  renderTurnFooter?: (
+    item: Extract<ChatDisplayItem, { type: 'assistant-turn' }>,
+  ) => ReactNode;
 }
 
 function collectSearchKeysForDisplayItem(item: ChatDisplayItem): string[] {
@@ -108,7 +122,9 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
     onPreviewFile,
     onCreateScheduledTask,
     onEditMessage,
+    enableEditMessage,
     onOpenWorkflow,
+    renderTurnFooter,
   }, ref) {
     const virtualize = !forceFullRender && items.length > CHAT_VIRTUAL_LIST_THRESHOLD;
 
@@ -241,6 +257,8 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
     }, [scrollRef, items.length, hasOlderHistory, historyFillToken, enableOlderHistory]);
 
     const renderItem = (item: ChatDisplayItem) => {
+      // T05：显式 enableEditMessage 覆盖 variant 判定；缺省仅主会话（page）可编辑
+      const editMessageHandler = (enableEditMessage ?? variant === 'page') ? onEditMessage : undefined;
       if (item.type === 'workflow-run') {
         if (variant === 'embed') return null;
         return (
@@ -257,19 +275,22 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
 
       if (item.type === 'assistant-turn') {
         return (
-          <AssistantTurnMessage
-            sessionMessages={messages}
-            turnMessages={item.messages}
-            turnToolResults={item.toolResults}
-            precedingUserMessage={item.precedingUserMessage}
-            turnStableKey={item.key}
-            showThinking={showThinking}
-            matchedMessageKeys={variant === 'embed' ? undefined : matchedMessageKeys}
-            activeMessageKey={variant === 'embed' ? null : activeSearchMessageKey}
-            onPreviewFile={onPreviewFile}
-            onCreateScheduledTask={onCreateScheduledTask}
-            onEditMessage={variant === 'page' ? onEditMessage : undefined}
-          />
+          <>
+            <AssistantTurnMessage
+              sessionMessages={messages}
+              turnMessages={item.messages}
+              turnToolResults={item.toolResults}
+              precedingUserMessage={item.precedingUserMessage}
+              turnStableKey={item.key}
+              showThinking={showThinking}
+              matchedMessageKeys={variant === 'embed' ? undefined : matchedMessageKeys}
+              activeMessageKey={variant === 'embed' ? null : activeSearchMessageKey}
+              onPreviewFile={onPreviewFile}
+              onCreateScheduledTask={onCreateScheduledTask}
+              onEditMessage={editMessageHandler}
+            />
+            {renderTurnFooter ? renderTurnFooter(item) : null}
+          </>
         );
       }
 
@@ -288,7 +309,7 @@ export const ChatStaticItemsList = forwardRef<ChatStaticItemsListHandle, ChatSta
           isSearchActive={variant !== 'embed' && searchMessageKey === activeSearchMessageKey}
           onPreviewFile={onPreviewFile}
           onCreateScheduledTask={onCreateScheduledTask}
-          onEditMessage={variant === 'page' ? onEditMessage : undefined}
+          onEditMessage={editMessageHandler}
           isTurnDisplayReply={variant === 'page' && isAssistantRole(item.message.role)}
         />
       );

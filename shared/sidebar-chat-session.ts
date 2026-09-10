@@ -1,3 +1,4 @@
+import { isAppDevSessionKey } from './app-dev-session';
 import { isBridgeAiChatSessionKey } from './bridge-ai-session';
 import { isEmbedAppChatSessionKey } from './session-type';
 import { isWorkflowOpenClawSessionKey } from './workflow-openclaw-session';
@@ -35,6 +36,7 @@ export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
     || isMainAgentChatSessionKey(key)
     || isEmbedAppChatSessionKey(key)
     || isBridgeAiChatSessionKey(key)
+    || isAppDevSessionKey(key)
     || isClaudeScheduledTaskSummarySessionKey(key)
     || isCronRunSessionKey(key)
     || isWorkflowOpenClawSessionKey(key)

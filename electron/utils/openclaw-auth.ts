@@ -9,8 +9,9 @@
  * Responding" hangs.
  */
 import { access, mkdir, readFile, writeFile } from 'fs/promises';
-import { constants } from 'fs';
+import { chmodSync, constants, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { randomBytes } from 'node:crypto';
 import { listConfiguredAgentIds } from './agent-config';
 import {
   getProviderEnvVar,
@@ -27,7 +28,13 @@ import { PORTS } from './config';
 import { resolveStoBaseUrl } from './sto-domain';
 import { getOpenClawConfigDir } from './paths';
 import { RETIRED_PLUGIN_IDS } from '../../shared/retired-skills';
-import { PORTS } from './config';
+import { isBrowserAutomationEnabled } from '../../shared/browser-automation/feature-flag';
+import {
+  buildStoBrowserAutomationPluginConfig,
+  buildStoBrowserBridgePluginConfig,
+  buildStoOpenClawPluginConfigs,
+  sanitizeStoBrowserAutomationPluginConfig,
+} from '../../shared/openclaw-plugin-config';
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
@@ -1492,11 +1499,7 @@ function ensureStoBrowserBridgePluginConfig(plugins: Record<string, unknown>): b
   if (!current || current.enabled !== true) {
     entries[STO_BROWSER_BRIDGE_PLUGIN_ID] = {
       enabled: true,
-      config: {
-        hostApiHost: '127.0.0.1',
-        hostApiPort: PORTS.CLAWX_HOST_API,
-        commandTimeoutMs: 30_000,
-      },
+      config: buildStoBrowserBridgePluginConfig({ hostApiPort: PORTS.CLAWX_HOST_API }),
     };
     modified = true;
   }
@@ -1521,6 +1524,52 @@ export async function ensureStoBrowserBridgePluginInOpenClaw(): Promise<boolean>
   });
 }
 
+// ── Browser Automation loopback API token（P0-3，计划 §四 C3）───────────────
+
+const BROWSER_AUTOMATION_TOKEN_FILENAME = 'browser-automation.token';
+let cachedBrowserAutomationToken: string | null = null;
+
+/**
+ * BAP loopback HTTP API Bearer token 的单一来源。
+ * 存为 openclaw config dir 下的独立文件（0600），供三处消费：
+ * C1 鉴权（main 进程直读）、openclaw.json 插件 config（ensureStoBrowserAutomationPluginConfig
+ * 注入，OpenClaw 插件是外部进程，拿不到进程内随机值）、Claude 侧（同进程直读）。
+ *
+ * 刻意用同步 I/O + 进程内缓存：ensureStoBrowserAutomationPluginConfig 是同步函数，
+ * 且 token 每进程只读一次（本文件其余全异步的约定针对的是高频/大文件场景）。
+ */
+export function getOrCreateBrowserAutomationToken(): string {
+  if (cachedBrowserAutomationToken) {
+    return cachedBrowserAutomationToken;
+  }
+  const tokenPath = join(getOpenClawConfigDir(), BROWSER_AUTOMATION_TOKEN_FILENAME);
+  try {
+    const existing = readFileSync(tokenPath, 'utf-8').trim();
+    if (existing) {
+      // 既有文件权限加固（0600）；Windows 上 chmod 语义有限，失败可忽略
+      try { chmodSync(tokenPath, 0o600); } catch { /* best-effort */ }
+      cachedBrowserAutomationToken = existing;
+      return existing;
+    }
+  } catch {
+    // 文件不存在/不可读 → 下方重新生成
+  }
+  const token = randomBytes(32).toString('base64url');
+  mkdirSync(getOpenClawConfigDir(), { recursive: true });
+  writeFileSync(tokenPath, token, { encoding: 'utf-8', mode: 0o600 });
+  cachedBrowserAutomationToken = token;
+  return token;
+}
+
+function stableJson(value: Record<string, unknown> | undefined): string {
+  const src = value ?? {};
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(src).sort()) {
+    sorted[key] = src[key];
+  }
+  return JSON.stringify(sorted);
+}
+
 /** Enable Browser Automation Platform plugin (ba_* tools). */
 function ensureStoBrowserAutomationPluginConfig(plugins: Record<string, unknown>): boolean {
   const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
@@ -1536,14 +1585,29 @@ function ensureStoBrowserAutomationPluginConfig(plugins: Record<string, unknown>
     modified = true;
   }
   const current = entries[STO_BROWSER_AUTOMATION_PLUGIN_ID];
-  if (!current || current.enabled !== true) {
+  // 注入 loopback API 鉴权 token（C3）；token 加载失败时不写 authToken，
+  // C1 侧同样读不到 → 双端保持灰度放行（warn-only）语义一致。
+  let authToken: string | null = null;
+  try {
+    authToken = getOrCreateBrowserAutomationToken();
+  } catch (error) {
+    console.warn('[browser-automation] failed to load auth token; plugin config left without authToken:', error);
+  }
+  const currentConfig = (
+    current && typeof current.config === 'object' && current.config !== null && !Array.isArray(current.config)
+      ? current.config
+      : undefined
+  ) as Record<string, unknown> | undefined;
+  const desiredConfig = sanitizeStoBrowserAutomationPluginConfig(currentConfig, {
+    hostApiPort: PORTS.CLAWX_HOST_API,
+    authToken,
+  });
+  const tokenStale = authToken !== null && currentConfig?.authToken !== authToken;
+  const configDirty = stableJson(currentConfig) !== stableJson(desiredConfig);
+  if (!current || current.enabled !== true || tokenStale || configDirty) {
     entries[STO_BROWSER_AUTOMATION_PLUGIN_ID] = {
       enabled: true,
-      config: {
-        hostApiHost: '127.0.0.1',
-        hostApiPort: PORTS.CLAWX_HOST_API,
-        commandTimeoutMs: 120_000,
-      },
+      config: desiredConfig,
     };
     modified = true;
   }
@@ -1565,6 +1629,62 @@ export async function ensureStoBrowserAutomationPluginInOpenClaw(): Promise<bool
       await writeOpenClawJson(config);
     }
     return modified;
+  });
+}
+
+/** H2：总开关关闭时只翻转 enabled，不走 ensure（ensure 会强制 enabled:true）。 */
+export async function setStoBrowserAutomationPluginEnabled(enabled: boolean): Promise<boolean> {
+  if (enabled) {
+    return ensureStoBrowserAutomationPluginInOpenClaw();
+  }
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    const plugins = (config.plugins || {}) as Record<string, unknown>;
+    const entries = (
+      plugins.entries && typeof plugins.entries === 'object' && !Array.isArray(plugins.entries)
+        ? plugins.entries
+        : {}
+    ) as Record<string, Record<string, unknown>>;
+    const current = entries[STO_BROWSER_AUTOMATION_PLUGIN_ID];
+    if (current?.enabled === false) return false;
+    entries[STO_BROWSER_AUTOMATION_PLUGIN_ID] = {
+      ...(current ?? {}),
+      enabled: false,
+      config: (current?.config as Record<string, unknown> | undefined)
+        ?? buildStoBrowserAutomationPluginConfig({ hostApiPort: PORTS.CLAWX_HOST_API }),
+    };
+    plugins.entries = entries;
+    config.plugins = plugins;
+    await writeOpenClawJson(config);
+    return true;
+  });
+}
+
+/** 总开关关闭时同步关掉 bridge 插件，避免扩展侧工具面仍注册。 */
+export async function setStoBrowserBridgePluginEnabled(enabled: boolean): Promise<boolean> {
+  if (enabled) {
+    return ensureStoBrowserBridgePluginInOpenClaw();
+  }
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    const plugins = (config.plugins || {}) as Record<string, unknown>;
+    const entries = (
+      plugins.entries && typeof plugins.entries === 'object' && !Array.isArray(plugins.entries)
+        ? plugins.entries
+        : {}
+    ) as Record<string, Record<string, unknown>>;
+    const current = entries[STO_BROWSER_BRIDGE_PLUGIN_ID];
+    if (current?.enabled === false) return false;
+    entries[STO_BROWSER_BRIDGE_PLUGIN_ID] = {
+      ...(current ?? {}),
+      enabled: false,
+      config: (current?.config as Record<string, unknown> | undefined)
+        ?? buildStoBrowserBridgePluginConfig({ hostApiPort: PORTS.CLAWX_HOST_API }),
+    };
+    plugins.entries = entries;
+    config.plugins = plugins;
+    await writeOpenClawJson(config);
+    return true;
   });
 }
 
@@ -1603,74 +1723,29 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
     plugins.allow = allow.filter((id) => !RETIRED_PLUGIN_IDS.includes(id as typeof RETIRED_PLUGIN_IDS[number]));
 
     const entries = (plugins.entries || {}) as Record<string, unknown>;
-    entries['sto-dynamic-agent-route'] = {
-      enabled: true,
-      config: {},
-    };
-    entries['sto-agent-telemetry'] = {
-      enabled: true,
-      config: {
-        enabled: true,
-        ingestUrl: `${stoBaseUrl}/agent/v1/agent-telemetry/events`,
-        timeoutMs: 5000,
-        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
-        conversationSyncEnabled: false,
-        hooks: {
-          beforeToolCall: true,
-          afterToolCall: true,
-          modelCallStarted: true,
-          modelCallEnded: true,
-          agentEnd: true,
-        },
-      },
-    };
-    entries['sto-scheduled-task-tool'] = {
-      enabled: true,
-      config: {
-        hostApiHost: '127.0.0.1',
-        hostApiPort: PORTS.CLAWX_HOST_API,
-        timeoutMs: 60_000,
-      },
-    };
-    entries['sto-workflow-tool'] = {
-      enabled: true,
-      config: {
-        baseUrl: LOCAL_HOST_API_BASE_URL,
-        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
-        timeoutMs: 30000,
-      },
-    };
-    entries['sto-user-skill-tool'] = {
-      enabled: true,
-      config: {
-        hostApiHost: '127.0.0.1',
-        hostApiPort: PORTS.CLAWX_HOST_API,
-        timeoutMs: 60_000,
-      },
-    };
-    entries['sto-skill-call-monitor'] = {
-      enabled: true,
-      config: {
-        reportApiUrl: `${stoBaseUrl}/agent/v1/skills/usage-report`,
-        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
-        timeoutMs: 5000,
-      },
-    };
-    entries['sto-media-understanding'] = {
-      enabled: true,
-      config: {},
-    };
+    const pluginConfigs = buildStoOpenClawPluginConfigs({
+      stoBaseUrl,
+      hostApiPort: PORTS.CLAWX_HOST_API,
+      localHostApiBaseUrl: LOCAL_HOST_API_BASE_URL,
+    });
+    for (const pluginId of [
+      'sto-dynamic-agent-route',
+      'sto-agent-telemetry',
+      'sto-scheduled-task-tool',
+      'sto-workflow-tool',
+      'sto-user-skill-tool',
+      'sto-skill-call-monitor',
+      'sto-media-understanding',
+    ]) {
+      entries[pluginId] = { enabled: true, config: pluginConfigs[pluginId] };
+    }
     entries[STO_BROWSER_BRIDGE_PLUGIN_ID] = {
-      enabled: true,
-      config: {
-        hostApiHost: '127.0.0.1',
-        hostApiPort: PORTS.CLAWX_HOST_API,
-        commandTimeoutMs: 30_000,
-      },
+      enabled: isBrowserAutomationEnabled(),
+      config: pluginConfigs[STO_BROWSER_BRIDGE_PLUGIN_ID],
     };
     entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = {
       enabled: true,
-      config: {},
+      config: pluginConfigs[DINGTALK_SEND_GUARD_PLUGIN_ID],
     };
     for (const pluginId of RETIRED_PLUGIN_IDS) {
       delete entries[pluginId];

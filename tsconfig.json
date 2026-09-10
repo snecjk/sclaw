@@ -27,6 +27,10 @@
       "@electron/*": ["electron/*"]
     }
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  /**
+   * 不引用 tsconfig.node.json：项目引用会让 src 对着 dist-electron 里的 .d.ts 产物
+   * 做类型检查，而不是 shared/ 源码。实测出现过产物停留在 9/2、源码已到 9/4，
+   * renderer 报 "no exported member" 但源码里明明有——改成直接编源码。
+   */
+  "include": ["src"]
 }

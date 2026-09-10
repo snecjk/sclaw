@@ -27,18 +27,11 @@ export function normalizeSiteappMenuItem(item: SiteappMenuItemInput): SiteappMen
 export function buildSiteappMenuSyncParams(input: {
   appCode: string;
   menus: SiteappMenuItemInput[];
-  mode?: 'preview' | 'apply';
-  confirm?: boolean;
-  skipPreview?: boolean;
 }): Record<string, unknown> {
   const appCode = input.appCode.trim();
   if (!appCode) throw new Error('缺少 app_code');
-  const mode = input.mode ?? 'apply';
   return {
     app_code: appCode,
-    mode,
-    confirm: input.confirm ?? mode === 'apply',
-    skip_preview: input.skipPreview ?? mode === 'apply',
     menus: input.menus.map(normalizeSiteappMenuItem),
   };
 }

@@ -2,10 +2,29 @@ export type BrowserAutomationPluginConfig = {
 	hostApiHost?: string;
 	hostApiPort?: number;
 	commandTimeoutMs?: number;
+	/** 由 openclaw.json 插件 config 注入（主进程 C3 写入）；loopback API 的 Bearer token。 */
+	authToken?: string;
 };
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3210;
+
+/**
+ * BAP 调用此前完全没有超时：commandTimeoutMs 只在类型里声明，fetch 从不读它，
+ * 挂住的调用一路等到 claude-agent-sdk 的流关闭窗口（300s）——模型看到的是
+ * "流断了"而不是"工具超时了"，没有可归因的错误。
+ * 现在 config 的值只当天花板，且严格小于流关闭窗口。
+ */
+const TIMEOUT_CEILING_MS = 240_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+function resolveTimeoutMs(cfg: BrowserAutomationPluginConfig): number {
+	const configured =
+		typeof cfg.commandTimeoutMs === "number" && Number.isFinite(cfg.commandTimeoutMs) && cfg.commandTimeoutMs > 0
+			? cfg.commandTimeoutMs
+			: DEFAULT_TIMEOUT_MS;
+	return Math.min(configured, TIMEOUT_CEILING_MS);
+}
 
 function baseUrl(cfg: BrowserAutomationPluginConfig): string {
 	const host = cfg.hostApiHost ?? DEFAULT_HOST;
@@ -13,13 +32,45 @@ function baseUrl(cfg: BrowserAutomationPluginConfig): string {
 	return `http://${host}:${port}`;
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-	const response = await fetch(url, init);
-	const payload = await response.json() as T & { success?: boolean; error?: string };
+/** 统一注入鉴权头（P0-3）：配置了 authToken 时所有请求携带 Authorization: Bearer。 */
+function buildHeaders(cfg: BrowserAutomationPluginConfig, base?: Record<string, string>): Record<string, string> {
+	const headers: Record<string, string> = { ...(base ?? {}) };
+	if (cfg.authToken) {
+		headers["Authorization"] = `Bearer ${cfg.authToken}`;
+	}
+	return headers;
+}
+
+async function fetchJson<T>(cfg: BrowserAutomationPluginConfig, url: string, init?: RequestInit): Promise<T> {
+	const timeoutMs = resolveTimeoutMs(cfg);
+	let response: Response;
+	try {
+		response = await fetch(url, {
+			...init,
+			headers: buildHeaders(cfg, (init?.headers as Record<string, string> | undefined) ?? undefined),
+			signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+		});
+	} catch (error) {
+		if (error instanceof Error && error.name === "TimeoutError") {
+			throw new Error(`浏览器自动化调用超时（${Math.round(timeoutMs / 1000)}s）：${url}`);
+		}
+		throw error;
+	}
+	const payload = await response.json() as T & { success?: boolean; error?: unknown };
 	if (!response.ok) {
-		const message = typeof payload === "object" && payload && "error" in payload
-			? String(payload.error)
-			: `HTTP ${response.status}`;
+		if (response.status === 401) {
+			throw new Error("BAP 鉴权失败：请重启 StoClaw 以刷新插件配置");
+		}
+		const errorPayload = typeof payload === "object" && payload ? payload.error : undefined;
+		let message: string;
+		if (typeof errorPayload === "string") {
+			message = errorPayload;
+		} else if (errorPayload && typeof errorPayload === "object" && "message" in errorPayload) {
+			// 服务端结构化错误 { code, message }（如 401 UNAUTHORIZED / 403 HOST_MISMATCH）
+			message = String((errorPayload as { message: unknown }).message);
+		} else {
+			message = `HTTP ${response.status}`;
+		}
 		throw new Error(message);
 	}
 	return payload;
@@ -42,6 +93,7 @@ export async function ensureAutomationSession(
 	if (params.embedRuntimeId) {
 		const sessionId = `embed-${params.embedRuntimeId}`;
 		const created = await fetchJson<{ session: { sessionId: string } }>(
+			cfg,
 			`${baseUrl(cfg)}/api/browser-automation/sessions`,
 			{
 				method: "POST",
@@ -54,6 +106,7 @@ export async function ensureAutomationSession(
 
 	if (params.url) {
 		const created = await fetchJson<{ session: { sessionId: string } }>(
+			cfg,
 			`${baseUrl(cfg)}/api/browser-automation/sessions`,
 			{
 				method: "POST",
@@ -69,6 +122,7 @@ export async function ensureAutomationSession(
 
 export async function listAutomationSessions(cfg: BrowserAutomationPluginConfig) {
 	const data = await fetchJson<{ sessions: Array<{ sessionId: string; source: string; url: string; title: string }> }>(
+		cfg,
 		`${baseUrl(cfg)}/api/browser-automation/sessions`,
 	);
 	return data.sessions ?? [];
@@ -79,7 +133,7 @@ export async function postAutomation<T>(
 	path: string,
 	body: Record<string, unknown>,
 ): Promise<T> {
-	return fetchJson<T>(`${baseUrl(cfg)}${path}`, {
+	return fetchJson<T>(cfg, `${baseUrl(cfg)}${path}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(body),
@@ -102,8 +156,18 @@ export function formatObservationElements(observation: {
 	elements?: Array<{ ref: string; role: string; name: string; clickable?: boolean; editable?: boolean }>;
 	url?: string;
 	title?: string;
+	documentGeneration?: number;
+	observationMode?: string;
+	truncated?: boolean;
 }): string {
-	const header = `URL: ${observation.url ?? ""}\nTitle: ${observation.title ?? ""}\n`;
+	// 透出 documentGeneration / observationMode：ba_act 需携带代际（STALE_REF 语义），模式供判断回退
+	const header = [
+		`URL: ${observation.url ?? ""}`,
+		`Title: ${observation.title ?? ""}`,
+		`Mode: ${observation.observationMode ?? "dom"}`,
+		`Generation: ${observation.documentGeneration ?? 0}${observation.truncated ? " (truncated)" : ""}`,
+		"",
+	].join("\n");
 	const lines = (observation.elements ?? []).slice(0, 80).map((el) => {
 		const flags = [el.clickable ? "click" : null, el.editable ? "edit" : null].filter(Boolean).join(",");
 		return `${el.ref} [${el.role}] ${el.name}${flags ? ` (${flags})` : ""}`;

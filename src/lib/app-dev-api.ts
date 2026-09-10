@@ -41,9 +41,29 @@ export interface AppDevStatus {
   phase: AppDevPhase;
   progress: number;
   previewUrl?: string;
+  backendUrl?: string;
+  dbStatus?: 'unknown' | 'ready' | 'error';
   error?: string;
   /** Extra line for the active setup step (e.g. snpm found vs installing). */
   detail?: string;
+  /** Recent snpm / setup command output shown in the workbench log panel. */
+  log?: string;
+}
+
+export interface AppRuntimeStatus {
+  workspaceId: string;
+  appPath: string;
+  frontendRunning: boolean;
+  backendRunning: boolean;
+  previewUrl?: string;
+  backendUrl?: string;
+  backendPort?: number;
+  dbStatus: 'unknown' | 'ready' | 'error';
+  phase: 'stopped' | 'starting' | 'ready' | 'error';
+  crashCount?: number;
+  recentErrorCount?: number;
+  escalateNeeded?: boolean;
+  error?: string;
 }
 
 export interface AppDevEnvironment {
@@ -112,7 +132,7 @@ export async function listAppExternalServiceBindings(
 
 export async function bindAppExternalService(input: {
   workspaceId: string;
-  serviceId: string;
+  serviceUid: string;
   version: string;
   alias: string;
 }): Promise<AppExternalServiceChangeResult> {
@@ -182,6 +202,10 @@ export async function listAppTemplates(
 ): Promise<AppTemplatePageResult> {
   const query = pageType ? `?pageType=${encodeURIComponent(pageType)}` : '';
   return hostApiFetch(`/api/app-templates${query}`);
+}
+
+export async function deleteAppTemplate(templateId: string): Promise<{ templateId: string; status: 'DISABLED' }> {
+  return hostApiFetch(`/api/app-templates/${encodeURIComponent(templateId)}`, { method: 'DELETE' });
 }
 
 export async function openAppTemplateWorkspace(input: {
@@ -410,6 +434,142 @@ export async function drainAppErrors(workspaceId: string): Promise<string[]> {
   return res.errors ?? [];
 }
 
+export async function getAppRuntimeStatus(workspaceId: string): Promise<{
+  fullstack: boolean;
+  status: AppRuntimeStatus;
+  appStatus: AppDevStatus | null;
+}> {
+  return hostApiFetch(`/api/app-dev/runtime/status?workspaceId=${encodeURIComponent(workspaceId)}`);
+}
+
+export async function startAppRuntime(workspaceId: string): Promise<AppRuntimeStatus> {
+  const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return res.status;
+}
+
+export async function stopAppRuntime(workspaceId: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/runtime/stop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+  });
+}
+
+export async function restartAppRuntime(workspaceId: string): Promise<AppRuntimeStatus> {
+  const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/restart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return res.status;
+}
+
+export async function getAppRuntimeLogs(
+  workspaceId: string,
+  source: 'frontend' | 'backend' | 'all' = 'all',
+): Promise<string[]> {
+  const res = await hostApiFetch<{ logs: string[] }>(
+    `/api/app-dev/runtime/logs?workspaceId=${encodeURIComponent(workspaceId)}&source=${encodeURIComponent(source)}`,
+  );
+  return res.logs ?? [];
+}
+
+export async function consumeAppRuntimeEscalate(workspaceId: string): Promise<{
+  fingerprint: string;
+  attempt: number;
+  melted: boolean;
+  prompt: string | null;
+  lines: string[];
+} | null> {
+  const res = await hostApiFetch<{
+    escalate: {
+      fingerprint: string;
+      attempt: number;
+      melted: boolean;
+      prompt: string | null;
+      lines: string[];
+    } | null;
+  }>('/api/app-dev/runtime/escalate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+  });
+  return res.escalate;
+}
+
+export async function runAppRuntimeSmoke(workspaceId: string): Promise<{
+  ok: boolean;
+  output?: string;
+  errMessage?: string;
+  prompt?: string;
+}> {
+  const res = await hostApiFetch<{
+    success: boolean;
+    output?: string;
+    errMessage?: string;
+    prompt?: string;
+  }>('/api/app-dev/runtime/smoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return {
+    ok: res.success,
+    output: res.output,
+    errMessage: res.errMessage,
+    prompt: res.prompt,
+  };
+}
+
+export async function restartAppBackend(workspaceId: string): Promise<AppRuntimeStatus> {
+  const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/restart-backend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return res.status;
+}
+
+export async function migrateAppDb(workspaceId: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/db/migrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function listAppSecrets(workspaceId: string): Promise<string[]> {
+  const res = await hostApiFetch<{ keys: string[] }>(
+    `/api/app-dev/secrets?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.keys ?? [];
+}
+
+export async function setAppSecret(workspaceId: string, key: string, value: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/secrets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, key, value }),
+  });
+}
+
+export async function deleteAppSecret(workspaceId: string, key: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/secrets', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, key }),
+  });
+}
+
 export async function listAppCheckpoints(workspaceId: string): Promise<AppCheckpoint[]> {
   const res = await hostApiFetch<{ checkpoints: AppCheckpoint[] }>(
     `/api/app-dev/checkpoints?workspaceId=${encodeURIComponent(workspaceId)}`,
@@ -417,13 +577,74 @@ export async function listAppCheckpoints(workspaceId: string): Promise<AppCheckp
   return res.checkpoints ?? [];
 }
 
-export async function createAppCheckpoint(workspaceId: string, message: string): Promise<boolean> {
-  const res = await hostApiFetch<{ created: boolean }>('/api/app-dev/checkpoints', {
+/** T04：checkpoint 创建结果（向后兼容——旧调用方只看 `created`）。 */
+export interface AppCheckpointCreateResult {
+  created: boolean;
+  status?: 'created' | 'clean-head' | 'failed';
+  /** 新 commit hash（created 时必带；clean-head 为当前 HEAD）。 */
+  hash?: string;
+  subject?: string;
+}
+
+export async function createAppCheckpoint(
+  workspaceId: string,
+  message: string,
+): Promise<AppCheckpointCreateResult> {
+  const res = await hostApiFetch<{
+    created: boolean;
+    status?: AppCheckpointCreateResult['status'];
+    hash?: string;
+    subject?: string;
+  }>('/api/app-dev/checkpoints', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, message }),
   });
-  return res.created === true;
+  return {
+    created: res.created === true,
+    status: res.status,
+    hash: res.hash,
+    subject: res.subject,
+  };
+}
+
+/** T04：消息级「查看修改」——单文件差异（文本文件带前后全文，供 Monaco DiffEditor）。 */
+export interface AppCheckpointDiffFile {
+  path: string;
+  status: 'M' | 'A' | 'D';
+  added: number | null;
+  removed: number | null;
+  binary?: boolean;
+  truncated?: boolean;
+  original?: string;
+  modified?: string;
+}
+
+export interface AppCheckpointDiff {
+  hash: string;
+  parentHash: string | null;
+  subject: string;
+  files: AppCheckpointDiffFile[];
+}
+
+export async function diffAppCheckpoint(
+  workspaceId: string,
+  hash: string,
+  baseHash?: string,
+): Promise<AppCheckpointDiff | null> {
+  try {
+    const params = new URLSearchParams({
+      workspaceId,
+      hash,
+    });
+    if (baseHash?.trim()) params.set('baseHash', baseHash.trim());
+    const res = await hostApiFetch<{ success?: boolean; diff?: AppCheckpointDiff }>(
+      `/api/app-dev/checkpoints/diff?${params.toString()}`,
+    );
+    return res.diff ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function restoreAppCheckpoint(
@@ -489,6 +710,122 @@ export async function searchAppSourceFiles(
     body: JSON.stringify({ workspaceId, query }),
   });
   return res.hits ?? [];
+}
+
+/** 预览路由下拉条目（T03）：`#/home` / `/home` / `#home` 路径片段 + 展示名。 */
+export interface AppRouteEntry {
+  path: string;
+  label: string;
+  source: 'router' | 'a2ui';
+}
+
+export async function listAppRoutes(workspaceId: string): Promise<AppRouteEntry[]> {
+  const res = await hostApiFetch<{ routes: AppRouteEntry[] }>(
+    `/api/app-dev/routes?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.routes ?? [];
+}
+
+export interface AppDevDesignTokenDef {
+  name: string;
+  label: string;
+  type: 'color' | 'font' | 'radius';
+  format?: 'oklch' | 'rem';
+  group: string;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
+export async function getAppDesignTokens(workspaceId: string): Promise<{
+  schemaVersion: number;
+  source: string;
+  tokens: AppDevDesignTokenDef[];
+  degraded: boolean;
+}> {
+  return hostApiFetch(
+    `/api/app-dev/theme/tokens?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+}
+
+export async function applyAppTheme(
+  workspaceId: string,
+  overrides: Record<string, string>,
+): Promise<{ updated: string[]; themePath: string }> {
+  return hostApiFetch('/api/app-dev/theme', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, overrides }),
+  });
+}
+
+export interface AppDevArtifactRecord {
+  id: string;
+  turnKey: string;
+  commitHash?: string;
+  title: string;
+  thumbnailDataUrl?: string;
+  previewUrl?: string;
+  createdAt: string;
+  favorite: boolean;
+  suggestions: Array<{ label: string; prompt: string }>;
+}
+
+export async function listAppArtifacts(workspaceId: string): Promise<AppDevArtifactRecord[]> {
+  const res = await hostApiFetch<{ items: AppDevArtifactRecord[] }>(
+    `/api/app-dev/artifacts?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.items ?? [];
+}
+
+export async function putAppArtifacts(
+  workspaceId: string,
+  items: AppDevArtifactRecord[],
+): Promise<AppDevArtifactRecord[]> {
+  const res = await hostApiFetch<{ items: AppDevArtifactRecord[] }>('/api/app-dev/artifacts', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, items }),
+  });
+  return res.items ?? [];
+}
+
+export async function captureAppPreview(
+  workspaceId: string,
+  webContentsId: number,
+): Promise<{ dataUrl: string; width: number; height: number }> {
+  return hostApiFetch('/api/app-dev/preview/capture', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, webContentsId }),
+  });
+}
+
+export interface AppGeneratedAsset {
+  path: string;
+  name: string;
+  size: number;
+  ext: string;
+  mtimeMs: number;
+  kind: 'image' | 'document' | 'archive' | 'media' | 'other';
+}
+
+export async function listAppGeneratedAssets(workspaceId: string): Promise<AppGeneratedAsset[]> {
+  const res = await hostApiFetch<{ items: AppGeneratedAsset[] }>(
+    `/api/app-dev/generated-assets?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.items ?? [];
+}
+
+export async function exportAppGeneratedAsset(
+  workspaceId: string,
+  path: string,
+): Promise<{ saved: boolean; savedPath?: string }> {
+  return hostApiFetch('/api/app-dev/generated-assets/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, path }),
+  });
 }
 
 export async function installAppNpmPackage(
@@ -677,6 +1014,24 @@ export async function refreshStoAppDeploy(input: {
   data: unknown;
 }> {
   return hostApiFetch('/api/app-dev/sto-app/deploy/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function getStoAppDeployResources(input: {
+  workspaceId: string;
+  appCode?: string;
+  pipelineInstanceId: string | number;
+}): Promise<{
+  success: boolean;
+  appCode: string;
+  pipelineInstanceId: number;
+  data: unknown;
+}> {
+  return hostApiFetch('/api/app-dev/sto-app/deploy/resource/list', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),

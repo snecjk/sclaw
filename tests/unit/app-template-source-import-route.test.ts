@@ -10,6 +10,7 @@ const cancelMock = vi.fn();
 const builtinStatusMock = vi.fn();
 const builtinSyncMock = vi.fn();
 const builtinResetMock = vi.fn();
+const deleteTemplateMock = vi.fn();
 
 vi.mock('electron', () => ({ app: { isPackaged: true } }));
 vi.mock('@electron/api/route-utils', () => ({
@@ -27,7 +28,7 @@ vi.mock('@electron/services/app-dev-service', () => ({
   resetBuiltinAppTemplateDebugWorkspace: (...args: unknown[]) => builtinResetMock(...args),
 }));
 vi.mock('@electron/services/app-template-api-client', () => ({
-  appTemplateApiClient: {},
+  appTemplateApiClient: { delete: (...args: unknown[]) => deleteTemplateMock(...args) },
 }));
 vi.mock('@electron/services/app-template-package-manager', () => ({
   listLocalBuiltinAppTemplates: vi.fn(),
@@ -41,6 +42,22 @@ vi.mock('@electron/services/app-template-source-import-service', () => ({
 
 describe('app template source import routes', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('删除模板转发到服务端并保留权限错误', async () => {
+    const { handleAppTemplateRoutes } = await import('@electron/api/routes/app-templates');
+    deleteTemplateMock.mockResolvedValueOnce({ templateId: 'custom', status: 'DISABLED' });
+    const request = { method: 'DELETE' } as IncomingMessage;
+    const response = {} as ServerResponse;
+    const url = new URL('http://127.0.0.1/api/app-templates/custom');
+    expect(await handleAppTemplateRoutes(request, response, url, {} as never)).toBe(true);
+    expect(sendJsonMock).toHaveBeenLastCalledWith(response, 200, {
+      success: true, templateId: 'custom', status: 'DISABLED',
+    });
+    expect(deleteTemplateMock).toHaveBeenCalledWith('custom');
+    deleteTemplateMock.mockRejectedValueOnce(Object.assign(new Error('没有权限'), { statusCode: 403 }));
+    await handleAppTemplateRoutes(request, response, url, {} as never);
+    expect(sendJsonMock).toHaveBeenLastCalledWith(response, 403, { success: false, error: '没有权限' });
+  });
 
   it('prepare forwards only workspace and source path', async () => {
     parseJsonBodyMock.mockResolvedValueOnce({

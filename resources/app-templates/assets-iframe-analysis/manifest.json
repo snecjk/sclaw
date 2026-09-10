@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "templateId": "assets-iframe-analysis",
+  "pageType": "assets",
+  "name": "iframe 分析子应用",
+  "description": "内嵌子应用分析看板，内置 iframe 身份桥接与模拟数据"
+}

@@ -163,6 +163,7 @@ export const ChatToolCallCard = memo(function ChatToolCallCard({
   const {
     wrapperRef,
     expanded: thinkingExpanded,
+    bodyMounted: thinkingBodyMounted,
     toggle: toggleThinkingBlock,
     bodyGridClass,
     chevronClass,
@@ -170,6 +171,8 @@ export const ChatToolCallCard = memo(function ChatToolCallCard({
     collapsible: isThinkingProcessCollapsible,
     isComplete,
     autoExpand,
+    unmountCollapsedBody: isThinkingProcessCollapsible,
+    scrollOnExpand: false,
   });
   const baseLabel = displayName ?? resolveChatToolDisplayName(name.trim() || '…');
   const label = isThinkingProcess
@@ -235,9 +238,11 @@ export const ChatToolCallCard = memo(function ChatToolCallCard({
             <ChevronDown className={chevronClass} aria-hidden />
           </span>
         </button>
-        <div className={bodyGridClass}>
-          <div className="min-h-0 overflow-hidden">{toolBody}</div>
-        </div>
+        {thinkingBodyMounted ? (
+          <div className={bodyGridClass}>
+            <div className="min-h-0 overflow-hidden">{toolBody}</div>
+          </div>
+        ) : null}
       </div>
     );
   }

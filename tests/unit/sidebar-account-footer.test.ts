@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveSidebarAccountFooterMode,
+  resolveSidebarAccountName,
   shouldRenderAccountGearIcon,
 } from '@/lib/sidebar-account-footer';
 import {
@@ -34,6 +35,26 @@ describe('resolveSidebarAccountFooterMode', () => {
         sidebarCollapsed: false,
       }),
     ).toBe('compact-gear');
+  });
+});
+
+describe('resolveSidebarAccountName', () => {
+  it('prefers realName over userName', () => {
+    expect(resolveSidebarAccountName({
+      realName: '安谱卓阳',
+      userName: '10001',
+    })).toBe('安谱卓阳');
+  });
+
+  it('falls back to userName when realName is empty', () => {
+    expect(resolveSidebarAccountName({
+      realName: '  ',
+      userName: '10001',
+    })).toBe('10001');
+  });
+
+  it('returns empty string without a user', () => {
+    expect(resolveSidebarAccountName(null)).toBe('');
   });
 });
 

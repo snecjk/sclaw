@@ -14,6 +14,10 @@ const matchesBrowserBridgeIntent = createKeywordActivationMatcher({
     '浏览器桥接',
     '浏览器工具',
     '浏览器',
+    // TODO(web-bridge): 上线前不把「打开网页」当成 Web Bridge 意图。
+    // '打开浏览器',
+    // '打开网页',
+    // '打开网站',
     '当前浏览器',
     '当前页面',
     '左侧页面',

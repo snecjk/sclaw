@@ -74,7 +74,9 @@ export function createExternalServiceClient(alias: string, testDependencies: Tes
         : `${binding.environments[env].replace(/\/$/, '')}${path}`;
       return requestImpl<T>(url, {
         ...options,
-        ...(binding.auth.type === 'none' ? { stoToken: null } : {}),
+        ...(binding.auth.type === 'none'
+          ? { stoToken: null }
+          : { withCredentials: false }),
       });
     },
   };

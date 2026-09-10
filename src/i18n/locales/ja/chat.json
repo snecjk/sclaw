@@ -183,6 +183,8 @@
     "connectingModel": "モデルに接続中...",
     "understandingQuestion": "ご質問を理解しています…",
     "stillExecuting": "実行中（ファイル書き込み中…）",
+    "startingRuntime": "実行環境を起動しています…",
+    "readingProjectContext": "プロジェクト文脈を読み取っています…",
     "thinkingNow": "思考中…",
     "preparingToolInput": "ツールパラメータを準備中…",
     "runningTool": "ツールを実行中…",
@@ -207,6 +209,8 @@
     "collapsedSummary": "{{thoughtCount}} 回思考、{{toolCount}} 個のツールを使用",
     "collapsedSummaryThoughtsOnly": "{{thoughtCount}} 回思考",
     "collapsedSummaryToolsOnly": "{{toolCount}} 個のツールを使用",
+    "liveCurrentThinking": "思考中",
+    "liveCallingTool": "ツールを呼び出しています",
     "omittedEarlierThinkingChars": "先頭の {{count}} 文字を省略しました",
     "invokeToolLabel": "ツール呼び出し – {{toolName}}",
     "toolNoParams": "パラメータなし",
@@ -234,7 +238,8 @@
     "submitFailed": "フォームの送信に失敗しました。ページを更新して再試行してください。"
   },
   "sessionList": {
-    "mainSessionTitle": "メインチャット"
+    "mainSessionTitle": "メインチャット",
+    "webBridgeTitle": "Chrome サイドパネル"
   },
   "messageActions": {
     "copy": "コピー",
@@ -384,7 +389,14 @@
   "runtime": {
     "errors": {
       "recoveryTimeout": "実行確認がタイムアウトしました。しばらくしてから再試行してください。",
-      "rateLimit": "モデルのリクエストが多すぎます。しばらく待ってから再試行してください。"
+      "networkRetryExhausted": "ネットワーク接続に失敗し、{{count}} 回の自動再試行後も成功しませんでした。接続を復旧してから再送信してください。",
+      "modelAuthentication": "モデルサービスの認証が無効または利用できません。再ログインして再試行してください。解決しない場合は管理者に連絡してください。",
+      "claudeCertificate": "証明書の検証に失敗したため、Claude が API に接続できませんでした。プロキシまたは企業証明書の設定を確認してから再試行してください。",
+      "workspaceUnavailable": "この会話のワークスペースは利用できず、削除された可能性があります。新しい会話を開始してください。",
+      "requestTimeout": "モデルリクエストがタイムアウトしました。接続を確認してから再試行してください。",
+      "rateLimit": "モデルのリクエストが多すぎます。しばらく待ってから再試行してください。",
+      "gatewayTimeout": "モデルゲートウェイがタイムアウトしました。しばらくしてから再試行してください。",
+      "gatewayUnavailable": "モデルサービスが一時的に利用できません。しばらくしてから再試行してください。"
     }
   }
 }

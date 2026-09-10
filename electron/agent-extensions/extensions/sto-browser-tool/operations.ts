@@ -5,6 +5,12 @@ import {
   type SclawToolOutcome,
 } from '../../../../shared/agent-extensions';
 import { isEmbedAppChatSessionKey } from '../../../../shared/session-type';
+import { attachSuccessfulActProgress } from '../../../../shared/browser-bridge/act-progress';
+import {
+  formatBridgeSessionList,
+  normalizeBridgeSessionId,
+} from '../../../../shared/browser-bridge/pick-session';
+import { WEB_BRIDGE_ORDINARY_CHAT_ENABLED } from '../../../../shared/browser-bridge/ship-gate';
 import { STO_BROWSER_BRIDGE_ACTIVATION } from './activation';
 import {
   STO_BROWSER_BRIDGE_CAPABILITY,
@@ -50,7 +56,7 @@ async function resolveSessionId(
   requestedSessionId: string | undefined,
   context: Parameters<SclawToolDefinition['execute']>[1],
 ): Promise<string> {
-  const requested = requestedSessionId?.trim();
+  const requested = normalizeBridgeSessionId(requestedSessionId);
   const embedChat = isEmbedAppChatSessionKey(context.sessionKey);
   if (requested) {
     if (embedChat && !requested.startsWith('embed-')) {
@@ -70,13 +76,15 @@ async function resolveSessionId(
 
   const sessions = await port.listSessions(context.signal);
   const external = sessions.find((item) => !isEmbedSession(item));
-  if (!external) {
-    throw new StoBrowserBridgePortError(
-      'BROWSER_NOT_CONNECTED',
-      '未找到已连接的外部 Browser Bridge 会话。请安装浏览器扩展并完成配对，或显式传入 sessionId。',
-    );
+  if (external) return external.sessionId;
+  // TODO(web-bridge): WEB_BRIDGE_ORDINARY_CHAT_ENABLED = true 后自动 ensure-session 接管本机 Chrome。
+  if (WEB_BRIDGE_ORDINARY_CHAT_ENABLED) {
+    return port.ensureSession(context.signal);
   }
-  return external.sessionId;
+  throw new StoBrowserBridgePortError(
+    'BROWSER_NOT_CONNECTED',
+    '未找到已连接的外部 Browser Bridge 会话。请安装浏览器扩展并完成配对，或显式传入 sessionId。',
+  );
 }
 
 async function runBridgeTool(
@@ -94,11 +102,22 @@ async function runBridgeTool(
       payload,
       signal: context.signal,
     });
+    const progressed = await attachSuccessfulActProgress({
+      action,
+      payload,
+      result: data,
+      snapshot: () => port.runCommand({
+        sessionId: resolvedSessionId,
+        action: 'snapshot',
+        payload: {},
+        signal: context.signal,
+      }),
+    });
     return {
       success: true,
       type: `browser_bridge_${action}_completed`,
       domain: 'browser-bridge',
-      data,
+      data: progressed,
     };
   } catch (error) {
     return sclawToolFailure(
@@ -190,7 +209,7 @@ export const stoBrowserBridgeTools = [
           success: true,
           type: 'browser_bridge_sessions_listed',
           domain: 'browser-bridge',
-          data: sessions,
+          data: formatBridgeSessionList(sessions),
         };
       } catch (error) {
         return sclawToolFailure(
