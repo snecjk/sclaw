@@ -14,21 +14,13 @@
         {
           "id": "root",
           "component": "AntdStack",
-          "children": ["title", "kpi", "filter", "table", "pager", "back"]
+          "children": ["title", "filter", "table", "pager", "back"]
         },
         {
           "id": "title",
           "component": "AntdText",
           "text": { "path": "/title" },
           "strong": true
-        },
-        {
-          "id": "kpi",
-          "component": "AntdStatCard",
-          "title": { "path": "/kpiTitle" },
-          "value": { "path": "/kpiValue" },
-          "prefix": { "path": "/kpiPrefix" },
-          "suffix": { "path": "/kpiSuffix" }
         },
         {
           "id": "filter",
@@ -92,10 +84,6 @@
       "path": "/",
       "value": {
         "title": "客户列表（antd Catalog 示例）",
-        "kpiTitle": "客户数",
-        "kpiValue": "2",
-        "kpiPrefix": "",
-        "kpiSuffix": "个",
         "keyword": "",
         "placeholder": "客户名称",
         "columns": [

@@ -3,7 +3,7 @@
   "intents": [
     {
       "intent": "查询页",
-      "preferredComponents": ["AntdStack", "AntdText", "AntdStatCard", "AntdFilterBar", "AntdTable", "AntdPagination", "AntdButton"],
+      "preferredComponents": ["AntdStack", "AntdText", "AntdFilterBar", "AntdTable", "AntdPagination", "AntdButton"],
       "catalogId": "antd",
       "notes": "含查询条件、表格、分页时必须用 antd Catalog，不要用 basic 拼凑。"
     },

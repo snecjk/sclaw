@@ -20,11 +20,87 @@ export type AppDevElementTuneField =
   | 'background'
   | 'fontSize'
   | 'fontWeight'
+  | 'lineHeight'
   | 'textAlign'
   | 'borderRadius'
+  | 'borderWidth'
+  | 'borderColor'
   | 'src'
   | 'alt'
-  | 'objectFit';
+  | 'objectFit'
+  | 'width'
+  | 'height'
+  | 'padding'
+  | 'margin'
+  | 'boxModel'
+  | 'gap'
+  | 'display'
+  | 'flexDirection'
+  | 'flexWrap'
+  | 'justifyContent'
+  | 'alignItems'
+  | 'opacity';
+
+export type AppDevTuneSectorId =
+  | 'content'
+  | 'font'
+  | 'layout'
+  | 'size'
+  | 'spacing'
+  | 'background'
+  | 'border'
+  | 'image';
+
+export type CssLengthUnit = 'px' | '%' | 'auto';
+
+export interface CssLength {
+  value: number;
+  unit: CssLengthUnit;
+}
+
+export interface CssBox {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/** 重置 / 清空 live patch 时覆盖的 CSS 属性。 */
+export const ELEMENT_TUNE_STYLE_KEYS = [
+  'color',
+  'background-color',
+  'font-size',
+  'font-weight',
+  'line-height',
+  'text-align',
+  'border-radius',
+  'border-width',
+  'border-color',
+  'border-style',
+  'object-fit',
+  'padding',
+  'margin',
+  'gap',
+  'width',
+  'height',
+  'opacity',
+  'display',
+  'flex-direction',
+  'flex-wrap',
+  'justify-content',
+  'justify-items',
+  'align-items',
+] as const;
+
+export function emptyElementTuneStyles(): Record<string, string> {
+  return Object.fromEntries(ELEMENT_TUNE_STYLE_KEYS.map((key) => [key, '']));
+}
+
+export interface AppDevTuneSector {
+  id: AppDevTuneSectorId;
+  title: string;
+  fields: AppDevElementTuneField[];
+}
 
 export interface AppDevElementTuneDraft {
   text?: string;
@@ -44,6 +120,11 @@ const THEME_CANDIDATES = ['src/theme/theme.css', 'frontend/src/theme/theme.css']
 const TEXT_TAGS = new Set([
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'p', 'span', 'label', 'li', 'em', 'strong', 'small', 'td', 'th',
+]);
+
+const LAYOUT_TAGS = new Set([
+  'div', 'section', 'header', 'footer', 'nav', 'aside', 'main', 'article',
+  'ul', 'ol', 'form', 'fieldset',
 ]);
 
 function blankToUndef(value?: string): string | undefined {
@@ -68,10 +149,11 @@ export function normalizeAppDevPickedElement(el: AppDevPickedElement): AppDevPic
 }
 
 export function classifyAppDevElementTuneKind(el: AppDevPickedElement): AppDevElementTuneKind {
-  if (el.kind) return el.kind;
   const tag = (el.tag || '').toLowerCase();
-  if (tag === 'img' || tag === 'picture' || tag === 'svg' || Boolean(el.src)) return 'image';
-  if (tag === 'button' || tag === 'input') return 'button';
+  const a2ui = (el.a2uiComponent || '').toLowerCase();
+  if (a2ui.includes('table') || tag === 'table' || tag === 'thead' || tag === 'tbody') return 'table';
+  if (tag === 'img' || tag === 'picture' || tag === 'svg') return 'image';
+  if (tag === 'button' || tag === 'input' || a2ui.includes('button')) return 'button';
   if (tag === 'a') {
     const background = el.styles?.background ?? '';
     if (background && !/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0/.test(background) && background !== 'transparent') {
@@ -80,31 +162,185 @@ export function classifyAppDevElementTuneKind(el: AppDevPickedElement): AppDevEl
     return 'text';
   }
   if (TEXT_TAGS.has(tag)) return 'text';
+  if (LAYOUT_TAGS.has(tag)) return 'container';
   const text = (el.text ?? '').replace(/\s+/g, ' ').trim();
-  if (text.length > 0 && text.length <= 80 && tag !== 'div') return 'text';
+  if (text.length > 0 && text.length <= 80) return 'text';
   return 'container';
+}
+
+/** 对齐：文字用 text-align；容器同时写成 flex，子节点才会跟着动。 */
+export function expandAlignmentStyles(
+  align: 'left' | 'center' | 'right',
+  asFlex = false,
+): Record<string, string> {
+  const justify = align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center';
+  if (!asFlex) {
+    return { 'text-align': align };
+  }
+  return {
+    display: 'flex',
+    'text-align': align,
+    'justify-content': justify,
+    'justify-items': align,
+  };
+}
+
+function isFlexDisplay(display: string | undefined): boolean {
+  return display === 'flex' || display === 'inline-flex';
+}
+
+export function elementTuneSectorsForKind(
+  kind: AppDevElementTuneKind,
+  el?: AppDevPickedElement,
+  display?: string,
+): AppDevTuneSector[] {
+  const layoutDisplay = (display || el?.styles?.display || '').split(' ')[0];
+  if (kind === 'text') {
+    return [
+      { id: 'content', title: '内容', fields: ['text'] },
+      { id: 'font', title: '文字', fields: ['color', 'fontSize', 'fontWeight', 'lineHeight', 'textAlign'] },
+      { id: 'spacing', title: '间距', fields: ['margin'] },
+    ];
+  }
+  if (kind === 'button') {
+    return [
+      { id: 'content', title: '内容', fields: ['text'] },
+      { id: 'font', title: '文字', fields: ['color', 'fontSize', 'fontWeight'] },
+      { id: 'background', title: '背景', fields: ['background', 'opacity'] },
+      { id: 'border', title: '边框', fields: ['borderWidth', 'borderColor', 'borderRadius'] },
+      { id: 'spacing', title: '间距', fields: ['boxModel'] },
+    ];
+  }
+  if (kind === 'image') {
+    return [
+      { id: 'image', title: '图片', fields: ['src', 'alt', 'objectFit'] },
+      { id: 'size', title: '尺寸', fields: ['width', 'height'] },
+      { id: 'border', title: '边框', fields: ['borderRadius'] },
+      { id: 'spacing', title: '间距', fields: ['margin'] },
+    ];
+  }
+  if (kind === 'table') {
+    return [
+      { id: 'font', title: '文字', fields: ['color', 'fontSize', 'fontWeight', 'textAlign'] },
+      { id: 'size', title: '尺寸', fields: ['width'] },
+      { id: 'background', title: '背景', fields: ['background', 'opacity'] },
+      { id: 'spacing', title: '间距', fields: ['boxModel'] },
+      { id: 'border', title: '边框', fields: ['borderWidth', 'borderColor', 'borderRadius'] },
+    ];
+  }
+  const layoutFields: AppDevElementTuneField[] = ['display'];
+  if (isFlexDisplay(layoutDisplay) || !layoutDisplay) {
+    layoutFields.push('flexDirection', 'justifyContent', 'alignItems', 'flexWrap', 'gap');
+  }
+  layoutFields.push('textAlign');
+  const sectors: AppDevTuneSector[] = [
+    { id: 'layout', title: '布局', fields: layoutFields },
+    { id: 'size', title: '尺寸', fields: ['width', 'height'] },
+    { id: 'spacing', title: '间距', fields: ['boxModel'] },
+    { id: 'background', title: '背景', fields: ['background', 'opacity'] },
+    { id: 'border', title: '边框', fields: ['borderWidth', 'borderColor', 'borderRadius'] },
+  ];
+  if (el?.text?.trim()) {
+    sectors.unshift({ id: 'content', title: '内容', fields: ['text'] });
+  }
+  return sectors;
 }
 
 export function elementTuneFieldsForKind(
   kind: AppDevElementTuneKind,
   el?: AppDevPickedElement,
 ): AppDevElementTuneField[] {
-  if (kind === 'text') return ['text', 'color', 'fontSize', 'fontWeight', 'textAlign'];
-  if (kind === 'button') return ['text', 'color', 'background', 'fontSize', 'borderRadius'];
-  if (kind === 'image') return ['src', 'alt', 'borderRadius', 'objectFit'];
-  const fields: AppDevElementTuneField[] = ['background', 'borderRadius', 'color'];
-  if (el?.text?.trim()) fields.unshift('text');
-  return fields;
+  return elementTuneSectorsForKind(kind, el).flatMap((sector) => sector.fields);
 }
 
 export function parseCssPx(input: string | undefined): number | null {
   if (!input) return null;
-  const px = input.trim().match(/^([0-9.]+)px$/i);
+  const first = input.trim().split(/\s+/)[0] ?? '';
+  if (first === 'auto' || first === 'normal' || first === 'none') return null;
+  const px = first.match(/^([0-9.]+)px$/i);
   if (px) return Number(px[1]);
-  const rem = input.trim().match(/^([0-9.]+)rem$/i);
+  const rem = first.match(/^([0-9.]+)rem$/i);
   if (rem) return Number(rem[1]) * 16;
-  const n = Number(input);
+  const pct = first.match(/^([0-9.]+)%$/i);
+  if (pct) return Number(pct[1]);
+  const n = Number(first);
   return Number.isFinite(n) ? n : null;
+}
+
+export function parseCssLength(input: string | undefined): CssLength | null {
+  if (!input) return null;
+  const first = input.trim().split(/\s+/)[0] ?? '';
+  if (!first || first === 'none') return null;
+  if (first === 'auto') return { value: 0, unit: 'auto' };
+  const pct = first.match(/^([0-9.]+)%$/i);
+  if (pct) return { value: Number(pct[1]), unit: '%' };
+  const px = parseCssPx(first);
+  if (px == null) return null;
+  return { value: px, unit: 'px' };
+}
+
+export function formatCssLength(length: CssLength): string {
+  if (length.unit === 'auto') return 'auto';
+  const n = Number.isInteger(length.value) ? String(length.value) : length.value.toFixed(1).replace(/\.0$/, '');
+  return `${n}${length.unit}`;
+}
+
+export function parseCssBox(
+  shorthand?: string,
+  sides?: { top?: string; right?: string; bottom?: string; left?: string },
+): CssBox {
+  const fromSides = {
+    top: parseCssPx(sides?.top),
+    right: parseCssPx(sides?.right),
+    bottom: parseCssPx(sides?.bottom),
+    left: parseCssPx(sides?.left),
+  };
+  if (shorthand?.trim()) {
+    const parts = shorthand.trim().split(/\s+/).map((part) => parseCssPx(part) ?? 0);
+    if (parts.length === 1) {
+      const n = parts[0] ?? 0;
+      return { top: n, right: n, bottom: n, left: n };
+    }
+    if (parts.length === 2) {
+      return { top: parts[0] ?? 0, right: parts[1] ?? 0, bottom: parts[0] ?? 0, left: parts[1] ?? 0 };
+    }
+    if (parts.length === 3) {
+      return { top: parts[0] ?? 0, right: parts[1] ?? 0, bottom: parts[2] ?? 0, left: parts[1] ?? 0 };
+    }
+    return {
+      top: parts[0] ?? 0,
+      right: parts[1] ?? 0,
+      bottom: parts[2] ?? 0,
+      left: parts[3] ?? 0,
+    };
+  }
+  return {
+    top: fromSides.top ?? 0,
+    right: fromSides.right ?? 0,
+    bottom: fromSides.bottom ?? 0,
+    left: fromSides.left ?? 0,
+  };
+}
+
+export function formatCssBox(box: CssBox): string {
+  const t = Math.round(box.top);
+  const r = Math.round(box.right);
+  const b = Math.round(box.bottom);
+  const l = Math.round(box.left);
+  if (t === r && r === b && b === l) return `${t}px`;
+  if (t === b && l === r) return `${t}px ${r}px`;
+  return `${t}px ${r}px ${b}px ${l}px`;
+}
+
+export function isUniformCssBox(box: CssBox): boolean {
+  return box.top === box.right && box.right === box.bottom && box.bottom === box.left;
+}
+
+export function parseCssOpacity(input: string | undefined): number {
+  if (!input) return 1;
+  const n = Number(input);
+  if (!Number.isFinite(n)) return 1;
+  return n > 1 ? n / 100 : n;
 }
 
 export function normalizeFontWeight(input: string | undefined): string {
@@ -134,10 +370,35 @@ export function serializeElementOverrideRule(
 ): string {
   const decls = Object.entries(styles)
     .filter(([, value]) => value.trim())
-    .map(([name, value]) => `  ${name}: ${value};`)
+    .map(([name, value]) => {
+      const trimmed = value.trim().replace(/\s*!important\s*$/i, '');
+      return `  ${name}: ${trimmed} !important;`;
+    })
     .join('\n');
   if (!decls) return '';
   return `${selector} {\n${decls}\n}`;
+}
+
+/** 填色要盖过组件 class / 渐变，并画到铺满的第一层子节点。 */
+export function expandElementTunePaintStyles(styles: Record<string, string>): Record<string, string> {
+  const fill = styles['background-color']?.trim() || styles.background?.trim();
+  if (!fill) return { ...styles };
+  return {
+    ...styles,
+    background: fill,
+    'background-color': fill,
+    'background-image': 'none',
+  };
+}
+
+export function elementTuneOverrideSelector(
+  selector: string,
+  styles: Record<string, string>,
+): string {
+  if (styles['background-color'] || styles.background) {
+    return `${selector},\n${selector} > :first-child`;
+  }
+  return selector;
 }
 
 export function upsertElementOverrideCssBlock(
@@ -145,10 +406,11 @@ export function upsertElementOverrideCssBlock(
   selector: string,
   styles: Record<string, string>,
 ): string {
+  const painted = expandElementTunePaintStyles(styles);
   const id = hashSelector(selector);
   const begin = `/* sclaw-el:${id} */`;
   const end = `/* /sclaw-el:${id} */`;
-  const rule = serializeElementOverrideRule(selector, styles);
+  const rule = serializeElementOverrideRule(elementTuneOverrideSelector(selector, painted), painted);
   const block = rule ? `${begin}\n${rule}\n${end}` : '';
   const startIdx = css.indexOf(begin);
   if (startIdx >= 0) {
@@ -192,9 +454,9 @@ async function persistThemeCss(
   selector: string,
   styles: Record<string, string>,
 ): Promise<{ path?: string; note?: string }> {
-  const dirty = Object.fromEntries(
+  const dirty = expandElementTunePaintStyles(Object.fromEntries(
     Object.entries(styles).filter(([, value]) => value.trim()),
-  );
+  ));
   if (Object.keys(dirty).length === 0) return {};
   for (const path of THEME_CANDIDATES) {
     try {
@@ -269,7 +531,11 @@ export async function persistAppDevElementTune(
   draft: AppDevElementTuneDraft,
 ): Promise<AppDevElementTunePersistResult> {
   const notes: string[] = [];
-  const css = await persistThemeCss(workspaceId, original.selector, draft.styles);
+  const css = await persistThemeCss(
+    workspaceId,
+    original.selector,
+    expandElementTunePaintStyles(draft.styles),
+  );
   if (css.note) notes.push(css.note);
   const a2uiText = await persistA2uiVisibleText(workspaceId, original, draft.text);
   if (a2uiText.note) notes.push(a2uiText.note);

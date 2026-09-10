@@ -476,6 +476,84 @@ describe('main chat runtime supervisor', () => {
     expect(events.filter((event) => event.type === 'message.delta')).toHaveLength(2);
   });
 
+  it('sends growing thinking as an append suffix instead of repeating the full snapshot', async () => {
+    const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+    const events: CanonicalChatEvent[] = [];
+    supervisor.on('event', (value) => events.push(value));
+    await supervisor.begin({
+      sessionKey: 'agent:main:session-append',
+      idempotencyKey: 'message-append',
+      engineType: 'openclaw',
+    });
+    await supervisor.accepted({
+      sessionKey: 'agent:main:session-append',
+      idempotencyKey: 'message-append',
+      runId: 'run-append',
+      engineType: 'openclaw',
+    });
+    const prefix = '先看结构。';
+    const suffix = '再改搜索框。';
+    await supervisor.handleEngineEvent({
+      type: 'message.delta',
+      sessionKey: 'agent:main:session-append',
+      runId: 'run-append',
+      seq: 1,
+      message: { id: 'a1', role: 'assistant', content: [{ type: 'thinking', thinking: prefix }] },
+    });
+    await supervisor.handleEngineEvent({
+      type: 'message.delta',
+      sessionKey: 'agent:main:session-append',
+      runId: 'run-append',
+      seq: 2,
+      message: { id: 'a1', role: 'assistant', content: [{ type: 'thinking', thinking: prefix + suffix }] },
+    });
+    const deltas = events.filter((event) => event.type === 'message.delta');
+    expect(deltas).toHaveLength(2);
+    expect(deltas[0]?.payload).toMatchObject({
+      content: [{ type: 'thinking', thinking: prefix }],
+    });
+    expect(deltas[1]?.payload).toMatchObject({
+      _liveAppend: {
+        append: suffix,
+        totalLength: (prefix + suffix).length,
+        blockIndex: 0,
+        field: 'thinking',
+      },
+    });
+    expect(deltas[1]?.payload).not.toHaveProperty('content');
+  });
+
+  it('does not persist every live thinking delta', async () => {
+    const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+    await supervisor.begin({
+      sessionKey: 'agent:main:session-delta-persist',
+      idempotencyKey: 'message-delta-persist',
+      engineType: 'openclaw',
+    });
+    await supervisor.accepted({
+      sessionKey: 'agent:main:session-delta-persist',
+      idempotencyKey: 'message-delta-persist',
+      runId: 'run-delta-persist',
+      engineType: 'openclaw',
+    });
+    const writesAfterAccept = repository.upsert.mock.calls.length;
+    await supervisor.handleEngineEvent({
+      type: 'message.delta',
+      sessionKey: 'agent:main:session-delta-persist',
+      runId: 'run-delta-persist',
+      seq: 1,
+      message: { role: 'assistant', content: 'hello' },
+    });
+    await supervisor.handleEngineEvent({
+      type: 'message.delta',
+      sessionKey: 'agent:main:session-delta-persist',
+      runId: 'run-delta-persist',
+      seq: 2,
+      message: { role: 'assistant', content: 'hello world' },
+    });
+    expect(repository.upsert.mock.calls.length).toBe(writesAfterAccept);
+  });
+
   it('projects current-turn reasoning and tool records from live OpenClaw history', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-04T05:10:00.000Z'));

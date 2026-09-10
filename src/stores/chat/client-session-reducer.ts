@@ -19,6 +19,7 @@ import { truncateToolPayload } from '../../../shared/chat-tool-payload';
 import { collectToolUpdates, isToolResultRole, upsertToolStatuses } from './helpers';
 import { isAgentPreparationProgressMessage } from '@/lib/agent-preparation-progress';
 import { appendStreamingAssistantSnapshot, appendStreamingToolResultSnapshot, STREAMING_OVERLAY_BUFFER_LIMIT } from './streaming-state';
+import { applyLiveMessagePayload, materializeLiveMessage } from '../../../shared/chat-live-append';
 
 interface ChatDispatchPayload {
   idempotencyKey: string;
@@ -217,7 +218,10 @@ export function reduceSessionEvent(
       && (!isTerminalChatRunPhase(phase) || isTerminalChatRunPhase(current.phase))
     ) return { state, accepted: false, needsHydration: false };
     if (event.epoch === current.epoch && event.sequence > current.sequence + 1) {
-      return { state, accepted: false, needsHydration: true };
+      // 累计 delta 可合帧成最新一条，sequence 会跳号；缺的是中间快照不是丢事件。
+      if (event.type !== 'message.delta') {
+        return { state, accepted: false, needsHydration: true };
+      }
     }
     if (!isContextEvent && event.epoch === current.epoch && current.runId && event.runId && current.runId !== event.runId) {
       return { state, accepted: false, needsHydration: true };
@@ -236,8 +240,10 @@ export function reduceSessionEvent(
   const payload = event.payload && typeof event.payload === 'object'
     ? event.payload as Record<string, unknown>
     : null;
-  const message = event.type === 'message.delta' || event.type === 'message.final'
-    ? event.payload as RawMessage | null
+  const message = event.type === 'message.delta'
+    ? applyLiveMessagePayload(state.overlay.streamingMessage, event.payload) as RawMessage | null
+    : event.type === 'message.final'
+      ? materializeLiveMessage(event.payload as RawMessage | null) as RawMessage | null
     : event.type === 'tool.updated'
       ? event.payload as RawMessage | null
     : null;
@@ -364,7 +370,11 @@ export function reduceSessionEvent(
           ? null
           : isToolResult
             ? state.overlay.streamingMessage
-            : message ?? state.overlay.streamingMessage,
+            : terminal
+              ? materializeLiveMessage(
+                (message ?? state.overlay.streamingMessage) as RawMessage | null,
+              ) as RawMessage | null
+              : message ?? state.overlay.streamingMessage,
         streamingMessages: startsNewRun || clearOverlay
           ? []
           : isPreparationProgress && message

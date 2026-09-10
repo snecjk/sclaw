@@ -53,6 +53,7 @@ export type AppDevElementLivePatch = {
   text?: string;
   src?: string;
   alt?: string;
+  cascadeAlign?: boolean;
 };
 
 /** 按选择器覆写选中节点的样式 / 文案 / 图片（即时预览，不改文件）。 */
@@ -64,11 +65,43 @@ export function buildApplyElementPatchScript(selector: string, patch: AppDevElem
   if (!el) return { ok: false, reason: 'missing' };
   var styles = patch.styles || {};
   var keys = Object.keys(styles);
-  for (var i = 0; i < keys.length; i++) {
-    var k = keys[i];
-    var v = styles[k];
-    if (v == null || v === '') el.style.removeProperty(k);
-    else el.style.setProperty(k, v);
+  function paint(node) {
+    if (!node || !node.style) return;
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var v = styles[k];
+      if (v == null || v === '') node.style.removeProperty(k);
+      else node.style.setProperty(k, v, 'important');
+    }
+  }
+  paint(el);
+  if (styles['background-color'] || styles.background) {
+    var child = el.firstElementChild;
+    if (child) {
+      var er = el.getBoundingClientRect();
+      var cr = child.getBoundingClientRect();
+      if (er.width > 0 && cr.width >= er.width * 0.7 && cr.height >= er.height * 0.4) paint(child);
+    }
+  }
+  function applyAlign(node, textAlign, justify) {
+    if (textAlign) node.style.setProperty('text-align', textAlign, 'important');
+    else node.style.removeProperty('text-align');
+    var display = getComputedStyle(node).display;
+    if (justify && (display === 'flex' || display === 'inline-flex' || display === 'grid' || styles.display === 'flex')) {
+      node.style.setProperty('justify-content', justify, 'important');
+    } else if (!justify) {
+      node.style.removeProperty('justify-content');
+    }
+    if (textAlign && (display === 'grid' || styles.display === 'flex')) {
+      node.style.setProperty('justify-items', textAlign, 'important');
+    }
+  }
+  if (patch.cascadeAlign) {
+    var textAlign = styles['text-align'] || '';
+    var justify = styles['justify-content'] || '';
+    applyAlign(el, textAlign, justify);
+    var kids = el.querySelectorAll('div,span,p,h1,h2,h3,h4,h5,h6,a,button,label,td,th,li,section,header,article');
+    for (var j = 0; j < kids.length; j++) applyAlign(kids[j], textAlign, justify);
   }
   function setText(node, text) {
     if (node.childElementCount === 0) {
@@ -184,9 +217,28 @@ export function buildElementPickerScript(mode: 'inspect' | 'tune' = 'inspect'): 
       textAlign: s.textAlign,
       lineHeight: s.lineHeight,
       padding: s.padding,
+      paddingTop: s.paddingTop,
+      paddingRight: s.paddingRight,
+      paddingBottom: s.paddingBottom,
+      paddingLeft: s.paddingLeft,
       margin: s.margin,
+      marginTop: s.marginTop,
+      marginRight: s.marginRight,
+      marginBottom: s.marginBottom,
+      marginLeft: s.marginLeft,
       borderRadius: s.borderRadius,
-      objectFit: s.objectFit
+      borderWidth: s.borderWidth,
+      borderColor: s.borderColor,
+      objectFit: s.objectFit,
+      display: s.display,
+      gap: s.gap,
+      justifyContent: s.justifyContent,
+      alignItems: s.alignItems,
+      flexDirection: s.flexDirection,
+      flexWrap: s.flexWrap,
+      width: s.width,
+      height: s.height,
+      opacity: s.opacity
     };
   }
 

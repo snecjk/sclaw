@@ -104,6 +104,60 @@ export function rgbToOklch(input: string): OklchColor | null {
   return hexToOklch(hex);
 }
 
+export interface RgbaColor {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+function channel(n: number): number {
+  return clamp(Math.round(n), 0, 255);
+}
+
+export function formatRgba({ r, g, b, a }: RgbaColor): string {
+  const rr = channel(r);
+  const gg = channel(g);
+  const bb = channel(b);
+  const alpha = clamp(a, 0, 1);
+  if (alpha >= 0.995) return `rgb(${rr}, ${gg}, ${bb})`;
+  return `rgba(${rr}, ${gg}, ${bb}, ${Number(alpha.toFixed(2))})`;
+}
+
+export function rgbaToHex({ r, g, b }: RgbaColor): string {
+  const hex = [r, g, b].map((part) => channel(part).toString(16).padStart(2, '0')).join('');
+  return `#${/^[0-9a-f]{6}$/i.test(hex) ? hex : 'ffffff'}`;
+}
+
+export function parseColorToRgba(input: string | undefined): RgbaColor | null {
+  const trimmed = (input ?? '').trim();
+  if (!trimmed || trimmed === 'transparent' || trimmed === 'none') {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+  const hex6 = trimmed.match(/^#([0-9a-f]{6})$/i);
+  if (hex6) {
+    const n = Number.parseInt(hex6[1], 16);
+    return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff, a: 1 };
+  }
+  const hex3 = trimmed.match(/^#([0-9a-f]{3})$/i);
+  if (hex3) {
+    const [r, g, b] = hex3[1].split('').map((ch) => Number.parseInt(ch + ch, 16));
+    return { r: r ?? 0, g: g ?? 0, b: b ?? 0, a: 1 };
+  }
+  const rgb = trimmed.match(
+    /rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)(?:\s*[,/]\s*(\d*\.?\d+))?\s*\)/i,
+  );
+  if (rgb) {
+    return {
+      r: Number(rgb[1]),
+      g: Number(rgb[2]),
+      b: Number(rgb[3]),
+      a: rgb[4] == null || rgb[4] === '' ? 1 : Number(rgb[4]),
+    };
+  }
+  return null;
+}
+
 export function isTransparentCssColor(input: string | undefined): boolean {
   const value = (input ?? '').trim().toLowerCase();
   if (!value || value === 'transparent' || value === 'none') return true;

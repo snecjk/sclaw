@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveSidebarAccountEmployeeId,
   resolveSidebarAccountFooterMode,
+  resolveSidebarAccountName,
   shouldRenderAccountGearIcon,
 } from '@/lib/sidebar-account-footer';
 import {
@@ -34,6 +36,70 @@ describe('resolveSidebarAccountFooterMode', () => {
         sidebarCollapsed: false,
       }),
     ).toBe('compact-gear');
+  });
+});
+
+describe('resolveSidebarAccountName', () => {
+  it('prefers realName over userName', () => {
+    expect(resolveSidebarAccountName({
+      realName: '安谱卓阳',
+      userName: '10001',
+    })).toBe('安谱卓阳');
+  });
+
+  it('falls back to userName when realName is empty', () => {
+    expect(resolveSidebarAccountName({
+      realName: '  ',
+      userName: '10001',
+    })).toBe('10001');
+  });
+
+  it('returns empty string without a user', () => {
+    expect(resolveSidebarAccountName(null)).toBe('');
+  });
+});
+
+describe('resolveSidebarAccountEmployeeId', () => {
+  it('prefers 梧桐工号 code next to the name', () => {
+    expect(resolveSidebarAccountEmployeeId({
+      realName: '安谱卓阳',
+      userName: '10001',
+      empCode: 'E2',
+      code: 'W3',
+    })).toBe('W3');
+  });
+
+  it('falls back to empCode then userName', () => {
+    expect(resolveSidebarAccountEmployeeId({
+      realName: '安谱卓阳',
+      userName: '10001',
+      empCode: 'E2',
+      code: '',
+    })).toBe('E2');
+    expect(resolveSidebarAccountEmployeeId({
+      realName: '安谱卓阳',
+      userName: '10001',
+      empCode: '',
+      code: '',
+    })).toBe('10001');
+  });
+
+  it('does not repeat the name when it already is the 工号', () => {
+    expect(resolveSidebarAccountEmployeeId({
+      realName: '10001',
+      userName: '10001',
+      empCode: '',
+      code: '10001',
+    })).toBe('');
+  });
+
+  it('returns empty string when no employee id exists', () => {
+    expect(resolveSidebarAccountEmployeeId({
+      realName: '安谱卓阳',
+      userName: '',
+      empCode: '',
+      code: '',
+    })).toBe('');
   });
 });
 

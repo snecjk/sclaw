@@ -18,6 +18,7 @@ vi.mock('react-i18next', () => ({
       if (key === 'streaming.omittedEarlierThinkingChars') return `已省略前 ${opts?.count} 字`;
       if (key === 'streaming.invokeToolLabel') return `调用工具-${opts?.toolName}`;
       if (key === 'streaming.liveCurrentThinking') return '正在思考';
+      if (key === 'streaming.liveCallingTool') return '正在调用工具';
       if (key === 'streaming.thinkingBadge') return 'AI 正在思考';
       if (key === 'streaming.toolNoParams') return '无参数';
       if (key === 'streaming.interrupted') return '已中断';
@@ -31,7 +32,6 @@ vi.mock('@/stores/skills', () => ({
 }));
 
 import { ThinkingTurnProcess } from '@/pages/Chat/thinking/thinking-turn-process';
-import { STREAMING_THINKING_TAIL_WINDOW_CHARS } from '@/pages/Chat/thinking/streaming-tail-window';
 
 // jsdom 未实现 scrollIntoView（useProcessBlockCollapse 展开时调用）
 Element.prototype.scrollIntoView = vi.fn();
@@ -83,7 +83,7 @@ describe('ThinkingTurnProcess 完成态卸载（chat-thinking-perf 2.1）', () =
   });
 });
 
-describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thinking-perf 3.2/3.3）', () => {
+describe('ThinkingTurnProcess 流式当前块纯文本与全文展开', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -92,9 +92,10 @@ describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thi
     vi.useRealTimers();
   });
 
-  it('流式中的当前块保持纯文本（markdown 不解析），超阈值只渲染尾部窗口', () => {
+  it('流式中的当前块保持纯文本（markdown 不解析），展开后可见全文而不是截尾', () => {
     const tailMarker = '**加粗标记**';
-    const longContent = 'a'.repeat(STREAMING_THINKING_TAIL_WINDOW_CHARS) + tailMarker;
+    const headMarker = 'HEAD_KEEP';
+    const longContent = `${headMarker}${'a'.repeat(3000)}${tailMarker}`;
     const segments: ThinkingTurnSegment[] = [{
       kind: 'tool-group',
       key: 'group-live-1',
@@ -104,26 +105,28 @@ describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thi
 
     const { container } = render(<ThinkingTurnProcess segments={segments} isStreaming />);
 
-    expect(screen.getByRole('button', { name: /思考 1 次/ })).toBeInTheDocument();
-    expect(screen.getByText('正在思考')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /AI 正在思考/ })).toBeInTheDocument();
+    expect(screen.getByText(/加粗标记/)).toBeInTheDocument();
     expect(screen.queryByText('已省略前 8 字')).not.toBeInTheDocument();
+    expect(container.querySelector('p[aria-busy="true"]')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /思考 1 次/ }));
+    fireEvent.click(screen.getByRole('button', { name: /AI 正在思考/ }));
 
-    // 省略占位：超出 8 字（'*'×2 + 4 个汉字）
-    expect(screen.getByText('已省略前 8 字')).toBeInTheDocument();
+    expect(screen.queryByText('已省略前 8 字')).not.toBeInTheDocument();
     // 纯文本：markdown 标记原样展示（未解析为 <strong>）
     expect(container.textContent).toContain(tailMarker);
     expect(container.querySelector('strong')).toBeNull();
-    // 头部已省略：只渲染尾部窗口（3000 字 = 'a'×2992 + 尾部标记）
     const body = container.querySelector('p[aria-busy="true"]');
-    expect(body?.textContent).toContain('a'.repeat(2992) + tailMarker);
-    expect(body?.textContent).not.toContain('a'.repeat(2993));
+    expect(body?.textContent).toContain(headMarker);
+    expect(body?.textContent).toContain(longContent);
+    expect(
+      [...container.querySelectorAll('div')].some((el) => el.className.includes('max-h-[200px]')),
+    ).toBe(true);
   });
 
   it('块完成后恢复完整内容并转 ReactMarkdown（完成态边界）', () => {
     const tailMarker = '**加粗标记**';
-    const longContent = 'a'.repeat(STREAMING_THINKING_TAIL_WINDOW_CHARS) + tailMarker;
+    const longContent = `HEAD_KEEP${'a'.repeat(3000)}${tailMarker}`;
     const liveSegments: ThinkingTurnSegment[] = [{
       kind: 'tool-group',
       key: 'group-live-1',
@@ -134,7 +137,7 @@ describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thi
     const { container, rerender } = render(
       <ThinkingTurnProcess segments={liveSegments} isStreaming />,
     );
-    expect(screen.getByText('正在思考')).toBeInTheDocument();
+    expect(screen.getByText('AI 正在思考')).toBeInTheDocument();
     expect(screen.queryByText('已省略前 8 字')).not.toBeInTheDocument();
 
     const doneSegments: ThinkingTurnSegment[] = [{
@@ -155,6 +158,21 @@ describe('ThinkingTurnProcess 流式当前块纯文本与尾部窗口（chat-thi
     const strong = container.querySelector('strong');
     expect(strong?.textContent).toBe('加粗标记');
     expect(container.textContent).toContain('a'.repeat(100));
+  });
+
+  it('流式默认收起，第二行展示最后一句而非整段正文', () => {
+    const segments: ThinkingTurnSegment[] = [{
+      kind: 'tool-group',
+      key: 'group-live-preview',
+      timeline: [{ type: 'thinking', content: '先看结构。正在核对首页搜索框的字段名。' }],
+      state: 'active',
+    }];
+
+    render(<ThinkingTurnProcess segments={segments} isStreaming />);
+
+    expect(screen.getByRole('button', { name: /AI 正在思考/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('正在核对首页搜索框的字段名。')).toBeInTheDocument();
+    expect(screen.queryByText('先看结构。正在核对首页搜索框的字段名。')).not.toBeInTheDocument();
   });
 });
 

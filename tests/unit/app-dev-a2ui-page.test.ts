@@ -9,8 +9,6 @@ import {
   type A2uiMessage,
 } from '@/lib/app-dev-a2ui-page';
 import { builderMetaToModuleFragment, parseComponentBuilderContract, findBuilderComponentMeta } from '@/lib/app-dev-component-builder';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 const sample: A2uiMessage[] = [
   {
@@ -76,12 +74,45 @@ describe('app-dev a2ui page patch', () => {
     expect(data.value.kpi.title).toBe('指标');
   });
 
-  it('parses template component-builder contract', () => {
-    const raw = JSON.parse(readFileSync(
-      join(process.cwd(), 'resources/app-templates/assets-minimal/contracts/component-builder.v1.json'),
-      'utf8',
-    ));
-    const contract = parseComponentBuilderContract(raw);
+  it('parses component-builder contract', () => {
+    const contract = parseComponentBuilderContract({
+      version: 'v1',
+      components: [
+        {
+          id: 'AntdStatCard',
+          nameZh: '指标卡',
+          category: 'metric',
+          styleFields: [],
+          dataFields: [
+            { key: 'title', label: '标题', type: 'string', bindable: true, format: [] },
+            { key: 'value', label: '数值', type: 'string', bindable: true, format: ['prefix', 'suffix', 'precision'] },
+          ],
+          slots: [],
+          actions: [],
+        },
+        {
+          id: 'AntdTable',
+          nameZh: '表格',
+          category: 'table',
+          styleFields: [{ key: 'size', label: '密度', type: 'enum', options: ['small', 'middle', 'large'] }],
+          dataFields: [
+            { key: 'columns', label: '列', type: 'list', bindable: true, format: [] },
+            { key: 'dataSource', label: '行数据', type: 'list', bindable: true, format: [] },
+          ],
+          slots: [],
+          actions: [],
+        },
+        {
+          id: 'AntdButton',
+          nameZh: '按钮',
+          category: 'action',
+          styleFields: [{ key: 'type', label: '类型', type: 'enum', options: ['primary', 'default'] }],
+          dataFields: [{ key: 'text', label: '文案', type: 'string', bindable: true, format: [] }],
+          slots: [],
+          actions: [{ key: 'onClick', label: '点击' }],
+        },
+      ],
+    });
     expect(findBuilderComponentMeta(contract, 'AntdStatCard')?.nameZh).toBe('指标卡');
     expect(findBuilderComponentMeta(contract, 'AntdTable')?.dataFields.some((f) => f.key === 'dataSource')).toBe(true);
     const card = findBuilderComponentMeta(contract, 'AntdStatCard');

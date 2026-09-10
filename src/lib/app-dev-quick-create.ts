@@ -7,7 +7,6 @@ import {
   listAppTemplates,
   prepareAppDevEnvironment,
 } from '@/lib/app-dev-api';
-import { buildPlanFirstPrompt } from '@/lib/app-dev-plan-gate';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
@@ -66,15 +65,13 @@ export async function quickCreateAppFromPrompt(prompt: string): Promise<{
   await useSessionCatalogStore.getState().refreshWorkspaces().catch(() => undefined);
   await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
 
-  // 对话式创建首轮强制走 Plan 闸门（不靠启发式猜）
-  const firstMessage = buildPlanFirstPrompt(trimmed);
-
+  // pending 只存用户原文；发送时再包 Plan 闸门，避免气泡露出系统约束。
   useAppPlazaShellStore.getState().openOrFocusDevAppTab(
     result.workspaceId,
     appName,
     'app',
-    { pendingPrompt: firstMessage },
+    { pendingPrompt: trimmed },
   );
 
-  return { workspaceId: result.workspaceId, appName, firstMessage };
+  return { workspaceId: result.workspaceId, appName, firstMessage: trimmed };
 }

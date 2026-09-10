@@ -172,6 +172,7 @@ export const ChatToolCallCard = memo(function ChatToolCallCard({
     isComplete,
     autoExpand,
     unmountCollapsedBody: isThinkingProcessCollapsible,
+    scrollOnExpand: false,
   });
   const baseLabel = displayName ?? resolveChatToolDisplayName(name.trim() || '…');
   const label = isThinkingProcess

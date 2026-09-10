@@ -2,7 +2,6 @@ import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './layouts/AppLayout';
-import { A2uiPageHost } from './pages/A2uiPageHost';
 import { HomePage } from './pages/HomePage';
 import { DemoPage } from './pages/DemoPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -27,8 +26,6 @@ export default function App() {
               <Route index element={<Navigate to="/home" replace />} />
               <Route path="home" element={<HomePage />} />
               <Route path="example" element={<DemoPage />} />
-              <Route path="a2ui-home" element={<A2uiPageHost pageId="home" />} />
-              <Route path="customer-list" element={<A2uiPageHost pageId="customer-list" />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

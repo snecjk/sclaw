@@ -147,21 +147,9 @@ describe('built-in app template resources', () => {
     const example = readFileSync(join(siteRoot, 'src/pages/DemoPage.tsx'), 'utf8');
 
     expect(app).toContain('path="example"');
-    expect(app).toContain('A2uiPageHost');
     expect(example).not.toContain('/api/health');
     expect(example).not.toContain('RequestError');
     expect(example).not.toContain('华东网点巡检');
-  });
-
-  it('三类模板提供可圈选的 A2UI 宿主与搭建契约', () => {
-    for (const template of ['site-minimal', 'assets-minimal', 'site-fullstack']) {
-      const root = join(resources, template);
-      expect(existsSync(join(root, 'src/pages/A2uiPageHost.tsx'))).toBe(true);
-      expect(existsSync(join(root, 'contracts/component-builder.v1.json'))).toBe(true);
-      expect(existsSync(join(root, 'src/catalog/modules/kpi-card.json'))).toBe(true);
-      expect(readFileSync(join(root, 'src/catalog/antd-catalog.tsx'), 'utf8')).toContain('AntdStatCard');
-      expect(readFileSync(join(root, 'src/catalog/antd-catalog.tsx'), 'utf8')).toContain('data-a2ui-component-id');
-    }
   });
 
   it('site 连续白卡模块保留 16px 纵向间距', () => {

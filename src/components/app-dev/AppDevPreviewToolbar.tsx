@@ -244,20 +244,32 @@ export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
         />
       </form>
 
-      <Tabs
-        value={device}
-        onValueChange={(value) => setDevice(value as AppDevPreviewDevice)}
-        className="app-dev-preview-device-tabs shrink-0"
-      >
-        <TabsList aria-label="预览设备">
-          <TabsTrigger value="desktop" title="桌面视图" aria-label="桌面视图">
-            <Monitor className="h-3.5 w-3.5" aria-hidden />
-          </TabsTrigger>
-          <TabsTrigger value="mobile" title="手机视图" aria-label="手机视图">
-            <Smartphone className="h-3.5 w-3.5" aria-hidden />
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="app-dev-preview-device-cluster" role="group" aria-label="预览视口">
+        <Tabs
+          value={device}
+          onValueChange={(value) => setDevice(value as AppDevPreviewDevice)}
+          className="app-dev-preview-device-tabs shrink-0"
+        >
+          <TabsList aria-label="预览设备">
+            <TabsTrigger value="desktop" title="桌面视图" aria-label="桌面视图">
+              <Monitor className="h-3.5 w-3.5" aria-hidden />
+            </TabsTrigger>
+            <TabsTrigger value="mobile" title="手机视图" aria-label="手机视图">
+              <Smartphone className="h-3.5 w-3.5" aria-hidden />
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <span className="app-dev-preview-device-cluster__divider" aria-hidden />
+        <button
+          type="button"
+          className="app-dev-preview-device-cluster__action"
+          onClick={onOpenExternal}
+          title="在系统浏览器打开"
+          aria-label="在系统浏览器打开"
+        >
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
 
       {onToggleInspect || onOpenTune ? (
         <div className="app-dev-preview-mode-toggles">
@@ -309,15 +321,6 @@ export const AppDevPreviewToolbar = memo(function AppDevPreviewToolbar({
         ) : (
           <Maximize className="h-4 w-4" aria-hidden />
         )}
-      </button>
-
-      <button
-        type="button"
-        className="app-plaza-browser-toolbar__btn"
-        onClick={onOpenExternal}
-      >
-        在系统浏览器打开
-        <ExternalLink className="h-3.5 w-3.5" aria-hidden />
       </button>
     </header>
   );

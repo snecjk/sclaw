@@ -1,4 +1,4 @@
-import type { RawMessage } from '@/stores/chat';
+import type { ContentBlock, RawMessage } from '@/stores/chat';
 import { collectToolUpdates } from '@/stores/chat/helpers';
 import {
   isRedundantThinking,
@@ -10,6 +10,7 @@ import {
   extractToolUse,
   type ThinkingTimelineItem,
 } from '@/pages/Chat/message-utils';
+import { liveTextTail, readLiveStreamParts } from '../../../shared/chat-live-append';
 import {
   mergeAdjacentOrphanedThinkingAndToolGroups,
   relocateInterruptPhaseBetweenAdjacentToolGroups,
@@ -439,7 +440,11 @@ function buildProcessTimelineFromEvents(events: RawTurnEvent[]): ThinkingTimelin
 
   for (const event of events) {
     if (event.type === 'thinking') {
-      items.push({ type: 'thinking', content: event.content });
+      items.push({
+        type: 'thinking',
+        content: event.content,
+        liveParts: event.liveParts,
+      });
       continue;
     }
     if (event.type === 'tool') {
@@ -804,6 +809,11 @@ function extractOrderedEventsFromMessage(message: RawMessage): RawTurnEvent[] {
   const capturedToolKeys = new Set<string>();
 
   if (typeof content === 'string') {
+    const live = readLiveStreamParts(msg);
+    if (live && (live.field === 'content' || live.blockIndex === null)) {
+      events.push({ type: 'text', text: live.tail || liveTextTail(live.parts) });
+      return events;
+    }
     const text = extractText(message).trim();
     if (text) events.push({ type: 'text', text });
     return events;
@@ -812,16 +822,33 @@ function extractOrderedEventsFromMessage(message: RawMessage): RawTurnEvent[] {
   if (!Array.isArray(content)) return events;
 
   let toolIndex = 0;
-  for (const block of content as ContentBlock[]) {
+  const live = readLiveStreamParts(msg);
+  for (const [blockIndex, block] of (content as ContentBlock[]).entries()) {
     if (block.type === 'text' && typeof block.text === 'string') {
+      const isGrow = live && live.field === 'text' && live.blockIndex === blockIndex;
+      if (isGrow) {
+        events.push({ type: 'text', text: live.tail || liveTextTail(live.parts) });
+        continue;
+      }
       const text = extractText({ role: 'assistant', content: [{ type: 'text', text: block.text }] }).trim();
       if (text) events.push({ type: 'text', text });
       continue;
     }
-    if (block.type === 'thinking' && typeof block.thinking === 'string') {
-      const trimmed = block.thinking.trim();
-      if (trimmed) {
-        events.push({ type: 'thinking', content: trimmed });
+    if (block.type === 'thinking') {
+      const isGrow = live && live.field === 'thinking' && live.blockIndex === blockIndex;
+      if (isGrow) {
+        events.push({
+          type: 'thinking',
+          content: live.tail || liveTextTail(live.parts),
+          liveParts: live.parts,
+        });
+        continue;
+      }
+      if (typeof block.thinking === 'string') {
+        const trimmed = block.thinking.trim();
+        if (trimmed) {
+          events.push({ type: 'thinking', content: trimmed });
+        }
       }
       continue;
     }
@@ -867,11 +894,12 @@ const orderedEventsByMessage = new WeakMap<
 
 /** 导出供缓存失效测试；禁止当作展示/协议字段。 */
 export function messageContentCacheFingerprint(message: RawMessage): string {
+  const live = readLiveStreamParts(message);
   const content = message.content;
-  if (typeof content === 'string') return `s:${content.length}`;
-  if (!Array.isArray(content)) return 'empty';
+  if (typeof content === 'string') return `s:${live?.length ?? content.length}`;
+  if (!Array.isArray(content)) return live ? `live:${live.length}` : 'empty';
   let fingerprint = `n:${content.length}`;
-  for (const block of content) {
+  for (const [index, block] of content.entries()) {
     if (!block || typeof block !== 'object') {
       fingerprint += '|x';
       continue;
@@ -879,7 +907,11 @@ export function messageContentCacheFingerprint(message: RawMessage): string {
     const record = block as Record<string, unknown>;
     const thinking = typeof record.thinking === 'string' ? record.thinking.length : 0;
     const text = typeof record.text === 'string' ? record.text.length : 0;
-    fingerprint += `|${String(record.type ?? '')}:${thinking}:${text}`;
+    const grow = live
+      && ((live.field === 'thinking' && live.blockIndex === index)
+        || (live.field === 'text' && live.blockIndex === index)
+        || (live.field === 'content' && live.blockIndex === null));
+    fingerprint += `|${String(record.type ?? '')}:${grow ? live.length : thinking}:${text}`;
   }
   return fingerprint;
 }

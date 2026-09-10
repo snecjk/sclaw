@@ -28,6 +28,8 @@ describe('AppDevTunePanel element inspector', () => {
     );
     expect(screen.getByTestId('app-dev-element-tune-form')).toHaveTextContent('文字');
     expect(screen.getByDisplayValue('山丘咖啡')).toBeInTheDocument();
+    expect(screen.getByLabelText('颜色 色盘')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('rgb(29, 33, 41)')).toBeInTheDocument();
   });
 
   it('shows image editors for img', () => {
@@ -42,6 +44,29 @@ describe('AppDevTunePanel element inspector', () => {
     );
     expect(screen.getByTestId('app-dev-element-tune-form')).toHaveTextContent('图片');
     expect(screen.getByDisplayValue('/cover.png')).toBeInTheDocument();
+    expect(screen.getByLabelText('宽度')).toBeInTheDocument();
+    expect(screen.getByLabelText('高度 auto')).toBeInTheDocument();
+  });
+
+  it('shows layout setters for a container', () => {
+    const element = { selector: 'header.bar', tag: 'header', text: '损益报告 湖北孝感公司' };
+    render(
+      <AppDevElementTuneForm
+        element={element}
+        executeJS={null}
+        draft={createElementTuneDraft(element)}
+        onDraftChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('app-dev-element-tune-form')).toHaveTextContent('容器');
+    expect(screen.getByText('布局')).toBeInTheDocument();
+    expect(screen.getByText('尺寸')).toBeInTheDocument();
+    expect(screen.getByLabelText('居中')).toBeInTheDocument();
+    expect(screen.getByTestId('app-dev-box-model')).toBeInTheDocument();
+    expect(screen.getByLabelText('外边距 上')).toBeInTheDocument();
+    expect(screen.getByLabelText('内边距 上')).toBeInTheDocument();
+    expect(screen.getByLabelText('背景色 色盘')).toBeInTheDocument();
+    expect(screen.getByLabelText('背景色 色值')).toBeInTheDocument();
   });
 
   it('tells the user JSX nodes cannot bind APIs', () => {

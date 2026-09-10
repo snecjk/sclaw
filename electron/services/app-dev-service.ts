@@ -381,18 +381,20 @@ export function mergeAndDedupeDevApps(
 
 
 /**
- * App files deleted but workspace row left behind: root only has `.sclaw`
- * (artifact/agent shell). Still treat as 开发应用 for sidebar filtering.
+ * Hide from 侧栏「项目」: real 开发应用 marker, or anything under ~/SClawApps.
+ *
+ * Do not treat “root only has `.sclaw`” as 开发应用. `createWorkspace` writes
+ * `<root>/.sclaw/.claw-output` for empty chat projects; that shell is identical
+ * to a leftover app folder and must stay in 项目.
  */
-async function isAbandonedAppDevShell(appPath: string): Promise<boolean> {
-  if (!appPath || !existsSync(appPath) || !statSync(appPath).isDirectory()) return false;
-  if (!existsSync(join(appPath, '.sclaw'))) return false;
-  try {
-    const entries = (await readdir(appPath)).filter((name) => name !== '.DS_Store');
-    return entries.length === 1 && entries[0] === '.sclaw';
-  } catch {
-    return false;
-  }
+export function isAppDevSidebarHiddenRoot(appPath: string): boolean {
+  if (!appPath.trim()) return false;
+  const resolvedRoot = resolve(appPath);
+  const defaultAppsRoot = resolve(DEFAULT_APPS_PARENT_DIR);
+  const underDefaultApps =
+    resolvedRoot === defaultAppsRoot
+    || resolvedRoot.startsWith(`${defaultAppsRoot}${sep}`);
+  return isAppDevWorkspaceRoot(resolvedRoot) || underDefaultApps;
 }
 
 function buildAppDevAgentsContextBlock(vars: {
@@ -489,7 +491,7 @@ ${pagePriorityBlock}
 - ⛔ 不要把业务页做成独立 HTML 报告：禁止 \`build.py\`、\`<!-- STO:DAILY -->\`、日报类名 \`.mc/.masthead\`、页尾设计师水印
 
 ## 输出协议（可选增强，失败时宿主会降级）
-- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"...","overview":"...","audience":"...","scenarios":"...","steps":[{"id":"1","title":"...","fileHints":["src/pages/..."],"assets":["..."]}]}\\n\`\`\`（契约见工作台 plan-gate v2），可选再输出 \`\`\`sclaw_styles\`\`\` 风格预设；**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
+- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"一两句话","steps":[{"id":"1","title":"短步骤"}]}\\n\`\`\`（summary ≤80 字，steps 3～6 条且 title ≤24 字）；**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
 - 每步完成可输出 \`\`\`sclaw_step\\n{"id":"1","status":"done"}\\n\`\`\`
 - 轮结束可输出 ≤3 条建议：\`\`\`sclaw_suggestions\\n[{"label":"检查移动端","prompt":"请检查一下移动端效果并修复溢出"}]\\n\`\`\`
 <!-- /sclaw-app-dev-context -->`;
@@ -1426,9 +1428,8 @@ export async function resolveCloudAppForWorkspace(
  *
  * Sources (union):
  * 1. Local marker `.sclaw/app-dev.json` on the workspace root
- * 2. Abandoned shells that only keep `.sclaw` after app files were removed
- * 3. Workspaces under the default apps parent (`~/SClawApps`)
- * 4. sto-app bindings (workspaceId / localPath)
+ * 2. Workspaces under the default apps parent (`~/SClawApps`)
+ * 3. sto-app bindings (workspaceId / localPath)
  *
  * Do not rely on cloud `listDevApps`: CLI/login failures must not leak apps
  * into 侧栏「项目」(入口只在应用广场).
@@ -1441,7 +1442,6 @@ export async function listDevAppWorkspaceIds(): Promise<string[]> {
 
   const ids = new Set<string>();
   const workspaceIdByRoot = new Map<string, string>();
-  const defaultAppsRoot = resolve(DEFAULT_APPS_PARENT_DIR);
 
   for (const workspace of workspaces) {
     const root = workspace.rootPath?.trim();
@@ -1449,15 +1449,7 @@ export async function listDevAppWorkspaceIds(): Promise<string[]> {
     const resolvedRoot = resolve(root);
     workspaceIdByRoot.set(resolvedRoot, workspace.id);
 
-    const underDefaultApps =
-      resolvedRoot === defaultAppsRoot
-      || resolvedRoot.startsWith(`${defaultAppsRoot}${sep}`);
-
-    if (
-      isAppDevWorkspaceRoot(resolvedRoot)
-      || underDefaultApps
-      || await isAbandonedAppDevShell(resolvedRoot)
-    ) {
+    if (isAppDevSidebarHiddenRoot(resolvedRoot)) {
       ids.add(workspace.id);
     }
   }

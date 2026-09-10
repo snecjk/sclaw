@@ -5,6 +5,7 @@ import { AppError } from '@/lib/error-model';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import { trimHistoryTail } from '../../../shared/chat-history-page';
+import { mergeLiveDeltaPayloads } from '../../../shared/chat-live-append';
 import type { ChatHistoryFingerprint } from '../../../shared/chat-history-fingerprint';
 import type { ChatHistoryCapabilities } from '../../../shared/chat-history-capabilities';
 import type { RawMessage } from './types';
@@ -102,7 +103,18 @@ function reduceEventIntoSession(
   event: CanonicalChatEvent,
 ): SessionEventApplyResult {
   if (current.sync.status === 'gapped' || current.sync.status === 'hydrating') {
-    const allPendingEvents = [...current.sync.pendingEvents, event];
+    const lastPending = current.sync.pendingEvents[current.sync.pendingEvents.length - 1];
+    const coalescedDelta = event.type === 'message.delta'
+      && lastPending?.type === 'message.delta';
+    const allPendingEvents = coalescedDelta
+      ? [
+          ...current.sync.pendingEvents.slice(0, -1),
+          {
+            ...event,
+            payload: mergeLiveDeltaPayloads(lastPending.payload, event.payload),
+          },
+        ]
+      : [...current.sync.pendingEvents, event];
     const bufferOverflowed = current.sync.bufferOverflowed || allPendingEvents.length > MAX_PENDING_EVENTS;
     const pendingEvents = allPendingEvents.slice(-MAX_PENDING_EVENTS);
     return {
@@ -156,9 +168,8 @@ function applyEventToStoreImmediately(event: CanonicalChatEvent): void {
 }
 
 /**
- * message.delta 合帧（chat-thinking-perf 3.1）：delta 先入队，每帧（rAF；无 rAF 环境
- * 退化为 40ms 时间片）最多一次 store 提交。任何非 delta 事件 / transcript 写入到来前
- * 先同步 flush，保证事件不丢、与同会话后续事件顺序不乱。
+ * message.delta 合帧（chat-thinking-perf 3.1）：delta 先入队，每帧最多一次 store 提交。
+ * 同会话累计快照只保留最新一条（或把连续 append 拼成一次），队列里不堆上万份全文。
  */
 const pendingDeltaEvents: CanonicalChatEvent[] = [];
 let deltaFlushScheduled = false;
@@ -174,7 +185,24 @@ function scheduleChatDeltaFlush(): void {
 }
 
 function enqueueChatDeltaEvent(event: CanonicalChatEvent): void {
-  pendingDeltaEvents.push(event);
+  const last = pendingDeltaEvents[pendingDeltaEvents.length - 1];
+  if (last?.sessionKey === event.sessionKey && last.type === 'message.delta') {
+    pendingDeltaEvents[pendingDeltaEvents.length - 1] = {
+      ...event,
+      payload: mergeLiveDeltaPayloads(last.payload, event.payload),
+    };
+  } else {
+    const existingIndex = pendingDeltaEvents.findIndex((item) => item.sessionKey === event.sessionKey);
+    if (existingIndex >= 0) {
+      const earlier = pendingDeltaEvents[existingIndex];
+      pendingDeltaEvents[existingIndex] = {
+        ...event,
+        payload: mergeLiveDeltaPayloads(earlier?.payload, event.payload),
+      };
+    } else {
+      pendingDeltaEvents.push(event);
+    }
+  }
   scheduleChatDeltaFlush();
 }
 

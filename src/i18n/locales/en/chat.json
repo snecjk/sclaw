@@ -210,6 +210,7 @@
     "collapsedSummaryThoughtsOnly": "Thought {{thoughtCount}} times",
     "collapsedSummaryToolsOnly": "Used {{toolCount}} tools",
     "liveCurrentThinking": "Thinking",
+    "liveCallingTool": "Calling a tool",
     "omittedEarlierThinkingChars": "Omitted the first {{count}} characters",
     "invokeToolLabel": "Invoke tool – {{toolName}}",
     "toolNoParams": "No parameters",

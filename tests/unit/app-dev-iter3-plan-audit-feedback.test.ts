@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   buildPlanConfirmPrompt,
+  buildPlanFirstPrompt,
   extractSclawPlan,
   extractSclawStepUpdates,
   shouldTriggerPlanGate,
+  stripPlanGatePromptForDisplay,
   wrapUserTextForPlanGate,
 } from '@/lib/app-dev-plan-gate';
 import {
@@ -62,6 +64,14 @@ describe('T12 plan gate', () => {
       userText: '请按以下已确认方案开始实现',
       priorUserMessageCount: 0,
     })).toBeNull();
+  });
+
+  it('strips plan-gate wrapping from bubble display text', () => {
+    const original = '从零做一个完整官网落地页';
+    const wrapped = buildPlanFirstPrompt(original);
+    expect(wrapped).toContain('【系统约束 · 方案闸门】');
+    expect(stripPlanGatePromptForDisplay(wrapped)).toBe(original);
+    expect(stripPlanGatePromptForDisplay(original)).toBe(original);
   });
 
   it('deriveAppDevTurnPlan prefers sclaw_plan contract', () => {

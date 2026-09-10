@@ -67,6 +67,8 @@ export interface ChatProcessBlockProps {
   isActive?: boolean;
   /** 收起后卸载正文 */
   unmountCollapsedBody?: boolean;
+  /** 展开时是否滚入视口；思考 peek 内应关闭，避免整列被拽动 */
+  scrollOnExpand?: boolean;
   /** 左竖线内容区；省略则仅标题行（连接/等待态） */
   children?: React.ReactNode;
   className?: string;
@@ -82,6 +84,7 @@ export const ChatProcessBlock = memo(function ChatProcessBlock({
   defaultExpanded,
   isActive = false,
   unmountCollapsedBody = false,
+  scrollOnExpand,
   children,
   className,
 }: ChatProcessBlockProps) {
@@ -98,6 +101,7 @@ export const ChatProcessBlock = memo(function ChatProcessBlock({
     autoExpand,
     defaultExpanded,
     unmountCollapsedBody,
+    scrollOnExpand,
   });
 
   const titleWithChevron = collapsible ? (
