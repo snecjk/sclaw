@@ -42,7 +42,3 @@ export function buildDirectAppPermissionsLoginUrl(callbackUrl: string, stoToken:
   callback.searchParams.set('stoToken', stoToken);
   return callback.toString();
 }
-
-export function usesDirectPortalAuth(env: AppEnvironment): boolean {
-  return env === 'development' || env === 'test';
-}

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { fetchSkipLoginLinkMock, openExternalUrlMock, openInSclawBrowserMock } = vi.hoisted(() => ({
   fetchSkipLoginLinkMock: vi.fn(),
@@ -59,6 +59,8 @@ import {
   buildDirectAppPermissionsLoginUrl,
 } from '../../src/lib/app-permissions-url';
 import type { DevAppSummary } from '../../src/lib/app-dev-api';
+
+afterEach(() => vi.unstubAllEnvs());
 
 function app(pageType: 'site' | 'assets'): DevAppSummary {
   return {
@@ -133,7 +135,11 @@ describe('DevAppCard page type', () => {
     );
   });
 
-  it('opens the local permissions page with the current StoToken without remote SSO', async () => {
+  it.each(['development', 'test', 'staging', 'production'])('opens permissions with the current StoToken in %s', async (env) => {
+    vi.stubEnv('VITE_APP_ENV', env);
+    const portalOrigin = env === 'development' || env === 'test'
+      ? 'https://sclaw-test.sto.cn'
+      : 'https://sclaw.sto.cn';
     fetchSkipLoginLinkMock.mockResolvedValue(
       'https://page-test.sto.cn/sto-base-service/sto-sso-web/#/main?autoLogin=true&ticket=t-1',
     );
@@ -146,10 +152,10 @@ describe('DevAppCard page type', () => {
     await waitFor(() => {
       expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
       expect(openInSclawBrowserMock).toHaveBeenCalledWith({
-        url: 'https://sclaw-test.sto.cn/sso/callback?redirect=%2Fapps%2Fapp_site%2Fpermissions&stoToken=sto-local-token',
+        url: `${portalOrigin}/sso/callback?redirect=%2Fapps%2Fapp_site%2Fpermissions&stoToken=sto-local-token`,
         title: 'site app · 权限配置',
         appId: 'dev-app-permissions:app_site',
-        sourceUrl: 'https://sclaw-test.sto.cn/sso/callback?redirect=%2Fapps%2Fapp_site%2Fpermissions',
+        sourceUrl: `${portalOrigin}/sso/callback?redirect=%2Fapps%2Fapp_site%2Fpermissions`,
         systemCode: 'SCLAW_PORTAL',
         skipLoginEligible: false,
       });
