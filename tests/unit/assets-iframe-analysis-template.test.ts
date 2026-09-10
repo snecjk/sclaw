@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
 import { resolveIframeApplicationId } from '../../resources/app-templates/assets-iframe-analysis/src/sclaw/iframe-app-config';
@@ -18,5 +20,14 @@ describe('assets iframe analysis template', () => {
     expect(() => resolveIframeApplicationId({})).toThrow(
       '请配置 window.__SCLAW_APP_CONFIG__.applicationId 或 VITE_SCLAW_APPLICATION_ID',
     );
+  });
+
+  it('ships an install config that hoists UI-library transitive dependencies', () => {
+    const npmrc = readFileSync(join(
+      process.cwd(),
+      'resources/app-templates/assets-iframe-analysis/.npmrc',
+    ), 'utf8');
+
+    expect(npmrc).toContain('shamefully-hoist=true');
   });
 });

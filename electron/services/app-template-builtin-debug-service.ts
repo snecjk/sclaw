@@ -249,7 +249,10 @@ async function copySafeNpmrc(sourceRoot: string, targetRoot: string): Promise<vo
       const trimmed = line.trim();
       return !trimmed
         || trimmed.startsWith('#')
-        || /^(?:@[a-z0-9._-]+:)?registry=https?:\/\/[^\s]+$/i.test(trimmed);
+        || /^(?:@[a-z0-9._-]+:)?registry=https?:\/\/[^\s]+$/i.test(trimmed)
+        || /^package-import-method=(?:copy|symlink)$/i.test(trimmed)
+        || /^shamefully-hoist=(?:true|false)$/i.test(trimmed)
+        || /^strict-peer-dependencies=(?:true|false)$/i.test(trimmed);
     });
     if (safe) await copyFile(npmrcPath, join(targetRoot, '.npmrc'));
   }

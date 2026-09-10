@@ -97,6 +97,18 @@ describe('built-in app template debug service', () => {
     await initializeBuiltinTemplateDebugWorkspace(sourceRoot, safeDebugRoot);
     expect(await readFile(join(safeDebugRoot, '.npmrc'), 'utf8'))
       .toBe('registry=http://snpm-registry.sto.cn\n');
+
+    const hoistedDebugRoot = join(sourceRoot, '..', 'hoisted-debug-copy');
+    await writeFile(join(sourceRoot, '.npmrc'), [
+      'registry=http://snpm-registry.sto.cn',
+      'package-import-method=copy',
+      'shamefully-hoist=true',
+      'strict-peer-dependencies=false',
+      '',
+    ].join('\n'));
+    await initializeBuiltinTemplateDebugWorkspace(sourceRoot, hoistedDebugRoot);
+    expect(await readFile(join(hoistedDebugRoot, '.npmrc'), 'utf8'))
+      .toContain('shamefully-hoist=true');
   });
 
   it('reports distributable file differences and ignores generated files', async () => {
