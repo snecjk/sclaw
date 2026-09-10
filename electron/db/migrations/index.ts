@@ -20,6 +20,7 @@ import chatRuntimeActivityMigration from './0037-chat-runtime-activity';
 import chatContextUsageMigration from './0038-chat-context-usage';
 import browserAutomationArtifactsMigration from './0039-browser-automation-artifacts';
 import chatRuntimeInterruptCauseMigration from './0040-chat-runtime-interrupt-cause';
+import uniqueWorkspaceRootPathMigration from './0041-unique-workspace-root-path';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -46,4 +47,5 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   chatContextUsageMigration,
   browserAutomationArtifactsMigration,
   chatRuntimeInterruptCauseMigration,
+  uniqueWorkspaceRootPathMigration,
 ].sort((left, right) => left.version - right.version);
