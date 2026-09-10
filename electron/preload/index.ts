@@ -2,7 +2,6 @@
  * Preload Script
  * Exposes safe APIs to the renderer process via contextBridge
  */
-import '@openim/electron-client-sdk/lib/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 /**
@@ -78,11 +77,6 @@ const electronAPI = {
         'app:quit',
         'app:relaunch',
         'app:request',
-        'openim:ensureDirs',
-        'openim:writeTempUploadFile',
-        'openim:login',
-        'openim:bootstrap',
-        'openim:getBootstrapState',
         // Window controls
         'window:minimize',
         'window:maximize',
@@ -298,7 +292,6 @@ const electronAPI = {
         'jsbridge:close-tab',
         'jsbridge:toast',
         'app-dev-ide:ownership',
-        'openim:bootstrap-result',
       ];
 
       if (validChannels.includes(channel)) {

@@ -41,7 +41,6 @@ export function ContentHeader() {
     title,
     previewTabs,
     chatActions,
-    centerContent,
     previewActions,
     layoutMode,
     onCloseSession,
@@ -55,8 +54,6 @@ export function ContentHeader() {
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
   const windowsChromeOwner = useWindowsChromeOwner();
-  const { pathname } = useLocation();
-  const isMessagesRoute = pathname.startsWith('/messages');
 
   // Drawer / App Plaza 自带页顶栏，不占 44px ContentHeader。
   if (browserOverlayOpen || appPlazaVisible) {
@@ -173,18 +170,12 @@ export function ContentHeader() {
         {titleZone}
       </div>
       <div
-        data-slot="header-center"
         className={cn(
-          'no-drag min-w-0 flex-1',
+          'min-w-0 flex-1',
           (isSplitLayout || isPreviewExpanded) && 'hidden',
         )}
-      >
-        {centerContent ? (
-          <div className="flex w-full items-center justify-center px-3">
-            {centerContent}
-          </div>
-        ) : null}
-      </div>
+        aria-hidden
+      />
       {chatActionsZone}
     </div>
   );
@@ -218,7 +209,6 @@ export function ContentHeader() {
         isSplitLayout ? contentHeaderSplitBarClass : contentHeaderBarClass,
         isPreviewExpanded && !sidebarCollapsed && contentHeaderPreviewExpandedStartClass,
         isPreviewExpanded && !canUserRestoreSidebar && 'gap-0',
-        isMessagesRoute && !isSplitLayout && !isPreviewExpanded && 'border-b border-[var(--sto-border-default)]',
       )}
       aria-label={t('sidebar.chat')}
     >

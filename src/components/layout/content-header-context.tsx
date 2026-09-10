@@ -27,8 +27,6 @@ export interface ContentHeaderSlot {
   previewTabs?: ReactNode;
   /** 会话区操作（搜索/刷新/思考等） */
   chatActions?: ReactNode;
-  /** 标题与操作区之间的居中内容（如 IM 全局搜索） */
-  centerContent?: ReactNode;
   /** 预览列操作（展开/收起/预览开关等）；conversation 时亦渲染在右上角 */
   previewActions?: ReactNode;
   /**
@@ -49,7 +47,6 @@ interface NormalizedContentHeaderSlot {
   title: ReactNode;
   previewTabs?: ReactNode;
   chatActions?: ReactNode;
-  centerContent?: ReactNode;
   previewActions?: ReactNode;
   layoutMode: ContentHeaderLayoutMode;
   onCloseSession?: () => void;
@@ -66,7 +63,6 @@ function resolveDefaultTitle(pathname: string, t: (key: string) => string): stri
   if (matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname)) return t('common:sidebar.taskList');
   if (matchPath({ path: '/tasks/:taskId', end: true }, pathname)) return t('common:sidebar.taskList');
   if (pathname.startsWith('/workflow')) return t('common:sidebar.workflow');
-  if (pathname.startsWith('/messages')) return t('common:im.title');
   if (pathname.startsWith('/my-tasks')) return t('common:sidebar.myTasks');
   if (pathname.startsWith('/skills')) return t('common:sidebar.skills');
   if (pathname.startsWith('/more-apps')) return t('common:sidebar.moreApps');
@@ -88,7 +84,6 @@ function normalizeSlot(input: ContentHeaderSlot): NormalizedContentHeaderSlot {
     title: input.title,
     previewTabs: input.previewTabs,
     chatActions: input.chatActions,
-    centerContent: input.centerContent,
     previewActions: input.previewActions ?? input.actions,
     layoutMode,
     onCloseSession: input.onCloseSession,
@@ -122,7 +117,6 @@ export function useContentHeader({
   title,
   previewTabs,
   chatActions,
-  centerContent,
   previewActions,
   actions,
   layoutMode,
@@ -141,7 +135,6 @@ export function useContentHeader({
       title,
       previewTabs,
       chatActions,
-      centerContent,
       previewActions,
       actions,
       layoutMode,
@@ -152,7 +145,6 @@ export function useContentHeader({
     title,
     previewTabs,
     chatActions,
-    centerContent,
     previewActions,
     actions,
     layoutMode,
@@ -173,7 +165,6 @@ export function useContentHeaderDisplay(): {
   title: ReactNode | null;
   previewTabs: ReactNode | null;
   chatActions: ReactNode | null;
-  centerContent: ReactNode | null;
   previewActions: ReactNode | null;
   /** @deprecated Alias of previewActions for existing consumers. */
   actions: ReactNode | null;
@@ -198,7 +189,6 @@ export function useContentHeaderDisplay(): {
     title,
     previewTabs: slot?.previewTabs ?? null,
     chatActions: slot?.chatActions ?? null,
-    centerContent: slot?.centerContent ?? null,
     previewActions: slot?.previewActions ?? null,
     actions: slot?.previewActions ?? null,
     layoutMode,

@@ -501,8 +501,6 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // Always clear local state even if API call fails
         }
-        const { useOpenIMSessionStore } = await import('@/stores/openim-session');
-        await useOpenIMSessionStore.getState().disconnect();
         set({
           isAuthenticated: false,
           user: null,
