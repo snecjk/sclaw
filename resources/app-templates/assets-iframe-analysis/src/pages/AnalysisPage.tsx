@@ -1,4 +1,4 @@
-import { Alert, Card, Col, Progress, Row, Select, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, Col, Progress, Row, Select, Statistic, Table, Tag, Typography } from 'antd';
 
 const trend = [42, 57, 48, 66, 61, 78, 86];
 const rows = [
@@ -15,13 +15,18 @@ const metrics = [
   { title: '待关注项', value: 36, suffix: '项', change: '-5.4%' },
 ];
 
+function SectionTitle({ children }: { children: string }) {
+  return <h2 className="sto-card-title"><span aria-hidden className="bar" />{children}</h2>;
+}
+
 export function AnalysisPage() {
   return (
     <main className="analysis-page">
-      <section className="analysis-title-row">
+      <section className="analysis-toolbar" aria-label="分析范围">
         <div>
-          <Typography.Title level={3}>经营分析看板</Typography.Title>
-          <Typography.Text type="secondary">单页 Assets 子应用基础框架</Typography.Text>
+          <Typography.Text className="analysis-eyebrow">分析概览</Typography.Text>
+          <Typography.Title level={4}>经营分析看板</Typography.Title>
+          <Typography.Text type="secondary">Assets 子应用基础分析框架</Typography.Text>
         </div>
         <div className="analysis-filters">
           <Select defaultValue="all" options={[{ value: 'all', label: '全部区域' }, { value: 'east', label: '华东区域' }, { value: 'south', label: '华南区域' }]} />
@@ -37,36 +42,45 @@ export function AnalysisPage() {
         description="接入真实数据时，可直接将本页的 metrics、trend 与 rows 模拟数据替换为接口调用结果。"
       />
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[12, 12]}>
         {metrics.map((metric) => (
-          <Col key={metric.title} xs={24} sm={12} xl={6}>
-            <Card className="metric-card">
+          <Col key={metric.title} xs={12} md={6}>
+            <section className="metric-card">
               <Statistic {...metric} />
-              <Tag color={metric.change.startsWith('-') ? 'green' : 'blue'}>{metric.change} 较上期</Tag>
-            </Card>
+              <Tag color={metric.change.startsWith('-') ? 'green' : 'orange'}>{metric.change} 较上期</Tag>
+            </section>
           </Col>
         ))}
       </Row>
 
-      <Row gutter={[16, 16]} className="analysis-content-row">
+      <Row gutter={[12, 12]} className="analysis-content-row">
         <Col xs={24} lg={15}>
-          <Card title="趋势概览" extra={<Typography.Text type="secondary">近 7 个周期</Typography.Text>}>
+          <section className="sto-card">
+            <div className="sto-card-header">
+              <SectionTitle>趋势概览</SectionTitle>
+              <Typography.Text type="secondary">近 7 个周期</Typography.Text>
+            </div>
             <div className="trend-chart" aria-label="趋势模拟图">
               {trend.map((value, index) => <span key={index} style={{ height: `${value}%` }} title={`${value}`} />)}
             </div>
             <div className="trend-labels"><span>周期 1</span><span>周期 7</span></div>
-          </Card>
+          </section>
         </Col>
         <Col xs={24} lg={9}>
-          <Card title="分类分布">
-            <div className="distribution-item"><span>高价值</span><Progress percent={46} strokeColor="#1677ff" /></div>
-            <div className="distribution-item"><span>稳态</span><Progress percent={34} strokeColor="#52c41a" /></div>
+          <section className="sto-card">
+            <div className="sto-card-header"><SectionTitle>分类分布</SectionTitle></div>
+            <div className="distribution-item"><span>高价值</span><Progress percent={46} strokeColor="#4760fe" /></div>
+            <div className="distribution-item"><span>稳态</span><Progress percent={34} strokeColor="#00b54b" /></div>
             <div className="distribution-item"><span>待关注</span><Progress percent={20} strokeColor="#faad14" /></div>
-          </Card>
+          </section>
         </Col>
       </Row>
 
-      <Card className="analysis-table" title="分析明细" extra={<Typography.Text type="secondary">模拟数据 · 共 4 条</Typography.Text>}>
+      <section className="sto-card analysis-table">
+        <div className="sto-card-header">
+          <SectionTitle>分析明细</SectionTitle>
+          <Typography.Text type="secondary">模拟数据 · 共 4 条</Typography.Text>
+        </div>
         <Table
           pagination={false}
           dataSource={rows}
@@ -78,7 +92,7 @@ export function AnalysisPage() {
             { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === '正常' ? 'green' : 'gold'}>{value}</Tag> },
           ]}
         />
-      </Card>
+      </section>
     </main>
   );
 }
