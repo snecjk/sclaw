@@ -3,7 +3,7 @@
  * (capabilities: app-create-scaffold / service-dev-server). No Electron deps.
  */
 
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 export type AppDevPhase =
@@ -91,6 +91,25 @@ function dirHasPackageJson(dir: string): boolean {
   return existsSync(join(dir, 'package.json'));
 }
 
+function declaredDirectDependencies(npmCwd: string): string[] | null {
+  try {
+    const packageJson = JSON.parse(readFileSync(join(npmCwd, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, unknown>;
+      devDependencies?: Record<string, unknown>;
+    };
+    return [...new Set([
+      ...Object.keys(packageJson.dependencies ?? {}),
+      ...Object.keys(packageJson.devDependencies ?? {}),
+    ])];
+  } catch {
+    return null;
+  }
+}
+
+function hasInstalledPackage(nodeModules: string, packageName: string): boolean {
+  return dirHasPackageJson(join(nodeModules, ...packageName.split('/')));
+}
+
 /**
  * True when the app npm cwd still needs `npm install`.
  * Treats a leftover empty or interrupted `node_modules` as missing
@@ -99,6 +118,10 @@ function dirHasPackageJson(dir: string): boolean {
 export function needsAppNpmInstall(npmCwd: string): boolean {
   const nodeModules = join(npmCwd, 'node_modules');
   if (!existsSync(nodeModules)) return true;
+  const dependencies = declaredDirectDependencies(npmCwd);
+  if (dependencies?.length) {
+    return dependencies.some((dependency) => !hasInstalledPackage(nodeModules, dependency));
+  }
   try {
     const entries = readdirSync(nodeModules, { withFileTypes: true });
     for (const entry of entries) {

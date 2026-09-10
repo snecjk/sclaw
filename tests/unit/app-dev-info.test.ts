@@ -125,6 +125,18 @@ describe('app-dev-info', () => {
       );
       expect(needsAppNpmInstall(root)).toBe(false);
     });
+
+    it('needs install when a declared direct dependency is missing', async () => {
+      const root = await tmpRoot();
+      await writeFile(join(root, 'package.json'), JSON.stringify({
+        dependencies: { react: '^19.0.0' },
+        devDependencies: { vite: '^5.4.0', '@vitejs/plugin-react': '^4.7.0' },
+      }));
+      await mkdir(join(root, 'node_modules', 'vite'), { recursive: true });
+      await writeFile(join(root, 'node_modules', 'vite', 'package.json'), '{"name":"vite"}');
+
+      expect(needsAppNpmInstall(root)).toBe(true);
+    });
   });
 
   it('stripInheritedNpmRegistryEnv drops host registry overrides', () => {
