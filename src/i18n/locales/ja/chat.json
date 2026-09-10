@@ -210,6 +210,7 @@
     "collapsedSummaryThoughtsOnly": "{{thoughtCount}} 回思考",
     "collapsedSummaryToolsOnly": "{{toolCount}} 個のツールを使用",
     "liveCurrentThinking": "思考中",
+    "liveCallingTool": "ツールを呼び出しています",
     "omittedEarlierThinkingChars": "先頭の {{count}} 文字を省略しました",
     "invokeToolLabel": "ツール呼び出し – {{toolName}}",
     "toolNoParams": "パラメータなし",

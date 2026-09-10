@@ -59,6 +59,9 @@ const SMALL_CHANGE_RE = /(改一个字|改下文案|改标题|改颜色|改圆�
 
 const PLAN_GATE_DISABLED_KEY = 'stoclaw:app-dev-plan-gate-disabled';
 
+/** 拼进发给模型的 user 消息；展示侧必须剥掉，不能进气泡。 */
+export const PLAN_GATE_HEADING = '【系统约束 · 方案闸门】';
+
 /** 全局关闭 Plan 闸门（localStorage）；默认开启。 */
 export function isAppDevPlanGateEnabled(): boolean {
   try {
@@ -97,16 +100,32 @@ export function shouldTriggerPlanGate(input: {
   return false;
 }
 
-/** 发送侧包装：要求 Agent 先出方案、先不改代码。 */
+/** 发送侧包装：要求 Agent 先出短方案、先不改代码。气泡展示请用 {@link stripPlanGatePromptForDisplay}。 */
 export function buildPlanFirstPrompt(userText: string): string {
   return [
     userText.trim(),
     '',
-    '【系统约束 · 方案闸门】本需求较复杂：请先只输出 fenced JSON ```sclaw_plan',
-    '{"summary":"...","overview":"应用概述","audience":"目标用户","scenarios":"核心场景","steps":[{"id":"1","title":"...","fileHints":["..."],"assets":["可选素材说明"]}]}',
-    '```，可选再输出 ```sclaw_styles {"presets":[{"id":"...","name":"...","description":"...","swatches":["#..."]}]} ```。',
-    '不要写业务代码、不要改文件。等用户确认后再实现。',
+    `${PLAN_GATE_HEADING}本需求较复杂：请先只输出 fenced JSON \`\`\`sclaw_plan`,
+    '{"summary":"一两句话说明要做什么","steps":[{"id":"1","title":"短步骤"}]}',
+    '```。summary 不超过 80 字；steps 3～6 条，每条 title 不超过 24 字。不要写长概述、不要写业务代码、不要改文件。等用户确认后再实现。',
   ].join('\n');
+}
+
+/** 确认卡展示用短文案：优先 summary，避免把概述长文铺满屏幕。 */
+export function planCardBrief(plan: AppDevPlanDocument): string {
+  const summary = plan.summary.trim();
+  if (summary) return summary;
+  return (plan.overview ?? '').trim();
+}
+
+/** 从发给模型的包装正文还原用户原文（气泡 / 编辑回填）。 */
+export function stripPlanGatePromptForDisplay(text: string): string {
+  const marked = `\n${PLAN_GATE_HEADING}`;
+  const markedAt = text.indexOf(marked);
+  if (markedAt >= 0) return text.slice(0, markedAt).trimEnd();
+  const headingAt = text.indexOf(PLAN_GATE_HEADING);
+  if (headingAt >= 0) return text.slice(0, headingAt).trimEnd();
+  return text;
 }
 
 /** 若应触发闸门则返回包装后的发送文本，否则返回 null。 */

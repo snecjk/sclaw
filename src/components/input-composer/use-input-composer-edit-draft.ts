@@ -16,6 +16,7 @@ import {
   stripGatewayTimestampPrefix,
 } from '@/lib/user-message-display';
 import { stripSkillGatewayPrefix } from '@/lib/skill-transcript-marker';
+import { stripPlanGatePromptForDisplay } from '@/lib/app-dev-plan-gate';
 import { unescapeLiteralNewlines } from '../../../shared/text-escape';
 import { hostApiFetch } from '@/lib/host-api';
 import { stageDataCenterSelection } from '@/components/data-center-file-picker/stage-selection';
@@ -117,7 +118,7 @@ export function sanitizePersistedTextSegmentForEdit(
   text: string,
   skill?: Pick<SkillMeta, 'slug' | 'title'>,
 ): string {
-  let cleaned = stripComposerGatewayPlaceholders(text);
+  let cleaned = stripPlanGatePromptForDisplay(stripComposerGatewayPlaceholders(text));
   cleaned = stripGatewayMediaAttached(cleaned);
   // 仅当确有时间戳前缀时才 trimStart，避免吃掉 chip 两侧故意保留的空格。
   const trimmedStart = cleaned.trimStart();

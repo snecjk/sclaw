@@ -210,6 +210,7 @@
     "collapsedSummaryThoughtsOnly": "思考 {{thoughtCount}} 次",
     "collapsedSummaryToolsOnly": "使用 {{toolCount}} 个工具",
     "liveCurrentThinking": "正在思考",
+    "liveCallingTool": "正在调用工具",
     "omittedEarlierThinkingChars": "已省略前 {{count}} 字",
     "invokeToolLabel": "调用工具-{{toolName}}",
     "toolNoParams": "无参数",

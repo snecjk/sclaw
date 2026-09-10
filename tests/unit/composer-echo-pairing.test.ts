@@ -19,6 +19,7 @@ import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
 import { stripUserNoiseKeepComposerBake, stripGatewayTimestampPrefix } from '@/lib/user-message-display';
 import { stripSkillGatewayPrefix } from '@/lib/skill-transcript-marker';
 import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { buildPlanFirstPrompt } from '@/lib/app-dev-plan-gate';
 import type { RawMessage } from '@/stores/chat/types';
 
 describe('composer echo pairing & display', () => {
@@ -40,6 +41,13 @@ describe('composer echo pairing & display', () => {
     expect(normalizeUserMessageForDisplay(
       '要求：\n\n📊 核心数据\n- 总发件量：1\n- 活跃客户：2',
     )).toBe('要求：\n\n📊 核心数据\n- 总发件量：1\n- 活跃客户：2');
+  });
+
+  it('strips app-dev plan-gate wrapping from bubble and edit refill', () => {
+    const original = '从零做一个完整官网落地页';
+    const wrapped = buildPlanFirstPrompt(original);
+    expect(normalizeUserMessageForDisplay(wrapped)).toBe(original);
+    expect(sanitizePersistedTextSegmentForEdit(wrapped)).toBe(original);
   });
 
   it('pairs optimistic displayText with gateway history that contains file placeholders', () => {

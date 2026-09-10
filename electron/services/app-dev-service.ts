@@ -491,7 +491,7 @@ ${pagePriorityBlock}
 - ⛔ 不要把业务页做成独立 HTML 报告：禁止 \`build.py\`、\`<!-- STO:DAILY -->\`、日报类名 \`.mc/.masthead\`、页尾设计师水印
 
 ## 输出协议（可选增强，失败时宿主会降级）
-- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"...","overview":"...","audience":"...","scenarios":"...","steps":[{"id":"1","title":"...","fileHints":["src/pages/..."],"assets":["..."]}]}\\n\`\`\`（契约见工作台 plan-gate v2），可选再输出 \`\`\`sclaw_styles\`\`\` 风格预设；**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
+- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"一两句话","steps":[{"id":"1","title":"短步骤"}]}\\n\`\`\`（summary ≤80 字，steps 3～6 条且 title ≤24 字）；**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
 - 每步完成可输出 \`\`\`sclaw_step\\n{"id":"1","status":"done"}\\n\`\`\`
 - 轮结束可输出 ≤3 条建议：\`\`\`sclaw_suggestions\\n[{"label":"检查移动端","prompt":"请检查一下移动端效果并修复溢出"}]\\n\`\`\`
 <!-- /sclaw-app-dev-context -->`;

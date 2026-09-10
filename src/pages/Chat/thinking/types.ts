@@ -3,7 +3,7 @@ export type { ThinkingTimelineItem } from '@/pages/Chat/message-utils';
 
 export type RawTurnEvent =
   | { type: 'text'; text: string }
-  | { type: 'thinking'; content: string }
+  | { type: 'thinking'; content: string; liveParts?: string[] }
   | { type: 'tool'; id: string; name: string; input: unknown };
 
 /** 阶段叙述 text（摘要之间的正文段落，不是最终交付） */

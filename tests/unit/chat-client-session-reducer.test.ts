@@ -6,6 +6,7 @@ import {
   reduceSessionEvent,
 } from '@/stores/chat/client-session-reducer';
 import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
+import { materializeLiveMessage } from '../../shared/chat-live-append';
 
 function event(overrides: Partial<CanonicalChatEvent> = {}): CanonicalChatEvent {
   return {
@@ -251,6 +252,37 @@ describe('canonical chat client session reducer', () => {
     const started = reduceSessionEvent(createClientSessionState(), event()).state;
     expect(reduceSessionEvent(started, event()).accepted).toBe(false);
     expect(reduceSessionEvent(started, event({ sequence: 3 })).needsHydration).toBe(true);
+  });
+
+  it('applies coalesced thinking appends and allows delta sequence jumps without hydration', () => {
+    const started = reduceSessionEvent(createClientSessionState(), event()).state;
+    const first = reduceSessionEvent(started, event({
+      eventId: 'delta-2',
+      sequence: 2,
+      type: 'message.delta',
+      payload: { id: 'a1', role: 'assistant', content: [{ type: 'thinking', thinking: '先看结构' }] },
+    })).state;
+    const jumped = reduceSessionEvent(first, event({
+      eventId: 'delta-5',
+      sequence: 5,
+      type: 'message.delta',
+      payload: {
+        id: 'a1',
+        role: 'assistant',
+        _liveAppend: {
+          append: '，再改首页',
+          totalLength: '先看结构，再改首页'.length,
+          blockIndex: 0,
+          field: 'thinking',
+        },
+      },
+    }));
+    expect(jumped.needsHydration).toBe(false);
+    expect(jumped.accepted).toBe(true);
+    expect(materializeLiveMessage(jumped.state.overlay.streamingMessage)).toMatchObject({
+      content: [{ type: 'thinking', thinking: '先看结构，再改首页' }],
+    });
+    expect(jumped.state.runtime?.sequence).toBe(5);
   });
 
   it('accepts a same-sequence terminal event and terminal hydration snapshot', () => {

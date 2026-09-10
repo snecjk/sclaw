@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPlanConfirmPrompt,
+  buildPlanFirstPrompt,
   extractSclawPlan,
   extractSclawStyles,
+  planCardBrief,
 } from '../../src/lib/app-dev-plan-gate';
 import { deriveAppNameFromPrompt } from '../../src/lib/app-dev-quick-create';
 
@@ -37,6 +39,29 @@ describe('app-dev-plan-gate v2', () => {
     expect(prompt).toContain('【应用概述】');
     expect(prompt).toContain('【设计风格】');
     expect(prompt).toContain('清爽');
+  });
+
+  it('asks the model for a short plan instead of a multi-field brief', () => {
+    const wrapped = buildPlanFirstPrompt('从零做一个完整官网落地页');
+    expect(wrapped).toContain('sclaw_plan');
+    expect(wrapped).toContain('"summary"');
+    expect(wrapped).toContain('"steps"');
+    expect(wrapped).not.toContain('"overview"');
+    expect(wrapped).not.toContain('"audience"');
+    expect(wrapped).not.toContain('"scenarios"');
+  });
+
+  it('uses summary as the confirm-card brief', () => {
+    expect(planCardBrief({
+      summary: '做查询页',
+      overview: '很长的实现细节不该铺在确认卡上',
+      steps: [{ id: '1', title: '首页' }],
+    })).toBe('做查询页');
+    expect(planCardBrief({
+      summary: '  ',
+      overview: '快递查询',
+      steps: [{ id: '1', title: '首页' }],
+    })).toBe('快递查询');
   });
 });
 

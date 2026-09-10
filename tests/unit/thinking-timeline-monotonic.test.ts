@@ -59,6 +59,21 @@ describe('mergeTimelineMonotonic', () => {
     expect(merged[2]).toMatchObject({ type: 'thinking', content: 'beta thinking block' });
   });
 
+  it('keeps a live thinking block when the collapsed tail window slides', () => {
+    const parts = ['abcdefghij'.repeat(20)];
+    const cached: ThinkingTimelineItem[] = [
+      { type: 'thinking', content: 'abcdefghij'.repeat(8), liveParts: parts },
+    ];
+    const incoming: ThinkingTimelineItem[] = [
+      { type: 'thinking', content: 'cdefghijab'.repeat(8), liveParts: parts },
+    ];
+
+    const merged = mergeTimelineMonotonic(cached, incoming);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ type: 'thinking', liveParts: parts });
+    expect(timelineBlockResetKey(cached[0]!, 0)).toBe(timelineBlockResetKey(incoming[0]!, 0));
+  });
+
   it('does not shrink timeline when incoming is shorter', () => {
     const cached: ThinkingTimelineItem[] = [
       { type: 'thinking', content: 'a' },

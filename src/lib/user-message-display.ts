@@ -13,6 +13,7 @@ import { stripSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { stripWorkflowCompleteForDisplay, stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
+import { stripPlanGatePromptForDisplay } from '@/lib/app-dev-plan-gate';
 
 const GATEWAY_SYSTEM_EVENT_LINE =
   /^\s*System:\s*(?:\[[^\]]+\]\s*)?[^\n]*(?:\n|$)/gim;
@@ -66,13 +67,15 @@ export function stripGatewayMediaAttached(text: string): string {
  * 顺序：先抽 `用户消息：` 等外层块，再剥时间戳——否则 `[Thu …]` 嵌在用户段内时 `^` 匹配不到。
  */
 export function stripUserNoiseKeepComposerBake(text: string): string {
-  const withoutWrappers = stripSkillTranscriptMarker(
-    stripCronTriggerTextForDisplay(
-      stripWorkflowContextForDisplay(
-        stripSclawBrowserEmbedContextForDisplay(
-          stripWorkflowSessionHintForDisplay(
-            stripWorkflowCompleteForDisplay(
-              stripDingTalkMentionContextForDisplay(text),
+  const withoutWrappers = stripPlanGatePromptForDisplay(
+    stripSkillTranscriptMarker(
+      stripCronTriggerTextForDisplay(
+        stripWorkflowContextForDisplay(
+          stripSclawBrowserEmbedContextForDisplay(
+            stripWorkflowSessionHintForDisplay(
+              stripWorkflowCompleteForDisplay(
+                stripDingTalkMentionContextForDisplay(text),
+              ),
             ),
           ),
         ),

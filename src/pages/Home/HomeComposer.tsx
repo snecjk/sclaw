@@ -19,8 +19,9 @@ import {
   stoHeroInputShellClass,
   stoParameterFormDockLayout,
 } from '@/lib/surfaces';
-import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { ChatInput, type ChatSendExtras, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
+import { PLAN_GATE_HEADING, buildPlanFirstPrompt } from '@/lib/app-dev-plan-gate';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatEngineModelPicker } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
@@ -45,6 +46,7 @@ export interface HomeComposerProps {
     workflowSource?: string | null,
     workflowName?: string | null,
     skillMeta?: SkillMeta,
+    extras?: ChatSendExtras,
   ) => void;
   /** Return true to consume a local command before it is sent to the agent. */
   onBeforeSend?: (text: string) => boolean | string | void;
@@ -137,9 +139,25 @@ export function HomeComposer({
   const sendMessage = onSend ?? handleHubSend;
   const inputProps = useChatInputBindings({
     onSend: onBeforeSend
-      ? (text, attachments, targetAgentId, dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta) => {
+      ? (text, attachments, targetAgentId, dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta, extras) => {
           const gate = onBeforeSend(text);
           if (gate === true) return;
+          // 方案闸门只进发给模型的 gatewayText，气泡仍用用户原文。
+          if (typeof gate === 'string' && gate.includes(PLAN_GATE_HEADING)) {
+            const gatewaySource = extras?.gatewayText?.trim() || text;
+            sendMessage(
+              text,
+              attachments,
+              targetAgentId,
+              dingTalkMentions,
+              workflowId,
+              workflowSource,
+              workflowName,
+              skillMeta,
+              { ...extras, gatewayText: buildPlanFirstPrompt(gatewaySource) },
+            );
+            return;
+          }
           const outbound = typeof gate === 'string' ? gate : text;
           sendMessage(
             outbound,
@@ -150,6 +168,7 @@ export function HomeComposer({
             workflowSource,
             workflowName,
             skillMeta,
+            extras,
           );
         }
       : sendMessage,

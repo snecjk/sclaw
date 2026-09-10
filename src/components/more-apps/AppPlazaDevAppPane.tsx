@@ -58,6 +58,7 @@ import {
   shouldTriggerPlanGate,
   wrapUserTextForPlanGate,
   buildPlanFirstPrompt,
+  stripPlanGatePromptForDisplay,
 } from '@/lib/app-dev-plan-gate';
 import {
   RESPONSIVE_AUDIT_SCRIPT,
@@ -314,6 +315,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
       <div className="mt-2 space-y-0">
         {showPlan && plan ? (
           <AppDevPlanCard
+            key={item.key}
             plan={plan}
             stylePresets={stylePresets}
             onDismiss={() => setDismissedPlans((prev) => ({ ...prev, [item.key]: true }))}
@@ -536,9 +538,9 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     setInspectActive(false);
   }, [workspaceId, setInspectActive]);
 
-  // P5 W2-1：对话式创建后自动发送首条（已包装 Plan 闸门）
+  // P5 W2-1：对话式创建后自动发送首条。气泡用原文，模型侧强制走 Plan 闸门。
   useEffect(() => {
-    const prompt = tab.pendingPrompt?.trim();
+    const prompt = stripPlanGatePromptForDisplay(tab.pendingPrompt ?? '').trim();
     if (!active || !prompt || !appDevSessionKey || sending) return;
     clearDevAppPendingPrompt(tab.id);
     setChatOpen(true);
@@ -547,6 +549,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     void useChatStore.getState().sendMessage({
       text: prompt,
       sessionKey: appDevSessionKey,
+      gatewayText: buildPlanFirstPrompt(prompt),
     }).catch((error) => {
       toast.error(error instanceof Error ? error.message : String(error));
     });
@@ -850,11 +853,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     const packed = buildElementIntentPrompt(trimmed, elements);
     const priorUserMessageCount = getSessionDisplayMessages(appDevSessionKey)
       .filter((message) => message.role === 'user').length;
-    const outbound = shouldTriggerPlanGate({ userText: trimmed, priorUserMessageCount })
+    const gatewayText = shouldTriggerPlanGate({ userText: trimmed, priorUserMessageCount })
       ? buildPlanFirstPrompt(packed)
-      : packed;
+      : undefined;
     try {
-      await sendAppDevChatPrompt(appDevSessionKey, outbound);
+      await sendAppDevChatPrompt(appDevSessionKey, packed, gatewayText ? { gatewayText } : undefined);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
