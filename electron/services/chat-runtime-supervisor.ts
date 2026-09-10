@@ -18,11 +18,29 @@ import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-ses
 import { isEmbedAppChatSessionKey } from '../../shared/session-type';
 import { patchTerminalRuntimeMetadata, transitionChatRuntime, transitionChatRuntimePhase } from './chat-runtime-transition';
 import { inspectTranscript } from '../engines/chat-runtime-inspection';
+import { inheritChatRunInterruptCause, classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
+import { peekRunInterrupt, rememberRunInterrupt } from '../engines/run-interrupt-store';
+import {
+  buildLiveDeltaPayload,
+  type LiveDeltaCursor,
+} from '../../shared/chat-live-append';
 
 const RECOVERY_DEADLINE_MS = 135_000;
 const EMBED_BROWSER_RECOVERY_IDLE_MS = 5 * 60_000;
 const RECOVERY_RETRY_MS = 5_000;
 const DELTA_PERSIST_THROTTLE_MS = 1_000;
+
+function isNonRetryableSqliteConstraint(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const record = current as { errcode?: unknown; code?: unknown; cause?: unknown; error?: unknown };
+    if (record.errcode === 275 || record.errcode === 19) return true;
+    const code = String(record.code ?? '');
+    if (code.includes('CONSTRAINT')) return true;
+    current = record.cause ?? record.error;
+  }
+  return false;
+}
 const ERROR_RECOVERY_GRACE_MS = 15_000;
 const EMBED_RATE_LIMIT_RECOVERY_GRACE_MS = 90_000;
 const RUN_HARD_DEADLINE_MS = 6 * 60 * 60_000;
@@ -198,6 +216,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private readonly transcriptSettleRuns = new Map<string, Promise<void>>();
   private readonly transcriptCompensationRuns = new Map<string, Promise<void>>();
   private readonly diagnostics = new Map<string, RunDiagnostics>();
+  /** 上一帧已发给 renderer 的生长字段；只用于算增量后缀，不截断全文。 */
+  private readonly liveDeltaCursors = new Map<string, LiveDeltaCursor>();
   private initializationState: 'uninitialized' | 'initializing' | 'ready' | 'degraded' = 'uninitialized';
   private initializePromise: Promise<void> | null = null;
   private initializeRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -246,6 +266,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
             phase: 'interrupted',
             terminalAt: Date.now(),
             error: 'Superseded by a newer active run during recovery.',
+            interruptCause: previous.interruptCause ?? 'process_restart',
             updatedAt: Date.now(),
           });
         }
@@ -258,10 +279,12 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           phase: 'reconciling',
           epoch: stored.epoch + 1,
           sequence: 0,
+          interruptCause: 'process_restart',
           updatedAt: Date.now(),
         };
         this.snapshots.set(recovered.sessionKey, recovered);
         await this.persist(recovered, true);
+        rememberRunInterrupt(recovered.sessionKey, 'process_restart');
         this.touchRunActivity(recovered.sessionKey, recovered.lastEventAt);
         this.scheduleRecovery(recovered.sessionKey);
         this.scheduleHardDeadline(recovered.sessionKey, recovered.epoch);
@@ -368,10 +391,12 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     }
     const now = Date.now();
     const prior = this.snapshots.get(input.sessionKey);
+    const inheritedCause = inheritChatRunInterruptCause(prior);
     if (prior && !isTerminalChatRunPhase(prior.phase) && prior.idempotencyKey !== input.idempotencyKey) {
       await this.publish({
         ...prior,
         error: 'Superseded by a newer send in the same session.',
+        interruptCause: prior.interruptCause ?? inheritedCause,
       }, 'run.interrupted', { reason: 'superseded' }, true);
     }
     const snapshot: ChatRuntimeSnapshot = {
@@ -388,12 +413,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       lastEventAt: now,
       terminalAt: null,
       error: null,
+      interruptCause: inheritedCause,
       contextUsage: prior?.contextUsage ?? null,
       acceptanceResult: null,
       updatedAt: now,
     };
     this.projectedTranscriptEvents.delete(input.sessionKey);
     this.historyPollBackoff.delete(input.sessionKey);
+    this.liveDeltaCursors.delete(input.sessionKey);
     this.diagnostics.set(input.sessionKey, {
       polls: 0,
       transcriptRevisions: 0,
@@ -512,7 +539,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.scheduleHistoryPoll(input.sessionKey);
       return;
     }
-    await this.publish({ ...current, error: input.error }, 'run.failed', { error: input.error }, true);
+    await this.publish(this.withTerminalInterruptCause({ ...current, error: input.error }, 'run.failed'), 'run.failed', { error: input.error }, true);
   }
 
   async aborting(sessionKey: string): Promise<void> {
@@ -536,7 +563,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private async abortedUnlocked(sessionKey: string, runId?: string | null): Promise<void> {
     const current = this.snapshots.get(sessionKey);
     if (!current || (runId && current.runId && runId !== current.runId)) return;
-    await this.publish(current, 'run.aborted', undefined, true);
+    await this.publish(this.withTerminalInterruptCause(current, 'run.aborted'), 'run.aborted', undefined, true);
   }
 
   async abortFailed(sessionKey: string, error: string): Promise<void> {
@@ -705,6 +732,58 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (engineCompleted && latest) this.startTranscriptSettle(latest, event.type);
   }
 
+  private withTerminalInterruptCause(
+    base: ChatRuntimeSnapshot,
+    type: CanonicalChatEventType,
+  ): ChatRuntimeSnapshot {
+    if (type === 'run.completed') {
+      return { ...base, interruptCause: null };
+    }
+    if (type === 'run.aborted') {
+      return { ...base, interruptCause: 'user_abort' };
+    }
+    if (type === 'run.failed') {
+      return { ...base, interruptCause: classifyChatRunInterrupt(base.error) };
+    }
+    if (type === 'run.interrupted') {
+      return {
+        ...base,
+        interruptCause: base.interruptCause ?? classifyChatRunInterrupt(base.error),
+      };
+    }
+    return base;
+  }
+
+  private applyHotInterruptCause(snapshot: ChatRuntimeSnapshot): ChatRuntimeSnapshot {
+    if (snapshot.phase === 'completed') {
+      return { ...snapshot, interruptCause: snapshot.interruptCause ?? null };
+    }
+    if (snapshot.interruptCause) return snapshot;
+    const hot = peekRunInterrupt(snapshot.sessionKey);
+    if (!hot) return snapshot;
+    const next = { ...snapshot, interruptCause: hot };
+    const live = this.snapshots.get(snapshot.sessionKey);
+    if (live && live.epoch === snapshot.epoch) {
+      this.snapshots.set(snapshot.sessionKey, { ...live, interruptCause: hot });
+    }
+    return next;
+  }
+
+  /**
+   * 引擎 delta 是累计快照；发给 renderer 时只带新增后缀。
+   * 结构变化（新 tool_use 等）仍发完整 message，绝不截断思考正文。
+   */
+  private toRendererLiveDeltaPayload(sessionKey: string, payload: unknown): unknown {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+    const built = buildLiveDeltaPayload(
+      this.liveDeltaCursors.get(sessionKey) ?? null,
+      payload as Record<string, unknown>,
+    );
+    if (built.cursor) this.liveDeltaCursors.set(sessionKey, built.cursor);
+    else this.liveDeltaCursors.delete(sessionKey);
+    return built.payload;
+  }
+
   private async publish(
     base: ChatRuntimeSnapshot,
     type: CanonicalChatEventType,
@@ -712,7 +791,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     forcePersist = false,
   ): Promise<void> {
     const now = Date.now();
-    const transition = transitionChatRuntime({ snapshot: base, type, occurredAt: now });
+    const stamped = this.withTerminalInterruptCause(base, type);
+    const transition = transitionChatRuntime({ snapshot: stamped, type, occurredAt: now });
     if (!transition.accepted) {
       logger.debug('[chat-runtime] transition rejected', {
         sessionKey: base.sessionKey,
@@ -732,6 +812,16 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       : transitionedSnapshot;
     const phase = snapshot.phase;
     this.snapshots.set(snapshot.sessionKey, snapshot);
+    const eventPayload = type === 'message.delta'
+      ? this.toRendererLiveDeltaPayload(snapshot.sessionKey, payload)
+      : payload;
+    if (
+      type === 'run.dispatching'
+      || type === 'message.final'
+      || isRunTerminalEvent
+    ) {
+      this.liveDeltaCursors.delete(snapshot.sessionKey);
+    }
     const event: CanonicalChatEvent = {
       protocolVersion: CHAT_RUNTIME_PROTOCOL_VERSION,
       eventId: randomUUID(),
@@ -744,12 +834,17 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       sequence: snapshot.sequence,
       occurredAt: now,
       type,
-      payload,
+      payload: eventPayload,
     };
     const diagnostics = this.diagnostics.get(snapshot.sessionKey);
     if (diagnostics) diagnostics.canonicalEvents += 1;
     this.emit('event', event);
-    await this.persist(snapshot, forcePersist || isTerminalChatRunPhase(phase));
+    const persistDelta = type === 'message.delta' && !forcePersist && !isTerminalChatRunPhase(phase);
+    if (persistDelta) {
+      this.dirtySnapshots.set(snapshot.sessionKey, snapshot);
+    } else {
+      await this.persist(snapshot, forcePersist || isTerminalChatRunPhase(phase));
+    }
     if (type === 'message.delta' || type === 'tool.updated' || (
       type.startsWith('context.compaction.') && !isTerminalChatRunPhase(snapshot.phase)
     )) {
@@ -817,13 +912,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     const operation = previous.catch(() => undefined).then(async () => {
       const snapshot = this.dirtySnapshots.get(sessionKey);
       if (!snapshot) return;
+      const toWrite = this.applyHotInterruptCause(snapshot);
+      if (toWrite !== snapshot) this.dirtySnapshots.set(sessionKey, toWrite);
       try {
         const repository = getChatRuntimeRepository();
         const result = typeof repository.upsertIfNewer === 'function'
-          ? await repository.upsertIfNewer(snapshot)
-          : (await repository.upsert(snapshot), 'updated' as const);
+          ? await repository.upsertIfNewer(toWrite)
+          : (await repository.upsert(toWrite), 'updated' as const);
         const current = this.dirtySnapshots.get(sessionKey);
-        if (current === snapshot) this.dirtySnapshots.delete(sessionKey);
+        if (current === toWrite || current === snapshot) this.dirtySnapshots.delete(sessionKey);
         this.lastPersistedAt.set(sessionKey, Date.now());
         const diagnostics = this.diagnostics.get(sessionKey);
         if (diagnostics && result !== 'stale') diagnostics.databaseWrites += 1;
@@ -836,6 +933,11 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         }
       } catch (error) {
         logger.warn('[chat-runtime] persist failed', { sessionKey, error });
+        if (isNonRetryableSqliteConstraint(error)) {
+          const current = this.dirtySnapshots.get(sessionKey);
+          if (current === toWrite || current === snapshot) this.dirtySnapshots.delete(sessionKey);
+          return;
+        }
         if (!this.persistTimers.has(sessionKey)) {
           this.persistTimers.set(sessionKey, setTimeout(() => {
             this.persistTimers.delete(sessionKey);
@@ -1044,7 +1146,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         const latest = this.snapshots.get(sessionKey);
         if (!latest || isTerminalChatRunPhase(latest.phase)) return;
         if (runId && latest.runId && runId !== latest.runId) return;
-        await this.publish({ ...latest, error }, 'run.failed', { error }, true);
+        await this.publish(this.withTerminalInterruptCause({ ...latest, error }, 'run.failed'), 'run.failed', { error }, true);
       });
     }, graceMs);
     this.errorTimers.set(sessionKey, timer);
@@ -1088,7 +1190,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     await this.publish({
       ...current,
       error: 'The run exceeded its configured deadline.',
+      interruptCause: 'hard_deadline',
     }, 'run.interrupted', { reason, ...(abortError ? { abortError } : {}) }, true);
+    rememberRunInterrupt(snapshot.sessionKey, 'hard_deadline');
   }
 
   private clearHardDeadline(sessionKey: string): void {

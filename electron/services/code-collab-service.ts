@@ -1,35 +1,24 @@
 /**
- * Site App code collaboration via sai-cli `siteapp` commands.
- * List / archive use memory-center HTTP in site-app-api.ts.
+ * Site App code collaboration via memory-center HTTP source APIs.
+ * List / archive / create / commit / snapshot use `/api/v1/site-apps*`.
  */
 
-import { readFile, realpath, unlink } from 'node:fs/promises';
+import { readFile, realpath, readdir } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { basename, join, resolve } from 'node:path';
 import {
-  mergeSiteAppRecords,
   normalizeSiteAppPageType,
   type SiteAppPageType,
   type SiteAppRecord,
 } from '../../shared/site-app-catalog';
 import {
-  filePathFromSiteappLocalUri,
-  parseSiteappSavedFiles,
-  parseSiteappRevision,
-  siteappCliErrorMessage,
-  type SiteappRepositoryProvision,
-} from '../../shared/siteapp-cli-payload';
+  REMOTE_AHEAD_MESSAGE,
+  decideSourcePullAction,
+  isVersionConflictError,
+} from '../../shared/site-app-source-sync';
 import { siteAppToWorkspaceFields, type StoWorkspaceFile } from '../../shared/sto-workspace';
 import { createUlid } from '../utils/ulid';
 import { logger } from '../utils/logger';
-import {
-  parseSiteappUploadRevision,
-  siteappApplicationCreate,
-  siteappRepositoryProvision,
-  siteappRevisionCreate,
-  siteappSourceDownload,
-  siteappSourceUpload,
-} from '../utils/siteapp-cli';
 import {
   applyArchiveToWorkspace,
   cleanupSourceSnapshot,
@@ -37,7 +26,14 @@ import {
   ensureEmptyDirectory,
   extractSourceArchive,
 } from '../utils/code-source-archive';
-import { enrichSiteAppRecord, getSiteApp, listSiteApps } from './site-app-api';
+import {
+  commitSiteAppSource,
+  createSiteApp,
+  downloadSiteAppSourceSnapshot,
+  enrichSiteAppRecord,
+  getSiteApp,
+  listSiteApps,
+} from './site-app-api';
 import {
   getStoAppBindingByLocalPath,
   getStoAppBindingByWorkspaceId,
@@ -50,6 +46,7 @@ import {
   writeStoWorkspaceBinding,
 } from './sto-workspace-store';
 import { upsertStoAppPushHistory } from './sto-app-push-history-store';
+import { StoMemoryApiError } from './sto-memory-api-fetch';
 
 export interface CodeCollabCommandResult {
   ok: boolean;
@@ -71,6 +68,7 @@ export interface CodeCollabStatusSummary {
 }
 
 const CODE_COLLAB_LOG_MAX_CHARS = 12_000;
+const SOURCE_SYNC_EXECUTABLE = 'site-apps';
 
 function syncLabelForState(state: CodeCollabStatusSummary['syncState'], bound: boolean): string {
   if (!bound) return '未绑定';
@@ -93,37 +91,9 @@ function serializeForCodeCollabLog(value: unknown): string {
   }
 }
 
-function isRepositoryReady(status?: string, headCommitSha?: string | null): boolean {
-  const normalized = status?.trim().toLowerCase() ?? '';
-  return (normalized === 'ready' || normalized === 'active') && Boolean(headCommitSha?.trim());
-}
-
-async function provisionRepository(appCode: string): Promise<SiteappRepositoryProvision> {
-  const provisioned = await siteappRepositoryProvision(appCode);
-  if (!isRepositoryReady(provisioned.status, provisioned.headCommitSha)) {
-    throw new Error(
-      `仓库未就绪（status=${provisioned.status ?? '未知'}），请针对同一 app_code 重试 provision`,
-    );
-  }
-  return provisioned;
-}
-
-function siteAppFromProvision(
-  appCode: string,
-  provisioned: SiteappRepositoryProvision,
-  name?: string,
-  pageType: SiteAppPageType = 'site',
-): SiteAppRecord {
-  return {
-    appCode,
-    applicationName: name ?? appCode,
-    status: provisioned.status,
-    headRevisionId: provisioned.headRevisionId ?? undefined,
-    headCommitSha: provisioned.headCommitSha ?? undefined,
-    gitlabProjectId: provisioned.gitlabProjectId,
-    devopsApplicationId: provisioned.devopsApplicationId,
-    pageType: normalizeSiteAppPageType(pageType),
-  };
+async function workspaceHasSourceFiles(appPath: string): Promise<boolean> {
+  const entries = await readdir(appPath).catch(() => [] as string[]);
+  return entries.some((entry) => entry !== '.sto');
 }
 
 export async function createSiteApplication(input: {
@@ -134,18 +104,11 @@ export async function createSiteApplication(input: {
   const applicationName = input.applicationName.trim();
   if (!applicationName) throw new Error('应用名称不能为空');
   const pageType = normalizeSiteAppPageType(input.pageType);
-  const created = await siteappApplicationCreate({
+  return createSiteApp({
     name: applicationName,
     description: input.description,
     pageType,
   });
-  const provisioned = await provisionRepository(created.appCode);
-  return siteAppFromProvision(
-    created.appCode,
-    provisioned,
-    applicationName,
-    created.pageType ?? pageType,
-  );
 }
 
 export async function ensureStoWorkspaceBinding(
@@ -259,7 +222,7 @@ async function summarizePendingRegistrationStatus(cwd: string): Promise<CodeColl
   }
   return {
     available: true,
-    executable: 'sai-cli',
+    executable: SOURCE_SYNC_EXECUTABLE,
     bound: false,
     syncState,
     syncLabel: '待首次提交',
@@ -285,7 +248,12 @@ async function persistFirstPushAppCode(input: {
 
   const state = await writeStoWorkspaceBinding({
     appPath: input.appPath,
-    cloud: siteAppToWorkspaceFields(input.cloud),
+    cloud: input.cloud
+      ? {
+          appCode: input.cloud.appCode,
+          status: input.cloud.status,
+        }
+      : undefined,
     fallback: { appCode, status: input.status || input.cloud?.status || 'ready' },
   });
 
@@ -311,8 +279,9 @@ function isFirstPushBaselineReady(state: StoWorkspaceFile | null): boolean {
 
 /**
  * Bind workspace for push. Creates the cloud Site App on first commit only.
- * appCode is persisted immediately after cloud create so a later git/provision
+ * appCode is persisted immediately after cloud create so a later source-commit
  * failure will reuse the same application instead of creating another one.
+ * First source/commit auto-provisions the Git repository on the server.
  */
 async function ensureWorkspaceForPush(
   appPath: string,
@@ -331,38 +300,43 @@ async function ensureWorkspaceForPush(
   const marker = await readMarkerForFirstPush(cwd);
   const { applicationName, pageType } = marker;
   let appCode = fromBinding?.appCode || marker.appCode || hints?.appCode?.trim();
+  let cloud: SiteAppRecord | undefined;
 
   if (!appCode) {
     logger.info(
       `[code-collab] first-push create cloud app name=${applicationName} pageType=${pageType} appPath=${cwd}`,
     );
-    const created = await siteappApplicationCreate({
+    cloud = await createSiteApp({
       name: applicationName,
       description: `${applicationName} 应用`,
       pageType,
     });
-    appCode = created.appCode;
+    appCode = cloud.appCode;
     await persistFirstPushAppCode({
       appPath: cwd,
       appCode,
-      applicationName: created.name || applicationName,
-      status: created.status || 'ready',
+      applicationName: cloud.applicationName || applicationName,
+      status: cloud.status || 'ready',
+      cloud,
       workspaceId: hints?.workspaceId,
     });
   } else if (!fromBinding?.baseRevisionId && !fromBinding?.baseCommitSha) {
     logger.info(
       `[code-collab] first-push reuse cloud app appCode=${appCode} name=${applicationName} appPath=${cwd}`,
     );
+    try {
+      cloud = await getSiteApp(appCode);
+    } catch (error) {
+      logger.warn(`[code-collab] first-push detail fallback appCode=${appCode}:`, error);
+    }
   }
 
-  const provisioned = await provisionRepository(appCode);
-  const remote = siteAppFromProvision(appCode, provisioned, applicationName, pageType);
   const state = await persistFirstPushAppCode({
     appPath: cwd,
     appCode,
-    applicationName: remote.applicationName || applicationName,
-    status: remote.status || 'ready',
-    cloud: remote,
+    applicationName: cloud?.applicationName || applicationName,
+    status: cloud?.status || 'ready',
+    cloud,
     workspaceId: hints?.workspaceId,
   });
   if (!state) {
@@ -371,32 +345,29 @@ async function ensureWorkspaceForPush(
   return { cwd, state };
 }
 
-function assertRemoteBaseline(
-  state: StoWorkspaceFile,
-  provisioned: SiteappRepositoryProvision,
-): void {
-  const remoteRevision = provisioned.headRevisionId ?? null;
+function throwIfRemoteAhead(state: StoWorkspaceFile, remote?: SiteAppRecord | null): void {
+  const remoteRevision = remote?.headRevisionId ?? null;
   const localRevision = state.baseRevisionId ?? null;
   if (remoteRevision && localRevision && remoteRevision !== localRevision) {
-    throw new Error('REMOTE_AHEAD：请先下载远程最新代码并处理差异');
-  }
-  if (remoteRevision && !localRevision) {
-    throw new Error('REMOTE_AHEAD：请先下载远程最新代码并处理差异');
+    throw new Error(REMOTE_AHEAD_MESSAGE);
   }
 }
 
-async function downloadArchiveBuffer(appCode: string): Promise<Buffer> {
-  logger.info(`[code-collab] siteapp download appCode=${appCode}`);
-  const result = await siteappSourceDownload(appCode);
-  if (!result.ok) throw new Error(siteappCliErrorMessage(result));
-  const saved = parseSiteappSavedFiles(result.data);
-  if (saved.length === 0) throw new Error('下载失败：CLI 未返回文件路径');
-  const path = filePathFromSiteappLocalUri(saved[0].localPath);
-  const archive = await readFile(path);
-  await unlink(path).catch(() => undefined);
-  if (archive.length === 0) throw new Error('下载文件为空');
-  gunzipSync(archive);
-  return archive;
+function mapVersionConflict(error: unknown): never {
+  if (error instanceof StoMemoryApiError && isVersionConflictError(error.errCode)) {
+    throw new Error(REMOTE_AHEAD_MESSAGE);
+  }
+  throw error instanceof Error ? error : new Error(String(error));
+}
+
+async function localSourceSha256(cwd: string): Promise<string | null> {
+  try {
+    const snapshot = await createSourceSnapshot(cwd);
+    await cleanupSourceSnapshot(snapshot);
+    return snapshot.sourceSha256;
+  } catch {
+    return null;
+  }
 }
 
 async function updateWorkspaceBaseline(
@@ -422,45 +393,48 @@ export async function getCodeCollabStatus(appPath: string): Promise<CodeCollabSt
   logger.info(`[code-collab] action=status appPath=${cwd}`);
   try {
     const { state } = await requireWorkspace(cwd);
-    const provisioned = await siteappRepositoryProvision(state.appCode);
-    let remote = siteAppFromProvision(state.appCode, provisioned);
+    let remote: SiteAppRecord | undefined;
     try {
-      const detail = await getSiteApp(state.appCode);
-      remote = mergeSiteAppRecords(remote, detail);
-    } catch {
-      // HTTP detail is optional for status display.
+      remote = await getSiteApp(state.appCode);
+    } catch (error) {
+      logger.warn(`[code-collab] action=status detail fallback appCode=${state.appCode}:`, error);
     }
 
     let syncState: CodeCollabStatusSummary['syncState'] = 'unknown';
-    const remoteRev = provisioned.headRevisionId ?? null;
+    const remoteRev = remote?.headRevisionId ?? null;
+    const remoteCommit = remote?.headCommitSha ?? null;
     const localRev = state.baseRevisionId ?? null;
-    if (remoteRev && localRev && remoteRev !== localRev) {
+    const localCommit = state.baseCommitSha ?? null;
+    const remoteChanged = Boolean(
+      (remoteRev && localRev && remoteRev !== localRev)
+      || (remoteCommit && localCommit && remoteCommit !== localCommit)
+      || (remoteRev && !localRev),
+    );
+    const localSha = await localSourceSha256(cwd);
+    const localChanged = Boolean(
+      localSha && state.baseSourceSha256 && localSha !== state.baseSourceSha256,
+    );
+    if (remoteChanged && localChanged) {
+      syncState = 'merge-required';
+    } else if (remoteChanged) {
       syncState = 'remote-ahead';
-    } else {
-      try {
-        const snapshot = await createSourceSnapshot(cwd);
-        await cleanupSourceSnapshot(snapshot);
-        if (state.baseSourceSha256 && snapshot.sourceSha256 !== state.baseSourceSha256) {
-          syncState = 'local-changes';
-        } else {
-          syncState = 'synced';
-        }
-      } catch {
-        syncState = localRev ? 'synced' : 'unknown';
-      }
+    } else if (localChanged) {
+      syncState = 'local-changes';
+    } else if (localRev) {
+      syncState = 'synced';
     }
 
     const summary: CodeCollabStatusSummary = {
       available: true,
-      executable: 'sai-cli',
+      executable: SOURCE_SYNC_EXECUTABLE,
       bound: true,
       syncState,
       syncLabel: syncLabelForState(syncState, true),
       appCode: state.appCode,
-      applicationName: remote.applicationName,
+      applicationName: remote?.applicationName,
       revisionId: state.baseRevisionId ?? undefined,
       devCommitSha: state.baseCommitSha ?? undefined,
-      raw: { local: state, remote, provisioned },
+      raw: { local: state, remote },
     };
     logger.info(`[code-collab] action=status syncState=${summary.syncState} appCode=${summary.appCode}`);
     return summary;
@@ -480,7 +454,7 @@ export async function getCodeCollabStatus(appPath: string): Promise<CodeCollabSt
     }
     return {
       available: true,
-      executable: 'sai-cli',
+      executable: SOURCE_SYNC_EXECUTABLE,
       bound: false,
       syncState: 'unbound',
       syncLabel: '未绑定',
@@ -505,9 +479,14 @@ export async function pushCodeApplication(
       mergeParentRevisionId: state.mergeParentRevisionId,
     })}`,
   );
-  const provisioned = await provisionRepository(state.appCode);
-  logger.info(`[code-collab] action=push provisioned ${serializeForCodeCollabLog(provisioned)}`);
-  assertRemoteBaseline(state, provisioned);
+
+  try {
+    const remote = await getSiteApp(state.appCode);
+    throwIfRemoteAhead(state, remote);
+  } catch (error) {
+    if (error instanceof Error && error.message === REMOTE_AHEAD_MESSAGE) throw error;
+    logger.warn(`[code-collab] action=push remote check fallback:`, error);
+  }
 
   const revisionId = createUlid();
   const snapshot = await createSourceSnapshot(cwd);
@@ -523,37 +502,25 @@ export async function pushCodeApplication(
   );
 
   try {
-    const revisionParams: Record<string, string> = {
-      app_code: state.appCode,
-      revision_id: revisionId,
-      revision_message: trimmed,
-      source_sha256: snapshot.sourceSha256,
-      archive_sha256: snapshot.archiveSha256,
-      archive_size_bytes: String(snapshot.archiveSizeBytes),
-      expanded_size_bytes: String(snapshot.expandedSizeBytes),
-      file_count: String(snapshot.fileCount),
-    };
-    if (state.baseRevisionId) {
-      revisionParams.base_revision_id = state.baseRevisionId;
-      revisionParams.parent_revision_id = state.baseRevisionId;
-    }
-    logger.info(`[code-collab] action=push revision.create params=${serializeForCodeCollabLog(revisionParams)}`);
-    const created = await siteappRevisionCreate(revisionParams);
-    if (!created.ok) throw new Error(siteappCliErrorMessage(created));
-
-    const uploadInput = {
+    const revision = await commitSiteAppSource({
       appCode: state.appCode,
-      revisionId,
-      sourceFile: snapshot.archivePath,
-    };
-    logger.info(`[code-collab] action=push source.upload input=${serializeForCodeCollabLog(uploadInput)}`);
-    const uploaded = await siteappSourceUpload(uploadInput);
-    if (!uploaded.ok) throw new Error(siteappCliErrorMessage(uploaded));
+      archivePath: snapshot.archivePath,
+      metadata: {
+        revisionId,
+        revisionMessage: trimmed,
+        baseRevisionId: state.baseRevisionId,
+        parentRevisionId: state.baseRevisionId,
+        mergeParentRevisionId: null,
+        sourceSha256: snapshot.sourceSha256,
+        archiveSha256: snapshot.archiveSha256,
+        archiveSizeBytes: snapshot.archiveSizeBytes,
+        expandedSizeBytes: snapshot.expandedSizeBytes,
+        fileCount: snapshot.fileCount,
+      },
+    }).catch(mapVersionConflict);
 
-    const revision = parseSiteappUploadRevision(uploaded.data);
-    logger.info(`[code-collab] action=push source.upload parsed=${serializeForCodeCollabLog(revision)}`);
-    if (!revision || revision.status?.toLowerCase() !== 'ready' || !revision.commitSha) {
-      throw new Error(revision?.failureMessage || '代码版本未成功写入 dev 分支');
+    if (revision.status.toLowerCase() !== 'ready' || !revision.commitSha) {
+      throw new Error('代码版本未成功写入 dev 分支');
     }
     if (revision.sourceSha256 !== snapshot.sourceSha256) {
       throw new Error('上传校验失败：sourceSha256 不一致');
@@ -566,18 +533,18 @@ export async function pushCodeApplication(
     }
 
     await updateWorkspaceBaseline(cwd, state.appCode, {
-      revisionId,
+      revisionId: revision.revisionId,
       commitSha: revision.commitSha,
       sourceSha256: snapshot.sourceSha256,
     });
     await upsertStoAppPushHistory(cwd, {
-      revisionId,
+      revisionId: revision.revisionId,
       appCode: state.appCode,
       message: trimmed,
       commitSha: revision.commitSha,
       createdAt: Date.now(),
     }).catch((err) => logger.warn('[code-collab] push history write failed:', err));
-    logger.info(`[code-collab] action=push success revisionId=${revisionId}`);
+    logger.info(`[code-collab] action=push success revisionId=${revision.revisionId}`);
     return { ok: true, output: '提交成功', json: revision };
   } finally {
     await cleanupSourceSnapshot(snapshot);
@@ -587,28 +554,42 @@ export async function pushCodeApplication(
 export async function pullCodeApplication(appPath: string): Promise<CodeCollabCommandResult> {
   const { cwd, state } = await requireWorkspace(appPath);
   logger.info(`[code-collab] action=pull appPath=${cwd}`);
-  const before = await siteappRepositoryProvision(state.appCode);
-  if (!isRepositoryReady(before.status, before.headCommitSha)) {
-    throw new Error(`应用不可拉取，当前仓库状态：${before.status ?? '未知'}`);
-  }
-  const archive = await downloadArchiveBuffer(state.appCode);
-  const after = await siteappRepositoryProvision(state.appCode);
-  if (before.headRevisionId !== after.headRevisionId || before.headCommitSha !== after.headCommitSha) {
-    throw new Error('下载过程中远端发生更新，请重试拉取');
-  }
-  await applyArchiveToWorkspace(archive, cwd);
-  await writeStoWorkspaceBinding({
-    appPath: cwd,
-    cloud: {
-      appCode: state.appCode,
-      status: 'ready',
-      baseRevisionId: after.headRevisionId ?? null,
-      baseCommitSha: after.headCommitSha ?? null,
-      baseSourceSha256: after.headSourceSha256 ?? state.baseSourceSha256 ?? null,
+  const localSha = await localSourceSha256(cwd);
+  const { archive, remote } = await downloadSiteAppSourceSnapshot(state.appCode);
+  gunzipSync(archive);
+
+  const decision = decideSourcePullAction({
+    base: {
+      revisionId: state.baseRevisionId,
+      commitSha: state.baseCommitSha,
+      sourceSha256: state.baseSourceSha256,
     },
-    fallback: { appCode: state.appCode, status: 'ready' },
+    localSourceSha256: localSha,
+    remote,
+    workspaceEmpty: !(await workspaceHasSourceFiles(cwd)),
   });
-  const remote = siteAppFromProvision(state.appCode, after);
+  logger.info(`[code-collab] action=pull decision=${decision} appCode=${state.appCode}`);
+
+  if (decision === 'already-synced') {
+    return { ok: true, output: '已是最新', json: remote };
+  }
+  if (decision === 'local-ahead') {
+    return { ok: true, output: '本地已有未提交改动，未覆盖本地代码。请直接提交。', json: remote };
+  }
+  if (decision === 'diverged') {
+    throw new Error('本地和远端都有更新，禁止直接覆盖。请先处理差异后再拉取');
+  }
+
+  await applyArchiveToWorkspace(archive, cwd);
+  const appliedSha = await localSourceSha256(cwd);
+  if (appliedSha !== remote.sourceSha256) {
+    throw new Error('拉取校验失败：本地源码摘要与远端不一致');
+  }
+  await updateWorkspaceBaseline(cwd, state.appCode, {
+    revisionId: remote.revisionId,
+    commitSha: remote.commitSha,
+    sourceSha256: remote.sourceSha256,
+  });
   logger.info(`[code-collab] action=pull success appCode=${state.appCode}`);
   return { ok: true, output: '拉取成功', json: remote };
 }
@@ -623,33 +604,23 @@ export async function cloneCodeApplication(
   if (!target) throw new Error('缺少目标目录');
   logger.info(`[code-collab] action=clone appCode=${code} targetDir=${target}`);
   await ensureEmptyDirectory(target);
-  const before = await siteappRepositoryProvision(code);
-  if (!isRepositoryReady(before.status, before.headCommitSha)) {
-    throw new Error(`应用不可克隆，当前仓库状态：${before.status ?? '未知'}`);
-  }
-  const archive = await downloadArchiveBuffer(code);
-  const after = await siteappRepositoryProvision(code);
-  if (before.headRevisionId !== after.headRevisionId || before.headCommitSha !== after.headCommitSha) {
-    throw new Error('下载过程中远端发生更新，请重试克隆');
-  }
+  const { archive, remote } = await downloadSiteAppSourceSnapshot(code);
+  gunzipSync(archive);
   await extractSourceArchive(archive, target);
-  await writeStoWorkspaceBinding({
-    appPath: target,
-    cloud: {
-      appCode: code,
-      status: 'ready',
-      baseRevisionId: after.headRevisionId ?? null,
-      baseCommitSha: after.headCommitSha ?? null,
-      baseSourceSha256: after.headSourceSha256 ?? null,
-    },
-    fallback: { appCode: code, status: 'ready' },
+  const appliedSha = await localSourceSha256(target);
+  if (appliedSha !== remote.sourceSha256) {
+    throw new Error('克隆校验失败：本地源码摘要与远端不一致');
+  }
+  await updateWorkspaceBaseline(target, code, {
+    revisionId: remote.revisionId,
+    commitSha: remote.commitSha,
+    sourceSha256: remote.sourceSha256,
   });
-  const remote = siteAppFromProvision(code, after);
   logger.info(`[code-collab] action=clone success appCode=${code} targetDir=${target}`);
   return {
     ok: true,
     output: '拉取成功',
-    json: { appCode: code, workspacePath: target, application: remote },
+    json: { appCode: code, workspacePath: target, remote },
   };
 }
 

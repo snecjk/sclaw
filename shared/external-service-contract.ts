@@ -20,12 +20,20 @@ export interface ExternalServiceDraftInput {
 export interface ExternalServiceVersionConfig extends ExternalServiceDraftInput {
   schemaVersion: 'external-service/v1';
   serviceId: string;
+  serviceUid: string;
+  scopeType: 'PLATFORM' | 'COMPANY';
+  companyCode: string;
+  visibility: 'PRIVATE' | 'PUBLIC';
   version: string;
 }
 
 export interface ExternalServiceDraft extends ExternalServiceDraftInput {
   schemaVersion: 'external-service/v1';
   serviceId: string;
+  serviceUid: string;
+  scopeType: 'PLATFORM' | 'COMPANY';
+  companyCode: string;
+  visibility: 'PRIVATE' | 'PUBLIC';
   latestVersion: string | null;
   status: ExternalServiceStatus;
 }
@@ -41,6 +49,10 @@ export interface ExternalServicesManifest {
 
 export interface ExternalServiceSummary {
   serviceId: string;
+  serviceUid: string;
+  scopeType: 'PLATFORM' | 'COMPANY';
+  companyCode: string;
+  visibility: 'PRIVATE' | 'PUBLIC';
   name: string;
   description: string;
   owner: string;
@@ -61,6 +73,7 @@ export interface ExternalServicePageResult {
 
 export interface ExternalServiceVersionSummary {
   serviceId: string;
+  serviceUid: string;
   version: string;
   publishedAt: string;
   publishedBy: string | null;

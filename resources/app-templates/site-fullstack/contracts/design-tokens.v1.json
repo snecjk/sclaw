@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "source": "src/theme/theme.css",
+  "tokens": [
+    {
+      "name": "--sto-color-bg-layout",
+      "label": "页面背景",
+      "type": "color",
+      "format": "oklch",
+      "group": "颜色"
+    },
+    {
+      "name": "--sto-color-primary",
+      "label": "主题色",
+      "type": "color",
+      "format": "oklch",
+      "group": "颜色"
+    },
+    {
+      "name": "--sto-color-text",
+      "label": "正文色",
+      "type": "color",
+      "format": "oklch",
+      "group": "颜色"
+    },
+    {
+      "name": "--sto-font-family",
+      "label": "正文字体",
+      "type": "font",
+      "group": "字体",
+      "options": [
+        "\"PingFang SC\", \"Microsoft YaHei\", \"Helvetica Neue\", Arial, sans-serif",
+        "Georgia, \"Times New Roman\", serif",
+        "Menlo, Consolas, monospace"
+      ]
+    },
+    {
+      "name": "--sto-radius-lg",
+      "label": "卡片圆角",
+      "type": "radius",
+      "format": "rem",
+      "group": "圆角",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "name": "--sto-color-border",
+      "label": "边框色",
+      "type": "color",
+      "format": "oklch",
+      "group": "颜色"
+    }
+  ]
+}

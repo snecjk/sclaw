@@ -5,29 +5,36 @@
  * background pipeline reported as one continuous progress to the workbench.
  */
 
-import { app } from 'electron';
-import { spawn } from 'child_process';
+import { app, dialog } from 'electron';
+import { spawn, type ChildProcess } from 'child_process';
 import { existsSync, readFileSync, statSync } from 'fs';
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
+import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { homedir } from 'os';
-import { extname, dirname, join, relative, resolve, sep } from 'path';
+import { basename, extname, dirname, join, relative, resolve, sep } from 'path';
 import {
   buildSnpmInstallArgs,
   creepRatio,
   isTransientNpmInstallFailure,
+  lastInstallLogLine,
   needsAppNpmInstall,
   parseNpmrcRegistry,
   pipelineProgress,
+  pushInstallLogTail,
   sanitizePackageName,
+  stripInstallLogAnsi,
   type AppDevPhase,
 } from '../utils/app-dev-info';
 import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManagedNode } from '../utils/node-runtime';
 import { ensureSnpmBin, resolveSnpmBin } from '../utils/snpm-cli';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
-import { needsWinShell, quoteForCmd } from '../utils/paths';
+import { needsWinShell, prepareWinSpawn, quoteForCmd } from '../utils/paths';
 import { createWorkspace, deleteWorkspace, getWorkspaceRootPath, listUserWorkspaces } from './session-catalog-service';
-import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
+import { startDevServer, getDevServer } from './app-dev-server-manager';
+import {
+  startRuntime,
+  stopRuntime,
+} from './app-runtime-manager';
 import { KeyedGenerationTracker, OperationCanceledError } from './keyed-single-flight';
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
@@ -77,10 +84,16 @@ export interface AppDevStatus {
   /** 0-100 single continuous progress across all pipeline phases. */
   progress: number;
   previewUrl?: string;
-  /** Non-technical error hint; raw logs stay available for agent diagnosis. */
+  /** Fullstack backend base URL when runtime is up. */
+  backendUrl?: string;
+  /** SQLite / migrate readiness for fullstack apps. */
+  dbStatus?: 'unknown' | 'ready' | 'error';
+  /** Shown on the workbench error panel, including snpm install output. */
   error?: string;
   /** Extra line for the active setup step (e.g. snpm found vs installing). */
   detail?: string;
+  /** Recent snpm / setup command output for the workbench log panel. */
+  log?: string;
 }
 
 const statuses = new Map<string, AppDevStatus>();
@@ -99,6 +112,8 @@ export interface AppDevMarker {
   kind: 'app-dev' | 'app-template';
   name: string;
   projectType: string;
+  /** True when projectType is fullstack (local FE+BE runtime). */
+  fullstack?: boolean;
   createdAt: string;
   /** Cloud Site App id; written on first create so retries do not register a second app. */
   appCode?: string;
@@ -366,49 +381,76 @@ export function mergeAndDedupeDevApps(
 
 
 /**
- * App files deleted but workspace row left behind: root only has `.sclaw`
- * (artifact/agent shell). Still treat as 开发应用 for sidebar filtering.
+ * Hide from 侧栏「项目」: real 开发应用 marker, or anything under ~/SClawApps.
+ *
+ * Do not treat “root only has `.sclaw`” as 开发应用. `createWorkspace` writes
+ * `<root>/.sclaw/.claw-output` for empty chat projects; that shell is identical
+ * to a leftover app folder and must stay in 项目.
  */
-async function isAbandonedAppDevShell(appPath: string): Promise<boolean> {
-  if (!appPath || !existsSync(appPath) || !statSync(appPath).isDirectory()) return false;
-  if (!existsSync(join(appPath, '.sclaw'))) return false;
-  try {
-    const entries = (await readdir(appPath)).filter((name) => name !== '.DS_Store');
-    return entries.length === 1 && entries[0] === '.sclaw';
-  } catch {
-    return false;
-  }
+export function isAppDevSidebarHiddenRoot(appPath: string): boolean {
+  if (!appPath.trim()) return false;
+  const resolvedRoot = resolve(appPath);
+  const defaultAppsRoot = resolve(DEFAULT_APPS_PARENT_DIR);
+  const underDefaultApps =
+    resolvedRoot === defaultAppsRoot
+    || resolvedRoot.startsWith(`${defaultAppsRoot}${sep}`);
+  return isAppDevWorkspaceRoot(resolvedRoot) || underDefaultApps;
 }
 
-function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppPageType }): string {
+function buildAppDevAgentsContextBlock(vars: {
+  name: string;
+  pageType?: SiteAppPageType;
+  fullstack?: boolean;
+}): string {
   const pageType = normalizeSiteAppPageType(vars.pageType);
   const menuShape = pageType === 'assets'
     ? '本应用 pageType 为 assets：云端菜单只同步 **一个一级菜单**'
     : '本应用 pageType 为 site：云端菜单遵循用户导航，只同步 **一级目录 + 二级页面**';
-  return `<!-- sclaw-app-dev-context -->
-你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
+  const fullstackBlock = vars.fullstack
+    ? `
+## 本地全栈后端（强制）
+- 本应用为 fullstack：前端 Vite + 后端 Hono（\`server/\`）+ Drizzle/SQLite（\`.data/app.db\`）
+- **可改**：\`server/routes/\`、\`server/services/\`（若有）、\`drizzle/schema.ts\`
+- **禁止改**：\`server/runtime/\` 平台壳（logger / auth-middleware / error / db 打开方式），除非修明确 bug
+- 改 schema 后必须执行 \`npm run db:migrate\`，并用 \`GET /api/health\`（或 \`/proxy/appBackend/api/health\`）自检
+- 密钥只通过工作台 Secrets 注入环境变量，禁止写入源码 / \`.env\` 提交；\`.data/\` 永不进源码同步
+- 后端开发细则见 \`openspec/skill-catalog/backend-dev/SKILL.md\`
 
-## 项目结构
-- \`src/pages/\`：A2UI 页面资产（**主战场**，优先修改）
-- \`contracts/\`：action / intent 契约（Button 的 action 名必须已注册）
-- \`docs/api/\`：公司接口文档（Markdown），调用接口前先阅读这里
-- \`src/runtime/\`：页面加载与 Action Runtime（平台壳，默认不要改）
-- \`src/App.tsx\`：A2UI 宿主壳，**默认不要改**；**禁止**在业务预览里展示 Action Runtime / 开发者调试日志（调试日志应由 SClaw 工作台单独一列展示，不在应用页面内）
-- 工程构建对齐公司发布平台：\`npm run build\` 产物在 \`build/\`；不要改 \`outDir\` 或随意升级 rollup（模板已锁定）
-- \`openspec/\`：本应用的 OpenSpec；**不是** SClaw 客户端仓库
-
-## 工作方式
-- 用户是业务人员，用自然语言描述需求；不要要求他们写代码或看终端日志
-- 预览面向业务用户：只展示业务页面；不要加「Action Runtime」「当前页 #id」「改 page.json」等开发说明
-- **优先修改 \`src/pages/*.page.json\` 与 \`contracts/\`**；预览由 A2UI 渲染器驱动
+## 全栈页面双轨（强制，覆盖下方「优先 page.json」默认）
+- **需要调后端 / 持登录态 / 表单列表刷新的业务页** → 写 \`src/pages/*.tsx\`，并在 \`src/App.tsx\` 用 React Router 注册；参考 \`HomePage.tsx\`（登录 + Todos 走 \`/proxy/appBackend\`）
+- **纯展示 / 营销 / 无后端交互页** → 仍可用 \`src/pages/*.page.json\` + \`src/runtime/page-loader.ts\`（A2UI）
+- **禁止混用**：同一业务能力不要既写 JSX 又写 page.json；全栈 CRUD 不要硬套 A2UI catalog
+- 前端访问本应用后端一律 \`/proxy/appBackend/...\`，禁止写死 \`http://127.0.0.1:<port>\`
+`
+    : '';
+  const pagePriorityBlock = vars.fullstack
+    ? `- **全栈业务页优先改 JSX**（见上方双轨）；展示型页面仍可改 \`src/pages/*.page.json\` 与 \`contracts/\`
+- 查询/列表若做成 A2UI 展示页：仍须用 antd Catalog；若做成 JSX 业务页：可用 antd 组件，样式只走 \`src/theme/theme.css\` token`
+    : `- **优先修改 \`src/pages/*.page.json\` 与 \`contracts/\`**；预览由 A2UI 渲染器驱动
 - 禁止把业务页面写成自由 React JSX
 - 组件：查询/列表/表格/分页页 **必须** 使用 antd Catalog（\`catalogId: "antd"\`）组件：\`AntdFilterBar\`、\`AntdTable\`、\`AntdPagination\`、\`AntdButton\`、\`AntdStack\`、\`AntdText\`
 - 用户即使不提 antd，只要需求是「查询条件 + 表格 + 分页」，也要优先用上述组件；参考 \`src/pages/customer-list.page.json\`
 - 同一 surface 不要混用 basic 的 Column/Text 与 Antd*（一个 surface 一个 catalogId）
 - page JSON 必须是 A2UI v0.9 消息数组（createSurface / updateComponents / updateDataModel），不要编造 \`{ type, props }\` 伪格式
 - 交互通过 actionId：先改 \`contracts/action-registry.v1.json\`，再在页面 Button/Filter 上引用
-- 多页面：新增 \`src/pages/<id>.page.json\` 后还要在 \`src/runtime/page-loader.ts\` 注册
-- 优先使用公司接口文档；不确定时先查 \`docs/api/\`；页面里用 actionId，不写死后端 URL
+- 多页面：新增 \`src/pages/<id>.page.json\` 后还要在 \`src/runtime/page-loader.ts\` 注册`;
+  return `<!-- sclaw-app-dev-context -->
+你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
+
+## 项目结构
+- \`src/pages/\`：页面资产（${vars.fullstack ? '全栈以 JSX 业务页为主，A2UI page.json 为展示辅轨' : 'A2UI 页面资产（**主战场**，优先修改)'}）
+- \`contracts/\`：action / intent 契约（Button 的 action 名必须已注册）
+- \`docs/api/\`：公司接口文档（Markdown），调用接口前先阅读这里
+- \`src/runtime/\`：页面加载与 Action Runtime（平台壳，默认不要改）
+- \`src/App.tsx\`：${vars.fullstack ? '路由与布局宿主；注册新 JSX 业务页时需要改 Route' : 'A2UI 宿主壳，**默认不要改**'}；**禁止**在业务预览里展示 Action Runtime / 开发者调试日志（调试日志应由 SClaw 工作台单独一列展示，不在应用页面内）
+- 工程构建对齐公司发布平台：\`npm run build\` 产物在 \`build/\`；不要改 \`outDir\` 或随意升级 rollup（模板已锁定）
+- \`openspec/\`：本应用的 OpenSpec；**不是** SClaw 客户端仓库
+${fullstackBlock}
+## 工作方式
+- 用户是业务人员，用自然语言描述需求；不要要求他们写代码或看终端日志
+- 预览面向业务用户：只展示业务页面；不要加「Action Runtime」「当前页 #id」「改 page.json」等开发说明
+${pagePriorityBlock}
+- 优先使用公司接口文档；不确定时先查 \`docs/api/\`；页面里用 actionId 或 \`/proxy/...\`，不写死后端绝对 URL
 - 新功能或跨模块改动：先读 \`openspec/skills/\`，再按 OpenSpec（proposal → design → specs → tasks → apply）推进
 - 保持页面简洁可用；改动后用简短中文说明「改了什么、用户会看到什么」
 - 不要提交密钥到代码里；鉴权方式以接口文档为准
@@ -416,15 +458,15 @@ function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppP
 ## 自然语言建页与接口（强制）
 - 用户用自然语言生成页面时：若页面**需要调业务接口**（查询/列表/看板取数等），且用户**尚未指定**要用的 sai-cli 指令或接口：
   - 先执行 \`sai-cli siteapp external-service list --keyword "<业务词>" -f json\`，只读取平台已发布服务的摘要；用户明确要浏览全部服务时执行不带 keyword 的 \`list\`
-  - 唯一候选确定后，使用摘要中的 \`serviceId\` 和 \`latestVersion\` 执行 \`sai-cli siteapp external-service describe --serviceId <serviceId> --version <latestVersion> -f json\`
+  - 唯一候选确定后，使用摘要中的 \`serviceUid\` 和 \`latestVersion\` 执行 \`sai-cli siteapp external-service describe --params '{"serviceUid":"<serviceUid>","version":"<latestVersion>"}' -f json\`
   - 一次只 describe 一个服务；多个合理候选时先让用户选择，\`hasUsageGuide=false\` 或说明不足时向用户确认，禁止根据名称或描述猜测接口
   - 平台服务没有匹配结果时，回退原始 sai-cli 接口发现流程：
     - **先引导用户指定 CLI 接口**，再生成并绑定真实取数；未指定前不要臆造 URL / 命令路径去接真接口
     - 引导话术示例：「这个页面需要接业务数据。请告诉我要用哪条 sai-cli 指令（例如：一口价运费查询），指定后我再按该指令的参数和字段生成搜索/列表。」
     - 若用户说不清命令名，可协助执行 \`sai-cli discover "<业务词>"\`，把结果列出来**请用户指定一条**；仍以用户指定为准
 - 用户已指定 CLI 后：\`sai-cli help\` → 若有绝对 HTTP 地址，先执行 \`node scripts/ensure-dev-proxy.mjs "<绝对URL>"\`，把输出的 \`relativeUrl\`（\`/proxy/<key>/...\`）写入 action-registry 或页面；**禁止**页面直连 \`https://*.sto.cn\`（本地 CORS）
-- 已通过 usageGuide 明确接口后：若有绝对 HTTP 地址，同样先执行 \`node scripts/ensure-dev-proxy.mjs "<绝对URL>"\`，再使用输出的 \`relativeUrl\`
-- 取数约定：代码里统一写 \`/proxy/<key>/...\`；**开发**由 Vite proxy 转发，**生产**由 \`src/lib/request.ts\` 按 \`contracts/dev-proxy.v1.json\` 还原为真实域名（禁止把 \`/proxy\` 当生产静态路径）
+- 已安装外部服务且 usageGuide 已明确接口后：先确认 \`contracts/external-services.v1.json\` 中的 alias；在 action-registry 写 \`service: "<alias>"\` 与 \`path: "/..."\`，不要写 \`url: "/proxy/..."\`。A2UI Runtime 会在开发环境经 Vite 代理、在发布环境按部署环境直连该服务地址。
+- \`/proxy/<key>/...\` 仅用于未注册服务的临时开发回退；已注册服务禁止以它作为生产调用契约。
 - 预览出现 CORS/直连失败：对报错 URL 再跑 ensure-dev-proxy，改 url 为 relativeUrl，并重启预览
 - 生产 Network 若仍请求 \`https://page-*.sto.cn/proxy/...\`：检查是否未走 request 封装或缺 proxy 合约 key
 - 用户明确只要布局、先不接真接口：可用 mock 出页，并说明稍后指定 CLI 再接入
@@ -437,6 +479,21 @@ function buildAppDevAgentsContextBlock(vars: { name: string; pageType?: SiteAppP
 - 同意后：\`sai-cli siteapp menu sync --params '{"app_code":"<app_code>","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json\`
 - 菜单项字段：\`menu_code\` / \`parent_code\`（一级为 null） / \`menu_name\` / \`menu_type\`（directory 或 page，不要用 menu）
 - 不要同步 404、redirect、\`developerOnly\`；\`app_code\` 以 \`.sto/workspace.json\` 为准
+
+## 设计规范（强制）
+- 业务页视觉以 \`openspec/skills/sto-pc-visual/\` 为准：壳层读 SKILL.md / shell.md；卡内列表、表格、指标、状态读 content.md。营销落地页才仿 \`HomePage\` 的 1120 居中与大间距
+- 颜色/圆角/阴影/间距**只允许**使用 \`src/theme/theme.css\` 中声明的 token（含 \`--sto-*\` 与 shadcn 别名 \`--background/--foreground/--primary/--muted/--border/--radius\`）；**禁止**在页面或组件中硬编码 hex/rgb（违禁示例：\`#1677ff\` antd 默认蓝、\`#FF6700\` 散落写死）。content.md 里的 hex 只是对照值，落盘写成 \`var(--sto-*)\`
+- 字阶优先 12 / 14 / 16 / 28；行高 1.5；标题字重 600、正文字重 400；指标主值 28
+- 间距只用 \`--sto-space-1\` ~ \`--sto-space-8\`（4px 网格）。工作台主区/白卡 pad 16、卡缝 16，不要套营销页的 section ≥ 48px / 1120 居中
+- 圆角语义：控件 6px（\`--sto-radius-md\`）/ 卡片 8px（\`--sto-radius-lg\`）/ 面板 12px（\`--sto-radius-panel\`）；阴影只用 \`--sto-shadow-1\` / \`--sto-shadow-3\`
+- 每个页面须在 ≥390px 与 ≥1280px 双宽度可用，禁止横向溢出（自查 \`overflow-x\`）
+- 图片/图标未生成时必须用语义化占位（渐变块 + 居中文案），并在总结中披露「当前为模拟内容」
+- ⛔ 不要把业务页做成独立 HTML 报告：禁止 \`build.py\`、\`<!-- STO:DAILY -->\`、日报类名 \`.mc/.masthead\`、页尾设计师水印
+
+## 输出协议（可选增强，失败时宿主会降级）
+- 复杂多步改动（首轮建站、整站/官网、新增 ≥2 页面、后台系统等）：**必须先**输出 fenced JSON \`\`\`sclaw_plan\\n{"summary":"一两句话","steps":[{"id":"1","title":"短步骤"}]}\\n\`\`\`（summary ≤80 字，steps 3～6 条且 title ≤24 字）；**禁止**在用户确认前改业务代码；小改动（改文案/颜色/错别字/单文件微调）直接改代码，不要输出 plan
+- 每步完成可输出 \`\`\`sclaw_step\\n{"id":"1","status":"done"}\\n\`\`\`
+- 轮结束可输出 ≤3 条建议：\`\`\`sclaw_suggestions\\n[{"label":"检查移动端","prompt":"请检查一下移动端效果并修复溢出"}]\\n\`\`\`
 <!-- /sclaw-app-dev-context -->`;
 }
 
@@ -475,6 +532,7 @@ async function writeAppDevBootstrap(
     kind: vars.kind ?? 'app-dev',
     name: vars.name,
     projectType: vars.projectType,
+    fullstack: vars.projectType === 'fullstack' ? true : undefined,
     createdAt: new Date().toISOString(),
     source: vars.source,
     pageType: vars.pageType,
@@ -525,6 +583,7 @@ async function writeAppDevBootstrap(
     : buildAppDevAgentsContextBlock({
       name: vars.name,
       pageType: normalizeSiteAppPageType(vars.pageType),
+      fullstack: vars.projectType === 'fullstack' || marker.fullstack === true,
     });
   if (existsSync(agentsPath)) {
     let content = await readFile(agentsPath, 'utf8');
@@ -586,6 +645,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
         if (
           !entry.name.startsWith('pkg-')
           && entry.name !== 'nl-page-from-sai'
+          && entry.name !== 'sto-pc-visual'
         ) continue;
         const src = join(catalogRoot, entry.name);
         if (existsSync(join(src, 'SKILL.md'))) {
@@ -687,6 +747,26 @@ function runGit(cwd: string, args: string[]): Promise<{ ok: boolean; output: str
   });
 }
 
+/**
+ * 只取 stdout 且不 trim：用于 `git show <rev>:<path>` 读文件原文，
+ * 避免 stderr 警告或首尾空白裁剪污染 diff 内容。
+ */
+function runGitStdout(cwd: string, args: string[]): Promise<{ ok: boolean; output: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      'git',
+      ['-c', 'user.name=SClaw', '-c', 'user.email=sclaw@local', ...args],
+      { cwd, windowsHide: true },
+    );
+    const chunks: Buffer[] = [];
+    child.stdout?.on('data', (d) => chunks.push(d as Buffer));
+    child.on('close', (code) => {
+      resolve({ ok: code === 0, output: Buffer.concat(chunks).toString('utf8') });
+    });
+    child.on('error', (err) => resolve({ ok: false, output: String(err) }));
+  });
+}
+
 let gitAvailable: boolean | null = null;
 export async function isGitAvailable(): Promise<boolean> {
   if (gitAvailable !== null) return gitAvailable;
@@ -699,7 +779,7 @@ export interface CreateUserAppInput {
   name: string;
   /** Parent directory; the app folder `<parent>/<name>` is created inside. Defaults to ~/SClawApps. */
   parentDir?: string;
-  /** 'frontend' | 'fullstack' — same template in MVP (backend placeholder). */
+  /** 'frontend' | 'fullstack' — fullstack uses site-fullstack + dual-process runtime. */
   projectType?: string;
   /** Cloud application publishing mode. Defaults to site for older clients. */
   pageType?: SiteAppPageType;
@@ -713,6 +793,21 @@ export interface CreateUserAppResult {
   workspaceId: string;
   appPath: string;
   workspaceName: string;
+}
+
+export function isFullstackAppMarker(marker: Pick<AppDevMarker, 'projectType' | 'fullstack'> | null | undefined): boolean {
+  if (!marker) return false;
+  return marker.projectType === 'fullstack' || marker.fullstack === true;
+}
+
+export async function readAppDevMarker(appPath: string): Promise<AppDevMarker | null> {
+  const markerFile = appDevMarkerPath(appPath);
+  if (!existsSync(markerFile)) return null;
+  try {
+    return JSON.parse(await readFile(markerFile, 'utf8')) as AppDevMarker;
+  } catch {
+    return null;
+  }
 }
 
 export interface AppTemplateWorkspaceMarker {
@@ -1333,9 +1428,8 @@ export async function resolveCloudAppForWorkspace(
  *
  * Sources (union):
  * 1. Local marker `.sclaw/app-dev.json` on the workspace root
- * 2. Abandoned shells that only keep `.sclaw` after app files were removed
- * 3. Workspaces under the default apps parent (`~/SClawApps`)
- * 4. sto-app bindings (workspaceId / localPath)
+ * 2. Workspaces under the default apps parent (`~/SClawApps`)
+ * 3. sto-app bindings (workspaceId / localPath)
  *
  * Do not rely on cloud `listDevApps`: CLI/login failures must not leak apps
  * into 侧栏「项目」(入口只在应用广场).
@@ -1348,7 +1442,6 @@ export async function listDevAppWorkspaceIds(): Promise<string[]> {
 
   const ids = new Set<string>();
   const workspaceIdByRoot = new Map<string, string>();
-  const defaultAppsRoot = resolve(DEFAULT_APPS_PARENT_DIR);
 
   for (const workspace of workspaces) {
     const root = workspace.rootPath?.trim();
@@ -1356,15 +1449,7 @@ export async function listDevAppWorkspaceIds(): Promise<string[]> {
     const resolvedRoot = resolve(root);
     workspaceIdByRoot.set(resolvedRoot, workspace.id);
 
-    const underDefaultApps =
-      resolvedRoot === defaultAppsRoot
-      || resolvedRoot.startsWith(`${defaultAppsRoot}${sep}`);
-
-    if (
-      isAppDevWorkspaceRoot(resolvedRoot)
-      || underDefaultApps
-      || await isAbandonedAppDevShell(resolvedRoot)
-    ) {
+    if (isAppDevSidebarHiddenRoot(resolvedRoot)) {
       ids.add(workspace.id);
     }
   }
@@ -1579,32 +1664,98 @@ function resolveAppNpmRegistry(npmCwd: string): string | undefined {
   }
 }
 
+const SNPM_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
+const SNPM_INSTALL_HEARTBEAT_MS = 5_000;
+const SNPM_INSTALL_STALL_MS = 15_000;
+
+function getSnpmInstallEnv(): NodeJS.ProcessEnv {
+  return {
+    ...getNodeSpawnEnv(),
+    CI: '1',
+    FORCE_COLOR: '0',
+    npm_config_progress: 'false',
+    npm_config_fund: 'false',
+    npm_config_loglevel: 'http',
+  } as NodeJS.ProcessEnv;
+}
+
+function killSnpmInstallChild(child: ChildProcess): void {
+  const pid = child.pid;
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true });
+      return;
+    }
+    child.kill('SIGTERM');
+  } catch {
+    // already exited
+  }
+}
+
 function spawnSnpmInstallOnce(
   snpmBin: string,
   npmCwd: string,
   args: string[],
-  onActivity: (chunk: string) => void,
+  options: {
+    onActivity: (chunk: string) => void;
+    shouldAbort?: () => boolean;
+  },
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const child = spawn(snpmBin, args, {
+    const prepared = prepareWinSpawn(snpmBin, args);
+    const child = spawn(prepared.command, prepared.args, {
       cwd: npmCwd,
-      env: getNodeSpawnEnv() as NodeJS.ProcessEnv,
+      env: getSnpmInstallEnv(),
       windowsHide: true,
+      shell: prepared.shell,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     const tail: string[] = [];
+    let settled = false;
+    let abortTimer: ReturnType<typeof setInterval> | undefined;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     const handleChunk = (chunk: unknown) => {
       const text = String(chunk);
       tail.push(text);
       if (tail.length > 40) tail.shift();
-      onActivity(text);
+      options.onActivity(text);
     };
     child.stdout?.on('data', handleChunk);
     child.stderr?.on('data', handleChunk);
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (abortTimer) clearInterval(abortTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      fn();
+    };
+
+    abortTimer = setInterval(() => {
+      if (!options.shouldAbort?.()) return;
+      killSnpmInstallChild(child);
+      finish(() => reject(new OperationCanceledError()));
+    }, 400);
+
+    timeoutTimer = setTimeout(() => {
+      killSnpmInstallChild(child);
+      const output = stripInstallLogAnsi(tail.join('')).trim();
+      finish(() => reject(new Error(
+        `snpm install 超时（已等待 ${Math.round(SNPM_INSTALL_TIMEOUT_MS / 60000)} 分钟仍未结束）\n${output}`.trim(),
+      )));
+    }, SNPM_INSTALL_TIMEOUT_MS);
+
     child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`snpm install failed (code ${code})\n${tail.join('').trim()}`));
+      const output = stripInstallLogAnsi(tail.join('')).trim();
+      finish(() => {
+        if (code === 0) resolve();
+        else reject(new Error(`snpm install failed (code ${code})\n${output}`.trim()));
+      });
     });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      finish(() => reject(error));
+    });
   });
 }
 
@@ -1621,26 +1772,63 @@ async function runNpmInstall(
     `[app-dev] snpm install start bin=${snpmBin} cwd=${npmCwd}${registry ? ` registry=${registry}` : ''}`,
   );
   let ratio = 0;
+  let log = '';
+  let lastActivityAt = Date.now();
+  const startedAt = Date.now();
   const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      await spawnSnpmInstallOnce(snpmBin, npmCwd, args, () => {
-        ratio = creepRatio(ratio);
-        if (shouldReportProgress()) {
-          setStatus(workspaceId, {
-            phase: 'installing',
-            progress: pipelineProgress('installing', ratio),
-          });
+
+  const publish = (detail: string) => {
+    if (!shouldReportProgress()) return;
+    setStatus(workspaceId, {
+      phase: 'installing',
+      progress: pipelineProgress('installing', ratio),
+      detail,
+      log: log || undefined,
+    });
+  };
+
+  const heartbeat = setInterval(() => {
+    if (!shouldReportProgress()) return;
+    const silentMs = Date.now() - lastActivityAt;
+    if (silentMs < SNPM_INSTALL_STALL_MS) return;
+    const elapsedSec = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+    publish(`正在执行 snpm install（已等待 ${elapsedSec}s，暂无新输出）`);
+  }, SNPM_INSTALL_HEARTBEAT_MS);
+
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await spawnSnpmInstallOnce(snpmBin, npmCwd, args, {
+          onActivity: (chunk) => {
+            ratio = creepRatio(ratio);
+            lastActivityAt = Date.now();
+            if (!chunk) {
+              publish('正在执行 snpm install');
+              return;
+            }
+            log = pushInstallLogTail(log, chunk);
+            const last = lastInstallLogLine(log);
+            publish(last || '正在执行 snpm install');
+          },
+          shouldAbort: () => !shouldReportProgress(),
+        });
+        return;
+      } catch (error) {
+        if (error instanceof OperationCanceledError) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        log = pushInstallLogTail(log, `\n${message}`);
+        const retry = attempt < maxAttempts && isTransientNpmInstallFailure(message);
+        if (!retry) {
+          logger.error(`[app-dev] snpm install failed cwd=${npmCwd}: ${message}`);
+          throw error;
         }
-      });
-      return;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const retry = attempt < maxAttempts && isTransientNpmInstallFailure(message);
-      if (!retry) throw error;
-      logger.warn(`[app-dev] snpm install retry ${attempt}/${maxAttempts - 1}: ${message.split('\n')[0]}`);
-      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+        logger.warn(`[app-dev] snpm install retry ${attempt}/${maxAttempts - 1}: ${message.split('\n')[0]}`);
+        publish(`安装失败，正在重试（${attempt}/${maxAttempts - 1}）`);
+        await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+      }
     }
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 
@@ -1678,6 +1866,8 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
     setStatus(workspaceId, {
       phase: 'checking-snpm',
       progress: pipelineProgress('checking-snpm', foundSnpm ? 0.85 : 0.2),
+      error: undefined,
+      log: undefined,
       detail: foundSnpm
         ? '本机已安装 snpm'
         : needsDeps
@@ -1696,6 +1886,8 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
         phase: 'installing',
         progress: pipelineProgress('installing', 0),
         detail: '正在执行 snpm install',
+        error: undefined,
+        log: undefined,
       });
       await runNpmInstall(workspaceId, appPath, isCurrent);
       pipeline.throwIfCanceled();
@@ -1705,19 +1897,43 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
       phase: 'starting',
       progress: pipelineProgress('starting', 0.3),
       detail: '正在启动预览服务',
+      log: undefined,
     });
-    const entry = await startDevServer(workspaceId, appPath);
-    pipeline.throwIfCanceled();
-    setStatus(workspaceId, {
-      phase: 'ready',
-      progress: 100,
-      previewUrl: entry.previewUrl,
-      error: undefined,
-      detail: undefined,
-    });
+    const marker = await readAppDevMarker(appPath);
+    if (isFullstackAppMarker(marker)) {
+      setStatus(workspaceId, {
+        detail: '正在启动全栈运行时（migrate → 后端 → 前端）',
+      });
+      const runtime = await startRuntime(workspaceId, appPath);
+      pipeline.throwIfCanceled();
+      setStatus(workspaceId, {
+        phase: 'ready',
+        progress: 100,
+        previewUrl: runtime.previewUrl,
+        backendUrl: runtime.backendUrl,
+        dbStatus: runtime.dbStatus,
+        error: undefined,
+        detail: undefined,
+        log: undefined,
+      });
+    } else {
+      const entry = await startDevServer(workspaceId, appPath);
+      pipeline.throwIfCanceled();
+      setStatus(workspaceId, {
+        phase: 'ready',
+        progress: 100,
+        previewUrl: entry.previewUrl,
+        backendUrl: undefined,
+        dbStatus: undefined,
+        error: undefined,
+        detail: undefined,
+        log: undefined,
+      });
+    }
   } catch (err) {
     if (err instanceof OperationCanceledError || !isCurrent()) return;
     const message = err instanceof Error ? err.message : String(err);
+    logger.error(`[app-dev] setup pipeline failed workspaceId=${workspaceId}: ${message}`);
     setStatus(workspaceId, { phase: 'error', progress: 0, error: message, previewUrl: undefined });
     throw err;
   }
@@ -1725,8 +1941,14 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
 
 export function stopApp(workspaceId: string): void {
   setupPipelineGenerations.cancel(workspaceId);
-  stopDevServer(workspaceId);
-  setStatus(workspaceId, { phase: 'stopped', progress: 0, previewUrl: undefined });
+  stopRuntime(workspaceId);
+  setStatus(workspaceId, {
+    phase: 'stopped',
+    progress: 0,
+    previewUrl: undefined,
+    backendUrl: undefined,
+    dbStatus: undefined,
+  });
 }
 
 /**
@@ -1751,21 +1973,40 @@ export interface AppCheckpoint {
 
 export type AppCheckpointCreationStatus = 'created' | 'clean-head' | 'failed';
 
+export interface AppCheckpointCreateResult {
+  status: AppCheckpointCreationStatus;
+  /** 新 commit 的 hash（clean-head 时为当前 HEAD）。 */
+  hash?: string;
+}
+
+/**
+ * 创建 checkpoint 并返回 commit hash（P1 交互改造 T04）：
+ * hash 随轮次结束回传给渲染侧，建立 turn ↔ commit 映射。
+ */
+export async function createCheckpointDetailed(
+  appPath: string,
+  message: string,
+): Promise<AppCheckpointCreateResult> {
+  if (!(await isGitAvailable())) return { status: 'failed' };
+  const status = await runGit(appPath, ['status', '--porcelain']);
+  if (!status.ok) return { status: 'failed' };
+  if (!status.output) {
+    const head = await runGit(appPath, ['rev-parse', '--verify', 'HEAD']);
+    return head.ok ? { status: 'clean-head', hash: head.output } : { status: 'failed' };
+  }
+  const add = await runGit(appPath, ['add', '-A']);
+  if (!add.ok) return { status: 'failed' };
+  const commit = await runGit(appPath, ['commit', '-m', message || '应用更新']);
+  if (!commit.ok) return { status: 'failed' };
+  const head = await runGit(appPath, ['rev-parse', 'HEAD']);
+  return { status: 'created', hash: head.ok ? head.output : undefined };
+}
+
 export async function createCheckpointWithStatus(
   appPath: string,
   message: string,
 ): Promise<AppCheckpointCreationStatus> {
-  if (!(await isGitAvailable())) return 'failed';
-  const status = await runGit(appPath, ['status', '--porcelain']);
-  if (!status.ok) return 'failed';
-  if (!status.output) {
-    const head = await runGit(appPath, ['rev-parse', '--verify', 'HEAD']);
-    return head.ok ? 'clean-head' : 'failed';
-  }
-  const add = await runGit(appPath, ['add', '-A']);
-  if (!add.ok) return 'failed';
-  const commit = await runGit(appPath, ['commit', '-m', message || '应用更新']);
-  return commit.ok ? 'created' : 'failed';
+  return (await createCheckpointDetailed(appPath, message)).status;
 }
 
 export async function createCheckpoint(appPath: string, message: string): Promise<boolean> {
@@ -1802,6 +2043,149 @@ export async function restoreCheckpoint(appPath: string, hash?: string): Promise
     return { restored: false, backupRef };
   }
   return { restored: true, backupRef };
+}
+
+// ── Checkpoint diff（P1 交互改造 T04：消息级「查看修改」行级 diff） ──────────
+
+/** git 空树对象 hash：首个 commit（无父）时作为 diff 基底，父内容即空。 */
+const GIT_EMPTY_TREE_HASH = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+/** 单文件内容超过该阈值只回统计（Monaco DiffEditor 需要全量文本，防爆内存）。 */
+const DIFF_MAX_FILE_BYTES = 1_000_000;
+/** 单次最多回传全量内容的文件数，超出部分只回统计。 */
+const DIFF_MAX_CONTENT_FILES = 50;
+
+export type AppCheckpointDiffFileStatus = 'M' | 'A' | 'D';
+
+export interface AppCheckpointDiffFile {
+  path: string;
+  status: AppCheckpointDiffFileStatus;
+  /** numstat 增/删行数；二进制文件为 null。 */
+  added: number | null;
+  removed: number | null;
+  binary?: boolean;
+  /** 内容超阈值或超出带内容文件数上限：只回统计，不回 original/modified。 */
+  truncated?: boolean;
+  /** 父版本全文（新增文件/首个 commit 为空串）。 */
+  original?: string;
+  /** 本版本全文（删除文件为空串）。 */
+  modified?: string;
+}
+
+export interface AppCheckpointDiff {
+  hash: string;
+  /** 父 commit hash；首个 commit 为 null。 */
+  parentHash: string | null;
+  subject: string;
+  files: AppCheckpointDiffFile[];
+}
+
+/**
+ * 取两个 checkpoint 之间的逐文件差异：
+ * - 仅 `hash`：相对其父版本（T04 默认）
+ * - `baseHash` + `hash`：任意两版对比（T10）
+ */
+export async function diffCheckpoint(
+  appPath: string,
+  hash: string,
+  baseHash?: string,
+): Promise<AppCheckpointDiff | null> {
+  if (!(await isGitAvailable())) return null;
+  const target = hash.trim();
+  // hash 会拼进 git 参数（`<hash>^`），先白名单校验。
+  if (!/^[0-9a-f]{4,40}$/i.test(target)) return null;
+  const verify = await runGit(appPath, ['rev-parse', '--verify', `${target}^{commit}`]);
+  if (!verify.ok) return null;
+  const fullHash = verify.output;
+
+  let parentHash: string | null = null;
+  let base: string;
+  const explicitBase = typeof baseHash === 'string' ? baseHash.trim() : '';
+  if (explicitBase) {
+    if (!/^[0-9a-f]{4,40}$/i.test(explicitBase)) return null;
+    const baseVerify = await runGit(appPath, ['rev-parse', '--verify', `${explicitBase}^{commit}`]);
+    if (!baseVerify.ok) return null;
+    parentHash = baseVerify.output;
+    base = parentHash;
+  } else {
+    const parent = await runGit(appPath, ['rev-parse', '--verify', `${fullHash}^`]);
+    parentHash = parent.ok ? parent.output : null;
+    base = parentHash ?? GIT_EMPTY_TREE_HASH;
+  }
+
+  const [nameStatus, numstat, subjectResult] = await Promise.all([
+    runGit(appPath, ['diff', '--no-renames', '--name-status', base, fullHash]),
+    runGit(appPath, ['diff', '--no-renames', '--numstat', base, fullHash]),
+    runGit(appPath, ['show', '-s', '--format=%s', fullHash]),
+  ]);
+  if (!nameStatus.ok) return null;
+
+  // numstat 行：`added\tremoved\tpath`（二进制为 `-\t-\tpath`）
+  const stats = new Map<string, { added: number | null; removed: number | null }>();
+  if (numstat.ok && numstat.output) {
+    for (const line of numstat.output.split('\n')) {
+      const [a, r, ...rest] = line.split('\t');
+      const path = rest.join('\t');
+      if (!path) continue;
+      stats.set(path, {
+        added: a === '-' ? null : Number(a) || 0,
+        removed: r === '-' ? null : Number(r) || 0,
+      });
+    }
+  }
+
+  const files: AppCheckpointDiffFile[] = [];
+  for (const line of nameStatus.output ? nameStatus.output.split('\n') : []) {
+    const [statusRaw, ...rest] = line.split('\t');
+    const path = rest.join('\t');
+    if (!path) continue;
+    const status = statusRaw?.[0] as AppCheckpointDiffFileStatus | undefined;
+    if (status !== 'M' && status !== 'A' && status !== 'D') continue;
+    const stat = stats.get(path);
+    files.push({
+      path,
+      status,
+      // stat 缺失（理论上不该发生）退化 0；二进制保留 null 语义。
+      added: stat ? stat.added : 0,
+      removed: stat ? stat.removed : 0,
+      binary: stat?.added === null ? true : undefined,
+    });
+  }
+
+  let contentFiles = 0;
+  for (const file of files) {
+    if (file.binary) continue;
+    if (contentFiles >= DIFF_MAX_CONTENT_FILES) {
+      file.truncated = true;
+      continue;
+    }
+    contentFiles += 1;
+    const [original, modified] = await Promise.all([
+      file.status === 'A' || !parentHash
+        ? Promise.resolve({ ok: true, output: '' })
+        : runGitStdout(appPath, ['show', `${parentHash}:${file.path}`]),
+      file.status === 'D'
+        ? Promise.resolve({ ok: true, output: '' })
+        : runGitStdout(appPath, ['show', `${fullHash}:${file.path}`]),
+    ]);
+    const originalText = original.ok ? original.output : '';
+    const modifiedText = modified.ok ? modified.output : '';
+    if (
+      Buffer.byteLength(originalText, 'utf8') > DIFF_MAX_FILE_BYTES
+      || Buffer.byteLength(modifiedText, 'utf8') > DIFF_MAX_FILE_BYTES
+    ) {
+      file.truncated = true;
+      continue;
+    }
+    file.original = originalText;
+    file.modified = modifiedText;
+  }
+
+  return {
+    hash: fullHash,
+    parentHash,
+    subject: subjectResult.ok ? subjectResult.output : '',
+    files,
+  };
 }
 
 // ── Source file browsing / edit (workbench Monaco) ──────────────────────────
@@ -1984,6 +2368,429 @@ export async function searchAppSourceFiles(
   return hits;
 }
 
+// ── Preview route discovery (T03 路由下拉) ──────────────────────────────────
+
+export interface AppRouteEntry {
+  /** 拼接预览地址的路径片段（`#/home`、`/home` 或 `#home`）。 */
+  path: string;
+  /** 展示名（路由路径或页面 id 原文）。 */
+  label: string;
+  /** 发现来源：router = `<Route path>` 扫描；a2ui = page.json 页面资产。 */
+  source: 'router' | 'a2ui';
+}
+
+const APP_ROUTE_MAX = 30;
+const APP_ROUTE_SCAN_MAX_FILES = 60;
+const ROUTE_PATH_RE = /<Route\s[^>]*?\bpath\s*=\s*["']([^"'>]+)["']/g;
+
+function normalizeRoutePath(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '*') return null;
+  // 带参数（/detail/:id）或通配的路由无法直接跳转，跳过。
+  if (trimmed.includes(':') || trimmed.includes('*')) return null;
+  const withoutLead = trimmed.replace(/^\/+/, '').replace(/\/+$/, '');
+  return `/${withoutLead}`;
+}
+
+function sortAppRoutes<T extends { label: string }>(routes: T[]): T[] {
+  return [...routes].sort((a, b) => {
+    const score = (label: string) => {
+      const clean = label.replace(/^\/+/, '').toLowerCase();
+      if (clean === '' || clean === 'home' || clean === 'index') return 0;
+      return 1;
+    };
+    const diff = score(a.label) - score(b.label);
+    return diff !== 0 ? diff : a.label.localeCompare(b.label);
+  });
+}
+
+/** 通用 React 应用：扫描 src 下 tsx/jsx 中的 `<Route path="...">`，并按入口判定 Hash/Browser Router。 */
+async function scanRouterRoutes(appPath: string): Promise<AppRouteEntry[]> {
+  const files = await listAppSourceFiles(appPath);
+  // 兼容模板应用（src/ 根部）与导入工程（frontend/src/ 等嵌套布局）。
+  const candidates = files
+    .filter((f) => /(?:^|\/)src\/[^/].*\.(tsx|jsx)$/.test(f.path))
+    .slice(0, APP_ROUTE_SCAN_MAX_FILES);
+  const found = new Map<string, AppRouteEntry>();
+  let hashRouter = false;
+  for (const file of candidates) {
+    let content = '';
+    try {
+      content = (await readAppSourceFile(appPath, file.path)).content;
+    } catch {
+      continue;
+    }
+    if (content.includes('HashRouter')) hashRouter = true;
+    ROUTE_PATH_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = ROUTE_PATH_RE.exec(content)) !== null) {
+      const normalized = normalizeRoutePath(match[1] ?? '');
+      if (!normalized || found.has(normalized)) continue;
+      found.set(normalized, {
+        path: normalized,
+        label: normalized,
+        source: 'router',
+      });
+      if (found.size >= APP_ROUTE_MAX) break;
+    }
+    if (found.size >= APP_ROUTE_MAX) break;
+  }
+  // 扫描后期才确认 HashRouter：统一重写 path 片段。
+  const routes = [...found.values()].map((route) => ({
+    ...route,
+    path: hashRouter ? `#${route.label}` : route.label,
+  }));
+  return sortAppRoutes(routes);
+}
+
+/** A2UI 应用：`src/pages/*.page.json` 文件名即页面 id，经 `#<id>` hash 切换。 */
+async function scanA2uiRoutes(appPath: string): Promise<AppRouteEntry[]> {
+  const pagesDir = ['src', 'frontend/src']
+    .map((dir) => join(appPath, dir, 'pages'))
+    .find((dir) => existsSync(dir) && statSync(dir).isDirectory());
+  if (!pagesDir) return [];
+  const entries = await readdir(pagesDir);
+  const routes: AppRouteEntry[] = [];
+  for (const name of entries.sort()) {
+    if (!name.endsWith('.page.json')) continue;
+    const id = name.slice(0, -'.page.json'.length).trim();
+    if (!id) continue;
+    routes.push({ path: `#${id}`, label: id, source: 'a2ui' });
+    if (routes.length >= APP_ROUTE_MAX) break;
+  }
+  return sortAppRoutes(routes);
+}
+
+/**
+ * 预览路由发现：优先通用 React 路由声明，其次 A2UI 页面资产；
+ * 都未发现时返回空数组，由渲染侧兜底为「当前地址」单条。
+ */
+export async function listAppRoutes(appPath: string): Promise<AppRouteEntry[]> {
+  if (!existsSync(appPath) || !statSync(appPath).isDirectory()) return [];
+  const routerRoutes = await scanRouterRoutes(appPath).catch(() => [] as AppRouteEntry[]);
+  if (routerRoutes.length > 0) return routerRoutes;
+  return scanA2uiRoutes(appPath).catch(() => [] as AppRouteEntry[]);
+}
+
+// ── Theme tune / artifacts / preview capture (P1 T06 / T09) ─────────────────
+
+const DESIGN_TOKENS_CONTRACT_REL = join('contracts', 'design-tokens.v1.json');
+const THEME_CSS_REL = join('src', 'theme', 'theme.css');
+const ARTIFACTS_REL = join('.sclaw', 'app-dev-artifacts.json');
+const TUNE_OVERRIDES_REL = join('.sclaw', 'tune-overrides.json');
+
+export interface AppDevDesignTokenDef {
+  name: string;
+  label: string;
+  type: 'color' | 'font' | 'radius';
+  format?: 'oklch' | 'rem';
+  group: string;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
+export interface AppDevDesignTokensContract {
+  schemaVersion: number;
+  source: string;
+  tokens: AppDevDesignTokenDef[];
+  /** true = 模板无契约，宿主使用内置默认项。 */
+  degraded: boolean;
+}
+
+const DEFAULT_DESIGN_TOKENS: AppDevDesignTokenDef[] = [
+  { name: '--sto-color-bg-layout', label: '页面背景', type: 'color', format: 'oklch', group: '颜色' },
+  { name: '--sto-color-primary', label: '主题色', type: 'color', format: 'oklch', group: '颜色' },
+  { name: '--sto-color-text', label: '正文色', type: 'color', format: 'oklch', group: '颜色' },
+  {
+    name: '--sto-font-family',
+    label: '正文字体',
+    type: 'font',
+    group: '字体',
+    options: [
+      '"PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
+      'Georgia, "Times New Roman", serif',
+      'Menlo, Consolas, monospace',
+    ],
+  },
+  { name: '--sto-radius-lg', label: '卡片圆角', type: 'radius', format: 'rem', group: '圆角', min: 0, max: 1 },
+  { name: '--sto-color-border', label: '边框色', type: 'color', format: 'oklch', group: '颜色' },
+];
+
+function normalizeDesignTokenDefs(raw: unknown): AppDevDesignTokenDef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AppDevDesignTokenDef[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.name !== 'string' || !rec.name.startsWith('--')) continue;
+    if (typeof rec.label !== 'string') continue;
+    if (rec.type !== 'color' && rec.type !== 'font' && rec.type !== 'radius') continue;
+    out.push({
+      name: rec.name,
+      label: rec.label,
+      type: rec.type,
+      format: rec.format === 'oklch' || rec.format === 'rem' ? rec.format : undefined,
+      group: typeof rec.group === 'string' ? rec.group : '其他',
+      options: Array.isArray(rec.options)
+        ? rec.options.filter((x): x is string => typeof x === 'string')
+        : undefined,
+      min: typeof rec.min === 'number' ? rec.min : undefined,
+      max: typeof rec.max === 'number' ? rec.max : undefined,
+    });
+  }
+  return out;
+}
+
+export async function readAppDesignTokens(appPath: string): Promise<AppDevDesignTokensContract> {
+  const contractPath = join(appPath, DESIGN_TOKENS_CONTRACT_REL);
+  if (!existsSync(contractPath)) {
+    return {
+      schemaVersion: 1,
+      source: THEME_CSS_REL,
+      tokens: DEFAULT_DESIGN_TOKENS,
+      degraded: true,
+    };
+  }
+  try {
+    const raw = JSON.parse(await readFile(contractPath, 'utf8')) as Record<string, unknown>;
+    const tokens = normalizeDesignTokenDefs(raw.tokens);
+    if (tokens.length === 0) {
+      return {
+        schemaVersion: 1,
+        source: THEME_CSS_REL,
+        tokens: DEFAULT_DESIGN_TOKENS,
+        degraded: true,
+      };
+    }
+    return {
+      schemaVersion: typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 1,
+      source: typeof raw.source === 'string' ? raw.source : THEME_CSS_REL,
+      tokens,
+      degraded: false,
+    };
+  } catch {
+    return {
+      schemaVersion: 1,
+      source: THEME_CSS_REL,
+      tokens: DEFAULT_DESIGN_TOKENS,
+      degraded: true,
+    };
+  }
+}
+
+/** 行级替换 theme.css 中 `--name: value;` 的值部；不存在的变量追加到 `:root` 块末尾。 */
+export async function applyAppThemeOverrides(
+  appPath: string,
+  overrides: Record<string, string>,
+): Promise<{ updated: string[]; themePath: string }> {
+  const themePath = join(appPath, THEME_CSS_REL);
+  if (!existsSync(themePath)) {
+    throw Object.assign(new Error('未找到 src/theme/theme.css，无法落盘主题'), { statusCode: 404 });
+  }
+  let css = await readFile(themePath, 'utf8');
+  const updated: string[] = [];
+  const missing: Array<{ name: string; value: string }> = [];
+
+  for (const [rawName, rawValue] of Object.entries(overrides)) {
+    const name = rawName.trim();
+    const value = String(rawValue ?? '').trim();
+    if (!name.startsWith('--') || !value) continue;
+    const re = new RegExp(`(${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*)([^;]+)(;)`);
+    if (re.test(css)) {
+      css = css.replace(re, `$1${value}$3`);
+      updated.push(name);
+    } else {
+      missing.push({ name, value });
+    }
+  }
+
+  if (missing.length > 0) {
+    const insert = missing.map(({ name, value }) => `  ${name}: ${value};`).join('\n');
+    const rootClose = css.indexOf('}', css.indexOf(':root'));
+    if (rootClose > 0) {
+      css = `${css.slice(0, rootClose)}${insert}\n${css.slice(rootClose)}`;
+      updated.push(...missing.map((m) => m.name));
+    }
+  }
+
+  await writeFile(themePath, css.endsWith('\n') ? css : `${css}\n`, 'utf8');
+  const sclawDir = join(appPath, '.sclaw');
+  await mkdir(sclawDir, { recursive: true });
+  await writeFile(
+    join(appPath, TUNE_OVERRIDES_REL),
+    `${JSON.stringify({ updatedAt: new Date().toISOString(), overrides }, null, 2)}\n`,
+    'utf8',
+  );
+  return { updated, themePath: THEME_CSS_REL };
+}
+
+export interface AppDevArtifactRecord {
+  id: string;
+  turnKey: string;
+  commitHash?: string;
+  title: string;
+  thumbnailDataUrl?: string;
+  previewUrl?: string;
+  createdAt: string;
+  favorite: boolean;
+  suggestions: Array<{ label: string; prompt: string }>;
+}
+
+export async function listAppArtifacts(appPath: string): Promise<AppDevArtifactRecord[]> {
+  const path = join(appPath, ARTIFACTS_REL);
+  if (!existsSync(path)) return [];
+  try {
+    const raw = JSON.parse(await readFile(path, 'utf8')) as { items?: unknown };
+    if (!Array.isArray(raw.items)) return [];
+    return raw.items.filter((item): item is AppDevArtifactRecord => {
+      return Boolean(item && typeof item === 'object' && typeof (item as AppDevArtifactRecord).id === 'string');
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function putAppArtifacts(
+  appPath: string,
+  items: AppDevArtifactRecord[],
+): Promise<AppDevArtifactRecord[]> {
+  const sclawDir = join(appPath, '.sclaw');
+  await mkdir(sclawDir, { recursive: true });
+  const normalized = items.slice(0, 50);
+  await writeFile(
+    join(appPath, ARTIFACTS_REL),
+    `${JSON.stringify({ updatedAt: new Date().toISOString(), items: normalized }, null, 2)}\n`,
+    'utf8',
+  );
+  return normalized;
+}
+
+/**
+ * 预览截图：按 webContentsId capturePage → 缩放到宽 480 JPEG q=70。
+ * 失败抛错，由路由返回占位由渲染侧处理。
+ */
+export async function captureAppPreviewByWebContentsId(
+  webContentsId: number,
+): Promise<{ dataUrl: string; width: number; height: number }> {
+  const { webContents } = await import('electron');
+  const wc = webContents.fromId(webContentsId);
+  if (!wc || wc.isDestroyed()) {
+    throw Object.assign(new Error('预览 webContents 不可用'), { statusCode: 409 });
+  }
+  const image = await wc.capturePage();
+  const size = image.getSize();
+  const targetW = 480;
+  const scale = targetW / Math.max(1, size.width);
+  const targetH = Math.max(1, Math.round(size.height * scale));
+  const resized = typeof image.resize === 'function'
+    ? image.resize({ width: targetW, height: targetH })
+    : image;
+  const jpeg = resized.toJPEG(70);
+  return {
+    dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
+    width: targetW,
+    height: targetH,
+  };
+}
+
+/** 生成资产扫描（T14）：图片 / 文档 / 导出文件，跳过源码与依赖目录。 */
+const GENERATED_ASSET_EXTS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico',
+  '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx',
+  '.csv', '.zip', '.tar', '.gz', '.mp4', '.webm', '.mp3',
+]);
+
+const GENERATED_ASSET_SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'dist-electron', 'coverage',
+  '.next', '.turbo', '.cache', 'src', 'contracts', 'openspec',
+]);
+
+export interface AppGeneratedAsset {
+  path: string;
+  name: string;
+  size: number;
+  ext: string;
+  mtimeMs: number;
+  kind: 'image' | 'document' | 'archive' | 'media' | 'other';
+}
+
+function classifyGeneratedAsset(ext: string): AppGeneratedAsset['kind'] {
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico'].includes(ext)) return 'image';
+  if (['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.csv'].includes(ext)) return 'document';
+  if (['.zip', '.tar', '.gz'].includes(ext)) return 'archive';
+  if (['.mp4', '.webm', '.mp3'].includes(ext)) return 'media';
+  return 'other';
+}
+
+async function walkGeneratedAssets(
+  root: string,
+  dir: string,
+  out: AppGeneratedAsset[],
+  maxFiles: number,
+): Promise<void> {
+  if (out.length >= maxFiles) return;
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (out.length >= maxFiles) return;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (GENERATED_ASSET_SKIP_DIRS.has(entry.name)) continue;
+      await walkGeneratedAssets(root, full, out, maxFiles);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const ext = extname(entry.name).toLowerCase();
+    if (!GENERATED_ASSET_EXTS.has(ext)) continue;
+    try {
+      const st = await stat(full);
+      const rel = relative(root, full).split(sep).join('/');
+      out.push({
+        path: rel,
+        name: entry.name,
+        size: st.size,
+        ext,
+        mtimeMs: st.mtimeMs,
+        kind: classifyGeneratedAsset(ext),
+      });
+    } catch {
+      // skip unreadable
+    }
+  }
+}
+
+export async function listAppGeneratedAssets(appPath: string): Promise<AppGeneratedAsset[]> {
+  if (!existsSync(appPath) || !statSync(appPath).isDirectory()) return [];
+  const out: AppGeneratedAsset[] = [];
+  await walkGeneratedAssets(appPath, appPath, out, 200);
+  out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return out;
+}
+
+/** T14：另存为下载生成资产（save dialog → copy）。 */
+export async function exportAppGeneratedAsset(
+  appPath: string,
+  relativePath: string,
+): Promise<{ saved: boolean; savedPath?: string }> {
+  const full = assertPathInsideApp(appPath, relativePath);
+  if (!existsSync(full) || !statSync(full).isFile()) {
+    throw new Error('文件不存在');
+  }
+  const name = basename(full);
+  const result = await dialog.showSaveDialog({
+    title: '下载文件',
+    defaultPath: join(homedir(), 'Downloads', name),
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+  await copyFile(full, result.filePath);
+  return { saved: true, savedPath: result.filePath };
+}
+
 // ── Community skill package install ─────────────────────────────────────────
 
 const NPM_PACKAGE_RE =
@@ -2012,10 +2819,11 @@ function collectSpawnOutput(
   options: { cwd: string; env?: NodeJS.ProcessEnv; shell?: boolean },
 ): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const prepared = prepareWinSpawn(command, args, options.shell || undefined);
+    const child = spawn(prepared.command, prepared.args, {
       cwd: options.cwd,
       env: options.env,
-      shell: options.shell ?? false,
+      shell: prepared.shell,
       windowsHide: true,
     });
     const chunks: string[] = [];

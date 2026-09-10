@@ -33,3 +33,16 @@ export function resolveSidebarAccountFooterMode(options: {
 export function shouldRenderAccountGearIcon(mode: SidebarAccountFooterMode): boolean {
   return mode === 'compact-gear';
 }
+
+type SidebarAccountIdentity = {
+  realName?: string | null;
+  userName?: string | null;
+};
+
+/** 侧栏底部展示用姓名：真名优先，否则登录名 */
+export function resolveSidebarAccountName(
+  user: SidebarAccountIdentity | null | undefined,
+): string {
+  if (!user) return '';
+  return user.realName?.trim() || user.userName?.trim() || '';
+}

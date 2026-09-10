@@ -29,8 +29,13 @@ interface CachedTemplateMeta {
   fetchedAt: string;
 }
 
-const LOCAL_BUILTIN_TEMPLATE_IDS = new Set(['site-minimal', 'assets-minimal']);
-const TEMPLATE_ID_PATTERN = /^(?:site-minimal|assets-minimal|[0-9A-HJKMNP-TV-Z]{26})$/;
+const LOCAL_BUILTIN_TEMPLATE_IDS = new Set([
+  'site-minimal',
+  'assets-minimal',
+  'assets-iframe-analysis',
+  'site-fullstack',
+]);
+const TEMPLATE_ID_PATTERN = /^(?:site-minimal|assets-minimal|assets-iframe-analysis|site-fullstack|[0-9A-HJKMNP-TV-Z]{26})$/;
 const VERSION_PATTERN = /^1\.0\.\d+$/;
 
 function validTemplateRoot(dir: string): boolean {

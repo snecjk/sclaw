@@ -14,6 +14,9 @@ export interface StoAppDeployHistoryRecord {
   status?: string;
   deploymentVersion?: string;
   failureMessage?: string;
+  failureStage?: string;
+  pipelineInstanceId?: string;
+  revisionId?: string;
   startedAt: number;
   updatedAt: number;
 }
@@ -39,6 +42,14 @@ function asTimestamp(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function asIdentifierString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : value;
+    if (typeof text === 'string' && text.trim()) return text.trim();
+  }
+  return undefined;
+}
+
 export function parseStoAppDeployHistoryRecord(raw: unknown): StoAppDeployHistoryRecord | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const row = raw as Record<string, unknown>;
@@ -52,6 +63,9 @@ export function parseStoAppDeployHistoryRecord(raw: unknown): StoAppDeployHistor
     status: asTrimmedString(row.status),
     deploymentVersion: asTrimmedString(row.deploymentVersion, row.deployment_version),
     failureMessage: asTrimmedString(row.failureMessage, row.failure_message),
+    failureStage: asTrimmedString(row.failureStage, row.failure_stage),
+    pipelineInstanceId: asIdentifierString(row.pipelineInstanceId, row.pipeline_instance_id),
+    revisionId: asTrimmedString(row.revisionId, row.revision_id),
     startedAt: asTimestamp(row.startedAt, now),
     updatedAt: asTimestamp(row.updatedAt, now),
   };
@@ -104,11 +118,14 @@ export function historyRecordFromDeployFields(
   const now = Date.now();
   return {
     deploymentId,
-    appCode: fields.applicationId?.trim() || undefined,
+    appCode: fields.appCode?.trim() || fields.applicationId?.trim() || undefined,
     env: fields.env?.trim() || undefined,
     status: fields.status?.trim() || undefined,
     deploymentVersion: fields.deploymentVersion?.trim() || undefined,
     failureMessage: fields.failureMessage?.trim() || undefined,
+    failureStage: fields.failureStage?.trim() || undefined,
+    pipelineInstanceId: fields.pipelineInstanceId?.trim() || undefined,
+    revisionId: fields.revisionId?.trim() || undefined,
     startedAt,
     updatedAt: now,
   };
@@ -122,5 +139,8 @@ export function deployFieldsFromHistoryRecord(record: StoAppDeployHistoryRecord)
     status: record.status,
     deploymentVersion: record.deploymentVersion,
     failureMessage: record.failureMessage,
+    failureStage: record.failureStage,
+    pipelineInstanceId: record.pipelineInstanceId,
+    revisionId: record.revisionId,
   });
 }

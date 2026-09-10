@@ -165,6 +165,59 @@ export class BrowserAutomationRepository {
       completed_at: nowIso(),
     }).where('run_id', '=', runId).execute();
   }
+
+  // ── ba_artifact（B11）：产物元数据登记；二进制只落盘、不入库 ──────────────
+
+  async insertArtifact(row: {
+    artifactId: string;
+    sessionId: string;
+    runId?: string | null;
+    kind: string;
+    path: string;
+    sha256: string;
+    bytes: number;
+    mimeType: string;
+  }): Promise<void> {
+    const db = getKyselyDatabase();
+    await db.insertInto('ba_artifact').values({
+      artifact_id: row.artifactId,
+      session_id: row.sessionId,
+      run_id: row.runId ?? null,
+      kind: row.kind,
+      path: row.path,
+      sha256: row.sha256,
+      bytes: row.bytes,
+      mime_type: row.mimeType,
+      created_at: nowIso(),
+    }).execute();
+  }
+
+  async getArtifact(artifactId: string): Promise<Record<string, unknown> | undefined> {
+    const db = getKyselyDatabase();
+    return db.selectFrom('ba_artifact').selectAll()
+      .where('artifact_id', '=', artifactId)
+      .executeTakeFirst();
+  }
+
+  async listArtifacts(filter: { sessionId?: string; runId?: string }): Promise<Array<Record<string, unknown>>> {
+    const db = getKyselyDatabase();
+    let query = db.selectFrom('ba_artifact').selectAll().orderBy('created_at desc');
+    if (filter.sessionId) {
+      query = query.where('session_id', '=', filter.sessionId);
+    }
+    if (filter.runId) {
+      query = query.where('run_id', '=', filter.runId);
+    }
+    return query.execute();
+  }
+
+  async deleteArtifactsCreatedBefore(cutoffIso: string): Promise<number> {
+    const db = getKyselyDatabase();
+    const result = await db.deleteFrom('ba_artifact')
+      .where('created_at', '<', cutoffIso)
+      .executeTakeFirst();
+    return Number(result.numDeletedRows ?? 0);
+  }
 }
 
 export const browserAutomationRepository = new BrowserAutomationRepository();

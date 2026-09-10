@@ -9,6 +9,7 @@ const listProjectAgentIdsMock = vi.fn();
 const deleteAllProjectAgentsForProjectMock = vi.fn();
 const getByIdMock = vi.fn();
 const createWorkspaceMock = vi.fn();
+const findActiveByRootPathMock = vi.fn();
 const updateWorkspaceMock = vi.fn();
 const softDeleteWorkspaceMock = vi.fn();
 const getDefaultWorkspaceMock = vi.fn();
@@ -76,6 +77,7 @@ vi.mock('../../electron/db/repositories/workspace-repository', () => ({
     getDefaultWorkspace: getDefaultWorkspaceMock,
     getById: getByIdMock,
     create: createWorkspaceMock,
+    findActiveByRootPath: findActiveByRootPathMock,
     update: updateWorkspaceMock,
     softDelete: softDeleteWorkspaceMock,
   })),
@@ -115,6 +117,7 @@ describe('session catalog gateway reload', () => {
     softDeleteWorkspaceMock.mockResolvedValue({});
     deleteAllProjectAgentsForProjectMock.mockResolvedValue([]);
     listProjectAgentIdsMock.mockResolvedValue([]);
+    findActiveByRootPathMock.mockResolvedValue(null);
     createWorkspaceMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-a', name: 'A' });
     updateWorkspaceMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-b', name: 'A' });
     getByIdMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-a' });
@@ -157,6 +160,25 @@ describe('session catalog gateway reload', () => {
     expect(ensureProjectAgentMock).not.toHaveBeenCalled();
     expect(gatewayManager.debouncedReload).not.toHaveBeenCalled();
     expect(gatewayManager.reload).not.toHaveBeenCalled();
+  });
+
+  it('rejects creating a workspace when the folder already belongs to a project', async () => {
+    findActiveByRootPathMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-a', name: 'A' });
+    const { createWorkspace } = await import('../../electron/services/session-catalog-service');
+
+    await expect(createWorkspace({ name: 'A copy', rootPath: '/tmp/project-a/' }))
+      .rejects.toThrow('该目录已属于项目「A」');
+    expect(createWorkspaceMock).not.toHaveBeenCalled();
+    expect(ensureWorkspaceArtifactOutputDirMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects moving a workspace onto another project folder', async () => {
+    findActiveByRootPathMock.mockResolvedValue({ id: 'project-b', name: 'B', rootPath: '/tmp/project-b' });
+    const { updateWorkspace } = await import('../../electron/services/session-catalog-service');
+
+    await expect(updateWorkspace('project-a', { rootPath: '/tmp/project-b' }))
+      .rejects.toThrow('该目录已属于项目「B」');
+    expect(updateWorkspaceMock).not.toHaveBeenCalled();
   });
 
   it('ensures project agent when starting a chat in the project', async () => {

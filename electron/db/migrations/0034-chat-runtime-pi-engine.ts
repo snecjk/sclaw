@@ -1,10 +1,63 @@
 import type { SqliteMigration } from '../types';
 
+function tableColumnNames(
+  db: Parameters<NonNullable<SqliteMigration['apply']>>[0],
+  table: string,
+): Set<string> {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return new Set(rows.map((row) => String(row.name)));
+}
+
+function chatRuntimeAllowsPi(
+  db: Parameters<NonNullable<SqliteMigration['apply']>>[0],
+): boolean {
+  const row = db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'chat_runtime_runs'`,
+  ).get() as { sql?: string } | undefined;
+  return typeof row?.sql === 'string'
+    && /engine_type IN \('openclaw','claude','pi'\)/.test(row.sql);
+}
+
 /** Expand the immutable engine snapshot constraint without rewriting existing runs. */
 export const chatRuntimePiEngineMigration: SqliteMigration = {
   version: 34,
   name: 'chat-runtime-pi-engine',
   apply(db) {
+    const names = tableColumnNames(db, 'chat_runtime_runs');
+    if (names.size === 0 || chatRuntimeAllowsPi(db)) return;
+
+    const extraDefs = [
+      names.has('interrupt_cause') ? 'interrupt_cause TEXT' : null,
+      names.has('activity_json') ? 'activity_json TEXT' : null,
+      names.has('context_usage_json') ? 'context_usage_json TEXT' : null,
+    ].filter((value): value is string => Boolean(value));
+    const extraSql = extraDefs.length > 0 ? `,\n        ${extraDefs.join(',\n        ')}` : '';
+    const insertCols = [
+      'id',
+      'session_key',
+      'run_id',
+      'idempotency_key',
+      'origin',
+      'owner_id',
+      'deadline_at',
+      'engine_type',
+      'phase',
+      'epoch',
+      'sequence',
+      'started_at',
+      'last_event_at',
+      'terminal_at',
+      'error',
+      'interrupt_cause',
+      'acceptance_result_json',
+      'activity_json',
+      'context_usage_json',
+      'created_at',
+      'updated_at',
+      'version',
+    ].filter((column) => names.has(column));
+    const insertList = insertCols.join(', ');
+
     db.exec(`
       CREATE TABLE chat_runtime_runs_next (
         id                     TEXT PRIMARY KEY,
@@ -27,10 +80,11 @@ export const chatRuntimePiEngineMigration: SqliteMigration = {
         created_at             TEXT NOT NULL,
         updated_at             TEXT NOT NULL,
         version                INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
+        ${extraSql}
       );
 
-      INSERT INTO chat_runtime_runs_next
-      SELECT * FROM chat_runtime_runs;
+      INSERT INTO chat_runtime_runs_next (${insertList})
+      SELECT ${insertList} FROM chat_runtime_runs;
 
       DROP TABLE chat_runtime_runs;
       ALTER TABLE chat_runtime_runs_next RENAME TO chat_runtime_runs;

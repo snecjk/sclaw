@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferSessionCatalogMeta } from '../../shared/session-type';
+import { inferSessionCatalogMeta, isWebBridgeChatSessionKey, WEB_BRIDGE_CHAT_SESSION_KEY } from '../../shared/session-type';
 
 describe('inferSessionCatalogMeta', () => {
   it('classifies regular chat sessions', () => {
@@ -9,6 +9,11 @@ describe('inferSessionCatalogMeta', () => {
       appId: null,
     });
     expect(inferSessionCatalogMeta('agent:main:550e8400-e29b-41d4-a716-446655440000')).toEqual({
+      sessionType: 'chat',
+      taskId: null,
+      appId: null,
+    });
+    expect(inferSessionCatalogMeta('agent:main:web-bridge')).toEqual({
       sessionType: 'chat',
       taskId: null,
       appId: null,
@@ -75,5 +80,15 @@ describe('inferSessionCatalogMeta', () => {
       taskId: null,
       appId: 'crm',
     });
+  });
+});
+
+describe('isWebBridgeChatSessionKey', () => {
+  it('matches only the pinned Chrome side-panel session', () => {
+    expect(WEB_BRIDGE_CHAT_SESSION_KEY).toBe('agent:main:web-bridge');
+    expect(isWebBridgeChatSessionKey('agent:main:web-bridge')).toBe(true);
+    expect(isWebBridgeChatSessionKey(' agent:main:web-bridge ')).toBe(true);
+    expect(isWebBridgeChatSessionKey('agent:main:main')).toBe(false);
+    expect(isWebBridgeChatSessionKey('agent:main:web-bridge-extra')).toBe(false);
   });
 });

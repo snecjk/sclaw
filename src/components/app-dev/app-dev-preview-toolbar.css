@@ -1,0 +1,146 @@
+/**
+ * 预览工具条升级（T03）：设备框 / CSS 全屏降级。
+ * 只使用 --sto-* 语义 token，明暗双主题自动成立。
+ */
+
+/* 预览视口：桌面态铺满；手机态画布背景 + 居中设备框。 */
+.app-dev-preview-viewport {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  justify-content: center;
+  background: var(--sto-surface-canvas);
+}
+
+.app-dev-preview-device {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  transition: width 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.app-dev-preview-viewport[data-device='mobile'] .app-dev-preview-device {
+  width: 390px;
+  max-width: 100%;
+  height: min(844px, 100%);
+  align-self: center;
+  overflow: hidden;
+  border: 1px solid var(--sto-border-default);
+  border-radius: 18px;
+  background: hsl(var(--background));
+  box-shadow: var(--sto-shadow-dialog);
+}
+
+/*
+ * 全屏降级：requestFullscreen 不可用 / 被拒绝（或 macOS webview 全屏黑帧）时，
+ * 用 fixed 覆盖整个工作台 overlay（zIndex 240）实现沉浸预览。
+ */
+.app-dev-preview-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 260;
+  background: var(--sto-surface-canvas);
+}
+
+/* 路由下拉触发器：沿用工具条 __btn 体系，仅补充当前页名截断。 */
+.app-dev-preview-route-trigger {
+  max-width: 180px;
+}
+
+.app-dev-preview-route-trigger__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 设备 + 系统浏览器：同一视口框，外链只出图标，悬停看 title。 */
+.app-dev-preview-device-cluster {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 32px;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--sto-control-field-border);
+  border-radius: 8px;
+  background: var(--sto-segment-track-background);
+}
+
+.app-dev-preview-device-cluster .sto-segment-track {
+  height: 28px;
+  padding: 0;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-dev-preview-device-cluster__divider {
+  width: 1px;
+  height: 16px;
+  background: var(--sto-control-field-border);
+}
+
+.app-dev-preview-device-cluster__action {
+  display: inline-flex;
+  width: 32px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sto-segment-default-foreground);
+  cursor: pointer;
+}
+
+.app-dev-preview-device-cluster__action:hover {
+  background: var(--sto-segment-hover-background);
+}
+
+.app-dev-preview-device-tabs .sto-segment-item {
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.app-dev-preview-mode-toggles {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-dev-preview-mode-toggle {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--sto-control-default-foreground);
+  cursor: pointer;
+}
+
+.app-dev-preview-mode-toggle:hover {
+  background: var(--sto-navigation-menu-hover-background);
+}
+
+.app-dev-preview-mode-toggle--active {
+  border-color: color-mix(in srgb, var(--sto-brand-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--sto-brand-primary) 12%, transparent);
+  color: var(--sto-brand-primary);
+}

@@ -8,6 +8,8 @@ import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
 import { listAgentsSnapshot } from '../utils/agent-config';
+import { buildSilentPowerShellArgs } from '../utils/win-shell';
+import { resolveGatewayUtilityExecArgv } from './process-launcher';
 
 const pidCache = new Map<number, { pids: string[]; ts: number }>();
 const PID_CACHE_TTL_MS = 5000;
@@ -219,12 +221,18 @@ export async function getListeningProcessIds(port: number): Promise<string[]> {
   }
 
   const cmd = process.platform === 'win32'
-    ? `netstat -ano | findstr :${port}`
+    ? null
     : `lsof -i :${port} -sTCP:LISTEN -t`;
 
   const cp = await import('child_process');
   const { stdout } = await new Promise<{ stdout: string }>((resolve) => {
-    cp.exec(cmd, { timeout: 5000, windowsHide: true }, (err, stdout) => {
+    if (process.platform === 'win32') {
+      cp.execFile('netstat', ['-ano'], { timeout: 5000, windowsHide: true }, (err, output) => {
+        resolve({ stdout: err ? '' : String(output ?? '') });
+      });
+      return;
+    }
+    cp.exec(cmd as string, { timeout: 5000, windowsHide: true }, (err, stdout) => {
       if (err) {
         resolve({ stdout: '' });
       } else {
@@ -240,10 +248,13 @@ export async function getListeningProcessIds(port: number): Promise<string[]> {
 
   let result: string[];
   if (process.platform === 'win32') {
+    const portSuffix = `:${port}`;
     const pids: string[] = [];
     for (const line of stdout.trim().split(/\r?\n/)) {
       const parts = line.trim().split(/\s+/);
-      if (parts.length >= 5 && parts[3] === 'LISTENING') {
+      const localAddr = parts[1] ?? '';
+      const matchesPort = localAddr.endsWith(portSuffix) || localAddr.includes(`]:${port}`);
+      if (parts.length >= 5 && parts[3] === 'LISTENING' && matchesPort) {
         pids.push(parts[4]);
       }
     }
@@ -304,15 +315,20 @@ export async function listGatewayChildProcessIds(parentPid: number = process.pid
   const cp = await import('child_process');
 
   if (process.platform === 'win32') {
-    const cmd =
-      'powershell -NoProfile -Command ' +
-      `"Get-CimInstance Win32_Process -Filter \\"ParentProcessId=${parentPid}\\" | ` +
-      `Where-Object { $_.CommandLine -match 'openclaw-gateway' } | ` +
-      `ForEach-Object { $_.ProcessId }"`;
     const stdout = await new Promise<string>((resolve) => {
-      cp.exec(cmd, { timeout: 5000, windowsHide: true }, (err, output) => {
-        resolve(err ? '' : String(output ?? ''));
-      });
+      cp.execFile(
+        'powershell.exe',
+        buildSilentPowerShellArgs([
+          '-Command',
+          `Get-CimInstance Win32_Process -Filter "ParentProcessId=${parentPid}" | ` +
+            `Where-Object { $_.CommandLine -match 'openclaw-gateway' } | ` +
+            `ForEach-Object { $_.ProcessId }`,
+        ]),
+        { timeout: 5000, windowsHide: true },
+        (err, output) => {
+          resolve(err ? '' : String(output ?? ''));
+        },
+      );
     });
     return [...new Set(
       stdout
@@ -414,17 +430,21 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
     `Running OpenClaw doctor repair (entry="${entryScript}", args="${doctorArgs.join(' ')}", cwd="${openclawDir}", bundledBin=${binPathExists ? 'yes' : 'no'})`,
   );
 
+  const doctorEnv = prependNodePathEntry({
+    ...baseEnvPatched,
+    ...uvEnv,
+    OPENCLAW_NO_RESPAWN: '1',
+    OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
+    OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
+  }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv;
+  const doctorExecArgv = resolveGatewayUtilityExecArgv(doctorEnv);
+
   return await new Promise<boolean>((resolve) => {
     const child = utilityProcess.fork(entryScript, doctorArgs, {
       cwd: openclawDir,
       stdio: 'pipe',
-      env: prependNodePathEntry({
-        ...baseEnvPatched,
-        ...uvEnv,
-        OPENCLAW_NO_RESPAWN: '1',
-        OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
-        OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
-      }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
+      env: doctorEnv,
+      ...(doctorExecArgv ? { execArgv: doctorExecArgv } : {}),
     });
 
     let settled = false;

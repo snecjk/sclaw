@@ -30,6 +30,8 @@ export const BROWSER_AGENT_ALLOWED_TOOLS = [
   'ba_wait',
   'ba_validate',
   'ba_start_run',
+  'ba_find',
+  'ba_read_page',
 ] as const;
 
 export function isBrowserWorkflowNodeType(type: string): type is BrowserWorkflowNodeType {

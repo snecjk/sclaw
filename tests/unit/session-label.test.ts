@@ -44,6 +44,7 @@ describe('resolveSessionLabel', () => {
   const t = ((key: string) => {
     if (key === 'common:sidebar.newChat') return '新对话';
     if (key === 'chat:sessionList.mainSessionTitle') return '主会话';
+    if (key === 'chat:sessionList.webBridgeTitle') return 'Chrome 侧栏';
     return key;
   }) as never;
 
@@ -60,6 +61,15 @@ describe('resolveSessionLabel', () => {
       sessionLabels: {},
       t,
     })).toBe('新对话');
+  });
+
+  it('labels the Chrome side-panel session without treating it as main', () => {
+    expect(resolveSessionLabel({
+      key: 'agent:main:web-bridge',
+      displayName: 'SClaw',
+      sessionLabels: {},
+      t,
+    })).toBe('Chrome 侧栏');
   });
 
   it('ignores corrupted subagent boilerplate labels in sessionLabels', () => {

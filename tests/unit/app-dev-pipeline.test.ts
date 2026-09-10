@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { appDevSetupHeadline, appDevSetupSteps } from '../../src/lib/app-dev-pipeline';
+import {
+  appDevSetupHeadline,
+  appDevSetupLogStepId,
+  appDevSetupSteps,
+} from '../../src/lib/app-dev-pipeline';
 
 describe('appDevSetupSteps', () => {
   it('marks tools active while detecting snpm', () => {
@@ -14,6 +18,11 @@ describe('appDevSetupSteps', () => {
     expect(appDevSetupSteps('installing').map((s) => s.state)).toEqual(['done', 'active', 'pending']);
   });
 
+  it('shows the latest snpm line while installing', () => {
+    const steps = appDevSetupSteps('installing', 'http fetch GET lodash');
+    expect(steps[1].hint).toBe('http fetch GET lodash');
+  });
+
   it('marks start active while starting', () => {
     expect(appDevSetupSteps('starting').map((s) => s.state)).toEqual(['done', 'done', 'active']);
   });
@@ -24,5 +33,14 @@ describe('appDevSetupHeadline', () => {
     expect(appDevSetupHeadline('installing')).toBe('正在执行依赖…');
     expect(appDevSetupHeadline('starting')).toBe('正在执行启动…');
     expect(appDevSetupHeadline('checking-snpm')).toBe('正在检测 snpm…');
+  });
+});
+
+describe('appDevSetupLogStepId', () => {
+  it('attaches command log to the active setup step', () => {
+    expect(appDevSetupLogStepId('installing')).toBe('deps');
+    expect(appDevSetupLogStepId('starting')).toBe('start');
+    expect(appDevSetupLogStepId('checking-snpm')).toBe('tools');
+    expect(appDevSetupLogStepId('ready')).toBeNull();
   });
 });

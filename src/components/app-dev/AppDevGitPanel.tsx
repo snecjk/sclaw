@@ -26,13 +26,14 @@ import { stoAppPushToCheckpoint } from '../../../shared/sto-app-push-history';
 interface AppDevGitPanelProps {
   workspaceId: string;
   canDeploy?: boolean;
-  /** 建站应用：上传代码走 sai-cli push，与右上角提交同一条链路。 */
+  /** 建站应用：上传代码走云端源码提交，与右上角提交同一条链路。 */
   cloudPush?: boolean;
   /** Bump after header 提交 / 发布 so 最近提交 reloads. */
   recordsRevision?: number;
   deployRunning?: boolean;
   deployHistory?: StoAppDeployHistoryRecord[];
   onOpenDeploy?: () => void;
+  onOpenDeployHistory?: (deploymentId: string) => void;
 }
 
 function mergeCommitRows(cloud: AppCheckpoint[], git: AppCheckpoint[]): AppCheckpoint[] {
@@ -68,6 +69,7 @@ export function AppDevGitPanel({
   deployRunning = false,
   deployHistory = [],
   onOpenDeploy,
+  onOpenDeployHistory,
 }: AppDevGitPanelProps) {
   const [message, setMessage] = useState('上传代码');
   const [checkpoints, setCheckpoints] = useState<AppCheckpoint[]>([]);
@@ -94,6 +96,8 @@ export function AppDevGitPanel({
   };
 
   useEffect(() => {
+    // The async refresh owns the external workspace synchronization for this panel.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
     // refresh is recreated each render; key the load on workspace / cloud / parent bump.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,7 +114,7 @@ export function AppDevGitPanel({
         setMessage('上传代码');
         await refresh();
       } else {
-        const created = await createAppCheckpoint(workspaceId, note);
+        const { created } = await createAppCheckpoint(workspaceId, note);
         if (created) {
           toast.success('代码已提交到本地 Git');
           setMessage('上传代码');
@@ -138,7 +142,7 @@ export function AppDevGitPanel({
           </h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {cloudPush
-              ? '「上传代码」与右上角「提交」相同：调用 sai-cli 把代码提交到云端，并写入下方「最近提交」。「发布」会先提交再走 DevOps 流水线。'
+              ? '「上传代码」与右上角「提交」相同：把排除 node_modules 等忽略文件后的源码提交到云端，并写入下方「最近提交」。「发布」会先提交再走 DevOps 流水线。'
               : '「上传代码」会将当前改动提交到本地 Git。「发布」会把代码推到云端并走 DevOps 流水线；进行中的发布会写入本地记录并继续查询到成功或失败。'}
           </p>
         </header>
@@ -180,7 +184,7 @@ export function AppDevGitPanel({
                   ? '已有发布进行中'
                   : canDeploy
                     ? '选择环境并发布到云端'
-                    : '当前无法发布（未绑定云端应用或 sai-cli 不可用）'
+                    : '当前无法发布（未绑定云端应用）'
               }
               onClick={() => onOpenDeploy?.()}
             >
@@ -208,7 +212,12 @@ export function AppDevGitPanel({
                 const runningItem = isStoAppDeployHistoryInProgress(item);
                 const success = isCodeDeploySuccess(item.status);
                 return (
-                  <li key={item.deploymentId} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                  <li key={item.deploymentId}>
+                    <button
+                      type="button"
+                      className="flex w-full cursor-pointer items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => onOpenDeployHistory?.(item.deploymentId)}
+                    >
                     <div className="min-w-0">
                       <p className="truncate text-sm text-foreground">
                         {item.env || '未指定环境'}
@@ -236,6 +245,7 @@ export function AppDevGitPanel({
                         historyStatusLabel(item)
                       )}
                     </span>
+                    </button>
                   </li>
                 );
               })}

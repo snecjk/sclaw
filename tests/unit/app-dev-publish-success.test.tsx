@@ -121,4 +121,24 @@ describe('StoAppDeployControl typed success presentation', () => {
     fireEvent.click(item);
     expect(onPublishMenu).toHaveBeenCalledTimes(1);
   });
+
+  it('opens publish history from the same dropdown', async () => {
+    const onPublishMenu = vi.fn();
+    const onOpenHistory = vi.fn();
+    render(<StoAppDeployControl
+      {...commonProps}
+      pageType="site"
+      job={null}
+      onPublishMenu={onPublishMenu}
+      onOpenHistory={onOpenHistory}
+    />);
+    fireEvent.pointerDown(screen.getByRole('button', { name: '更多发布操作' }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    expect(await screen.findByRole('menuitem', { name: '发布菜单' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: '查看发布记录' }));
+    expect(onOpenHistory).toHaveBeenCalledTimes(1);
+    expect(onPublishMenu).not.toHaveBeenCalled();
+  });
 });

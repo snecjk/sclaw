@@ -29,6 +29,7 @@ import { logger } from './logger';
 import { resolveStoBaseUrl } from './sto-domain';
 import { proxyAwareFetch } from './proxy-fetch';
 import { SAI_CLIENT_ID_VALUE } from './sai-client-id';
+import { buildSilentPowerShellArgs } from './win-shell';
 
 export interface SaiCliResult {
   ok: boolean;
@@ -560,10 +561,10 @@ function broadcastWindowsEnvChange(): void {
   try {
     // Broadcast WM_SETTINGCHANGE so Explorer and other processes pick up
     // the new PATH without a reboot.
-    spawnSync('powershell.exe', [
-      '-NoProfile', '-Command',
+    spawnSync('powershell.exe', buildSilentPowerShellArgs([
+      '-Command',
       'Add-Type -MemberDefinition \'[DllImport("user32.dll",SetLastError=true,CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd,uint Msg,UIntPtr wParam,string lParam,uint fuFlags,uint uTimeout,out UIntPtr lpdwResult);\' -Name NativeMethods -Namespace Win32; $r = [UIntPtr]::Zero; [void][Win32.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x1a, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$r)',
-    ], { encoding: 'utf-8', windowsHide: true });
+    ]), { encoding: 'utf-8', windowsHide: true });
   } catch {
     // Best-effort broadcast — ignore failures.
   }

@@ -37,6 +37,7 @@ function dependencies() {
       sessionId: 'chrome-1', tabId: 7, url: 'https://example.com',
       title: 'Chrome', source: 'extension',
     }]),
+    ensureSession: vi.fn(async () => 'chrome-1'),
     runCommand: vi.fn(async (input) => ({ ok: true, action: input.action })),
   };
   return {

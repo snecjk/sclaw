@@ -119,49 +119,6 @@ function readFlag(command: string, flag: string): string | undefined {
   return match[1] ?? match[2] ?? match[3];
 }
 
-function appendEscapedChar(out: string, ch: string): string {
-  switch (ch) {
-    case 'n':
-      return `${out}\n`;
-    case 't':
-      return `${out}\t`;
-    case 'r':
-      return `${out}\r`;
-    case '"':
-      return `${out}"`;
-    case "'":
-      return `${out}'`;
-    case '\\':
-      return `${out}\\`;
-    default:
-      return `${out}${ch}`;
-  }
-}
-
-function parseQuotedValue(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const quote = trimmed[0];
-  if (quote !== '"' && quote !== "'") return trimmed;
-  let escaped = false;
-  let out = '';
-  for (let i = 1; i < trimmed.length; i += 1) {
-    const ch = trimmed[i];
-    if (escaped) {
-      out = appendEscapedChar(out, ch);
-      escaped = false;
-      continue;
-    }
-    if (ch === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (ch === quote) return out;
-    out += ch;
-  }
-  return out;
-}
-
 function parseTextFlag(command: string): string | undefined {
   const match = command.match(
     /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/i,

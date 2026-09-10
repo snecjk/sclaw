@@ -268,7 +268,7 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/chat/abort' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ sessionKey: string; engineType?: AgentEngineType }>(req);
+      const body = await parseJsonBody<{ sessionKey: string; engineType?: AgentEngineType; runId?: string }>(req);
       const runtimeSupervisor = getChatRuntimeSupervisor(ctx.gatewayManager);
       const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
       await runtimeSupervisor.aborting(body.sessionKey);
@@ -276,11 +276,16 @@ export async function handleGatewayRoutes(
       try {
         result = await adapter.abortRun(
           { gatewayManager: ctx.gatewayManager },
-          { sessionKey: body.sessionKey },
+          { sessionKey: body.sessionKey, runId: body.runId },
         );
       } catch (error) {
         await runtimeSupervisor.abortFailed(body.sessionKey, String(error));
         throw error;
+      }
+      if (result.outcome === 'stale-run') {
+        await runtimeSupervisor.abortFailed(body.sessionKey, 'stale-run');
+        sendJson(res, 200, { success: true, aborted: false, outcome: 'stale-run' });
+        return true;
       }
       if (!result.success) {
         await runtimeSupervisor.abortFailed(body.sessionKey, result.error || 'chat.abort failed');
@@ -289,7 +294,7 @@ export async function handleGatewayRoutes(
       }
       await getMemoryTurnCoordinator(ctx.gatewayManager).aborted(body.sessionKey, null);
       await runtimeSupervisor.aborted(body.sessionKey, null);
-      sendJson(res, 200, result);
+      sendJson(res, 200, { ...result, aborted: result.outcome !== 'idle' });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

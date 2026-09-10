@@ -43,6 +43,29 @@ export function thinkingTimelineToolIdentityKey(tool: {
   });
 }
 
+/** 稳定序列化：键序不影响签名，仅用于判断两次调用是否同一次，不参与 identity key。 */
+export function toolInputSignature(input: unknown): string {
+  const stringify = (value: unknown): string => {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+    if (Array.isArray(value)) return `[${value.map(stringify).join(',')}]`;
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stringify(record[key])}`).join(',')}}`;
+  };
+  return stringify(input);
+}
+
+/**
+ * 两个快照是否属于**不同**的调用。
+ *
+ * 只有双方 input 都有意义且内容不同才算冲突——流式 partial（空 input）补全成 final
+ * 不算。用于识别"id 撞车"：kimi-k3 经网关适配后同一轮 24 条不同 Bash 命令共用
+ * `toolu_Bash_0`，`isStableToolId` 判不出来，只能靠 input 冲突切开。
+ */
+export function isConflictingToolInput(existing: unknown, incoming: unknown): boolean {
+  if (!hasMeaningfulToolInput(existing) || !hasMeaningfulToolInput(incoming)) return false;
+  return toolInputSignature(existing) !== toolInputSignature(incoming);
+}
+
 /** 是否有可展示/可合并的业务 input（非 null/undefined/空串；空 object 视为无意义占位） */
 export function hasMeaningfulToolInput(input: unknown): boolean {
   if (input == null) return false;

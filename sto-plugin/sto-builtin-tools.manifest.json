@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "plugins": [
     {
       "id": "sto-workflow-tool",
@@ -19,6 +19,45 @@
       "localDir": "sto-scheduled-task-tool",
       "enabled": false,
       "tools": []
+    },
+    {
+      "id": "sto-browser-bridge",
+      "localDir": "sto-browser-bridge",
+      "sharedLibs": ["sto-toolkit"],
+      "enabled": true,
+      "tools": [
+        "bridge_snapshot",
+        "bridge_click",
+        "bridge_fill",
+        "bridge_navigate",
+        "bridge_screenshot",
+        "bridge_list_sessions",
+        "bridge_read_page",
+        "bridge_print_pdf",
+        "bridge_group_tabs",
+        "bridge_mark_tabs",
+        "bridge_cdp"
+      ]
+    },
+    {
+      "id": "sto-browser-automation",
+      "localDir": "sto-browser-automation",
+      "sharedLibs": ["sto-toolkit"],
+      "enabled": true,
+      "tools": [
+        "ba_create_session",
+        "ba_observe",
+        "ba_find",
+        "ba_act",
+        "ba_wait",
+        "ba_validate",
+        "ba_start_run",
+        "ba_read_page",
+        "ba_screenshot",
+        "ba_print_pdf",
+        "ba_network_capture",
+        "ba_cdp"
+      ]
     }
   ]
 }

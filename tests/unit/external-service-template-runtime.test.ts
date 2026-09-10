@@ -54,7 +54,10 @@ describe('external service template runtime', () => {
       request: requestMock,
     });
     await client.request({ method: 'GET', path: '/v1/search' });
-    expect(requestMock).toHaveBeenCalledWith('/proxy/policyOntology/v1/search', expect.anything());
+    expect(requestMock).toHaveBeenCalledWith(
+      '/proxy/policyOntology/v1/search',
+      expect.objectContaining({ withCredentials: false }),
+    );
   });
 
   it('发布时按注入 deployEnv 选择地址', async () => {

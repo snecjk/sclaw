@@ -24,14 +24,22 @@ export async function actOnPage(
     ref?: string;
     stableKey?: string;
     error?: string;
+    staleRef?: boolean;
+    occluded?: boolean;
+    occluder?: string;
   };
 
+  // 页内代际兜底（A2 resolveTarget）命中 → 映射结构化错误码 STALE_REF
+  const staleRef = result?.staleRef === true;
   return {
     success: Boolean(result?.success),
     action: payload.action,
     ref: result?.ref ?? payload.ref,
     stableKey: result?.stableKey ?? payload.stableKey,
-    error: result?.error,
+    error: result?.error ?? (staleRef ? 'Stale element reference: re-observe required' : undefined),
+    errorCode: staleRef ? 'STALE_REF' : undefined,
+    occluded: result?.occluded === true ? true : undefined,
+    occluder: typeof result?.occluder === 'string' ? result.occluder : undefined,
   };
 }
 

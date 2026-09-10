@@ -1,4 +1,5 @@
 import { preferCronDatedSessionKey } from '../../../shared/cron-job-agent';
+import { isSidebarHiddenChatSessionKey } from '../../../shared/sidebar-chat-session';
 import { looksLikeTechnicalTaskGroupLabel } from '@/lib/scheduled-task-group-name';
 import {
   isClaudeScheduledTaskDatedSessionKey,
@@ -332,6 +333,68 @@ export function mergeEngineAndCatalogScheduledTaskSessions<T extends SessionList
       updatedAt: session.updatedAt ?? existing.updatedAt,
       engineType: session.engineType ?? existing.engineType,
       model: session.model ?? existing.model,
+    });
+  }
+
+  return [...byKey.values()];
+}
+
+/** catalog_sessions.session_type values that feed sidebar 项目 / 最近 chat rows. */
+export const SIDEBAR_CHAT_CATALOG_TYPES = new Set(['chat', 'channel']);
+
+export type CatalogChatRow = {
+  sessionKey: string;
+  sessionType: string;
+  title?: string | null;
+  lastActivityAt?: string | null;
+};
+
+function inferEngineTypeFromChatSessionKey(sessionKey: string): SessionListEntry['engineType'] | undefined {
+  if (sessionKey.startsWith('pi:')) return 'pi';
+  if (sessionKey.startsWith('agent:')) return 'openclaw';
+  return undefined;
+}
+
+export function isSidebarChatCatalogRow(row: CatalogChatRow): boolean {
+  return SIDEBAR_CHAT_CATALOG_TYPES.has(row.sessionType)
+    && !isSidebarHiddenChatSessionKey(row.sessionKey);
+}
+
+/**
+ * Fill sidebar chat rows from SQLite catalog when engine `sessions.list` omitted them
+ * (typical for OpenClaw project agents after Gateway list only returns `main`).
+ * Engine rows win on conflict. Empty catalog titles must still become rows.
+ */
+export function mergeEngineAndCatalogChatSessions<T extends SessionListEntry>(
+  engineSessions: T[],
+  catalogRows: CatalogChatRow[],
+): Array<T | SessionListEntry> {
+  const byKey = new Map<string, T | SessionListEntry>();
+  for (const session of engineSessions) {
+    byKey.set(session.key, session);
+  }
+
+  for (const row of catalogRows) {
+    if (!isSidebarChatCatalogRow(row)) continue;
+    const existing = byKey.get(row.sessionKey);
+    const title = row.title?.trim() || undefined;
+    const updatedAt = parseCatalogActivityMs(row.lastActivityAt);
+    if (existing) {
+      byKey.set(row.sessionKey, {
+        ...existing,
+        label: existing.label?.trim() || title,
+        displayName: existing.displayName?.trim() || title,
+        updatedAt: existing.updatedAt ?? updatedAt,
+        engineType: existing.engineType ?? inferEngineTypeFromChatSessionKey(row.sessionKey),
+      });
+      continue;
+    }
+    byKey.set(row.sessionKey, {
+      key: row.sessionKey,
+      label: title,
+      displayName: title,
+      updatedAt,
+      engineType: inferEngineTypeFromChatSessionKey(row.sessionKey),
     });
   }
 

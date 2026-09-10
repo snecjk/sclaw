@@ -1,11 +1,25 @@
 import i18n from '@/i18n';
-import type { AppError } from '@/lib/error-model';
+import type { AppError, AppErrorCode } from '@/lib/error-model';
 
 function isRateLimitMessage(message: string): boolean {
   const lower = message.toLowerCase();
   return lower.includes('rate limit')
     || lower.includes('429')
     || message.includes('请求过于频繁');
+}
+
+function looksLikeHtmlErrorPage(message: string): boolean {
+  return /<!DOCTYPE\s+html|<html[\s>]|<\/html>|<head>[\s\S]*<title>|Powered by Tengine/i.test(message);
+}
+
+/** Nginx/Tengine dumps the status page body into the model error string. */
+function classifyGatewayHtmlError(message: string): 'timeout' | 'unavailable' | null {
+  const isHtml = looksLikeHtmlErrorPage(message);
+  const isNamedGateway = /gateway time-?out|bad gateway|service unavailable|powered by tengine/i.test(message);
+  if (!isHtml && !isNamedGateway) return null;
+  if (/\b504\b|gateway time-?out/i.test(message)) return 'timeout';
+  if (/\b502\b|\b503\b|bad gateway|service unavailable/i.test(message)) return 'unavailable';
+  return isHtml ? 'unavailable' : null;
 }
 
 function isRequestTimeoutMessage(message: string): boolean {
@@ -32,6 +46,32 @@ function isModelAuthenticationErrorMessage(message: string): boolean {
     || lower.includes('大模型令牌未找到');
 }
 
+function friendlyRuntimeError(message: string): { code: AppErrorCode; text: string } | null {
+  if (isRateLimitMessage(message)) {
+    return { code: 'RATE_LIMIT', text: i18n.t('chat:runtime.errors.rateLimit') };
+  }
+  if (isWorkspaceUnavailableErrorMessage(message)) {
+    return { code: 'GATEWAY', text: i18n.t('chat:runtime.errors.workspaceUnavailable') };
+  }
+  if (isModelAuthenticationErrorMessage(message)) {
+    return { code: 'AUTH_INVALID', text: i18n.t('chat:runtime.errors.modelAuthentication') };
+  }
+  if (isClaudeCertificateErrorMessage(message)) {
+    return { code: 'NETWORK', text: i18n.t('chat:runtime.errors.claudeCertificate') };
+  }
+  if (isRequestTimeoutMessage(message)) {
+    return { code: 'TIMEOUT', text: i18n.t('chat:runtime.errors.requestTimeout') };
+  }
+  const gatewayKind = classifyGatewayHtmlError(message);
+  if (gatewayKind === 'timeout') {
+    return { code: 'TIMEOUT', text: i18n.t('chat:runtime.errors.gatewayTimeout') };
+  }
+  if (gatewayKind === 'unavailable') {
+    return { code: 'GATEWAY', text: i18n.t('chat:runtime.errors.gatewayUnavailable') };
+  }
+  return null;
+}
+
 export function resolveChatRuntimeErrorCode(
   payload: Record<string, unknown> | null,
   fallbackMessage: string,
@@ -40,12 +80,7 @@ export function resolveChatRuntimeErrorCode(
   if (reason === 'recovery-timeout') return 'TIMEOUT';
   if (reason === 'network-retry-exhausted') return 'NETWORK';
   const errorText = String(payload?.error ?? fallbackMessage);
-  if (isWorkspaceUnavailableErrorMessage(errorText)) return 'GATEWAY';
-  if (isModelAuthenticationErrorMessage(errorText)) return 'AUTH_INVALID';
-  if (isClaudeCertificateErrorMessage(errorText)) return 'NETWORK';
-  if (isRequestTimeoutMessage(errorText)) return 'TIMEOUT';
-  if (isRateLimitMessage(errorText)) return 'RATE_LIMIT';
-  return 'GATEWAY';
+  return friendlyRuntimeError(errorText)?.code ?? 'GATEWAY';
 }
 
 export function formatChatRuntimeErrorMessage(
@@ -62,22 +97,7 @@ export function formatChatRuntimeErrorMessage(
     });
   }
   const errorText = String(payload?.error ?? fallbackMessage);
-  if (isWorkspaceUnavailableErrorMessage(errorText)) {
-    return i18n.t('chat:runtime.errors.workspaceUnavailable');
-  }
-  if (isModelAuthenticationErrorMessage(errorText)) {
-    return i18n.t('chat:runtime.errors.modelAuthentication');
-  }
-  if (isClaudeCertificateErrorMessage(errorText)) {
-    return i18n.t('chat:runtime.errors.claudeCertificate');
-  }
-  if (isRequestTimeoutMessage(errorText)) {
-    return i18n.t('chat:runtime.errors.requestTimeout');
-  }
-  if (isRateLimitMessage(errorText)) {
-    return i18n.t('chat:runtime.errors.rateLimit');
-  }
-  return errorText || fallbackMessage;
+  return friendlyRuntimeError(errorText)?.text || errorText || fallbackMessage;
 }
 
 export function formatChatRuntimeErrorForDisplay(error: AppError): string {
@@ -91,20 +111,14 @@ export function formatChatRuntimeErrorForDisplay(error: AppError): string {
       : 0;
     return i18n.t('chat:runtime.errors.networkRetryExhausted', { count: retryAttempts });
   }
-  if (isWorkspaceUnavailableErrorMessage(error.message)) {
-    return i18n.t('chat:runtime.errors.workspaceUnavailable');
-  }
   if (error.code === 'AUTH_INVALID' || isModelAuthenticationErrorMessage(error.message)) {
     return i18n.t('chat:runtime.errors.modelAuthentication');
   }
   if (isClaudeCertificateErrorMessage(error.message)) {
     return i18n.t('chat:runtime.errors.claudeCertificate');
   }
-  if (error.code === 'TIMEOUT' || isRequestTimeoutMessage(error.message)) {
-    return i18n.t('chat:runtime.errors.requestTimeout');
-  }
   if (error.code === 'RATE_LIMIT' || isRateLimitMessage(error.message)) {
     return i18n.t('chat:runtime.errors.rateLimit');
   }
-  return error.message;
+  return friendlyRuntimeError(error.message)?.text || error.message;
 }

@@ -30,6 +30,8 @@ export interface UseProcessBlockCollapseOptions {
   defaultExpanded?: boolean;
   /** 展开时滚入视口（§5.5） */
   scrollOnExpand?: boolean;
+  /** 收起后卸载正文，避免 CSS 隐藏仍占用 DOM */
+  unmountCollapsedBody?: boolean;
 }
 
 /**
@@ -38,15 +40,21 @@ export interface UseProcessBlockCollapseOptions {
  * 对齐 sai-desktop ChartMessageThinking / ChartMessageToolCollapsible：
  * isComplete 强制收起；autoExpand 时展开；支持手动 toggle。
  */
+export const PROCESS_BLOCK_COLLAPSE_UNMOUNT_MS = 300;
+
 export function useProcessBlockCollapse({
   collapsible,
   isComplete,
   autoExpand,
   defaultExpanded,
   scrollOnExpand = true,
+  unmountCollapsedBody = false,
 }: UseProcessBlockCollapseOptions) {
   const [expanded, setExpanded] = useState(() => defaultExpanded ?? !isComplete);
   const [collapseAnimationEnabled, setCollapseAnimationEnabled] = useState(false);
+  const [bodyMounted, setBodyMounted] = useState(
+    () => !unmountCollapsedBody || (defaultExpanded ?? !isComplete),
+  );
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,6 +74,19 @@ export function useProcessBlockCollapse({
   }, [collapsible, isComplete, autoExpand]);
 
   useEffect(() => {
+    if (!collapsible || !unmountCollapsedBody) {
+      setBodyMounted(true);
+      return undefined;
+    }
+    if (expanded) {
+      setBodyMounted(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setBodyMounted(false), PROCESS_BLOCK_COLLAPSE_UNMOUNT_MS);
+    return () => window.clearTimeout(timer);
+  }, [collapsible, expanded, unmountCollapsedBody]);
+
+  useEffect(() => {
     if (!collapsible || !scrollOnExpand || !expanded) return;
     wrapperRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [collapsible, scrollOnExpand, expanded]);
@@ -75,17 +96,20 @@ export function useProcessBlockCollapse({
     setExpanded((value) => !value);
   };
 
+  const visuallyExpanded = collapsible ? expanded : true;
+
   return {
     wrapperRef,
-    expanded: collapsible ? expanded : true,
+    expanded: visuallyExpanded,
+    bodyMounted: collapsible && unmountCollapsedBody ? bodyMounted : true,
     collapseAnimationEnabled,
     toggle,
     bodyGridClass: chatProcessBlockBodyCollapseGridClass(
-      collapsible ? expanded : true,
+      visuallyExpanded,
       collapseAnimationEnabled,
     ),
     chevronClass: chatProcessBlockChevronClass(
-      collapsible ? expanded : true,
+      visuallyExpanded,
       collapseAnimationEnabled,
     ),
   };

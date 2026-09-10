@@ -1,3 +1,5 @@
+import type { ChatRunInterruptCause } from './chat-run-interrupt';
+
 export const CHAT_RUNTIME_PROTOCOL_VERSION = 1 as const;
 
 import type { AgentEngineType } from './agent-engine';
@@ -10,17 +12,20 @@ export interface ChatRuntimePolicy {
   deadlineAt?: number | null;
 }
 
-export type ChatRunPhase =
-  | 'dispatching'
-  | 'uncertain'
-  | 'running'
-  | 'awaiting_transcript'
-  | 'aborting'
-  | 'reconciling'
-  | 'completed'
-  | 'failed'
-  | 'aborted'
-  | 'interrupted';
+export const CHAT_RUN_PHASES = [
+  'dispatching',
+  'uncertain',
+  'running',
+  'awaiting_transcript',
+  'aborting',
+  'reconciling',
+  'completed',
+  'failed',
+  'aborted',
+  'interrupted',
+] as const;
+
+export type ChatRunPhase = (typeof CHAT_RUN_PHASES)[number];
 
 export type ContextCompactionReason = 'manual' | 'threshold' | 'overflow' | 'auto' | 'unknown';
 
@@ -40,23 +45,26 @@ export interface ChatContextUsage {
   updatedAt: number;
 }
 
-export type CanonicalChatEventType =
-  | 'run.dispatching'
-  | 'run.accepted'
-  | 'run.started'
-  | 'message.delta'
-  | 'message.final'
-  | 'tool.updated'
-  | 'context.compaction.started'
-  | 'context.compaction.completed'
-  | 'context.compaction.failed'
-  | 'context.usage.updated'
-  | 'transcript.updated'
-  | 'run.awaiting_transcript'
-  | 'run.completed'
-  | 'run.failed'
-  | 'run.aborted'
-  | 'run.interrupted';
+export const CANONICAL_CHAT_EVENT_TYPES = [
+  'run.dispatching',
+  'run.accepted',
+  'run.started',
+  'message.delta',
+  'message.final',
+  'tool.updated',
+  'context.compaction.started',
+  'context.compaction.completed',
+  'context.compaction.failed',
+  'context.usage.updated',
+  'transcript.updated',
+  'run.awaiting_transcript',
+  'run.completed',
+  'run.failed',
+  'run.aborted',
+  'run.interrupted',
+] as const;
+
+export type CanonicalChatEventType = (typeof CANONICAL_CHAT_EVENT_TYPES)[number];
 
 export interface CanonicalChatEvent {
   protocolVersion: typeof CHAT_RUNTIME_PROTOCOL_VERSION;
@@ -87,6 +95,8 @@ export interface ChatRuntimeSnapshot {
   lastEventAt: number;
   terminalAt: number | null;
   error: string | null;
+  /** 上一轮为什么断；进库，续跑读这里而不是内存 Map。 */
+  interruptCause?: ChatRunInterruptCause | null;
   /** Transient engine activity inside the current run; it does not change run phase. */
   activity?: ContextCompactionActivity | null;
   /** Most recent engine-reported context occupancy for this session. */

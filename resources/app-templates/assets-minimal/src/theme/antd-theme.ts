@@ -1,6 +1,7 @@
 import type { ThemeConfig } from 'antd';
 import { STO_THEME_TOKENS } from './tokens';
 
+/** antd ThemeConfig 直接引用 CSS 变量字符串（antd v5 支持）。 */
 export const stoAntdTheme: ThemeConfig = {
   token: {
     colorPrimary: STO_THEME_TOKENS.colorBrand,

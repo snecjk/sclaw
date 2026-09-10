@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { logger } from './logger';
+import { buildSilentPowerShellArgs } from './win-shell';
 
 function normalizeFsPathForWindows(filePath: string): string {
   if (process.platform !== 'win32') return filePath;
@@ -119,10 +120,14 @@ function extractWithPowerShellZipFile(zipPath: string, destDir: string): void {
   const psCommand =
     `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
     `[System.IO.Compression.ZipFile]::ExtractToDirectory('${cleanZipPath}', '${cleanDestDir}')`;
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand], {
-    encoding: 'utf-8',
-    windowsHide: true,
-  });
+  const result = spawnSync(
+    'powershell.exe',
+    buildSilentPowerShellArgs(['-ExecutionPolicy', 'Bypass', '-Command', psCommand]),
+    {
+      encoding: 'utf-8',
+      windowsHide: true,
+    },
+  );
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || 'ZipFile::ExtractToDirectory failed');
   }
@@ -134,13 +139,12 @@ function extractWithPowerShellExpandArchive(zipPath: string, destDir: string): v
   const cleanDestDir = stripLongPathPrefix(destDir).replace(/'/g, "''");
   const result = spawnSync(
     'powershell.exe',
-    [
-      '-NoProfile',
+    buildSilentPowerShellArgs([
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
       `Expand-Archive -Path '${cleanZipPath}' -DestinationPath '${cleanDestDir}' -Force`,
-    ],
+    ]),
     { encoding: 'utf-8', windowsHide: true },
   );
   if (result.status !== 0) {

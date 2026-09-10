@@ -19,8 +19,9 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, createWriteStream, symlinkSync } = require('fs');
+const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, writeFileSync, createReadStream, createWriteStream, symlinkSync } = require('fs');
 const { execSync } = require('child_process');
+const { createHash } = require('crypto');
 const { join, dirname, basename } = require('path');
 const { tmpdir } = require('os');
 const { createPackageWithOptions } = require('@electron/asar');
@@ -200,6 +201,51 @@ function resolveRuntimePackageSource(projectNodeModules, resolvedSources, entry)
   }
 
   throw new Error(`[after-pack] Required app runtime package missing in source node_modules: ${rootSource}`);
+}
+
+const WIN_ASAR_INTEGRITY_PREFIX = '{"file":"resources\\\\app.asar","alg":"SHA256","value":"';
+const SHA256_HEX_LEN = 64;
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+/**
+ * electron-builder writes the ELECTRONASAR integrity resource before afterPack.
+ * If that hash does not match the final app.asar, Electron 40 on Windows calls
+ * ValidateIntegrityOrDie and exits before JS runs — no window, no SClaw process.
+ */
+async function restampWinAsarIntegrity(exePath, asarPath) {
+  if (!existsSync(exePath) || !existsSync(asarPath)) return false;
+  const digest = await sha256File(asarPath);
+  const exe = readFileSync(exePath);
+  const marker = Buffer.from(WIN_ASAR_INTEGRITY_PREFIX, 'ascii');
+  const idx = exe.indexOf(marker);
+  if (idx < 0) {
+    console.warn(`[after-pack] ⚠️  No ELECTRONASAR integrity JSON found in ${exePath}`);
+    return false;
+  }
+  const hexStart = idx + marker.length;
+  const current = exe.subarray(hexStart, hexStart + SHA256_HEX_LEN).toString('ascii');
+  if (!/^[0-9a-f]{64}$/i.test(current)) {
+    throw new Error(`[after-pack] ASAR integrity value is not a SHA256 hex digest: ${current}`);
+  }
+  if (current.toLowerCase() === digest) {
+    console.log('[after-pack] ASAR integrity already matches app.asar');
+    return true;
+  }
+  Buffer.from(digest, 'ascii').copy(exe, hexStart);
+  writeFileSync(exePath, exe);
+  console.log(
+    `[after-pack] Restamped ASAR integrity ${current.slice(0, 8)}… → ${digest.slice(0, 8)}…`,
+  );
+  return true;
 }
 
 function ensureAppRuntimePackages(resourcesDir, packageEntries) {
@@ -1213,6 +1259,7 @@ exports.packDirectoryToAsar = packDirectoryToAsar;
 exports.validateAsarNativeUnpack = validateAsarNativeUnpack;
 exports.ensureTargetSharpPackages = ensureTargetSharpPackages;
 exports.ensureTargetClaudeSdkPackage = ensureTargetClaudeSdkPackage;
+exports.restampWinAsarIntegrity = restampWinAsarIntegrity;
 
 exports.default = async function afterPack(context) {
   const appOutDir = context.appOutDir;
@@ -1519,4 +1566,12 @@ exports.default = async function afterPack(context) {
   ensureTargetClaudeSdkPackage(resourcesDir, platform, arch);
   cleanupClaudeSdkPackages(resourcesDir, platform, arch);
   validateBundledClaudeSdk(resourcesDir, platform, arch);
+
+  if (platform === 'win32') {
+    const productFilename = context.packager?.appInfo?.productFilename || 'SClaw';
+    await restampWinAsarIntegrity(
+      join(appOutDir, `${productFilename}.exe`),
+      join(resourcesDir, 'app.asar'),
+    );
+  }
 };

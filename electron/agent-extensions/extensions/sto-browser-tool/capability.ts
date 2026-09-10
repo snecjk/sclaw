@@ -28,6 +28,7 @@ export class StoBrowserBridgePortError extends Error {
 
 export interface StoBrowserBridgePort {
   listSessions(signal?: AbortSignal): Promise<BrowserBridgeSession[]>;
+  ensureSession(signal?: AbortSignal, url?: string): Promise<string>;
   runCommand(input: {
     sessionId: string;
     action: BrowserBridgeAction;

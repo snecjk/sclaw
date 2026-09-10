@@ -1,0 +1,133 @@
+/**
+ * 选中区域对话修改浮条：overlay 语义，浅色值与现有 popover 对齐。
+ */
+
+.app-dev-element-intent-bar {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 4px 6px 4px 8px;
+  border: 1px solid var(--sto-overlay-border);
+  border-radius: 999px;
+  background: var(--sto-overlay-background);
+  color: var(--sto-overlay-foreground);
+  box-shadow: var(--sto-shadow-content-popover);
+}
+
+.app-dev-element-intent-bar__grip {
+  display: inline-flex;
+  color: var(--sto-icon-tertiary);
+  cursor: default;
+}
+
+.app-dev-element-intent-bar__spark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sto-brand-primary) 14%, transparent);
+  color: var(--sto-brand-primary);
+}
+
+.app-dev-element-intent-bar__chips {
+  display: flex;
+  max-width: 28%;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.app-dev-element-intent-bar__chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 6px;
+  background: var(--sto-control-hover-bg);
+  padding: 2px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--sto-text-secondary);
+}
+
+.app-dev-element-intent-bar__hint {
+  flex-shrink: 0;
+  max-width: 36%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--sto-text-tertiary);
+}
+
+.app-dev-element-intent-bar__form {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-dev-element-intent-bar__input {
+  min-width: 0;
+  flex: 1;
+  height: 32px;
+  border-radius: 999px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.app-dev-element-intent-bar__input:focus {
+  border-color: var(--sto-brand-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sto-brand-primary) 35%, transparent);
+}
+
+.app-dev-element-intent-bar__send {
+  display: inline-flex;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--sto-composer-send-background);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sto-composer-send-foreground);
+  cursor: pointer;
+}
+
+.app-dev-element-intent-bar__send:hover:not(:disabled) {
+  background: var(--sto-composer-send-hover-background);
+}
+
+.app-dev-element-intent-bar__send:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.app-dev-element-intent-bar__icon-btn {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sto-icon-secondary);
+  cursor: pointer;
+}
+
+.app-dev-element-intent-bar__icon-btn:hover {
+  background: var(--sto-control-hover-bg);
+  color: var(--sto-icon-primary);
+}

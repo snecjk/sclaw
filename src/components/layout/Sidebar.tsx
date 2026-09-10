@@ -124,6 +124,7 @@ import {
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 import {
   resolveSidebarAccountFooterMode,
+  resolveSidebarAccountName,
   shouldRenderAccountGearIcon,
 } from '@/lib/sidebar-account-footer';
 import {
@@ -872,6 +873,7 @@ export function Sidebar() {
     userProfileCard: sidebarVis.userProfileCard,
     sidebarCollapsed,
   });
+  const accountName = resolveSidebarAccountName(authUser);
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const taskCatalogSessions = useSessionCatalogStore((s) => s.taskCatalogSessions);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
@@ -2286,8 +2288,10 @@ export function Sidebar() {
                       setMobileConnectOpen(false);
                     }}
                   >
-                    <span className={sidebarFooterNameClass}>
-                      {authUser.realName?.trim() || authUser.userName}
+                    <span className="flex min-w-0 w-full" title={accountName}>
+                      <span className={cn(sidebarFooterNameClass, 'w-auto flex-1')}>
+                        {accountName}
+                      </span>
                     </span>
                     {authUser.companyName?.trim() ? (
                       <span className={sidebarFooterMetaClass}>

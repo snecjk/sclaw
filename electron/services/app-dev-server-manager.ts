@@ -9,12 +9,14 @@
 import { app } from 'electron';
 import { spawn, type ChildProcess } from 'child_process';
 import { createServer } from 'net';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { isDevServerRepairWorthyLine } from '../../shared/app-dev-preview-noise';
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
+import { prepareWinSpawn } from '../utils/win-shell';
 import { logger } from '../utils/logger';
 import { getPort } from '../utils/config';
+import { findAvailablePort } from '../utils/port-utils';
 import {
   buildSsoAuthLocalServerEnvironment,
   createSsoAuthLocalSession,
@@ -39,6 +41,36 @@ function resolveDevServerCwd(appPath: string): string {
 const LOG_BUFFER_LINES = 500;
 const MAX_CRASH_RESTARTS = 3;
 const CRASH_BACKOFF_BASE_MS = 1_000;
+const DEV_SERVER_START_PORT = 8801;
+
+interface AppPackageJson {
+  scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+}
+
+function isIceApp(cwd: string): boolean {
+  try {
+    const packageJson = JSON.parse(
+      readFileSync(join(cwd, 'package.json'), 'utf8'),
+    ) as AppPackageJson;
+    const dependencies = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
+    return Boolean(dependencies['@ice/app'])
+      || /(^|\s)ice\s+start(?:\s|$)/.test(packageJson.scripts?.dev ?? '');
+  } catch {
+    return false;
+  }
+}
+
+export function buildDevServerNpmArgs(cwd: string, port: number): string[] {
+  const args = ['run', 'dev', '--', '--port', String(port)];
+  if (!isIceApp(cwd)) args.push('--strictPort');
+  args.push('--host', '127.0.0.1');
+  return args;
+}
 
 export interface DevServerEntry {
   workspaceId: string;
@@ -106,13 +138,21 @@ function killProcessTree(child: ChildProcess): void {
 function allocateFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      server.close(() => (port ? resolve(port) : reject(new Error('failed to allocate port'))));
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        void findAvailablePort(DEV_SERVER_START_PORT + 1).then(resolve, reject);
+        return;
+      }
+      reject(error);
+    });
+    server.listen(DEV_SERVER_START_PORT, '127.0.0.1', () => {
+      server.close(() => resolve(DEV_SERVER_START_PORT));
     });
   });
+}
+
+export async function allocateDevServerPort(): Promise<number> {
+  return allocateFreePort();
 }
 
 function pushLog(entry: DevServerEntry, chunk: string): void {
@@ -194,7 +234,7 @@ async function startDevServerImpl(
   if (!npmBin || !existsSync(npmBin)) {
     throw new Error(`未找到可用的 npm 可执行文件: ${npmBin || '(empty)'}`);
   }
-  const port = await allocateFreePort();
+  const port = await allocateDevServerPort();
   lease.throwIfCanceled();
   const cwd = resolveDevServerCwd(appPath);
   const previewUrl = `http://127.0.0.1:${port}/`;
@@ -223,17 +263,15 @@ async function startDevServerImpl(
   logger.info(`[app-dev] starting dev server for ${workspaceId} on port ${port} cwd=${cwd}`);
   let child: ChildProcess;
   try {
-    child = spawn(
-      npmBin,
-      ['run', 'dev', '--', '--port', String(port), '--strictPort', '--host', '127.0.0.1'],
-      {
-        cwd,
-        env: childEnvironment,
-        windowsHide: true,
-        detached: process.platform !== 'win32',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
+    const prepared = prepareWinSpawn(npmBin, buildDevServerNpmArgs(cwd, port));
+    child = spawn(prepared.command, prepared.args, {
+      cwd,
+      env: childEnvironment,
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: prepared.shell,
+    });
   } catch (error) {
     destroySsoAuthLocalSession(workspaceId, ssoAuthSession.secret);
     throw error;

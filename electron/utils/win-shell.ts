@@ -26,16 +26,22 @@ export function quoteForCmd(value: string): string {
   return `"${value}"`;
 }
 
+/** True when `bin` is a cmd.exe script that Node cannot spawn without a shell. */
+export function isWinBatchFile(bin: string): boolean {
+  return /\.(cmd|bat)$/i.test(bin);
+}
+
 /**
  * Determine whether a spawn call needs `shell: true` on Windows.
  *
- * Full (absolute) paths can be executed directly by the OS via
- * CreateProcessW, which handles spaces correctly without a shell.
- * Simple command names (e.g. 'uv', 'node') need shell for PATH/PATHEXT
- * resolution on Windows.
+ * Full (absolute) `.exe` paths can be executed directly by the OS via
+ * CreateProcessW. Simple command names (e.g. 'uv', 'node') need shell for
+ * PATH/PATHEXT resolution. `.cmd` / `.bat` files always need a shell:
+ * Node 18.20+/20.12+ rejects them with `spawn EINVAL` (CVE-2024-27980).
  */
 export function needsWinShell(bin: string): boolean {
   if (process.platform !== 'win32') return false;
+  if (isWinBatchFile(bin)) return true;
   return !path.win32.isAbsolute(bin);
 }
 
@@ -51,7 +57,7 @@ export function prepareWinSpawn(
   forceShell?: boolean,
 ): { shell: boolean; command: string; args: string[] } {
   const isWin = process.platform === 'win32';
-  const useShell = forceShell ?? (isWin && !path.win32.isAbsolute(command));
+  const useShell = forceShell ?? needsWinShell(command);
 
   if (!useShell || !isWin) {
     return { shell: useShell, command, args };
@@ -86,4 +92,114 @@ export function appendNodeRequireToNodeOptions(
 ): string {
   const normalized = normalizeNodeRequirePathForNodeOptions(modulePath);
   return `${nodeOptions ?? ''} --require "${normalized}"`.trim();
+}
+
+/**
+ * Quiet powershell.exe without allocating a console window.
+ * Must appear before `-Command` / `-File` / `-EncodedCommand`.
+ *
+ * Do not pass `-WindowStyle Hidden`: PowerShell creates a real window then
+ * hides it, which flashes a black console. Hide with CREATE_NO_WINDOW
+ * (`windowsHide: true`) instead — same as main.
+ */
+const SILENT_POWERSHELL_PREFIX = [
+  '-NoLogo',
+  '-NoProfile',
+  '-NonInteractive',
+] as const;
+
+export function silentPowerShellPrefix(): string[] {
+  return [...SILENT_POWERSHELL_PREFIX];
+}
+
+/** Build powershell.exe argv: quiet prefix + caller flags (`-Command` / `-File` / …). */
+export function buildSilentPowerShellArgs(rest: string[]): string[] {
+  return ensureSilentPowerShellArgs(rest);
+}
+
+function hasPowerShellSwitch(args: string[], name: string): boolean {
+  const needle = name.toLowerCase();
+  return args.some((arg) => String(arg).toLowerCase() === needle);
+}
+
+/** Drop `-WindowStyle …` so callers cannot reintroduce the console flash. */
+export function stripPowerShellWindowStyle(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (String(args[i]).toLowerCase() === '-windowstyle') {
+      i += 1;
+      continue;
+    }
+    out.push(args[i]);
+  }
+  return out;
+}
+
+/** Prepend missing quiet flags without duplicating switches already present. */
+export function ensureSilentPowerShellArgs(args: string[]): string[] {
+  const stripped = stripPowerShellWindowStyle(args);
+  const prefix: string[] = [];
+  if (!hasPowerShellSwitch(stripped, '-NoLogo')) prefix.push('-NoLogo');
+  if (!hasPowerShellSwitch(stripped, '-NoProfile')) prefix.push('-NoProfile');
+  if (!hasPowerShellSwitch(stripped, '-NonInteractive')) prefix.push('-NonInteractive');
+  return prefix.length > 0 ? [...prefix, ...stripped] : stripped;
+}
+
+export function isPowerShellExecutable(cmd: string): boolean {
+  const token = cmd.trim().replace(/^"(.*)"$/, '$1').split(/\s+/)[0]?.replace(/^"(.*)"$/, '$1') ?? '';
+  return /(?:^|[\\/])(?:powershell|pwsh)(?:\.exe)?$/i.test(token)
+    || /^(?:powershell|pwsh)(?:\.exe)?$/i.test(token);
+}
+
+export function isWindowsConsoleHost(cmd: string): boolean {
+  if (isPowerShellExecutable(cmd)) return true;
+  const token = cmd.trim().replace(/^"(.*)"$/, '$1').split(/\s+/)[0]?.replace(/^"(.*)"$/, '$1') ?? '';
+  return /(?:^|[\\/])cmd(?:\.exe)?$/i.test(token) || /^cmd(?:\.exe)?$/i.test(token);
+}
+
+function findChildProcessOptionsIndex(args: unknown[]): number {
+  for (let i = 1; i < args.length; i += 1) {
+    const value = args[i];
+    if (value && typeof value === 'object' && !Array.isArray(value) && typeof value !== 'function') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function withWindowsHideOptions(
+  options: Record<string, unknown> | undefined,
+  cmd: string,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...(options ?? {}), windowsHide: true };
+  // DETACHED_PROCESS fights CREATE_NO_WINDOW and still allocates a console.
+  if (isWindowsConsoleHost(cmd)) next.detached = false;
+  return next;
+}
+
+/**
+ * Force Windows child processes to use CREATE_NO_WINDOW (`windowsHide`).
+ * Do not add `-WindowStyle Hidden` — that allocates a console then hides it.
+ */
+export function applyWindowsHiddenSpawnArgs(args: unknown[]): unknown[] {
+  if (process.platform !== 'win32') return args;
+  const next = [...args];
+  const cmd = typeof next[0] === 'string' ? next[0] : '';
+  if (Array.isArray(next[1]) && isPowerShellExecutable(cmd)) {
+    next[1] = ensureSilentPowerShellArgs(next[1].map(String));
+  }
+
+  const optIdx = findChildProcessOptionsIndex(next);
+  if (optIdx >= 0) {
+    next[optIdx] = withWindowsHideOptions(next[optIdx] as Record<string, unknown>, cmd);
+    return next;
+  }
+
+  const hideOptions = withWindowsHideOptions(undefined, cmd);
+  if (typeof next[next.length - 1] === 'function') {
+    next.splice(next.length - 1, 0, hideOptions);
+  } else {
+    next.push(hideOptions);
+  }
+  return next;
 }

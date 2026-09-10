@@ -81,6 +81,7 @@ export function SclawBrowserEmbedChat({
     streamingToolResults,
     streamingTools,
     error,
+    phase,
   } = useChatSessionRuntimeView(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
   const clearError = useChatStore((s) => s.clearError);
@@ -112,6 +113,7 @@ export function SclawBrowserEmbedChat({
     streamingToolResults,
     streamingTools,
     turnAnchorAt,
+    phase,
   });
 
   const showLoadingPlaceholder = useMemo(
@@ -245,6 +247,7 @@ export function SclawBrowserEmbedChat({
           seedText={composerSeed}
           composerScenarioActions={composerScenarioActions}
           toolbarToolsLayout={toolbarToolsLayout}
+          composerDraftSessionKey={sessionKey}
         />
       </div>
         </>

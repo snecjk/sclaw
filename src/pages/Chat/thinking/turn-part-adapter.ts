@@ -5,6 +5,7 @@
  * 不重新排序 segment 结构（Phase 4：done fallback 只补缺口）。
  */
 import {
+  isConflictingToolInput,
   mergeToolInput,
   resolveToolInputState,
   thinkingTimelineToolIdentityKey,
@@ -30,20 +31,42 @@ function enrichToolItem(
     toolLookup.get(identityKey)
     ?? toolLookup.get(item.id)
     ?? toolLookup.get(item.name);
-  const mergedInput = mergeToolInput(item.input, fromPart?.input);
+  // timeline 自己的 input 优先；lookup 只补缺口，不得反向覆盖（否则同名多次调用会被抹平）。
+  const mergedInput = mergeToolInput(fromPart?.input, item.input);
   return { ...item, input: mergedInput };
 }
 
-/** 同一 identity 的工具只保留首次出现，input 取合并后最高质量 */
+type TimelineTool = Extract<ThinkingTimelineItem, { type: 'tool' }>;
+
+/**
+ * 同一 identity 的工具只保留首次出现，input 取合并后最高质量。
+ *
+ * identity 撞车时按 input 冲突切开：id 唯一性不可信（弱 id `name === id`，以及
+ * 网关适配出来的 `toolu_<Name>_0` —— 一轮里 24 条不同命令共用同一个 id），
+ * 一律合并会让工具列表整段丢调用。input 兼容（含流式空 → 补全）仍然合并。
+ */
 function dedupeTimelineTools(
   timeline: ThinkingTimelineItem[],
   toolLookup: ReturnType<typeof buildToolPartLookup>,
 ): ThinkingTimelineItem[] {
-  const seenIdentities = new Set<string>();
-  const mergedByIdentity = new Map<
-    string,
-    Extract<ThinkingTimelineItem, { type: 'tool' }>
-  >();
+  const mergedByKey = new Map<string, TimelineTool>();
+  const resultIndexByKey = new Map<string, number>();
+  /** base identity → 当前正在累积的那次调用的 key */
+  const activeKeyByBase = new Map<string, string>();
+  const collisionCountByBase = new Map<string, number>();
+
+  const resolveKey = (tool: TimelineTool): string => {
+    const baseKey = thinkingTimelineToolIdentityKey({ id: tool.id, name: tool.name });
+    const activeKey = activeKeyByBase.get(baseKey) ?? baseKey;
+    const active = mergedByKey.get(activeKey);
+    if (!active || !isConflictingToolInput(active.input, tool.input)) return activeKey;
+
+    const nextCall = (collisionCountByBase.get(baseKey) ?? 0) + 1;
+    collisionCountByBase.set(baseKey, nextCall);
+    const splitKey = `${baseKey}::call-${nextCall}`;
+    activeKeyByBase.set(baseKey, splitKey);
+    return splitKey;
+  };
 
   const result: ThinkingTimelineItem[] = [];
 
@@ -54,30 +77,19 @@ function dedupeTimelineTools(
     }
 
     const enriched = enrichToolItem(item, toolLookup);
-    const identityKey = thinkingTimelineToolIdentityKey({
-      id: enriched.id,
-      name: enriched.name,
-    });
+    const key = resolveKey(enriched);
+    const existing = mergedByKey.get(key);
 
-    const existing = mergedByIdentity.get(identityKey);
     if (existing) {
-      mergedByIdentity.set(identityKey, {
-        ...existing,
-        input: mergeToolInput(existing.input, enriched.input),
-      });
-      const idx = result.findIndex(
-        (entry) =>
-          entry.type === 'tool'
-          && thinkingTimelineToolIdentityKey(entry) === identityKey,
-      );
-      if (idx >= 0) {
-        result[idx] = mergedByIdentity.get(identityKey)!;
-      }
+      const merged = { ...existing, input: mergeToolInput(existing.input, enriched.input) };
+      mergedByKey.set(key, merged);
+      const index = resultIndexByKey.get(key);
+      if (index !== undefined) result[index] = merged;
       continue;
     }
 
-    seenIdentities.add(identityKey);
-    mergedByIdentity.set(identityKey, enriched);
+    mergedByKey.set(key, enriched);
+    resultIndexByKey.set(key, result.length);
     result.push(enriched);
   }
 

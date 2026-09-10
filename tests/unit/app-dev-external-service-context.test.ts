@@ -81,7 +81,11 @@ describe('应用开发外部服务上下文', () => {
     );
     expect(visualSkill).toContain('STO PC Visual');
     expect(visualSkill).toContain('#FF6700');
+    expect(visualSkill).toContain('content.md');
     expect(agents).toContain('openspec/skills/sto-pc-visual/SKILL.md');
+    expect(agents).toContain('content.md');
+    await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'content.md'), 'utf8'))
+      .resolves.toContain('这不是报告 HTML');
     await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'tokens.css'), 'utf8'))
       .resolves.toContain('--shell-topbar: 60px');
     await expect(readFile(join(appPath, 'openspec', 'skills', 'sto-pc-visual', 'reference.html'), 'utf8'))

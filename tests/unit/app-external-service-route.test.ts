@@ -5,6 +5,8 @@ const sendJsonMock = vi.fn();
 const parseJsonBodyMock = vi.fn();
 const resolveAppPathMock = vi.fn().mockResolvedValue('/apps/demo');
 const pageMock = vi.fn();
+const resolveInstallMock = vi.fn();
+const workspaceBindingMock = vi.fn();
 const listMock = vi.fn();
 const bindMock = vi.fn();
 const upgradeMock = vi.fn();
@@ -18,7 +20,13 @@ vi.mock('@electron/services/session-catalog-service', () => ({
   getWorkspaceRootPath: (...args: unknown[]) => resolveAppPathMock(...args),
 }));
 vi.mock('@electron/services/external-service-api-client', () => ({
-  externalServiceApiClient: { page: (...args: unknown[]) => pageMock(...args) },
+  externalServiceApiClient: {
+    page: (...args: unknown[]) => pageMock(...args),
+    resolveInstall: (...args: unknown[]) => resolveInstallMock(...args),
+  },
+}));
+vi.mock('@electron/services/sto-app-binding-store', () => ({
+  getStoAppBindingByWorkspaceId: (...args: unknown[]) => workspaceBindingMock(...args),
 }));
 vi.mock('@electron/services/app-external-service-binding', () => ({
   listExternalServiceBindings: (...args: unknown[]) => listMock(...args),
@@ -33,11 +41,13 @@ describe('app external service routes', () => {
   it('bind 只接受可解析 workspaceId 并调用受控绑定服务', async () => {
     parseJsonBodyMock.mockResolvedValueOnce({
       workspaceId: 'ws-1',
-      serviceId: 'sto-policy-ontology',
+      serviceUid: 'service-1',
       version: '1.0.0',
       alias: 'policyOntology',
     });
     bindMock.mockResolvedValueOnce({ changedFiles: [] });
+    workspaceBindingMock.mockResolvedValueOnce({ appCode: 'app-1' });
+    resolveInstallMock.mockResolvedValueOnce({ serviceId: 'sto-policy-ontology', serviceUid: 'service-1' });
     const { handleAppExternalServiceRoutes } = await import(
       '@electron/api/routes/app-external-services'
     );
@@ -53,7 +63,7 @@ describe('app external service routes', () => {
     expect(resolveAppPathMock).toHaveBeenCalledWith('ws-1');
     expect(bindMock).toHaveBeenCalledWith(expect.objectContaining({
       appPath: '/apps/demo',
-      serviceId: 'sto-policy-ontology',
+      serviceUid: 'service-1',
       alias: 'policyOntology',
     }));
     expect(sendJsonMock).toHaveBeenCalledWith(expect.anything(), 200, {

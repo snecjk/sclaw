@@ -210,4 +210,51 @@ describe('CreateAppDialog application type', () => {
       templateSource: 'local-resource',
     })));
   });
+
+  it('hides 工程形态 and always creates a frontend app', async () => {
+    listAppTemplatesMock.mockImplementation(async () => ({
+      items: [
+        {
+          templateId: 'site-minimal',
+          pageType: 'site',
+          name: '标准 Site 模版',
+          description: '平台内置最简模板',
+          status: 'ACTIVE',
+          isBuiltin: true,
+          latestVersion: '1.0.0',
+          createdAt: '2026-08-26T00:00:00Z',
+          updatedAt: '2026-08-26T00:00:00Z',
+        },
+        {
+          templateId: 'site-fullstack',
+          pageType: 'site',
+          name: '全栈 Site 模版',
+          description: '前端 + 本地后端',
+          status: 'ACTIVE',
+          isBuiltin: true,
+          latestVersion: 'local',
+          source: 'local-resource',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      total: 2,
+      pageNum: 1,
+      pageSize: 100,
+    }));
+    render(<CreateAppDialog open onClose={vi.fn()} />);
+
+    expect(screen.queryByText('工程形态')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /全栈应用/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /标准 Site 模版/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /全栈 Site 模版/ })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('比如：快递查询助手'), { target: { value: '快递助手' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建应用' }));
+
+    await waitFor(() => expect(createUserAppMock).toHaveBeenCalledWith(expect.objectContaining({
+      projectType: 'frontend',
+      templateId: 'site-minimal',
+    })));
+  });
 });

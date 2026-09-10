@@ -34,6 +34,25 @@ function ensureGatewayFetchPreload(): string {
   return dest;
 }
 
+/** Hide Windows consoles + DWS send guards for Gateway / doctor utilityProcess children. */
+export function resolveGatewayUtilityExecArgv(runtimeEnv?: NodeJS.ProcessEnv): string[] | undefined {
+  try {
+    const preloadPath = ensureGatewayFetchPreload();
+    if (!existsSync(preloadPath)) return undefined;
+    const requirePath = normalizeNodeRequirePathForNodeOptions(preloadPath);
+    if (runtimeEnv && !app.isPackaged) {
+      runtimeEnv.NODE_OPTIONS = appendNodeRequireToNodeOptions(
+        runtimeEnv.NODE_OPTIONS,
+        preloadPath,
+      );
+    }
+    return ['--require', requirePath];
+  } catch (err) {
+    logger.warn('Failed to set up Gateway security preload:', err);
+    return undefined;
+  }
+}
+
 export async function launchGatewayProcess(options: {
   port: number;
   launchContext: GatewayLaunchContext;
@@ -67,22 +86,9 @@ export async function launchGatewayProcess(options: {
   // Security + DWS send normalization preload must apply in ALL modes.
   // Packaged Electron blocks `--require` in NODE_OPTIONS (see startup-stderr.ts);
   // utilityProcess.fork execArgv is the supported path in production builds.
-  let forkExecArgv: string[] | undefined;
-  try {
-    const preloadPath = ensureGatewayFetchPreload();
-    if (existsSync(preloadPath)) {
-      const requirePath = normalizeNodeRequirePathForNodeOptions(preloadPath);
-      forkExecArgv = ['--require', requirePath];
-      if (!app.isPackaged) {
-        runtimeEnv.NODE_OPTIONS = appendNodeRequireToNodeOptions(
-          runtimeEnv.NODE_OPTIONS,
-          preloadPath,
-        );
-      }
-      logger.info(`Gateway security preload enabled via execArgv: ${requirePath}`);
-    }
-  } catch (err) {
-    logger.warn('Failed to set up Gateway security preload:', err);
+  const forkExecArgv = resolveGatewayUtilityExecArgv(runtimeEnv);
+  if (forkExecArgv) {
+    logger.info(`Gateway security preload enabled via execArgv: ${forkExecArgv[1]}`);
   }
 
   return await new Promise<{ child: Electron.UtilityProcess; lastSpawnSummary: string }>((resolve, reject) => {
@@ -90,7 +96,7 @@ export async function launchGatewayProcess(options: {
       cwd: openclawDir,
       stdio: 'pipe',
       env: runtimeEnv as NodeJS.ProcessEnv,
-      execArgv: forkExecArgv,
+      ...(forkExecArgv ? { execArgv: forkExecArgv } : {}),
       serviceName: 'OpenClaw Gateway',
     });
 

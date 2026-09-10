@@ -28,6 +28,7 @@ import { AppCard } from './AppCard';
 import { DevAppCard, formatDevAppCardDesc } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { CreateAppDialog } from './CreateAppDialog';
+import { AppDevConversationalCreate, SHOW_APP_DEV_CONVERSATIONAL_CREATE } from './AppDevConversationalCreate';
 import { AppTemplateManagerDialog } from './AppTemplateManagerDialog';
 import { ExternalServiceManagerDialog } from './ExternalServiceManagerDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -750,21 +751,48 @@ export function MoreAppsPage() {
   const renderDevAppsView = () => {
     const emptyMessage = searchQuery
       ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
-      : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' });
+      : null;
 
     return (
       <div className="more-apps-main">
         {filteredDevApps.length === 0 ? (
-          <div className="more-apps-empty">{emptyMessage}</div>
-        ) : (
-          <div className="more-apps-grid">
-            {filteredDevApps.map((app) => (
-              <DevAppCard
-                key={app.appCode || app.workspaceId || `${app.name}:${app.appPath}`}
-                app={app}
-              />
-            ))}
+          <div className="flex flex-col items-center justify-center gap-4 px-4 py-10">
+            {searchQuery ? (
+              <div className="more-apps-empty">{emptyMessage}</div>
+            ) : SHOW_APP_DEV_CONVERSATIONAL_CREATE ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {t('moreApps.emptyDevAppsHint', {
+                    defaultValue: '还没有开发中的应用，用一句话开始，或打开高级选项自定义模板',
+                  })}
+                </p>
+                <AppDevConversationalCreate onOpenAdvanced={() => setCreateAppOpen(true)} />
+              </>
+            ) : (
+              <div className="more-apps-empty">
+                {t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「高级创建」开始' })}
+              </div>
+            )}
           </div>
+        ) : (
+          <>
+            {SHOW_APP_DEV_CONVERSATIONAL_CREATE ? (
+              <div className="mb-4 px-1">
+                <AppDevConversationalCreate
+                  compact
+                  onOpenAdvanced={() => setCreateAppOpen(true)}
+                />
+              </div>
+            ) : null}
+            <div className="more-apps-grid">
+              {filteredDevApps.map((app) => (
+                <DevAppCard
+                  key={app.appCode || app.workspaceId || `${app.name}:${app.appPath}`}
+                  app={app}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     );
@@ -791,9 +819,10 @@ export function MoreAppsPage() {
               className="sto-control sto-control--fill-action more-apps-add-btn"
               id="more-apps-create-app-btn"
               onClick={() => setCreateAppOpen(true)}
+              title="自定义模板、全栈或存放目录"
             >
               <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
-              {t('moreApps.createApp', { defaultValue: '创建应用' })}
+              {t('moreApps.createAppAdvanced', { defaultValue: '高级创建' })}
             </button>
           ) : null}
           <button

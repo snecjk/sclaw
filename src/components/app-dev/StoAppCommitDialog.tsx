@@ -8,7 +8,7 @@ interface StoAppCommitDialogProps {
   open: boolean;
   appName: string;
   initialMessage: string;
-  /** `sto` = sai-cli 上传；`git` = 本地 git commit */
+  /** `sto` = 云端源码提交；`git` = 本地 git commit */
   mode?: 'sto' | 'git';
   onCancel: () => void;
   onConfirm: (message: string) => Promise<void> | void;

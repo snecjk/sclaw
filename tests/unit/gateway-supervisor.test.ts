@@ -5,9 +5,11 @@ const originalPlatform = process.platform;
 
 const {
   mockExec,
+  mockExecFile,
   mockCreateServer,
 } = vi.hoisted(() => ({
   mockExec: vi.fn(),
+  mockExecFile: vi.fn(),
   mockCreateServer: vi.fn(),
 }));
 
@@ -21,10 +23,12 @@ vi.mock('electron', () => ({
 
 vi.mock('child_process', () => ({
   exec: mockExec,
+  execFile: mockExecFile,
   execSync: vi.fn(),
   spawn: vi.fn(),
   default: {
     exec: mockExec,
+    execFile: mockExecFile,
     execSync: vi.fn(),
     spawn: vi.fn(),
   },
@@ -54,6 +58,11 @@ describe('gateway supervisor process cleanup', () => {
     vi.clearAllMocks();
 
     mockExec.mockImplementation((_cmd: string, _opts: object, cb: (err: Error | null, stdout: string) => void) => {
+      cb(null, '');
+      return {} as never;
+    });
+
+    mockExecFile.mockImplementation((_file: string, _args: string[], _opts: object, cb: (err: Error | null, stdout: string) => void) => {
       cb(null, '');
       return {} as never;
     });
@@ -115,8 +124,8 @@ describe('gateway supervisor process cleanup', () => {
     setPlatform('win32');
     const { findExistingGatewayProcess } = await import('@electron/gateway/supervisor');
 
-    mockExec.mockImplementation((cmd: string, _opts: object, cb: (err: Error | null, stdout: string) => void) => {
-      if (cmd.includes('netstat -ano')) {
+    mockExecFile.mockImplementation((file: string, _args: string[], _opts: object, cb: (err: Error | null, stdout: string) => void) => {
+      if (file === 'netstat') {
         cb(null, '  TCP    127.0.0.1:18789    0.0.0.0:0    LISTENING    4321\n');
         return {} as never;
       }
@@ -127,6 +136,12 @@ describe('gateway supervisor process cleanup', () => {
     const result = await findExistingGatewayProcess({ port: 18789 });
     expect(result).toBeNull();
 
+    expect(mockExecFile).toHaveBeenCalledWith(
+      'netstat',
+      ['-ano'],
+      expect.objectContaining({ timeout: 5000, windowsHide: true }),
+      expect.any(Function),
+    );
     expect(mockExec).toHaveBeenCalledWith(
       expect.stringContaining('taskkill /F /PID 4321 /T'),
       expect.objectContaining({ timeout: 5000, windowsHide: true }),

@@ -39,6 +39,38 @@ export function pageExternalServices(input: { keyword?: string; pageNum?: number
   return request<ExternalServicePageResult>('/page', json({ pageNum: 1, pageSize: 20, ...input }));
 }
 
+export function pageMyExternalServices(input: { keyword?: string; pageNum?: number; pageSize?: number } = {}) {
+  return request<ExternalServicePageResult>('/mine/page', json({ pageNum: 1, pageSize: 20, ...input }));
+}
+
+export function getVisibleExternalServiceVersion(serviceUid: string, version: string) {
+  return request<ExternalServiceVersionConfig>(
+    `/uid/${encodeURIComponent(serviceUid)}/versions/${encodeURIComponent(version)}`,
+  );
+}
+
+export function createMyExternalService(serviceId: string, draft: ExternalServiceDraftInput) {
+  return request<ExternalServiceDraft>('/', json({ serviceId, draft }));
+}
+
+export function getMyExternalServiceDraft(serviceUid: string) {
+  return request<ExternalServiceDraft>(`/uid/${encodeURIComponent(serviceUid)}/draft`);
+}
+
+export function saveMyExternalServiceDraft(serviceUid: string, draft: ExternalServiceDraftInput) {
+  return request<ExternalServiceDraft>(`/uid/${encodeURIComponent(serviceUid)}/draft`, {
+    ...json(draft), method: 'PUT',
+  });
+}
+
+export function publishMyExternalService(serviceUid: string) {
+  return request<ExternalServiceVersionConfig>(`/uid/${encodeURIComponent(serviceUid)}/publish`, { method: 'POST' });
+}
+
+export function setMyExternalServiceVisibility(serviceUid: string, visibility: 'PRIVATE' | 'PUBLIC') {
+  return request<ExternalServiceDraft>(`/uid/${encodeURIComponent(serviceUid)}/visibility`, json({ visibility }));
+}
+
 export function pageExternalServicesAdmin(input: { keyword?: string; pageNum?: number; pageSize?: number } = {}) {
   return request<ExternalServicePageResult>('/admin/page', json({ pageNum: 1, pageSize: 20, ...input }));
 }

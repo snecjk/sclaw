@@ -12,6 +12,7 @@ import {
   subscribeCanonicalChatRuntimeProjection,
   useChatRuntimeV2Store,
 } from '@/stores/chat/runtime-v2-store';
+import { materializeLiveMessage } from '../../shared/chat-live-append';
 
 function event(overrides: Partial<CanonicalChatEvent> = {}): CanonicalChatEvent {
   return {
@@ -51,7 +52,7 @@ describe('chat runtime delta 合帧（chat-thinking-perf 3.1）', () => {
     useChatRuntimeV2Store.setState({ sessionsByKey: {}, initialized: false });
   });
 
-  it('同帧多个 delta 只提交一次 store 更新', () => {
+  it('同帧多个累计 delta 只保留最新全文，不截断内容', () => {
     let commitCount = 0;
     const unsubscribe = useChatRuntimeV2Store.subscribe(() => {
       commitCount += 1;
@@ -75,14 +76,31 @@ describe('chat runtime delta 合帧（chat-thinking-perf 3.1）', () => {
 
     flushPendingChatRuntimeDeltas();
 
-    // 一帧一次提交，三个 delta 全部按序生效
+    // 一帧一次提交；同会话累计 delta 只保留最新快照
     expect(commitCount).toBe(2);
     expect(session()?.overlay.streamingMessage).toMatchObject({ content: '第一第二第三' });
     expect(session()?.runtime).toMatchObject({ phase: 'running', sequence: 4 });
-    expect(projected.map((e) => e.sequence)).toEqual([2, 3, 4]);
+    expect(projected.map((e) => e.sequence)).toEqual([4]);
 
     unsubscribe();
     unsubscribeProjection();
+  });
+
+  it('同会话连续增量 append 合帧后拼回全文', () => {
+    useChatRuntimeV2Store.getState().applyEvent(event());
+    useChatRuntimeV2Store.getState().applyEvent(delta(2, '你好'));
+    useChatRuntimeV2Store.getState().applyEvent({
+      ...delta(3, ''),
+      payload: {
+        id: 'run-1',
+        role: 'assistant',
+        _liveAppend: { append: '世界', totalLength: 4, blockIndex: null, field: 'content' },
+      },
+    });
+
+    flushPendingChatRuntimeDeltas();
+    expect(materializeLiveMessage(session()?.overlay.streamingMessage ?? null)).toMatchObject({ content: '你好世界' });
+    expect(session()?.runtime?.sequence).toBe(3);
   });
 
   it('非 delta 事件（message.final）到来前立即 flush 排队 delta，不丢不乱序', () => {

@@ -65,6 +65,10 @@ export interface ChatProcessBlockProps {
   defaultExpanded?: boolean;
   /** 当前活跃段：标题 shimmer（§6.1） */
   isActive?: boolean;
+  /** 收起后卸载正文 */
+  unmountCollapsedBody?: boolean;
+  /** 展开时是否滚入视口；思考 peek 内应关闭，避免整列被拽动 */
+  scrollOnExpand?: boolean;
   /** 左竖线内容区；省略则仅标题行（连接/等待态） */
   children?: React.ReactNode;
   className?: string;
@@ -79,12 +83,15 @@ export const ChatProcessBlock = memo(function ChatProcessBlock({
   autoExpand = false,
   defaultExpanded,
   isActive = false,
+  unmountCollapsedBody = false,
+  scrollOnExpand,
   children,
   className,
 }: ChatProcessBlockProps) {
   const {
     wrapperRef,
     expanded,
+    bodyMounted,
     toggle,
     bodyGridClass,
     chevronClass,
@@ -93,6 +100,8 @@ export const ChatProcessBlock = memo(function ChatProcessBlock({
     isComplete,
     autoExpand,
     defaultExpanded,
+    unmountCollapsedBody,
+    scrollOnExpand,
   });
 
   const titleWithChevron = collapsible ? (
@@ -172,9 +181,11 @@ export const ChatProcessBlock = memo(function ChatProcessBlock({
     >
       {headerRow}
       {body != null && collapsible ? (
-        <div className={bodyGridClass}>
-          <div className="min-h-0 overflow-hidden">{body}</div>
-        </div>
+        bodyMounted ? (
+          <div className={bodyGridClass}>
+            <div className="min-h-0 overflow-hidden">{body}</div>
+          </div>
+        ) : null
       ) : body}
     </div>
   );

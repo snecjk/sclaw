@@ -45,7 +45,23 @@ import { inspectTranscript } from './chat-runtime-inspection';
 import { buildChatHistoryFingerprint } from '../../shared/chat-history-fingerprint';
 import { sliceHistoryPage } from '../../shared/chat-history-page';
 import { CHAT_HISTORY_LIMIT } from '../../shared/chat-config';
-import { isClaudeRuntimeControlText } from '../../shared/claude-runtime-control-text';
+import {
+  isClaudeRuntimeControlText,
+  isContinueUserPrompt,
+  buildClaudeResumeInterruptAppend,
+  buildClaudeResumeContinueUserPrompt,
+  inspectClaudeAssistantPayload,
+  isClaudeTurnContentless,
+  shouldAutoResumeContentlessTurn,
+} from '../../shared/claude-runtime-control-text';
+import { resolveClaudeResumePlan } from '../../shared/claude-resume-plan';
+import { classifyChatRunInterrupt } from '../../shared/chat-run-interrupt';
+import { assembleSystemPromptAppend } from '../../shared/system-prompt-sections';
+import { consumeRunInterrupt, peekRunInterrupt, rememberRunInterrupt } from './run-interrupt-store';
+import { bindClaudeLoopGuardAbort, unbindClaudeLoopGuardAbort } from './claude-loop-guard';
+import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
+import { ActiveQueryRegistry } from './active-query-registry';
+import { logUserSend } from '../../shared/user-send-log';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -63,17 +79,25 @@ type ClaudeEventSink = {
   emit(event: string, payload: unknown): boolean;
 };
 
-type ActiveClaudeQuery = {
-  close: () => void;
-  runId: string;
-  sessionId: string;
-  sessionKey: string;
-};
-
 const CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS = 400;
 const CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS = 4_096;
 
-const activeClaudeQueries = new Map<string, ActiveClaudeQuery>();
+const activeClaudeQueries = new ActiveQueryRegistry({
+  onReplace: (previous, next) => {
+    logger.warn('[claude-adapter] replacing an in-flight query for the same session', {
+      sessionKey: next.sessionKey,
+      previousRunId: previous.runId,
+      nextRunId: next.runId,
+    });
+  },
+  onCloseError: (handle, error) => {
+    logger.warn('[claude-adapter] failed to close a superseded query', {
+      sessionKey: handle.sessionKey,
+      runId: handle.runId,
+      error: String(error),
+    });
+  },
+});
 type ClaudeQuery = AsyncIterable<Record<string, unknown>> & {
   close(): void;
 };
@@ -345,9 +369,43 @@ function stringifyClaudeContent(content: unknown): string {
     .join('\n');
 }
 
+function formatClaudeError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
 function formatClaudeResultError(message: Record<string, unknown>): string {
   const result = typeof message.result === 'string' ? message.result.trim() : '';
   return result || 'Claude Code returned an error result.';
+}
+
+const lastClaudeInterruptBySession = new Map<string, string>();
+const autoResumeCountBySession = new Map<string, number>();
+
+function rememberClaudeInterrupt(sessionKey: string, error: unknown): void {
+  lastClaudeInterruptBySession.set(sessionKey, formatClaudeError(error));
+  rememberRunInterrupt(sessionKey, classifyChatRunInterrupt(error));
+}
+
+function consumeClaudeInterrupt(sessionKey: string): string | undefined {
+  const value = lastClaudeInterruptBySession.get(sessionKey);
+  lastClaudeInterruptBySession.delete(sessionKey);
+  return value;
+}
+
+function cacheClaudeErrorMessage(sessionKey: string, error: unknown): void {
+  const current = liveClaudeMessages.get(sessionKey) ?? [];
+  setLiveClaudeMessages(sessionKey, [
+    ...current,
+    {
+      id: randomUUID(),
+      role: 'assistant',
+      content: `[Claude error] ${formatClaudeError(error)}`,
+      timestamp: Date.now(),
+      isError: true,
+      receivedAt: Date.now(),
+    },
+  ]);
 }
 
 function toRawContentFromClaudeMessage(message: unknown): unknown {
@@ -832,7 +890,7 @@ export async function consumeClaudeQuery(
     initialSeq?: number;
     timing?: ClaudeConsumeTiming;
   },
-): Promise<void> {
+): Promise<{ autoResume: boolean }> {
   const iterationStartedAt = Date.now();
   const timing = recoveryOptions?.timing ?? {
     launchStartedAt: iterationStartedAt,
@@ -867,6 +925,18 @@ export async function consumeClaudeQuery(
   let pendingToolInputDelta = false;
   let lastToolInputDeltaAt = 0;
   let firstSdkMessageSeen = false;
+  let autoResume = false;
+  let turnHadAssistant = false;
+  let turnHadToolUse = false;
+  let turnHadVisibleAssistant = false;
+  let resultText = '';
+
+  const markAssistantPayload = (payload: unknown) => {
+    const inspected = inspectClaudeAssistantPayload(payload);
+    if (inspected.hasToolUse) turnHadToolUse = true;
+    if (inspected.hasVisibleText) turnHadVisibleAssistant = true;
+  };
+
   let activeCompaction: {
     attemptId: string;
     startedAt: number;
@@ -1148,6 +1218,11 @@ export async function consumeClaudeQuery(
         resultFailed = typeof (message as { subtype?: unknown }).subtype === 'string'
           && (message as { subtype: string }).subtype.startsWith('error_');
         seenResult = true;
+        markAssistantPayload({ content: streamContent.buildContentArray() });
+        if (streamThinking) turnHadAssistant = true;
+        if (typeof (message as { result?: unknown }).result === 'string') {
+          resultText = (message as { result: string }).result;
+        }
         if (resultFailed) {
           // Claude SDK exposes API failures as a terminal result message. Do not
           // emit a completed notification first, otherwise the later failure is
@@ -1169,7 +1244,13 @@ export async function consumeClaudeQuery(
               runId,
             });
           }
-          emitAgentCompleted();
+          const contentless = isClaudeTurnContentless({
+            hadAssistant: turnHadAssistant,
+            hadToolUse: turnHadToolUse,
+            hadVisibleAssistantText: turnHadVisibleAssistant,
+            resultText,
+          });
+          if (!contentless) emitAgentCompleted();
         } else {
           completionDeferred = true;
           logger.debug('[claude-adapter] deferring run completion for background tasks', {
@@ -1245,6 +1326,8 @@ export async function consumeClaudeQuery(
         // isClaudeRunFragment guard keeps these non-terminal (sending stays true)
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
+          turnHadAssistant = true;
+          markAssistantPayload(liveMessage.message);
           for (const slug of extractClaudeSkillSlugs(nextEntry.content)) {
             await markSkillUsed(sessionKey, runId, slug).catch((error) => {
               logger.warn('[skill-router] failed to persist Claude skill usage', {
@@ -1316,33 +1399,58 @@ export async function consumeClaudeQuery(
     if (!isSuppressedMissingConversation) {
       await failSkillTurn(sessionKey, runId).catch(() => {});
       emitEngineEvent({ type: 'turn.failed', errorMessage: String(error) });
+      rememberClaudeInterrupt(sessionKey, error);
     }
     throw error;
   } finally {
     clearRuntimeSkillAccess(sessionKey);
     flushPendingToolInputDelta();
     clearPendingToolInputDelta();
-    activeClaudeQueries.delete(sessionKey);
+    const contentless = isClaudeTurnContentless({
+      hadAssistant: turnHadAssistant,
+      hadToolUse: turnHadToolUse,
+      hadVisibleAssistantText: turnHadVisibleAssistant,
+      resultText,
+    });
+    const owner = activeClaudeQueries.get(sessionKey);
+    autoResume = shouldAutoResumeContentlessTurn({
+      turnWasContentless: Boolean(contentless && seenResult && !errorThrown && pendingTaskIds.size === 0),
+      autoResumeCount: autoResumeCountBySession.get(sessionKey) ?? 0,
+      interruptCause: peekRunInterrupt(sessionKey),
+      ownerRunId: owner?.runId ?? runId,
+      currentRunId: runId,
+    });
+    if (autoResume) {
+      logger.info('[claude-adapter] deferring completion for contentless auto-resume', {
+        sessionKey,
+        runId,
+      });
+    } else if (seenResult && !resultFailed && !completionEmitted && pendingTaskIds.size === 0) {
+      // Some SDK task modes settle the outstanding task and then close the
+      // iterator without producing another result. At iterator EOF all observed
+      // tasks are terminal, so finalize the already-seen result here.
+      emitAgentCompleted();
+    }
+    if (!contentless && seenResult) {
+      autoResumeCountBySession.delete(sessionKey);
+    }
+    unbindClaudeLoopGuardAbort(sessionKey);
+    activeClaudeQueries.releaseIfCurrent(sessionKey, runId);
     logClaudeQueryTiming('active_query_removed', {
       sessionKey,
       runId,
       launchStartedAt: timing.launchStartedAt,
       stageStartedAt: iterationStartedAt,
       mode: timing.mode,
-      details: { seenResult, completionEmitted, errorThrown },
+      details: { seenResult, completionEmitted, errorThrown, autoResume },
     });
-    // Some SDK task modes settle the outstanding task and then close the
-    // iterator without producing another result. At iterator EOF all observed
-    // tasks are terminal, so finalize the already-seen result here.
-    if (seenResult && !resultFailed && !completionEmitted && pendingTaskIds.size === 0) {
-      emitAgentCompleted();
-    }
     // If the loop ended without a result and without an error, the query was
     // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
     if (!seenResult && !errorThrown) {
       emitEngineEvent({ type: 'turn.aborted' });
     }
   }
+  return { autoResume };
 }
 
 async function ensureClaudeRegistryEntry(
@@ -1389,6 +1497,8 @@ async function startClaudeQuery(
     /** Internal slash command: do not expose a synthetic chat run. */
     suppressStartedEvent?: boolean;
     compactionReason?: 'manual' | 'auto' | 'unknown';
+    initialSeq?: number;
+    contentlessAutoResume?: boolean;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   const launchStartedAt = Date.now();
@@ -1421,13 +1531,28 @@ async function startClaudeQuery(
     const runId = randomUUID();
     trackingRunId = runId;
     beginRuntimeSkillAccessTurn(sessionKey, runId);
-    const queryMode = existing?.sessionId ? 'resume' as const : 'new' as const;
+    const storedCause = (await getChatRuntimeRepository().getLatestForSession(sessionKey).catch(() => null))
+      ?.interruptCause ?? null;
+    const interruptCause = peekRunInterrupt(sessionKey) ?? storedCause ?? null;
+    const resumePlan = resolveClaudeResumePlan({
+      registryEntry: existing,
+      interruptCause,
+      userPrompt: typeof prompt === 'string' ? prompt : options?.userPrompt,
+    });
+    const isRealUserTurn = !options?.contentlessAutoResume
+      && typeof prompt === 'string'
+      && Boolean(prompt.trim())
+      && !isContinueUserPrompt(prompt);
+    if (resumePlan.mode === 'new' || isRealUserTurn) {
+      autoResumeCountBySession.delete(sessionKey);
+    }
+    const queryMode = resumePlan.mode === 'new' ? 'new' as const : 'resume' as const;
     logClaudeQueryTiming('launch_prepared', {
       sessionKey,
       runId,
       launchStartedAt,
       mode: queryMode,
-      details: { hasExistingSession: Boolean(existing?.sessionId) },
+      details: { hasExistingSession: Boolean(existing?.sessionId), resumePlan: resumePlan.mode },
     });
     const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt, {
       runId,
@@ -1450,17 +1575,42 @@ async function startClaudeQuery(
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
+    const lastInterrupt = queryMode === 'resume' ? consumeClaudeInterrupt(sessionKey) : undefined;
+    const resumeInterruptAppend = buildClaudeResumeInterruptAppend({
+      isResume: queryMode === 'resume',
+      isContinue: resumePlan.mode === 'resume' ? resumePlan.isContinuePrompt : isContinueUserPrompt(options?.userPrompt),
+      lastError: lastInterrupt,
+      cause: resumePlan.mode === 'resume' ? resumePlan.interruptCause : null,
+    });
     // 默认将 cwd 工作区/工作空间写入提示词：用户未指定特殊路径时，模型以该路径作为默认工作目录。
     // 走 systemPromptAppend（与 historyBridge 一致），避免污染用户消息与侧栏标题。
     const cwdPromptNote = `# 工作区/项目空间限制\n 当前工作目录/空间根目录为：**${cwd}**。若用户未指定特殊路径，请默认使用该路径作为工作目录进行文件读写等操作。**如果记忆中也出现了，必须以此处路径为准**。`;
-    const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
-      .filter(Boolean)
-      .join('\n\n');
-    logger.info('[claude-adapter][prompt] final systemPrompt', systemPromptAppend);
-    const userMessageForLog = typeof prompt === 'string'
-      ? prompt
+    const systemPromptAppend = assembleSystemPromptAppend([
+      { id: 'cwd', text: cwdPromptNote },
+      { id: 'runtime-extensions', text: runtimeOptions.systemPromptAppend },
+      { id: 'caller', text: options?.systemPromptAppend },
+      { id: 'history-bridge', text: historyBridgeAppend },
+      { id: 'resume-interrupt', text: resumeInterruptAppend },
+    ]);
+    const resumeContinuePrompt = resumePlan.mode === 'resume' && resumePlan.isContinuePrompt
+      ? buildClaudeResumeContinueUserPrompt(resumePlan.interruptCause)
+      : null;
+    const queryPrompt = resumeContinuePrompt ?? prompt;
+    logger.info('[claude-adapter][prompt] final systemPromptAppend', {
+      sessionKey,
+      systemPromptAppendChars: systemPromptAppend.length,
+    });
+    const userMessageForLog = typeof queryPrompt === 'string'
+      ? queryPrompt
       : (options?.userPrompt ?? '(stream/non-string prompt)');
-    logger.info('[claude-adapter][prompt] userPrompt', userMessageForLog);
+    logUserSend({
+      engine: 'claude',
+      sessionKey,
+      message: userMessageForLog,
+      messageLength: userMessageForLog.length,
+      systemPromptAppend: systemPromptAppend || null,
+      systemPromptAppendLength: systemPromptAppend.length,
+    });
     // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
     // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。
     const permissionProfile = options?.permissionProfile;
@@ -1510,7 +1660,7 @@ async function startClaudeQuery(
       mode: queryMode,
     });
     const query = await createClaudeQuery({
-      prompt,
+      prompt: queryPrompt,
       options: existing?.sessionId
         ? {
           ...queryBaseOptions,
@@ -1530,12 +1680,16 @@ async function startClaudeQuery(
       mode: queryMode,
     });
 
-    activeClaudeQueries.set(sessionKey, {
+    activeClaudeQueries.register({
       close: () => query.close(),
       runId,
       sessionId,
       sessionKey,
     });
+    bindClaudeLoopGuardAbort(sessionKey, () => {
+      activeClaudeQueries.abortIfCurrent(sessionKey, runId);
+    });
+    consumeRunInterrupt(sessionKey);
     logClaudeQueryTiming('active_query_registered', {
       sessionKey,
       runId,
@@ -1568,7 +1722,7 @@ async function startClaudeQuery(
 
     const consumeWithMissingSessionRecovery = async (): Promise<void> => {
       try {
-        await consumeClaudeQuery(
+        const outcome = await consumeClaudeQuery(
           sessionKey,
           sessionId,
           cwd,
@@ -1577,17 +1731,33 @@ async function startClaudeQuery(
           runId,
           undefined,
           {
-            suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof prompt === 'string',
+            suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof queryPrompt === 'string',
             suppressStartedEvent: options?.suppressStartedEvent,
             compactionReason: options?.compactionReason,
+            initialSeq: options?.initialSeq,
             timing: { launchStartedAt, queryCreatedAt, mode: queryMode },
           },
         );
+        if (outcome.autoResume && !options?.contentlessAutoResume) {
+          autoResumeCountBySession.set(sessionKey, 1);
+          logger.info('[claude-adapter] auto-resuming contentless turn', { sessionKey, runId });
+          await startClaudeQuery(sessionKey, '', {
+            additionalDirectories: options?.additionalDirectories,
+            eventSink: options?.eventSink,
+            userPrompt: '',
+            systemPromptAppend: options?.systemPromptAppend,
+            permissionProfile: options?.permissionProfile,
+            explicitSkillSlugs: options?.explicitSkillSlugs,
+            suppressStartedEvent: true,
+            initialSeq: 1,
+            contentlessAutoResume: true,
+          });
+        }
       } catch (error) {
         const invalidSessionId = existing?.sessionId;
         if (
           invalidSessionId
-          && typeof prompt === 'string'
+          && typeof queryPrompt === 'string'
           && isMissingClaudeConversationError(error)
         ) {
           logger.warn('[claude-adapter] Resume session is unavailable; retrying as a new SDK session', {
@@ -1612,13 +1782,18 @@ async function startClaudeQuery(
             pendingHistoryBridge: true,
           };
           const recoveryBridge = await buildClaudeHistoryBridge(recoveryEntry);
-          const recoverySystemPromptAppend = [systemPromptAppend, recoveryBridge]
-            .filter(Boolean)
-            .join('\n\n');
+          const recoverySystemPromptAppend = assembleSystemPromptAppend([
+            { id: 'cwd', text: cwdPromptNote },
+            { id: 'runtime-extensions', text: runtimeOptions.systemPromptAppend },
+            { id: 'caller', text: options?.systemPromptAppend },
+            { id: 'history-bridge', text: historyBridgeAppend },
+            { id: 'resume-interrupt', text: resumeInterruptAppend },
+            { id: 'recovery-bridge', text: recoveryBridge },
+          ]);
           const recoverySessionId = randomUUID();
           const recoveryQueryCreateStartedAt = Date.now();
           const recoveryQuery = await createClaudeQuery({
-            prompt,
+            prompt: queryPrompt,
             options: {
               ...queryBaseOptions,
               sessionId: recoverySessionId,
@@ -1639,11 +1814,14 @@ async function startClaudeQuery(
             stageStartedAt: recoveryQueryCreateStartedAt,
             mode: 'recovery',
           });
-          activeClaudeQueries.set(sessionKey, {
+          activeClaudeQueries.register({
             close: () => recoveryQuery.close(),
             runId,
             sessionId: recoverySessionId,
             sessionKey,
+          });
+          bindClaudeLoopGuardAbort(sessionKey, () => {
+            activeClaudeQueries.abortIfCurrent(sessionKey, runId);
           });
           await upsertEngineSessionRegistryEntry({
             ...recoveryEntry,
@@ -1807,9 +1985,10 @@ export const claudeAdapter: EngineAdapter = {
     const memorySystemPrompt = [memory.preference, memory.execution].filter(Boolean).join('\n\n');
     // Memory is advisory. Put task-specific system context after it so recalled
     // experience cannot override the current task's rules or workflow contract.
-    const systemPromptAppend = [memorySystemPrompt, params.systemPromptAppend?.trim()]
-      .filter(Boolean)
-      .join('\n\n') || undefined;
+    const systemPromptAppend = assembleSystemPromptAppend([
+      { id: 'memory', text: memorySystemPrompt },
+      { id: 'caller', text: params.systemPromptAppend },
+    ]) || undefined;
     if (memorySystemPrompt) {
       logger.info('[agent-memory][claude] systemPromptAppend after memory injection', {
         sessionKey: params.sessionKey,
@@ -1933,12 +2112,17 @@ export const claudeAdapter: EngineAdapter = {
   },
 
   async abortRun(_ctx, params) {
-    const active = activeClaudeQueries.get(params.sessionKey);
-    if (!active) {
-      return { success: true, result: { aborted: false, runIds: [] } };
+    const outcome = activeClaudeQueries.abortIfCurrent(params.sessionKey, params.runId);
+    if (outcome === 'aborted') {
+      rememberRunInterrupt(params.sessionKey, 'user_abort');
     }
-    active.close();
-    activeClaudeQueries.delete(params.sessionKey);
-    return { success: true, result: { aborted: true, runIds: [params.runId ?? params.sessionKey] } };
+    return {
+      success: true,
+      outcome,
+      result: {
+        aborted: outcome === 'aborted',
+        runIds: outcome === 'aborted' ? [params.runId ?? params.sessionKey] : [],
+      },
+    };
   },
 };

@@ -3,12 +3,11 @@
  * 左：项目 Agent 对话（默认注入应用 AGENTS.md 上下文）；
  * 右：所见即所得预览（预览工具栏内可打开系统浏览器）。
  */
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
-  History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
@@ -28,10 +27,10 @@ import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
 import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
 import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
+import { StoAppDeployHistoryDialog } from '@/components/app-dev/StoAppDeployHistoryDialog';
 import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -49,7 +48,6 @@ import {
   pushStoApp,
   type CodeDeployEnv,
   type StoAppStatus,
-  restoreAppCheckpoint,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
@@ -61,6 +59,7 @@ import {
   APP_DEV_IDE_CHAT_SPLIT_DEFAULT,
   APP_DEV_IDE_CHAT_SPLIT_STORAGE_KEY,
 } from '@/lib/app-dev-split';
+import { wrapUserTextForPlanGate } from '@/lib/app-dev-plan-gate';
 
 const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
@@ -71,7 +70,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey: string;
   appName: string;
   composerSeed?: { text: string; version: number } | null;
-  onBeforeSend?: (text: string) => boolean;
+  onBeforeSend?: (text: string) => boolean | string | void;
 }) {
   const messages = useSessionDisplayMessages(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
@@ -87,6 +86,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingToolResults,
     streamingTools,
     error,
+    phase,
   } = useChatSessionRuntimeView(sessionKey);
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
@@ -109,7 +109,21 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    phase,
   });
+
+  const priorUserMessageCount = useMemo(
+    () => messages.filter((m) => m.role === 'user').length,
+    [messages],
+  );
+
+  const handleBeforeSend = useCallback((text: string): boolean | string => {
+    if (onBeforeSend?.(text) === true) return true;
+    return wrapUserTextForPlanGate({
+      userText: text,
+      priorUserMessageCount,
+    }) ?? false;
+  }, [onBeforeSend, priorUserMessageCount]);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -167,7 +181,8 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
         <AppDevComposer
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}
-          onBeforeSend={onBeforeSend}
+          onBeforeSend={handleBeforeSend}
+          composerDraftSessionKey={sessionKey}
         />
       </div>
     </div>
@@ -180,12 +195,13 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   const [status, setStatus] = useState<AppDevStatus | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [composerSeed, setComposerSeed] = useState<{ text: string; version: number } | null>(null);
-  const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [menuPublishOpen, setMenuPublishOpen] = useState(false);
+  const [deployHistoryOpen, setDeployHistoryOpen] = useState(false);
+  const [initialDeploymentId, setInitialDeploymentId] = useState<string>();
   const [sourceRevision, setSourceRevision] = useState(0);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
@@ -284,16 +300,6 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
   }, []);
 
-  const handleRestore = async () => {
-    const result = await restoreAppCheckpoint(workspaceId);
-    if (result.restored) {
-      setSourceRevision((n) => n + 1);
-      toast.success('已恢复到上一版，页面稍后自动刷新');
-    } else {
-      toast.error('暂时无法恢复，请稍后再试');
-    }
-  };
-
   const handleSubmit = async (message: string) => {
     try {
       await pushStoApp(workspaceId, message);
@@ -313,7 +319,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
 
   const handleGitSubmit = async (message: string) => {
     try {
-      const created = await createAppCheckpoint(workspaceId, message);
+      const { created } = await createAppCheckpoint(workspaceId, message);
       if (created) {
         toast.success('代码已提交到本地 Git');
         setCommitOpen(false);
@@ -490,20 +496,12 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
             onClearTerminalJob={deploy.clear}
             onFillComposer={handleFillComposerFromDiagnostics}
             onPublishMenu={() => setMenuPublishOpen(true)}
+            onOpenHistory={() => {
+              setInitialDeploymentId(undefined);
+              setDeployHistoryOpen(true);
+            }}
           />
         ) : null}
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn('gap-1 text-xs', !gitAvailable && 'hidden')}
-          disabled={!gitAvailable}
-          onClick={() => setConfirmRestore(true)}
-        >
-          <History className="h-3.5 w-3.5" aria-hidden />
-          恢复上一版
-        </Button>
       </header>
 
       <AppDevSplitBody
@@ -531,6 +529,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
           onDismissErrors={dismissErrors}
           onPreviewRuntimeError={handlePreviewRuntimeError}
           onRetryStart={handleRetryStart}
+          onCancelSetup={() => void stopRun()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={previewRevision}
@@ -541,22 +540,13 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
           deployRunning={deploy.running}
           deployHistory={deploy.history ?? []}
           onOpenDeploy={() => setDeployOpen(true)}
+          onOpenDeployHistory={(deploymentId) => {
+            setInitialDeploymentId(deploymentId);
+            setDeployHistoryOpen(true);
+          }}
         />
       </AppDevSplitBody>
 
-      <ConfirmDialog
-        open={confirmRestore}
-        title="恢复上一版"
-        message="将把应用恢复到上一次对话修改前的样子。当前内容会自动备份，可以放心恢复。"
-        confirmLabel="恢复"
-        confirmingLabel="恢复中…"
-        variant="destructive"
-        onConfirm={async () => {
-          await handleRestore();
-          setConfirmRestore(false);
-        }}
-        onCancel={() => setConfirmRestore(false)}
-      />
       <StoAppCommitDialog
         open={commitOpen}
         appName={appName}
@@ -581,6 +571,14 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
         appCode={stoStatus?.appCode}
         pageType={pageType ?? 'site'}
         onClose={() => setMenuPublishOpen(false)}
+      />
+      <StoAppDeployHistoryDialog
+        open={deployHistoryOpen}
+        workspaceId={workspaceId}
+        appCode={stoStatus?.appCode}
+        history={deploy.history ?? []}
+        initialDeploymentId={initialDeploymentId}
+        onOpenChange={setDeployHistoryOpen}
       />
     </div>
   );

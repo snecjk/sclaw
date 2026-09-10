@@ -1,9 +1,10 @@
 ---
 name: sto-pc-visual
 description: >
-  申通 / STO PC 后台层壳与视觉底：token、顶栏 60 / 系统页签 28 / 侧栏 180、主区灰底白卡。
-  只约束框架、顶部/侧边导航、卡片最底层容器、页内选项卡、面包屑与标题时机；其余组件由 agent 自写，用本 token 收成申通风格。
-  点名申通样式、层壳、脚手架、1440 壳、顶栏侧栏、灰底白卡、面包屑、系统页签、换皮时使用。
+  申通 / STO PC 后台层壳与生产页面视觉：token、顶栏 60 / 系统页签 28 / 侧栏 180、主区灰底白卡，
+  以及列表/表单/看板的卡内内容（指标卡、表格、语义色、空态）。
+  生成或改业务页面时必用；点名申通样式、层壳、脚手架、1440 壳、顶栏侧栏、灰底白卡、面包屑、系统页签、换皮时使用。
+  不要用来产出独立 HTML 报告或 PPT。
 triggers:
   - "申通样式"
   - "申通规范"
@@ -20,9 +21,11 @@ triggers:
 
 # STO PC Visual
 
-层壳 + 卡片底 + token。组件自己写，用本包 token 上色。
+层壳 + 卡片底 + token。卡内列表/表/指标/状态走 [`content.md`](content.md)，用本包 token 上色，落盘映射到 `src/theme/theme.css` 的 `--sto-*`。
 
-数值真源：[`tokens.css`](tokens.css)。
+⛔ 本技能服务**可发布的业务应用页**，不是 HTML 报告 / PPT。不要 `build.py`、不要 `<!-- STO:DAILY -->`、不要日报短类名、不要设计师水印。
+
+数值真源：[`tokens.css`](tokens.css)。写页面时以 `src/theme/theme.css` 为准，禁止散落 hex。
 
 **系统页签必须从 [`reference.html`](reference.html) 拷 `.sto-opentabs` 整段（CSS + SVG path），只改标签文案。** 禁止自写圆角条、底边倒三角、两个同时橙。未选是浅灰 `#F5F6F7` + 灰字，选中才橙底白字，且只能一个。
 
@@ -34,6 +37,7 @@ triggers:
 | 主区摆卡 · 卡片容器 | [`layouts.md`](layouts.md) |
 | 面包屑 · 标题时机 | [`page-head.md`](page-head.md) |
 | 页内选项卡 | [`tabs.md`](tabs.md) |
+| **卡内内容**（列表/表/指标/状态） | [`content.md`](content.md) |
 
 ## 锁死数字
 
@@ -80,4 +84,5 @@ Shell                          稿宽 1440
 3. 壳点击（侧栏 ↔ 页签 ↔ 主区）→ [`shell.md`](shell.md)「点击」
 4. 要不要面包屑、卡上要不要橙条标题 → [`page-head.md`](page-head.md)
 5. 主区用白卡承接内容 → [`layouts.md`](layouts.md)
-6. 卡内组件自己写，色与缝走 [`tokens.md`](tokens.md)
+6. 先定页面类型（列表 / 表单详情 / 看板 / 营销）→ [`content.md`](content.md)
+7. 卡内组件用 antd 写，色与缝走 [`tokens.md`](tokens.md)；语义色、指标卡、表格、空态按 [`content.md`](content.md)

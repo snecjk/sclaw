@@ -215,7 +215,6 @@ export function applyLoadedHistorySnapshot(input: {
     deps,
     get,
     rawMessages,
-    runtimeState,
     set,
     targetSessionKey,
     thinkingLevel,
