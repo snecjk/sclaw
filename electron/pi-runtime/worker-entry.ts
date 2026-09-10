@@ -1,3 +1,4 @@
+import './windows-hide-preload-entry';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { access, mkdir, rm, stat } from 'node:fs/promises';

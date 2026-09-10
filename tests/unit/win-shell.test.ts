@@ -283,3 +283,60 @@ describe('silent PowerShell args', () => {
     expect(args.indexOf('-WindowStyle')).toBeLessThan(args.indexOf('-Command'));
   });
 });
+
+describe('Windows hidden spawn args', () => {
+  let applyWindowsHiddenSpawnArgs: (args: unknown[]) => unknown[];
+  let isPowerShellExecutable: (cmd: string) => boolean;
+
+  beforeEach(async () => {
+    const mod = await import('@electron/utils/win-shell');
+    applyWindowsHiddenSpawnArgs = mod.applyWindowsHiddenSpawnArgs;
+    isPowerShellExecutable = mod.isPowerShellExecutable;
+  });
+
+  it('recognizes powershell executables', () => {
+    expect(isPowerShellExecutable('powershell.exe')).toBe(true);
+    expect(isPowerShellExecutable('pwsh')).toBe(true);
+    expect(isPowerShellExecutable('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe')).toBe(true);
+    expect(isPowerShellExecutable('cmd.exe')).toBe(false);
+  });
+
+  it('leaves argv unchanged on non-Windows', () => {
+    setPlatform('darwin');
+    expect(applyWindowsHiddenSpawnArgs(['powershell.exe', ['-Command', 'Get-Date']]))
+      .toEqual(['powershell.exe', ['-Command', 'Get-Date']]);
+  });
+
+  it('injects windowsHide and silent PowerShell flags on Windows', () => {
+    setPlatform('win32');
+    const next = applyWindowsHiddenSpawnArgs([
+      'powershell.exe',
+      ['-Command', 'Get-ChildItem'],
+      { detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
+    ]);
+    expect(next[0]).toBe('powershell.exe');
+    expect(next[1]).toEqual([
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
+      '-Command',
+      'Get-ChildItem',
+    ]);
+    expect(next[2]).toEqual({
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+  });
+
+  it('adds windowsHide when spawn options are omitted', () => {
+    setPlatform('win32');
+    expect(applyWindowsHiddenSpawnArgs(['where', ['bash.exe']])).toEqual([
+      'where',
+      ['bash.exe'],
+      { windowsHide: true },
+    ]);
+  });
+});

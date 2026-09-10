@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { getKyselyDatabase } from '../connection';
 import { DEFAULT_WORKSPACE_ID, type Workspace } from '../models/domain/session-catalog';
+import { normalizeWorkspaceRootPath } from '../workspace-root-path';
 import type {
   CreateWorkspaceInput,
   ListWorkspacesOptions,
@@ -70,17 +71,28 @@ export class WorkspaceRepository {
     return rows.map(mapRow);
   }
 
+  async findActiveByRootPath(rootPath: string): Promise<Workspace | null> {
+    const normalized = normalizeWorkspaceRootPath(rootPath);
+    if (!normalized) return null;
+    const rows = await this.list({ includeDefault: false });
+    return rows.find((row) => normalizeWorkspaceRootPath(row.rootPath) === normalized) ?? null;
+  }
+
   async create(input: CreateWorkspaceInput): Promise<Workspace> {
     const db = getKyselyDatabase();
     const id = input.id?.trim() || randomUUID();
     const timestamp = nowIso();
     const actor = input.actor ?? null;
+    const rootPath = normalizeWorkspaceRootPath(input.rootPath);
+    if (!rootPath) {
+      throw new Error('Workspace path is required');
+    }
     await db
       .insertInto('workspaces')
       .values({
         id,
         name: normalizeName(input.name),
-        root_path: input.rootPath.trim(),
+        root_path: rootPath,
         is_default: 0,
         created_at: timestamp,
         updated_at: timestamp,
@@ -105,12 +117,18 @@ export class WorkspaceRepository {
       throw new Error('Default workspace cannot be updated');
     }
     const existing = await this.getByIdOrThrow(id);
+    const nextRootPath = input.rootPath != null
+      ? normalizeWorkspaceRootPath(input.rootPath)
+      : existing.rootPath;
+    if (input.rootPath != null && !nextRootPath) {
+      throw new Error('Workspace path is required');
+    }
     const db = getKyselyDatabase();
     await db
       .updateTable('workspaces')
       .set({
         name: input.name != null ? normalizeName(input.name) : existing.name,
-        root_path: input.rootPath != null ? input.rootPath.trim() : existing.rootPath,
+        root_path: nextRootPath,
         updated_at: nowIso(),
         updated_by: input.actor ?? existing.updatedBy,
         version: sql<number>`version + 1`,

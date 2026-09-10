@@ -165,15 +165,24 @@ export async function listUserWorkspaces() {
   return getWorkspaceRepository().list({ includeDefault: false });
 }
 
+function workspaceRootPathTakenError(name: string): Error {
+  return new Error(`该目录已属于项目「${name}」`);
+}
+
 export async function createWorkspace(
   input: { name: string; rootPath: string },
   _gatewayManager?: GatewayManager | null,
 ) {
   await ensureSessionCatalogBootstrapped();
+  const repo = getWorkspaceRepository();
+  const existing = await repo.findActiveByRootPath(input.rootPath);
+  if (existing) {
+    throw workspaceRootPathTakenError(existing.name);
+  }
   // Do not create a project agent here — defer until the user starts a chat in
   // this project (sidebar「新建对话」), so creating a project does not reload the gateway.
   ensureWorkspaceArtifactOutputDir(resolveProjectAgentWorkspacePath(input.rootPath));
-  return getWorkspaceRepository().create({
+  return repo.create({
     name: input.name,
     rootPath: input.rootPath,
   });
@@ -213,6 +222,12 @@ export async function updateWorkspace(
   gatewayManager?: GatewayManager | null,
 ) {
   await ensureSessionCatalogBootstrapped();
+  if (input.rootPath != null) {
+    const clash = await getWorkspaceRepository().findActiveByRootPath(input.rootPath);
+    if (clash && clash.id !== workspaceId.trim()) {
+      throw workspaceRootPathTakenError(clash.name);
+    }
+  }
   const workspace = await getWorkspaceRepository().update(workspaceId, input);
   if (input.rootPath != null) {
     const sessions = await getCatalogSessionRepository().list({ workspaceId });
