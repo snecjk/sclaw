@@ -67,6 +67,7 @@ build/
 sto-plugin/*/shared/
 .superpowers/
 electron/gateway/gateway-fetch-preload.cjs
+electron/pi-runtime/windows-hide-preload.cjs
 artifacts/
 docs/pr-session-notes-
 .cursor/

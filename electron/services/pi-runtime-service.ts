@@ -11,6 +11,7 @@ import type {
   SerializedPiError,
 } from '../../shared/pi-runtime-protocol';
 import { logger } from '../utils/logger';
+import { normalizeNodeRequirePathForNodeOptions } from '../utils/paths';
 import { syncPiDefaultContext } from './pi-context-sync';
 
 const READY_TIMEOUT_MS = 10_000;
@@ -145,15 +146,35 @@ export class PiRuntimeService extends EventEmitter<PiRuntimeEvents> {
     return candidates.find(existsSync) ?? candidates[0];
   }
 
+  private windowsHidePreloadPath(): string | null {
+    const candidates = [
+      join(__dirname, 'windows-hide-preload.cjs'),
+      join(__dirname, '..', 'pi-runtime', 'windows-hide-preload.cjs'),
+      join(app.getAppPath(), 'dist-electron', 'main', 'windows-hide-preload.cjs'),
+      join(app.getAppPath(), 'dist-electron', 'pi-runtime', 'windows-hide-preload.cjs'),
+    ];
+    return candidates.find(existsSync) ?? null;
+  }
+
   private startChild(): Promise<void> {
     this.state = 'starting';
     const entry = this.workerEntryPath();
+    const preloadPath = this.windowsHidePreloadPath();
+    const execArgv = preloadPath
+      ? ['--require', normalizeNodeRequirePathForNodeOptions(preloadPath)]
+      : undefined;
+    if (preloadPath) {
+      logger.info('[pi-runtime] windows-hide preload enabled', { preloadPath });
+    } else {
+      logger.warn('[pi-runtime] windows-hide preload not found; Windows PowerShell consoles may flash');
+    }
     logger.info('[pi-runtime] starting worker', { entry });
     return new Promise<void>((resolve, reject) => {
       const child = utilityProcess.fork(entry, [], {
         cwd: app.getPath('userData'),
         env: { ...process.env, STO_PI_WORKER: '1' },
         stdio: 'pipe',
+        execArgv,
         serviceName: 'SClaw Pi Runtime',
       });
       this.child = child;

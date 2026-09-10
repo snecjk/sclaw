@@ -22,6 +22,8 @@ export {
   silentPowerShellPrefix,
   buildSilentPowerShellArgs,
   ensureSilentPowerShellArgs,
+  isPowerShellExecutable,
+  applyWindowsHiddenSpawnArgs,
 } from './win-shell';
 
 /**

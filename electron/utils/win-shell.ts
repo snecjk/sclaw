@@ -129,3 +129,46 @@ export function ensureSilentPowerShellArgs(args: string[]): string[] {
   if (!hasPowerShellSwitch(args, '-WindowStyle')) prefix.push('-WindowStyle', 'Hidden');
   return prefix.length > 0 ? [...prefix, ...args] : args;
 }
+
+export function isPowerShellExecutable(cmd: string): boolean {
+  const base = cmd.trim().replace(/^"(.*)"$/, '$1');
+  return /(?:^|[\\/])(?:powershell|pwsh)(?:\.exe)?$/i.test(base)
+    || /^(?:powershell|pwsh)(?:\.exe)?$/i.test(base);
+}
+
+function findChildProcessOptionsIndex(args: unknown[]): number {
+  for (let i = 1; i < args.length; i += 1) {
+    const value = args[i];
+    if (value && typeof value === 'object' && !Array.isArray(value) && typeof value !== 'function') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Force Windows child processes to use CREATE_NO_WINDOW, and hide powershell.exe.
+ * Pi's SDK spawns a new shell per tool call; without this, each call flashes a console.
+ */
+export function applyWindowsHiddenSpawnArgs(args: unknown[]): unknown[] {
+  if (process.platform !== 'win32') return args;
+  const next = [...args];
+  const cmd = typeof next[0] === 'string' ? next[0] : '';
+  if (Array.isArray(next[1]) && isPowerShellExecutable(cmd)) {
+    next[1] = ensureSilentPowerShellArgs(next[1].map(String));
+  }
+
+  const optIdx = findChildProcessOptionsIndex(next);
+  if (optIdx >= 0) {
+    (next[optIdx] as { windowsHide?: boolean }).windowsHide = true;
+    return next;
+  }
+
+  const hideOptions = { windowsHide: true };
+  if (typeof next[next.length - 1] === 'function') {
+    next.splice(next.length - 1, 0, hideOptions);
+  } else {
+    next.push(hideOptions);
+  }
+  return next;
+}
