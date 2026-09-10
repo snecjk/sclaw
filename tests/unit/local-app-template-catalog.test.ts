@@ -14,7 +14,14 @@ describe('local built-in app template catalog', () => {
       expect.objectContaining({
         templateId: 'assets-minimal',
         pageType: 'assets',
-        name: '最简托管应用',
+        name: '标准 Assets 模版',
+        latestVersion: 'local',
+        source: 'local-resource',
+      }),
+      expect.objectContaining({
+        templateId: 'assets-iframe-analysis',
+        pageType: 'assets',
+        name: 'iframe 分析子应用',
         latestVersion: 'local',
         source: 'local-resource',
       }),
@@ -33,6 +40,7 @@ describe('local built-in app template catalog', () => {
     }))).toEqual([
       { templateId: 'assets-minimal', pageType: 'assets', source: 'local-resource' },
       { templateId: 'site-minimal', pageType: 'site', source: 'local-resource' },
+      { templateId: 'assets-iframe-analysis', pageType: 'assets', source: 'local-resource' },
       { templateId: 'site-fullstack', pageType: 'site', source: 'local-resource' },
     ]);
   });

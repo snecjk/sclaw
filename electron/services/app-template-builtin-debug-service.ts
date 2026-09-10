@@ -14,7 +14,7 @@ export interface BuiltinTemplateDebugChange {
 
 export interface BuiltinTemplateDebugStatus {
   isBuiltinDebug: boolean;
-  templateId?: 'site-minimal' | 'assets-minimal';
+  templateId?: string;
   pageType?: PageType;
   sourceChanged: boolean;
   changes: BuiltinTemplateDebugChange[];
@@ -59,6 +59,7 @@ const SENSITIVE_FILES = new Set([
 ]);
 const SENSITIVE_SUFFIXES = ['.pem', '.key', '.p12', '.pfx', '.log', '.local', '.tsbuildinfo'];
 const activeWorkspaceMutations = new Set<string>();
+const BUILTIN_TEMPLATE_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 async function runWorkspaceMutation<T>(workspaceRoot: string, operation: () => Promise<T>): Promise<T> {
   if (activeWorkspaceMutations.has(workspaceRoot)) {
@@ -160,11 +161,10 @@ function compareFiles(
 async function readDebugMarker(workspaceRoot: string): Promise<DebugMarker> {
   const markerPath = join(workspaceRoot, '.sclaw', 'app-template.json');
   const marker = JSON.parse(await readFile(markerPath, 'utf8')) as DebugMarker;
-  const expectedTemplateId = `${marker.pageType}-minimal`;
   if (
     marker.kind !== 'app-template'
     || marker.source !== 'local-resource'
-    || marker.templateId !== expectedTemplateId
+    || !BUILTIN_TEMPLATE_ID_PATTERN.test(marker.templateId)
   ) {
     throw new Error('当前工作区不是本地内置模板调试工作区');
   }
@@ -346,7 +346,7 @@ export async function inspectBuiltinTemplateDebugWorkspace(input: {
   ]);
   return {
     isBuiltinDebug: true,
-    templateId: marker.templateId as 'site-minimal' | 'assets-minimal',
+    templateId: marker.templateId,
     pageType: marker.pageType,
     sourceChanged: !marker.sourceFingerprint
       || marker.sourceFingerprint !== fingerprintFiles(sourceFiles),

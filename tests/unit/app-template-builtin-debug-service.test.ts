@@ -17,18 +17,18 @@ import {
 
 const roots: string[] = [];
 
-async function fixture() {
+async function fixture(templateId = 'site-minimal') {
   const root = await mkdtemp(join(tmpdir(), 'sclaw-builtin-debug-'));
   roots.push(root);
   const resourcesRoot = join(root, 'resources');
-  const sourceRoot = join(resourcesRoot, 'site-minimal');
+  const sourceRoot = join(resourcesRoot, templateId);
   const workspaceRoot = join(root, 'workspace');
   await mkdir(join(sourceRoot, 'src'), { recursive: true });
   await mkdir(join(workspaceRoot, 'src'), { recursive: true });
   await writeFile(join(sourceRoot, 'manifest.json'), JSON.stringify({
     schemaVersion: 1,
-    templateId: 'site-minimal',
-    pageType: 'site',
+    templateId,
+    pageType: templateId.startsWith('assets-') ? 'assets' : 'site',
     name: '标准 Site 模版',
   }));
   await writeFile(join(sourceRoot, 'package.json'), '{"scripts":{"dev":"vite"}}');
@@ -40,8 +40,8 @@ async function fixture() {
   const sourceFingerprint = await fingerprintBuiltinTemplateTree(sourceRoot);
   await writeFile(join(workspaceRoot, '.sclaw', 'app-template.json'), JSON.stringify({
     kind: 'app-template',
-    templateId: 'site-minimal',
-    pageType: 'site',
+    templateId,
+    pageType: templateId.startsWith('assets-') ? 'assets' : 'site',
     name: '标准 Site 模版',
     description: '',
     source: 'local-resource',
@@ -115,6 +115,19 @@ describe('built-in app template debug service', () => {
       sourceChanged: false,
     });
     expect(status.changes).toEqual([{ path: 'src/App.tsx', kind: 'modify' }]);
+  });
+
+  it('recognizes a non-minimal built-in template debug workspace', async () => {
+    const { resourcesRoot, workspaceRoot } = await fixture('assets-iframe-analysis');
+
+    const status = await inspectBuiltinTemplateDebugWorkspace({ workspaceRoot, resourcesRoot });
+
+    expect(status).toMatchObject({
+      isBuiltinDebug: true,
+      templateId: 'assets-iframe-analysis',
+      pageType: 'assets',
+      sourceChanged: false,
+    });
   });
 
   it('blocks syncing when the resources template changed after the debug workspace was created', async () => {
