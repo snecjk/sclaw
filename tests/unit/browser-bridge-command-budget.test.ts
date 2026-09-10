@@ -81,6 +81,7 @@ describe('手抄副本不漂移', () => {
       expect(source).toContain(`const COMMAND_TIMEOUT_CEILING_MS = ${COMMAND_TIMEOUT_CEILING_MS / 1000}_000;`);
       expect(source).toContain('read_page: 45_000');
       expect(source).toContain('const DEFAULT_ACTION_BUDGET_MS = 25_000;');
+      expect(source).toContain('const WEB_BRIDGE_ORDINARY_CHAT_ENABLED = false;');
     }
   });
 

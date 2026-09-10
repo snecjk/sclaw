@@ -263,24 +263,29 @@ describe('silent PowerShell args', () => {
     ensureSilentPowerShellArgs = mod.ensureSilentPowerShellArgs;
   });
 
-  it('places hide flags before -Command', () => {
+  it('places quiet flags before -Command without -WindowStyle', () => {
     const args = buildSilentPowerShellArgs(['-Command', 'Get-Date']);
     expect(args).toEqual([
       '-NoLogo',
       '-NoProfile',
       '-NonInteractive',
-      '-WindowStyle',
-      'Hidden',
       '-Command',
       'Get-Date',
     ]);
   });
 
-  it('does not duplicate flags already present', () => {
-    const args = ensureSilentPowerShellArgs(['-NoProfile', '-Command', 'echo 1']);
+  it('does not duplicate flags already present and strips -WindowStyle', () => {
+    const args = ensureSilentPowerShellArgs([
+      '-NoProfile',
+      '-WindowStyle',
+      'Hidden',
+      '-Command',
+      'echo 1',
+    ]);
     expect(args.filter((arg) => arg.toLowerCase() === '-noprofile')).toHaveLength(1);
-    expect(args).toEqual(expect.arrayContaining(['-WindowStyle', 'Hidden', '-NonInteractive', '-NoLogo']));
-    expect(args.indexOf('-WindowStyle')).toBeLessThan(args.indexOf('-Command'));
+    expect(args).toEqual(expect.arrayContaining(['-NonInteractive', '-NoLogo']));
+    expect(args).not.toEqual(expect.arrayContaining(['-WindowStyle', 'Hidden']));
+    expect(args.indexOf('-NoLogo')).toBeLessThan(args.indexOf('-Command'));
   });
 });
 
@@ -319,13 +324,11 @@ describe('Windows hidden spawn args', () => {
       '-NoLogo',
       '-NoProfile',
       '-NonInteractive',
-      '-WindowStyle',
-      'Hidden',
       '-Command',
       'Get-ChildItem',
     ]);
     expect(next[2]).toEqual({
-      detached: true,
+      detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -338,5 +341,15 @@ describe('Windows hidden spawn args', () => {
       ['bash.exe'],
       { windowsHide: true },
     ]);
+  });
+
+  it('clears detached for console hosts so CREATE_NO_WINDOW can apply', () => {
+    setPlatform('win32');
+    const next = applyWindowsHiddenSpawnArgs([
+      'cmd.exe',
+      ['/c', 'echo hi'],
+      { detached: true },
+    ]);
+    expect(next[2]).toEqual({ detached: false, windowsHide: true });
   });
 });

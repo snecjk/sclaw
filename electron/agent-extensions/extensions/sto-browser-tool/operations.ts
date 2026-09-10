@@ -10,6 +10,7 @@ import {
   formatBridgeSessionList,
   normalizeBridgeSessionId,
 } from '../../../../shared/browser-bridge/pick-session';
+import { WEB_BRIDGE_ORDINARY_CHAT_ENABLED } from '../../../../shared/browser-bridge/ship-gate';
 import { STO_BROWSER_BRIDGE_ACTIVATION } from './activation';
 import {
   STO_BROWSER_BRIDGE_CAPABILITY,
@@ -76,7 +77,14 @@ async function resolveSessionId(
   const sessions = await port.listSessions(context.signal);
   const external = sessions.find((item) => !isEmbedSession(item));
   if (external) return external.sessionId;
-  return port.ensureSession(context.signal);
+  // TODO(web-bridge): WEB_BRIDGE_ORDINARY_CHAT_ENABLED = true 后自动 ensure-session 接管本机 Chrome。
+  if (WEB_BRIDGE_ORDINARY_CHAT_ENABLED) {
+    return port.ensureSession(context.signal);
+  }
+  throw new StoBrowserBridgePortError(
+    'BROWSER_NOT_CONNECTED',
+    '未找到已连接的外部 Browser Bridge 会话。请安装浏览器扩展并完成配对，或显式传入 sessionId。',
+  );
 }
 
 async function runBridgeTool(

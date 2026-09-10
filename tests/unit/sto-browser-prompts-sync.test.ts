@@ -10,8 +10,15 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { BA_SYSTEM_PROMPT } from '../../sto-plugin/openclaw/sto-browser-automation/prompts';
-import { BRIDGE_SYSTEM_PROMPT as OPENCLAW_BRIDGE_PROMPT } from '../../sto-plugin/openclaw/sto-browser-bridge/prompts';
-import { BRIDGE_SYSTEM_PROMPT as SHARED_BRIDGE_PROMPT } from '../../shared/browser-bridge/prompts';
+import {
+  BRIDGE_SYSTEM_PROMPT as OPENCLAW_BRIDGE_PROMPT,
+  WEB_BRIDGE_ORDINARY_CHAT_PROMPT as OPENCLAW_WEB_BRIDGE_PROMPT,
+} from '../../sto-plugin/openclaw/sto-browser-bridge/prompts';
+import {
+  BRIDGE_SYSTEM_PROMPT as SHARED_BRIDGE_PROMPT,
+  WEB_BRIDGE_ORDINARY_CHAT_PROMPT as SHARED_WEB_BRIDGE_PROMPT,
+} from '../../shared/browser-bridge/prompts';
+import { WEB_BRIDGE_ORDINARY_CHAT_ENABLED } from '../../shared/browser-bridge/ship-gate';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_INDEX = resolve(here, '../../sto-plugin/openclaw/sto-browser-automation/index.ts');
@@ -64,12 +71,19 @@ describe('T9 BA_SYSTEM_PROMPT ↔ 工具注册表同步', () => {
 describe('T9 BRIDGE_SYSTEM_PROMPT 单源', () => {
   it('OpenClaw 插件提示词与 shared 逐字相等', () => {
     expect(OPENCLAW_BRIDGE_PROMPT).toBe(SHARED_BRIDGE_PROMPT);
+    expect(OPENCLAW_WEB_BRIDGE_PROMPT).toBe(SHARED_WEB_BRIDGE_PROMPT);
   });
 
-  it('提示词限制 list_sessions 空转并声明 SESSION_STALE 自愈', () => {
-    expect(SHARED_BRIDGE_PROMPT).toContain('SESSION_STALE');
-    expect(SHARED_BRIDGE_PROMPT).toContain('禁止再 list_sessions');
-    expect(BA_SYSTEM_PROMPT).toContain('本机 Chrome Bridge');
+  it('上线提示不把主聊天路由到未完成的 Web Bridge', () => {
+    expect(WEB_BRIDGE_ORDINARY_CHAT_ENABLED).toBe(false);
+    expect(SHARED_BRIDGE_PROMPT).not.toContain('SClaw Web Bridge');
+    expect(BA_SYSTEM_PROMPT).not.toContain('本机 Chrome Bridge');
+  });
+
+  // TODO(web-bridge): 恢复 BRIDGE_SYSTEM_PROMPT = WEB_BRIDGE_ORDINARY_CHAT_PROMPT 后改回启用。
+  it('Web Bridge 待启用提示词仍限制 list_sessions 空转并声明 SESSION_STALE 自愈', () => {
+    expect(SHARED_WEB_BRIDGE_PROMPT).toContain('SESSION_STALE');
+    expect(SHARED_WEB_BRIDGE_PROMPT).toContain('禁止再 list_sessions');
   });
 
   it('提示词提及的 bridge_* 工具名 ⊆ OpenClaw 注册表', () => {

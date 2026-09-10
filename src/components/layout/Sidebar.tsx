@@ -123,7 +123,6 @@ import {
 } from '@/stores/sidebar-delete-confirm';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 import {
-  resolveSidebarAccountEmployeeId,
   resolveSidebarAccountFooterMode,
   resolveSidebarAccountName,
   shouldRenderAccountGearIcon,
@@ -875,7 +874,6 @@ export function Sidebar() {
     sidebarCollapsed,
   });
   const accountName = resolveSidebarAccountName(authUser);
-  const accountEmployeeId = resolveSidebarAccountEmployeeId(authUser);
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const taskCatalogSessions = useSessionCatalogStore((s) => s.taskCatalogSessions);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
@@ -2290,18 +2288,10 @@ export function Sidebar() {
                       setMobileConnectOpen(false);
                     }}
                   >
-                    <span
-                      className="flex min-w-0 w-full items-baseline gap-1.5"
-                      title={accountEmployeeId ? `${accountName} ${accountEmployeeId}` : accountName}
-                    >
+                    <span className="flex min-w-0 w-full" title={accountName}>
                       <span className={cn(sidebarFooterNameClass, 'w-auto flex-1')}>
                         {accountName}
                       </span>
-                      {accountEmployeeId ? (
-                        <span className={cn(sidebarFooterMetaClass, 'w-auto shrink-0 tabular-nums')}>
-                          {accountEmployeeId}
-                        </span>
-                      ) : null}
                     </span>
                     {authUser.companyName?.trim() ? (
                       <span className={sidebarFooterMetaClass}>

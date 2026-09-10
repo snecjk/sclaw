@@ -1,4 +1,6 @@
 import { SCLAW_AGENT_EXTENSIONS, type RegisteredAgentExtension } from '../../registry';
+import { isEmbedAppChatSessionKey } from '../../../../shared/session-type';
+import { WEB_BRIDGE_ORDINARY_CHAT_ENABLED } from '../../../../shared/browser-bridge/ship-gate';
 import { buildPiBrowserUseExtension } from '../../extensions/pi-browser-use/pi';
 import type { PiNativeContribution } from './types';
 
@@ -23,10 +25,22 @@ export const PI_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = SCLAW_AG
   },
 );
 
-/** Interactive Pi chats drive the user's Chrome (or App Plaza webview) via bridge_*. */
+/**
+ * Select exactly one browser implementation for each Pi chat surface.
+ * Web Bridge 主聊天未完成：普通会话仍走 pi-browser-use（与 main 一致）。
+ */
 export function selectPiAgentExtensions(
-  _sessionKey: string,
+  sessionKey: string,
   entries: readonly RegisteredAgentExtension[] = PI_AGENT_EXTENSIONS,
 ): readonly RegisteredAgentExtension[] {
-  return entries.filter((entry) => entry.common.id !== 'pi-browser-use');
+  // TODO(web-bridge): WEB_BRIDGE_ORDINARY_CHAT_ENABLED = true 后，普通 Pi 也只用 bridge_*。
+  if (WEB_BRIDGE_ORDINARY_CHAT_ENABLED) {
+    return entries.filter((entry) => entry.common.id !== 'pi-browser-use');
+  }
+  const embedChat = isEmbedAppChatSessionKey(sessionKey);
+  return entries.filter((entry) => (
+    embedChat
+      ? entry.common.id !== 'pi-browser-use'
+      : entry.common.id !== 'sto-browser-tool'
+  ));
 }

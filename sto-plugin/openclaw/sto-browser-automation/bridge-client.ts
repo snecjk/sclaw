@@ -1,5 +1,8 @@
 import { normalizeBridgeSessionId } from "../../../shared/browser-bridge/pick-session.js";
 
+/** TODO(web-bridge): 与 shared/browser-bridge/ship-gate.ts 保持一致。上线前 false。 */
+const WEB_BRIDGE_ORDINARY_CHAT_ENABLED = false;
+
 export type BrowserBridgePluginConfig = {
 	hostApiHost?: string;
 	hostApiPort?: number;
@@ -194,8 +197,15 @@ export async function runBridgeCommand(
 					`应用广场内置浏览器未就绪（sessionId=${options?.sessionId ?? 'embed'}）。请确认左侧页面已加载完成后再试。`,
 				);
 			}
-			const url = typeof payload.url === "string" ? payload.url : undefined;
-			sessionId = await ensureExtensionSession(cfg, url);
+			// TODO(web-bridge): WEB_BRIDGE_ORDINARY_CHAT_ENABLED = true 后自动 ensure-session。
+			if (WEB_BRIDGE_ORDINARY_CHAT_ENABLED) {
+				const url = typeof payload.url === "string" ? payload.url : undefined;
+				sessionId = await ensureExtensionSession(cfg, url);
+			} else {
+				throw new Error(
+					"浏览器未连接。应用广场内嵌预览未就绪，或请安装浏览器扩展并完成配对。",
+				);
+			}
 		} else {
 			sessionId = target.sessionId;
 		}

@@ -95,14 +95,14 @@ describe('sto-browser-tool common extension', () => {
     expect(result.options.systemPromptAppend).not.toContain('仅使用 bridge_*');
   });
 
-  it('registers sto-browser-tool for ordinary PI sessions without activating it until intent matches', async () => {
+  it('does not expose bridge tools to ordinary PI sessions', async () => {
     const result = await buildPiAgentExtensions({
       sessionKey: 'pi-browser', mode: 'interactive',
       entries: [{ common: stoBrowserToolDefinition }], ...dependencies(),
     });
     expect(result.initiallyActiveToolNames).toEqual([]);
     expect(result.extensions.map((item) => typeof item === 'function' ? 'anonymous' : item.name))
-      .toEqual(['sclaw-extension-lifecycle', 'sto-browser-tool']);
+      .toEqual(['sclaw-extension-lifecycle']);
   });
 
   it('uses sto-browser-tool instead of pi-browser-use for App Plaza PI sessions', async () => {
@@ -122,11 +122,11 @@ describe('sto-browser-tool common extension', () => {
       .toEqual(['sclaw-extension-lifecycle', 'sto-browser-tool']);
   });
 
-  it('uses sto-browser-tool instead of pi-browser-use for ordinary PI sessions', () => {
+  it('keeps pi-browser-use and excludes sto-browser-tool for ordinary PI sessions', () => {
     const selectedIds = selectPiAgentExtensions('agent:main:ordinary', PI_AGENT_EXTENSIONS)
       .map((entry) => entry.common.id);
-    expect(selectedIds).toContain('sto-browser-tool');
-    expect(selectedIds).not.toContain('pi-browser-use');
+    expect(selectedIds).toContain('pi-browser-use');
+    expect(selectedIds).not.toContain('sto-browser-tool');
   });
 
   it('requires an explicit embed session and never falls back to another page', async () => {

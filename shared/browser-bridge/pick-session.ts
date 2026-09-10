@@ -14,7 +14,9 @@ export function normalizeBridgeSessionId(sessionId: string | undefined): string 
 }
 
 export const EMPTY_BRIDGE_SESSIONS_HINT =
-  '当前没有已连接的 Chrome 扩展会话。不要再调用 list_sessions。下一步：bridge_navigate 打开目标 URL，省略 sessionId（不要传 auto），系统会建立扩展会话。';
+  '当前没有已连接的 Browser Bridge 会话。请安装浏览器扩展并完成配对，或显式传入 sessionId。不要再调用 list_sessions。';
+// TODO(web-bridge): 恢复自动接管后改回：
+// '当前没有已连接的 Chrome 扩展会话。不要再调用 list_sessions。下一步：bridge_navigate 打开目标 URL，省略 sessionId（不要传 auto），系统会建立扩展会话。';
 
 export function formatBridgeSessionList<T>(sessions: T[]): {
   sessions: T[];

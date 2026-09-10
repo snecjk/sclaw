@@ -95,24 +95,26 @@ export function appendNodeRequireToNodeOptions(
 }
 
 /**
- * Flags that keep powershell.exe from allocating a visible console.
+ * Quiet powershell.exe without allocating a console window.
  * Must appear before `-Command` / `-File` / `-EncodedCommand`.
+ *
+ * Do not pass `-WindowStyle Hidden`: PowerShell creates a real window then
+ * hides it, which flashes a black console. Hide with CREATE_NO_WINDOW
+ * (`windowsHide: true`) instead — same as main.
  */
 const SILENT_POWERSHELL_PREFIX = [
   '-NoLogo',
   '-NoProfile',
   '-NonInteractive',
-  '-WindowStyle',
-  'Hidden',
 ] as const;
 
 export function silentPowerShellPrefix(): string[] {
   return [...SILENT_POWERSHELL_PREFIX];
 }
 
-/** Build powershell.exe argv: silent prefix + caller flags (`-Command` / `-File` / …). */
+/** Build powershell.exe argv: quiet prefix + caller flags (`-Command` / `-File` / …). */
 export function buildSilentPowerShellArgs(rest: string[]): string[] {
-  return [...SILENT_POWERSHELL_PREFIX, ...rest];
+  return ensureSilentPowerShellArgs(rest);
 }
 
 function hasPowerShellSwitch(args: string[], name: string): boolean {
@@ -120,20 +122,39 @@ function hasPowerShellSwitch(args: string[], name: string): boolean {
   return args.some((arg) => String(arg).toLowerCase() === needle);
 }
 
-/** Prepend missing hide flags without duplicating switches already present. */
+/** Drop `-WindowStyle …` so callers cannot reintroduce the console flash. */
+export function stripPowerShellWindowStyle(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (String(args[i]).toLowerCase() === '-windowstyle') {
+      i += 1;
+      continue;
+    }
+    out.push(args[i]);
+  }
+  return out;
+}
+
+/** Prepend missing quiet flags without duplicating switches already present. */
 export function ensureSilentPowerShellArgs(args: string[]): string[] {
+  const stripped = stripPowerShellWindowStyle(args);
   const prefix: string[] = [];
-  if (!hasPowerShellSwitch(args, '-NoLogo')) prefix.push('-NoLogo');
-  if (!hasPowerShellSwitch(args, '-NoProfile')) prefix.push('-NoProfile');
-  if (!hasPowerShellSwitch(args, '-NonInteractive')) prefix.push('-NonInteractive');
-  if (!hasPowerShellSwitch(args, '-WindowStyle')) prefix.push('-WindowStyle', 'Hidden');
-  return prefix.length > 0 ? [...prefix, ...args] : args;
+  if (!hasPowerShellSwitch(stripped, '-NoLogo')) prefix.push('-NoLogo');
+  if (!hasPowerShellSwitch(stripped, '-NoProfile')) prefix.push('-NoProfile');
+  if (!hasPowerShellSwitch(stripped, '-NonInteractive')) prefix.push('-NonInteractive');
+  return prefix.length > 0 ? [...prefix, ...stripped] : stripped;
 }
 
 export function isPowerShellExecutable(cmd: string): boolean {
-  const base = cmd.trim().replace(/^"(.*)"$/, '$1');
-  return /(?:^|[\\/])(?:powershell|pwsh)(?:\.exe)?$/i.test(base)
-    || /^(?:powershell|pwsh)(?:\.exe)?$/i.test(base);
+  const token = cmd.trim().replace(/^"(.*)"$/, '$1').split(/\s+/)[0]?.replace(/^"(.*)"$/, '$1') ?? '';
+  return /(?:^|[\\/])(?:powershell|pwsh)(?:\.exe)?$/i.test(token)
+    || /^(?:powershell|pwsh)(?:\.exe)?$/i.test(token);
+}
+
+export function isWindowsConsoleHost(cmd: string): boolean {
+  if (isPowerShellExecutable(cmd)) return true;
+  const token = cmd.trim().replace(/^"(.*)"$/, '$1').split(/\s+/)[0]?.replace(/^"(.*)"$/, '$1') ?? '';
+  return /(?:^|[\\/])cmd(?:\.exe)?$/i.test(token) || /^cmd(?:\.exe)?$/i.test(token);
 }
 
 function findChildProcessOptionsIndex(args: unknown[]): number {
@@ -146,9 +167,19 @@ function findChildProcessOptionsIndex(args: unknown[]): number {
   return -1;
 }
 
+function withWindowsHideOptions(
+  options: Record<string, unknown> | undefined,
+  cmd: string,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...(options ?? {}), windowsHide: true };
+  // DETACHED_PROCESS fights CREATE_NO_WINDOW and still allocates a console.
+  if (isWindowsConsoleHost(cmd)) next.detached = false;
+  return next;
+}
+
 /**
- * Force Windows child processes to use CREATE_NO_WINDOW, and hide powershell.exe.
- * Pi's SDK spawns a new shell per tool call; without this, each call flashes a console.
+ * Force Windows child processes to use CREATE_NO_WINDOW (`windowsHide`).
+ * Do not add `-WindowStyle Hidden` — that allocates a console then hides it.
  */
 export function applyWindowsHiddenSpawnArgs(args: unknown[]): unknown[] {
   if (process.platform !== 'win32') return args;
@@ -160,11 +191,11 @@ export function applyWindowsHiddenSpawnArgs(args: unknown[]): unknown[] {
 
   const optIdx = findChildProcessOptionsIndex(next);
   if (optIdx >= 0) {
-    (next[optIdx] as { windowsHide?: boolean }).windowsHide = true;
+    next[optIdx] = withWindowsHideOptions(next[optIdx] as Record<string, unknown>, cmd);
     return next;
   }
 
-  const hideOptions = { windowsHide: true };
+  const hideOptions = withWindowsHideOptions(undefined, cmd);
   if (typeof next[next.length - 1] === 'function') {
     next.splice(next.length - 1, 0, hideOptions);
   } else {

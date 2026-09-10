@@ -5,6 +5,7 @@ import { getOpenClawConfigDir, getOpenClawEntryPath, getOpenClawProcessCwd, getO
 import { prependNodePathEntry } from './env-path';
 import { logger } from './logger';
 import { getUvMirrorEnv } from './uv-env';
+import { resolveGatewayUtilityExecArgv } from '../gateway/process-launcher';
 
 const OPENCLAW_DOCTOR_TIMEOUT_MS = 60_000;
 const MAX_DOCTOR_OUTPUT_BYTES = 10 * 1024 * 1024;
@@ -102,18 +103,22 @@ async function runDoctorCommandWithArgs(
     `Running OpenClaw doctor (mode=${mode}, entry="${entryScript}", args="${args.join(' ')}", cwd="${openclawDir}", bundledBin=${binPathExists ? 'yes' : 'no'})`,
   );
 
+  const doctorEnv = prependNodePathEntry({
+    ...process.env,
+    ...uvEnv,
+    PATH: finalPath,
+    OPENCLAW_NO_RESPAWN: '1',
+    OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
+    OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
+  }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv;
+  const doctorExecArgv = resolveGatewayUtilityExecArgv(doctorEnv);
+
   return await new Promise<OpenClawDoctorResult>((resolve) => {
     const child = utilityProcess.fork(entryScript, args, {
       cwd: openclawDir,
       stdio: 'pipe',
-      env: prependNodePathEntry({
-        ...process.env,
-        ...uvEnv,
-        PATH: finalPath,
-        OPENCLAW_NO_RESPAWN: '1',
-        OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
-        OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
-      }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
+      env: doctorEnv,
+      ...(doctorExecArgv ? { execArgv: doctorExecArgv } : {}),
     });
 
     let stdout = '';

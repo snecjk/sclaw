@@ -54,6 +54,32 @@ export function buildStoBrowserAutomationPluginConfig(
   };
 }
 
+/**
+ * Keep only schema-allowed keys. Spreading leftover user config (or a stale
+ * installed plugin schema) into openclaw.json makes Gateway reject the file
+ * and run `doctor --fix` on every Windows launch.
+ */
+export function sanitizeStoBrowserAutomationPluginConfig(
+  current: Record<string, unknown> | undefined,
+  input: StoBrowserAutomationConfigInput,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = {
+    hostApiHost: typeof current?.hostApiHost === 'string' && current.hostApiHost.trim()
+      ? current.hostApiHost
+      : (input.hostApiHost ?? '127.0.0.1'),
+    hostApiPort: typeof current?.hostApiPort === 'number'
+      ? current.hostApiPort
+      : input.hostApiPort,
+  };
+  if (typeof current?.commandTimeoutMs === 'number') {
+    next.commandTimeoutMs = current.commandTimeoutMs;
+  }
+  const authToken = input.authToken
+    ?? (typeof current?.authToken === 'string' ? current.authToken : null);
+  if (authToken) next.authToken = authToken;
+  return next;
+}
+
 export function buildStoOpenClawPluginConfigs(
   input: StoOpenClawPluginConfigInput,
 ): Record<string, Record<string, unknown>> {

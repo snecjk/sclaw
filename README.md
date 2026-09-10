@@ -329,12 +329,12 @@ workspace as their default working directory and otherwise inherit the desktop
 user's operating-system permissions, including access to files outside the
 workspace when requested. On Windows, Pi uses its native PowerShell tool instead
 of resolving `bash.exe` through WSL; macOS and Linux continue to use Bash.
-Ordinary interactive Pi browser automation uses the SClaw Browser Bridge
-`bridge_*` tools against the user's Google Chrome (SClaw Web Bridge extension).
-The isolated `chrome-devtools-mcp` profile from
-`@amaster.ai/pi-browser-use` is not loaded for chat, because that Chrome has no
-extension and looks like a private window. App Plaza Pi sessions also use
-`bridge_*` against the embed webview. Scheduled Pi runs do not load browser automation. Package/project
+Ordinary interactive Pi browser automation uses the pinned
+`@amaster.ai/pi-browser-use@0.1.12` extension, which starts
+`chrome-devtools-mcp`; Pi directly activates every tool registered by the reviewed
+extension factory, without a tool-name prefix allowlist. The SClaw Browser Bridge
+`bridge_*` tools are used instead for App Plaza Pi sessions, where `pi-browser-use`
+is not loaded. Scheduled Pi runs do not load browser automation. Package/project
 extension scanning remains disabled; SClaw loads the selected browser extension
 explicitly. On Windows, the MCP subprocess uses the bundled
 Node runtime first and a system `node.exe` second, avoiding Electron application

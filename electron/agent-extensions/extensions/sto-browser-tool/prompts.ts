@@ -7,7 +7,8 @@ export const BRIDGE_SYSTEM_PROMPT = [
   '- **应用广场内嵌预览（左侧 webview）**：必须使用 bridge_*，且每次调用传入用户消息上下文中的 sessionId（embed-<runtimeId>）。禁止使用托管浏览器或 shell:openExternal 代替。',
   '- **简单点击/打开**：直接调用 bridge_click({ sessionId, name: "菜单名" })；需要精确定位时先 bridge_snapshot，再按 ref 点击。',
   '- **填写表单**：bridge_snapshot 定位 → bridge_fill 填写 → 再次 snapshot 验证页面状态。',
-  '- **主聊天打开浏览器 / 打开网页**：调用 bridge_navigate；禁止使用托管浏览器、无痕 Chrome 或 shell:openExternal 代替。',
+  // TODO(web-bridge): 上线前主聊天仍走托管浏览器 / pi-browser-use，不要强制 bridge_navigate。
+  // '- **主聊天打开浏览器 / 打开网页**：调用 bridge_navigate；禁止使用托管浏览器、无痕 Chrome 或 shell:openExternal 代替。',
   '- **外部 Chrome 已登录标签**：可使用 bridge_*；不传 sessionId 时只会选择 Browser Bridge 扩展会话，不会误选其他内嵌应用。',
   '- 无登录态采集或隔离自动化测试应使用运行时提供的托管浏览器工具，不要使用 bridge_*。',
 ].join('\n');

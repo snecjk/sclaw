@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildStoOpenClawPluginConfigs } from '../../shared/openclaw-plugin-config';
+import { buildStoOpenClawPluginConfigs, sanitizeStoBrowserAutomationPluginConfig } from '../../shared/openclaw-plugin-config';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = resolve(here, '../../sto-plugin/openclaw');
@@ -59,5 +59,25 @@ describe('OpenClaw 插件 config ↔ configSchema 一致性', () => {
       authToken: null,
     });
     expect('authToken' in withoutToken['sto-browser-automation']).toBe(false);
+  });
+
+  it('strips undeclared sto-browser-automation keys that would fail Gateway', () => {
+    const sanitized = sanitizeStoBrowserAutomationPluginConfig(
+      {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: 3210,
+        authToken: 'token-abc',
+        extraLegacyKey: true,
+        commandTimeoutMs: 45_000,
+      },
+      { hostApiPort: 3210, authToken: 'token-abc' },
+    );
+    expect(sanitized).toEqual({
+      hostApiHost: '127.0.0.1',
+      hostApiPort: 3210,
+      commandTimeoutMs: 45_000,
+      authToken: 'token-abc',
+    });
+    expect('extraLegacyKey' in sanitized).toBe(false);
   });
 });

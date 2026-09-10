@@ -20,12 +20,11 @@ describe('Windows shell-script installer', () => {
     expect(kind).toBe('powershell');
     expect(invocation.command).toBe('powershell.exe');
     expect(invocation.args).toEqual(expect.arrayContaining([
-      '-WindowStyle',
-      'Hidden',
       '-NonInteractive',
       '-File',
     ]));
-    expect(invocation.args.indexOf('-WindowStyle')).toBeLessThan(invocation.args.indexOf('-File'));
+    expect(invocation.args).not.toEqual(expect.arrayContaining(['-WindowStyle', 'Hidden']));
+    expect(invocation.args.indexOf('-NonInteractive')).toBeLessThan(invocation.args.indexOf('-File'));
     expect(invocation.args.at(-1)).toBe(String.raw`C:\Temp\install.ps1`);
   });
 

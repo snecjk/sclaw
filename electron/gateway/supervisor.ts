@@ -9,6 +9,7 @@ import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
 import { listAgentsSnapshot } from '../utils/agent-config';
 import { buildSilentPowerShellArgs } from '../utils/win-shell';
+import { resolveGatewayUtilityExecArgv } from './process-launcher';
 
 const pidCache = new Map<number, { pids: string[]; ts: number }>();
 const PID_CACHE_TTL_MS = 5000;
@@ -429,17 +430,21 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
     `Running OpenClaw doctor repair (entry="${entryScript}", args="${doctorArgs.join(' ')}", cwd="${openclawDir}", bundledBin=${binPathExists ? 'yes' : 'no'})`,
   );
 
+  const doctorEnv = prependNodePathEntry({
+    ...baseEnvPatched,
+    ...uvEnv,
+    OPENCLAW_NO_RESPAWN: '1',
+    OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
+    OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
+  }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv;
+  const doctorExecArgv = resolveGatewayUtilityExecArgv(doctorEnv);
+
   return await new Promise<boolean>((resolve) => {
     const child = utilityProcess.fork(entryScript, doctorArgs, {
       cwd: openclawDir,
       stdio: 'pipe',
-      env: prependNodePathEntry({
-        ...baseEnvPatched,
-        ...uvEnv,
-        OPENCLAW_NO_RESPAWN: '1',
-        OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
-        OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
-      }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
+      env: doctorEnv,
+      ...(doctorExecArgv ? { execArgv: doctorExecArgv } : {}),
     });
 
     let settled = false;

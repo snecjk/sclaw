@@ -75,6 +75,7 @@ export function createHostApiBrowserBridgePort(): StoBrowserBridgePort {
       );
       return response.sessions ?? [];
     },
+    /** TODO(web-bridge): 主聊天自动接管 Chrome；上线前普通会话不会调用。 */
     async ensureSession(signal, url) {
       throwIfAborted(signal);
       const response = await fetchJson<{ sessionId?: string }>(

@@ -61,6 +61,6 @@ describe('sto-browser-bridge plugin', () => {
     expect(text).toContain('sessions');
     expect(text).not.toMatch(/^\[\]$/);
     expect(text).toContain('不要再调用 list_sessions');
-    expect(text).toContain('省略 sessionId');
+    expect(text).toContain('请安装浏览器扩展并完成配对');
   });
 });

@@ -8,6 +8,10 @@ import {
   parseDwsChatMessageSendShellCommandArgs,
   rewriteDwsSendSpawnInvocation,
 } from '../../shared/dingtalk-send/dws-send-text';
+import {
+  ensureSilentPowerShellArgs,
+  isPowerShellExecutable,
+} from '../utils/win-shell';
 
 /** Must match electron/utils/sai-client-id.ts — keep inline to avoid pulling Electron utils into preload. */
 const SAI_CLIENT_ID_VALUE = 'sto-claw';
@@ -141,22 +145,6 @@ function normalizeDwsSendInvocation(cmd: string, argsList: string[]): string[] {
     }
   }
   return args;
-}
-
-function isPowerShellExecutable(cmd: string): boolean {
-  const base = cmd.trim().replace(/^"(.*)"$/, '$1');
-  return /(?:^|[\\/])(?:powershell|pwsh)(?:\.exe)?$/i.test(base)
-    || /^(?:powershell|pwsh)(?:\.exe)?$/i.test(base);
-}
-
-function ensureSilentPowerShellArgs(args: string[]): string[] {
-  const lower = args.map((arg) => String(arg).toLowerCase());
-  const prefix: string[] = [];
-  if (!lower.includes('-nologo')) prefix.push('-NoLogo');
-  if (!lower.includes('-noprofile')) prefix.push('-NoProfile');
-  if (!lower.includes('-noninteractive')) prefix.push('-NonInteractive');
-  if (!lower.includes('-windowstyle')) prefix.push('-WindowStyle', 'Hidden');
-  return prefix.length > 0 ? [...prefix, ...args] : args;
 }
 
 function applySilentPowerShellIfNeeded(

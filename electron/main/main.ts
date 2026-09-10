@@ -9,6 +9,9 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
+import { installChildProcessWindowsHidePatch } from '../utils/child-process-windows-hide';
+installChildProcessWindowsHidePatch();
+
 import { app, BrowserWindow, dialog, nativeTheme, session, shell } from 'electron';
 import { forwardPreviewFrameEscape } from './preview-frame-escape';
 import type { Server } from 'node:http';

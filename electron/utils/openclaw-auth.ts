@@ -33,6 +33,7 @@ import {
   buildStoBrowserAutomationPluginConfig,
   buildStoBrowserBridgePluginConfig,
   buildStoOpenClawPluginConfigs,
+  sanitizeStoBrowserAutomationPluginConfig,
 } from '../../shared/openclaw-plugin-config';
 
 const AUTH_STORE_VERSION = 1;
@@ -1560,6 +1561,15 @@ export function getOrCreateBrowserAutomationToken(): string {
   return token;
 }
 
+function stableJson(value: Record<string, unknown> | undefined): string {
+  const src = value ?? {};
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(src).sort()) {
+    sorted[key] = src[key];
+  }
+  return JSON.stringify(sorted);
+}
+
 /** Enable Browser Automation Platform plugin (ba_* tools). */
 function ensureStoBrowserAutomationPluginConfig(plugins: Record<string, unknown>): boolean {
   const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
@@ -1588,18 +1598,16 @@ function ensureStoBrowserAutomationPluginConfig(plugins: Record<string, unknown>
       ? current.config
       : undefined
   ) as Record<string, unknown> | undefined;
+  const desiredConfig = sanitizeStoBrowserAutomationPluginConfig(currentConfig, {
+    hostApiPort: PORTS.CLAWX_HOST_API,
+    authToken,
+  });
   const tokenStale = authToken !== null && currentConfig?.authToken !== authToken;
-  if (!current || current.enabled !== true || tokenStale) {
+  const configDirty = stableJson(currentConfig) !== stableJson(desiredConfig);
+  if (!current || current.enabled !== true || tokenStale || configDirty) {
     entries[STO_BROWSER_AUTOMATION_PLUGIN_ID] = {
       enabled: true,
-      config: {
-        ...buildStoBrowserAutomationPluginConfig({ hostApiPort: PORTS.CLAWX_HOST_API }),
-        // 保留既有覆盖项（如用户改过的 host/port/timeout），只按需刷新 authToken。
-        // token 稳定时产物与现状逐字节一致，writeOpenClawJson 的"内容不变不写"
-        // 机制保证不触发 OpenClaw 文件监听硬重启（§六 R6 / WS 1012 事故）。
-        ...(currentConfig ?? {}),
-        ...(authToken ? { authToken } : {}),
-      },
+      config: desiredConfig,
     };
     modified = true;
   }

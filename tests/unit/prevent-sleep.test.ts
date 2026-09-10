@@ -26,11 +26,9 @@ import { buildWindowsPowerHelperSpawnArgs } from '../../electron/main/prevent-sl
 describe('prevent-sleep Windows helper', () => {
   it('hides the PowerShell fallback console window', () => {
     const args = buildWindowsPowerHelperSpawnArgs(1234);
-    expect(args).toEqual(expect.arrayContaining(['-WindowStyle', 'Hidden', '-NonInteractive', '-NoLogo']));
-    const styleIdx = args.indexOf('-WindowStyle');
-    const commandIdx = args.indexOf('-Command');
-    expect(styleIdx).toBeGreaterThanOrEqual(0);
-    expect(styleIdx).toBeLessThan(commandIdx);
+    expect(args).toEqual(expect.arrayContaining(['-NonInteractive', '-NoLogo', '-NoProfile']));
+    expect(args).not.toEqual(expect.arrayContaining(['-WindowStyle', 'Hidden']));
+    expect(args.indexOf('-NoProfile')).toBeLessThan(args.indexOf('-Command'));
   });
 
   it('keeps the helper script bound to the parent pid', () => {

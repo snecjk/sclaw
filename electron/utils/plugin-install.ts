@@ -399,6 +399,10 @@ const PLUGIN_CONTENT_SYNC_FILES: Record<string, readonly string[]> = {
     'shared/retired-skills.ts',
     'shared/workspace-paths.ts',
   ],
+  'sto-browser-automation': [
+    'openclaw.plugin.json',
+    'index.ts',
+  ],
 };
 
 const STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL = 'shared/retired-skills.ts';
