@@ -90,7 +90,7 @@ export async function launchGatewayProcess(options: {
       cwd: openclawDir,
       stdio: 'pipe',
       env: runtimeEnv as NodeJS.ProcessEnv,
-      execArgv: forkExecArgv,
+      ...(forkExecArgv ? { execArgv: forkExecArgv } : {}),
       serviceName: 'OpenClaw Gateway',
     });
 

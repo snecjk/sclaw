@@ -17,6 +17,10 @@ export function installChildProcessWindowsHidePatch(): void {
   if (flagHolder[PATCH_FLAG]) return;
   flagHolder[PATCH_FLAG] = true;
 
-  (['spawn', 'exec', 'execFile', 'fork'] as const).forEach(patchMethod);
-  (['spawnSync', 'execSync', 'execFileSync'] as const).forEach(patchMethod);
+  try {
+    (['spawn', 'exec', 'execFile'] as const).forEach(patchMethod);
+    (['spawnSync', 'execSync', 'execFileSync'] as const).forEach(patchMethod);
+  } catch {
+    flagHolder[PATCH_FLAG] = false;
+  }
 }

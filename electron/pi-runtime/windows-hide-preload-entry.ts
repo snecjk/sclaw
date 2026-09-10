@@ -4,4 +4,8 @@
  */
 import { installChildProcessWindowsHidePatch } from '../utils/child-process-windows-hide';
 
-installChildProcessWindowsHidePatch();
+try {
+  installChildProcessWindowsHidePatch();
+} catch {
+  // Never block worker/main startup if spawn patching fails.
+}

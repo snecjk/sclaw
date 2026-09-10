@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app, utilityProcess, type UtilityProcess } from 'electron';
 import type { NormalizedEngineEvent } from '../gateway/normalized-engine-event';
@@ -13,6 +13,7 @@ import type {
 import { logger } from '../utils/logger';
 import { normalizeNodeRequirePathForNodeOptions } from '../utils/paths';
 import { syncPiDefaultContext } from './pi-context-sync';
+import { buildPiUtilityForkOptions } from '../pi-runtime/fork-options';
 
 const READY_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -146,7 +147,7 @@ export class PiRuntimeService extends EventEmitter<PiRuntimeEvents> {
     return candidates.find(existsSync) ?? candidates[0];
   }
 
-  private windowsHidePreloadPath(): string | null {
+  private bundledWindowsHidePreloadPath(): string | null {
     const candidates = [
       join(__dirname, 'windows-hide-preload.cjs'),
       join(__dirname, '..', 'pi-runtime', 'windows-hide-preload.cjs'),
@@ -156,27 +157,50 @@ export class PiRuntimeService extends EventEmitter<PiRuntimeEvents> {
     return candidates.find(existsSync) ?? null;
   }
 
+  /**
+   * `--require` cannot load files from app.asar. Copy to userData first, same as
+   * Gateway's fetch preload. Passing an asar path on Windows Electron 40 can
+   * kill the whole process during Pi warmup — before any window appears.
+   */
+  private ensureWindowsHidePreload(): string | null {
+    const bundled = this.bundledWindowsHidePreloadPath();
+    if (!bundled) return null;
+    try {
+      const dest = join(app.getPath('userData'), 'windows-hide-preload.cjs');
+      writeFileSync(dest, readFileSync(bundled, 'utf-8'));
+      return dest;
+    } catch (error) {
+      logger.warn('[pi-runtime] failed to materialize windows-hide preload:', error);
+      return null;
+    }
+  }
+
   private startChild(): Promise<void> {
     this.state = 'starting';
     const entry = this.workerEntryPath();
-    const preloadPath = this.windowsHidePreloadPath();
+    const preloadPath = this.ensureWindowsHidePreload();
     const execArgv = preloadPath
       ? ['--require', normalizeNodeRequirePathForNodeOptions(preloadPath)]
       : undefined;
     if (preloadPath) {
       logger.info('[pi-runtime] windows-hide preload enabled', { preloadPath });
     } else {
-      logger.warn('[pi-runtime] windows-hide preload not found; Windows PowerShell consoles may flash');
+      logger.warn('[pi-runtime] windows-hide preload not on disk; worker import still hides consoles');
     }
     logger.info('[pi-runtime] starting worker', { entry });
     return new Promise<void>((resolve, reject) => {
-      const child = utilityProcess.fork(entry, [], {
-        cwd: app.getPath('userData'),
-        env: { ...process.env, STO_PI_WORKER: '1' },
-        stdio: 'pipe',
-        execArgv,
-        serviceName: 'SClaw Pi Runtime',
-      });
+      let child: UtilityProcess;
+      try {
+        child = utilityProcess.fork(entry, [], buildPiUtilityForkOptions({
+          cwd: app.getPath('userData'),
+          env: { ...process.env, STO_PI_WORKER: '1' },
+          execArgv,
+        }));
+      } catch (error) {
+        this.state = 'failed';
+        reject(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       this.child = child;
       let settled = false;
       const readyTimer = setTimeout(() => finish(new Error(`Pi worker ready timed out after ${READY_TIMEOUT_MS}ms`)), READY_TIMEOUT_MS);
