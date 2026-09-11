@@ -21,7 +21,7 @@ describe('AgentLoop request user context', () => {
 
     const env = await buildAgentLoopRequestEnv(baseEnv);
 
-    expect(env).toEqual({ ANTHROPIC_API_KEY: 'key', GEN_AI_USER_ID: 'Sclaw_1460933' });
+    expect(env).toEqual({ ANTHROPIC_API_KEY: 'key', GEN_AI_USER_ID: 'SClaw_1460933' });
     expect(baseEnv.GEN_AI_USER_ID).toBe('previous-user');
   });
 

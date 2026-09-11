@@ -19,7 +19,7 @@ export async function buildAgentLoopRequestEnv(
   try {
     const authState = await getAuthState();
     const employeeCode = authState.user?.code?.trim();
-    if (employeeCode) env.GEN_AI_USER_ID = `Sclaw_${employeeCode}`;
+    if (employeeCode) env.GEN_AI_USER_ID = `SClaw_${employeeCode}`;
   } catch {
     // Observability enrichment is best-effort and must never block an agent run.
   }
