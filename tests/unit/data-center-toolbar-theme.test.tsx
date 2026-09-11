@@ -179,7 +179,7 @@ describe('data center toolbar theme', () => {
     expect(screen.getByRole('textbox', { name: '搜索文件或文件夹' })).toBeTruthy();
   });
 
-  it('shows a focus ring on the search surface when its input receives keyboard focus', () => {
+  it('uses a neutral heavy border on the search surface when its input is focused', () => {
     const dispose = installControlRecipes('dark');
     const searchSurface = document.createElement('label');
     searchSurface.className = 'sto-control sto-control--outline sto-control--neutral-outline-default sto-control--data-center-toolbar-interactive';
@@ -191,8 +191,8 @@ describe('data center toolbar theme', () => {
     expect(searchSurface.matches(':focus-within')).toBe(true);
     searchSurface.dataset.stoState = 'focus';
 
-    expect(getComputedStyle(searchSurface).boxShadow).not.toBe('');
-    expect(getComputedStyle(searchSurface).boxShadow).not.toBe('none');
+    expect(getComputedStyle(searchSurface).boxShadow).toBe('none');
+    expect(getComputedStyle(searchSurface).borderTopColor).toBe('rgba(255, 255, 255, 0.16)');
     searchSurface.remove();
     dispose();
   });

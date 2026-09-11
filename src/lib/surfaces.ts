@@ -1577,7 +1577,7 @@ export const sidebarTextSectionClass = 'text-[var(--sto-sidebar-text-section)]';
 
 /** 侧栏窄态提示：浅色沿用设计深底，深色使用中性 Elevated Surface。 */
 export const sidebarTooltipContentClass = cn(
-  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'sto-overlay--content-tooltip overflow-visible rounded-lg border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
   'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
   'dark:bg-[var(--sto-surface-elevated)] dark:text-[var(--sto-text-primary)] dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
 );
