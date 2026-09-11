@@ -10,6 +10,11 @@ export const dataCenterToolbarInteractiveSurfaceClass = cn(
   'sto-control--data-center-toolbar-interactive transition-colors duration-150',
 );
 
+export const dataCenterToolbarSearchSurfaceClass = cn(
+  dataCenterToolbarInteractiveSurfaceClass,
+  'sto-control--data-center-toolbar-search',
+);
+
 export const dataCenterToolbarButtonClass = cn(
   dataCenterToolbarInteractiveSurfaceClass,
   'px-3 text-[13px] font-medium',

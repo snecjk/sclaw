@@ -361,11 +361,17 @@
     border-color: var(--sto-border-default);
   }
 
-  .sto-control--data-center-toolbar-interactive:is(:focus-within, [data-sto-state='focus']) {
-    background-color: var(--sto-control-hover-bg);
+  /* 双类选择器压过 neutral-outline 的 hover 规则，聚焦时鼠标仍在控件上也不铺灰底。 */
+  .sto-control.sto-control--data-center-toolbar-interactive:is(:focus-within, [data-sto-state='focus']) {
+    background-color: var(--sto-control-bg);
     border-color: var(--sto-border-heavy);
     outline: none;
     box-shadow: none;
+  }
+
+  /* 搜索框只用边框反馈，hover 与聚焦都保持静息底色。 */
+  .sto-control.sto-control--data-center-toolbar-search:is(:hover, [data-sto-state='hover']) {
+    background-color: var(--sto-control-bg);
   }
 
   /* Navigation recipe: Radix highlighted/open remain native meanings. */
