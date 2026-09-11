@@ -586,7 +586,7 @@ export function DataCenter() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--sto-main-bg)]">
-      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-6 pb-6 pt-0 [scrollbar-gutter:stable]">
+      <div className="sto-hide-scrollbar flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-6 pb-6 pt-0">
         <main className={cn(stoMainInnerShell, 'flex min-h-0 min-w-[620px] flex-1 flex-col')}>
           <div className="mb-[38px] flex shrink-0 flex-wrap items-center gap-3">
             <div className={myTaskSectionTabsTrackClass} role="tablist" aria-label={t('dataCenterPage.title')}>
