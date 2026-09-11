@@ -43,8 +43,8 @@ const VISIBLE_STATUSES = new Set([
 const UPDATE_CARD_PADDING_PX = 12;
 const UPDATE_ICON_BOX_PX = 40;
 const UPDATE_ICON_GAP_PX = 8;
-/** 按钮行左缘与标题对齐：图标宽 + 间距 */
-const UPDATE_BTN_ROW_INDENT = UPDATE_ICON_BOX_PX + UPDATE_ICON_GAP_PX;
+/** 固定卡片宽度：图标 + 文案列，「立即更新 / 稍后」与标题同一左缘 */
+const UPDATE_CARD_WIDTH_PX = 236;
 
 /** MasterGo 导出：侧边栏更新同步图标 */
 function UpdateSyncGlyph({ spinning = false, className }: { spinning?: boolean; className?: string }) {
@@ -81,17 +81,18 @@ function SyncIcon({ spinning = false, className }: { spinning?: boolean; classNa
 
 /** 侧边栏更新卡片 — 对齐 MasterGo 稿 */
 const updateCardClass = cn(
-  'rounded-[12px] bg-white',
+  'box-border max-w-full overflow-hidden rounded-[12px] bg-white',
   'shadow-[0_2px_12px_rgba(15,23,42,0.06)]',
   'dark:border dark:border-[var(--sto-sidebar-border)] dark:bg-card dark:shadow-none',
 );
 
-const updateCardStyle = { padding: UPDATE_CARD_PADDING_PX } as const;
+const updateCardStyle = {
+  padding: UPDATE_CARD_PADDING_PX,
+  width: UPDATE_CARD_WIDTH_PX,
+} as const;
 
-/** 按钮行与标题左缘对齐 */
-const updateBtnRowClass = 'mt-3 flex items-center gap-2';
-
-const updateBtnRowStyle = { paddingLeft: UPDATE_BTN_ROW_INDENT } as const;
+/** 按钮行与标题左缘对齐（放在文案列内，不再额外缩进 48px） */
+const updateBtnRowClass = 'mt-3 flex min-w-0 flex-wrap items-center gap-2';
 
 const updatePrimaryBtnClass = cn(
   'inline-flex h-7 shrink-0 items-center justify-center rounded-[8px] border-0 px-3.5',
@@ -206,23 +207,23 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
           <p className="mt-1 text-[12px] leading-[17px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">
             {t('updates.sidebar.updateToVersion', { version: cardVersion })}
           </p>
+          <div className={updateBtnRowClass}>
+            <button
+              type="button"
+              className={updatePrimaryBtnClass}
+              onClick={actions.onUpdateNow}
+            >
+              {t('updates.sidebar.updateNow')}
+            </button>
+            <button
+              type="button"
+              className={updateSecondaryBtnClass}
+              onClick={actions.onLater}
+            >
+              {t('updates.sidebar.later')}
+            </button>
+          </div>
         </div>
-      </div>
-      <div className={updateBtnRowClass} style={updateBtnRowStyle}>
-        <button
-          type="button"
-          className={updatePrimaryBtnClass}
-          onClick={actions.onUpdateNow}
-        >
-          {t('updates.sidebar.updateNow')}
-        </button>
-        <button
-          type="button"
-          className={updateSecondaryBtnClass}
-          onClick={actions.onLater}
-        >
-          {t('updates.sidebar.later')}
-        </button>
       </div>
     </div>
   );
@@ -386,31 +387,33 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
     <div className={cardClass} style={updateCardStyle}>
       <div className="flex items-start" style={{ gap: UPDATE_ICON_GAP_PX }}>
         <SyncIcon spinning={status === 'installing'} />
-        <p className="min-w-0 flex-1 text-[13px] font-semibold leading-[18px] text-[#1D2129] dark:text-foreground">
-          {title}
-        </p>
-      </div>
-      <div className={updateBtnRowClass} style={updateBtnRowStyle}>
-        {secondaryLabel && onSecondary ? (
-          <button type="button" className={updateSecondaryBtnClass} onClick={onSecondary}>
-            {secondaryLabel}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className={updatePrimaryBtnClass}
-          onClick={onPrimary}
-          disabled={status === 'installing'}
-        >
-          {status === 'installing' ? (
-            <span className="inline-flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              {t('updates.action.installing')}
-            </span>
-          ) : (
-            primaryLabel
-          )}
-        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold leading-[18px] text-[#1D2129] dark:text-foreground">
+            {title}
+          </p>
+          <div className={updateBtnRowClass}>
+            {secondaryLabel && onSecondary ? (
+              <button type="button" className={updateSecondaryBtnClass} onClick={onSecondary}>
+                {secondaryLabel}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={updatePrimaryBtnClass}
+              onClick={onPrimary}
+              disabled={status === 'installing'}
+            >
+              {status === 'installing' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {t('updates.action.installing')}
+                </span>
+              ) : (
+                primaryLabel
+              )}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -479,7 +482,7 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
 
   return (
     <>
-      <div className="shrink-0 bg-[var(--sto-sidebar-bg)] px-3 pt-2">{content}</div>
+      <div className="min-w-0 shrink-0 bg-[var(--sto-sidebar-bg)] px-3 pt-2">{content}</div>
       <UpdateContentModal
         open={modalOpen}
         version={updateInfo?.version}
