@@ -52,7 +52,7 @@ function unescapeDoubleQuotedShell(text: string): string {
   return out;
 }
 
-/** Unescape PowerShell double-quoted literals (`n, `"`, `$`, ``). */
+/** Unescape PowerShell double-quoted literals (`n, `"`, `$`, ``, and smart quotes). */
 function unescapePowerShellDoubleQuoted(text: string): string {
   let out = '';
   for (let i = 0; i < text.length; i += 1) {
@@ -89,6 +89,11 @@ function unescapePowerShellDoubleQuoted(text: string): string {
         i += 1;
         continue;
       }
+      if (/[“”‘’]/.test(next)) {
+        out += next;
+        i += 1;
+        continue;
+      }
     }
     out += ch;
   }
@@ -121,7 +126,7 @@ export function parseDwsSendTextFlagSegment(raw: string): string {
     const lastQuote = trimmed.lastIndexOf('"');
     if (lastQuote > 0) {
       const inner = trimmed.slice(1, lastQuote);
-      if (/`[nrt"$`]/.test(inner)) return unescapePowerShellDoubleQuoted(inner);
+      if (/`[nrt"$`“”‘’]/.test(inner)) return unescapePowerShellDoubleQuoted(inner);
       return unescapeDoubleQuotedShell(inner);
     }
   }
@@ -130,7 +135,7 @@ export function parseDwsSendTextFlagSegment(raw: string): string {
     return trimmed.slice(1, -1);
   }
 
-  if (/`[nrt"$`]/.test(trimmed)) {
+  if (/`[nrt"$`“”‘’]/.test(trimmed)) {
     return unescapePowerShellDoubleQuoted(trimmed);
   }
 
@@ -156,6 +161,8 @@ export function shellQuoteDwsSendTextForPowerShell(text: string): string {
   const escaped = text
     .replace(/`/g, '``')
     .replace(/"/g, '`"')
+    // Windows PowerShell treats typographic quotes as string delimiters too.
+    .replace(/[“”‘’]/g, (quote) => `\`${quote}`)
     .replace(/\$/g, '`$')
     .replace(/\r/g, '')
     .replace(/\n/g, '`n');

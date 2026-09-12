@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { appendDingTalkAgentSendDisclaimer } from '../../shared/dingtalk-prompts/dingtalk-disclaimer';
 import { buildDingTalkMentionSystemContext } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
@@ -89,6 +90,42 @@ describe('dws-send-text normalization', () => {
     expect(quoted).toContain('### 标题');
     expect(quoted).toContain('**早上**');
   });
+
+  it('shellQuoteDwsSendTextForPowerShell escapes typographic quotes', () => {
+    const body = '新增“技能发现”功能，并支持‘个性化记忆’';
+    const quoted = shellQuoteDwsSendTextForPowerShell(body);
+    expect(quoted).toContain('`“技能发现`”');
+    expect(quoted).toContain('`‘个性化记忆`’');
+
+    const args = parseDwsChatMessageSendShellCommandArgs(
+      `dws chat message send --user u1 --text ${quoted} --format json`,
+    );
+    expect(args?.[(args.indexOf('--text') ?? -2) + 1]).toBe(
+      appendDingTalkAgentSendDisclaimer(body),
+    );
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'shellQuoteDwsSendTextForPowerShell survives real Windows PowerShell parsing',
+    () => {
+      const body =
+        '本次版本新增 SAgent 能力。✨技能与记忆更加智能，新增“技能发现”功能；设置中新增“个性化记忆”开关。🔧稳定性改进。';
+      const quoted = shellQuoteDwsSendTextForPowerShell(body);
+      const result = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `[Console]::OutputEncoding = [Text.Encoding]::UTF8; [Console]::Out.Write(${quoted})`,
+        ],
+        { encoding: 'utf8', windowsHide: true },
+      );
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toBe(body);
+    },
+  );
 
   it('parseDwsChatMessageSendShellCommandArgs understands PowerShell-quoted --text', () => {
     vi.stubGlobal('process', { ...process, platform: 'win32' });
