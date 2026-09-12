@@ -69,7 +69,8 @@ describe('dingtalk mention context', () => {
     expect(message).toContain('用户已明确要求发送');
     expect(message).toContain('不要回头追问');
     expect(message).toContain('dws chat message list-direct --user <userId>');
-    expect(message).toContain('发起即计');
+    expect(message).toContain('普通会话当前不要求等待发送间隔');
+    expect(message).not.toContain('每 20 秒');
   });
 
   it('for summarize-only @ turns, injects read-only block without send examples', () => {
@@ -236,7 +237,8 @@ describe('dingtalk mention context scenario split', () => {
     expect(ctx).not.toContain('不要回头追问');
     // 收件人 JSON 块与发送格式规则仍共用
     expect(ctx).toContain('dws chat message send --user uid-2');
-    expect(ctx).toContain('发起即计');
+    expect(ctx).toContain('普通会话当前不要求等待发送间隔');
+    expect(ctx).not.toContain('每 20 秒');
     expect(ctx).toContain('代发说明');
   });
 

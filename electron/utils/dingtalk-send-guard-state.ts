@@ -10,6 +10,9 @@ import type {
 } from '../agent-extensions/extensions/sto-dingtalk-send-guard/capability';
 
 const SEND_INTERVAL_MS = 20_000;
+// Temporary switch: ordinary chat interval throttling is disabled. Keep the
+// implementation below so it can be restored without changing deduplication.
+const ORDINARY_SESSION_RATE_LIMIT_ENABLED = false;
 const DEDUP_TTL_MS = 5 * 60 * 1000;
 
 const lastInitiatedAt = new Map<string, number>();
@@ -84,7 +87,7 @@ export function reserveDingTalkSend(
     }
   }
 
-  if (!input.scheduledExecution) {
+  if (ORDINARY_SESSION_RATE_LIMIT_ENABLED && !input.scheduledExecution) {
     const key = rateKey(input.sessionKey, input.category);
     const last = lastInitiatedAt.get(key);
     if (last != null && now - last < SEND_INTERVAL_MS) {

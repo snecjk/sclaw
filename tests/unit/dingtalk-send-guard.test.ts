@@ -75,7 +75,7 @@ describe('evaluateDingTalkSendGuard', () => {
     resetDingTalkSendRateLimitForTests();
   });
 
-  it('blocks the second text send before any succeeds (initiate counts)', () => {
+  it('allows a second text send before any succeeds while interval limiting is disabled', () => {
     const params = {
       command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
     };
@@ -93,13 +93,10 @@ describe('evaluateDingTalkSendGuard', () => {
       now: t0 + 5_000,
     });
     expect(first.allowed).toBe(true);
-    expect(second.allowed).toBe(false);
-    if (!second.allowed) {
-      expect(second.reason).toContain('文字');
-    }
+    expect(second.allowed).toBe(true);
   });
 
-  it('unblocks the next text send after the 20s initiate window elapses', () => {
+  it('does not apply the former 20s initiate window', () => {
     const params = {
       command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
     };
@@ -110,7 +107,7 @@ describe('evaluateDingTalkSendGuard', () => {
     expect(
       evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1', now: t0 + 19_999 })
         .allowed,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1', now: t0 + 20_001 })
         .allowed,
@@ -143,7 +140,7 @@ describe('evaluateDingTalkSendGuard', () => {
     }
   });
 
-  it('blocks the second text send after one succeeds', () => {
+  it('allows a second text send after one succeeds while interval limiting is disabled', () => {
     const params = {
       command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
     };
@@ -160,10 +157,7 @@ describe('evaluateDingTalkSendGuard', () => {
     });
 
     const second = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
-    expect(second.allowed).toBe(false);
-    if (!second.allowed) {
-      expect(second.reason).toContain('文字');
-    }
+    expect(second.allowed).toBe(true);
   });
 
   it('allows text and image sends in the same minute when both succeed once', () => {
@@ -192,7 +186,7 @@ describe('evaluateDingTalkSendGuard', () => {
     expect(imageDecision.allowed).toBe(true);
   });
 
-  it('counts a failed send toward the 20s initiate window (retry blocked, later allowed)', () => {
+  it('allows immediate retries while ordinary-session interval limiting is disabled', () => {
     const params = {
       command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
     };
@@ -209,16 +203,16 @@ describe('evaluateDingTalkSendGuard', () => {
       now: t0,
     });
 
-    // 发起即计：失败重试在 20s 窗口内仍被挡（防止 example→summary 双发刷量）。
+    // 普通会话发送间隔限流已临时关闭，失败后可立即重试。
     const retry = evaluateDingTalkSendGuard({
       toolName: 'exec',
       params,
       sessionKey: 'sess-1',
       now: t0 + 5_000,
     });
-    expect(retry.allowed).toBe(false);
+    expect(retry.allowed).toBe(true);
 
-    // 窗口过后放行。
+    // 更晚的发送同样放行。
     const later = evaluateDingTalkSendGuard({
       toolName: 'exec',
       params,

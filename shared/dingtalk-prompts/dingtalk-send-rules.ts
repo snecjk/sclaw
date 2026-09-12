@@ -72,7 +72,7 @@ const DINGTALK_SEND_FORMAT_RULES_HEAD = [
   '   ```',
   '   分隔线与说明文案不得改写或省略。',
   DINGTALK_ARTIFACT_SEND_FORMAT_RULES,
-  '7. **安全限流**：禁止循环/批量 `dws chat message send`（含 shell `for`/`while`）；同一对话内 **文字** 与 **图片/文件** 分别限流：各 **每 20 秒最多发起 1 条**（**发起即计**：放行瞬间即记时间戳，失败/重试也占窗口；`--dry-run` 不计入）。**被挡时禁止绕过**——不要尝试 `sh -c`/heredoc/`2>&1` 套壳、`sai-cli message` 或换任何 CLI，SClaw 钩子正则扫命令文本里的 `dws chat message send`，套壳照样命中、绕不过。正确处置：等满 20 秒再发，或先 `--dry-run` 自检格式（不计窗口）',
+  '7. **安全发送**：禁止循环/批量 `dws chat message send`（含 shell `for`/`while`），一次命令只发送一条消息。普通会话当前不要求等待发送间隔，禁止在发送命令前拼接 `sleep` / `Start-Sleep`；需发送时直接执行单独的 `dws chat message send` 命令。不要尝试 `sh -c`/heredoc/`2>&1` 套壳、`sai-cli message` 或换其他 CLI 绕过安全检查。',
 ].join('\n');
 
 /** 对话场景规则 8：允许会话内简短确认。 */

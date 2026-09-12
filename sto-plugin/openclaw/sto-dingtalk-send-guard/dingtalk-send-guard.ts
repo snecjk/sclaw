@@ -30,6 +30,9 @@ const COMMAND_PARAM_KEYS = [
 ] as const;
 
 export const DINGTALK_SEND_MIN_INTERVAL_MS = 20_000;
+// Temporary switch: ordinary chat interval throttling is disabled. Batch
+// protection and payload validation stay active.
+export const DINGTALK_SEND_RATE_LIMIT_ENABLED = false;
 
 export type DingTalkSendRateLimitCategory = 'text' | 'image';
 
@@ -223,6 +226,7 @@ export function checkDingTalkSendRateLimit(
   category: DingTalkSendRateLimitCategory,
   now = Date.now(),
 ): { allowed: true } | { allowed: false; retryAfterMs: number } {
+  if (!DINGTALK_SEND_RATE_LIMIT_ENABLED) return { allowed: true };
   // 定时任务一次性执行，豁免 20s/条限流（支持向多名收件人并集发送）。
   if (isScheduledTaskSessionKey(sessionKey)) return { allowed: true };
   const scope = resolveRateLimitScope(sessionKey, category);

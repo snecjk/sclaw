@@ -330,7 +330,7 @@ describe('sto DingTalk send guard common extension', () => {
     }));
   });
 
-  it('centralizes rate limiting and successful-send deduplication', () => {
+  it('keeps ordinary interval limiting disabled while preserving successful-send deduplication', () => {
     const first = reserveDingTalkSend({
       sessionKey: 'session-1', toolCallId: 'first', category: 'text',
       recipientKey: 'user:u1', normalizedText: 'hello', scheduledExecution: false, now: 1_000,
@@ -339,7 +339,7 @@ describe('sto DingTalk send guard common extension', () => {
     expect(reserveDingTalkSend({
       sessionKey: 'session-1', toolCallId: 'rate', category: 'text',
       recipientKey: 'user:u2', normalizedText: 'different', scheduledExecution: false, now: 2_000,
-    })).toMatchObject({ allowed: false, code: 'rate_limited' });
+    })).toEqual({ allowed: true });
 
     completeDingTalkSend({
       sessionKey: 'session-1', toolCallId: 'first', success: true, now: 2_000,
