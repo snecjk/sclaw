@@ -5,6 +5,7 @@ import {
   buildDingTalkMentionSystemContext,
   buildDingTalkMentionSystemContextForScheduledTask,
   ensureChatSendMessageWithDingTalkMentions,
+  looksLikeDingTalkDriveUploadIntent,
   looksLikeDingTalkMentionSendIntent,
   parseDingTalkRecipientsFromText,
   stripDingTalkMentionContextForDisplay,
@@ -24,6 +25,19 @@ describe('looksLikeDingTalkMentionSendIntent', () => {
     expect(looksLikeDingTalkMentionSendIntent('分析一下这个群最近讨论')).toBe(false);
     expect(looksLikeDingTalkMentionSendIntent('查看和李峥的聊天')).toBe(false);
     expect(looksLikeDingTalkMentionSendIntent('告诉我群里说了什么')).toBe(false);
+  });
+});
+
+describe('looksLikeDingTalkDriveUploadIntent', () => {
+  it('detects explicit DingTalk Drive upload requests', () => {
+    expect(looksLikeDingTalkDriveUploadIntent('把报告上传到钉盘')).toBe(true);
+    expect(looksLikeDingTalkDriveUploadIntent('保存到钉钉云盘')).toBe(true);
+    expect(looksLikeDingTalkDriveUploadIntent('用钉盘分享这个文件')).toBe(true);
+  });
+
+  it('does not treat negated or unrelated mentions as drive upload requests', () => {
+    expect(looksLikeDingTalkDriveUploadIntent('不要上传到钉盘')).toBe(false);
+    expect(looksLikeDingTalkDriveUploadIntent('介绍一下钉盘功能')).toBe(false);
   });
 });
 
@@ -113,7 +127,7 @@ describe('dingtalk mention context', () => {
     expect(wrapped).toContain('upload_file_to_temp_oss');
     expect(wrapped).toContain('![文件名](在线地址)');
     expect(wrapped).toContain('[文件名](在线地址)');
-    expect(wrapped.indexOf('upload_file_to_temp_oss')).toBeLessThan(wrapped.indexOf('dws drive upload'));
+    expect(wrapped).toContain('1. 优先调用 Agent 工具');
     expect(buildDingTalkMentionRpcExtras(mentions, files)).toEqual({
       dingTalkMentions: mentions,
       dingTalkSendFileIntent: true,
@@ -129,6 +143,25 @@ describe('dingtalk mention context', () => {
       dingTalkSendFileIntent: true,
       dingTalkAttachedFiles: imageFiles,
     });
+  });
+
+  it('uses DingTalk Drive directly when the user explicitly requests it', () => {
+    const mentions = [{ type: 'user' as const, displayName: '张三', userId: 'u-1' }];
+    const files = [{
+      fileName: 'report.pdf',
+      filePath: '/tmp/report.pdf',
+      mimeType: 'application/pdf',
+    }];
+    const wrapped = appendDingTalkMentionContext(
+      '把这个文件上传到钉盘再发给张三',
+      mentions,
+      { sendFileIntent: true, attachedFiles: files },
+    );
+
+    expect(wrapped).toContain('用户已明确要求上传到钉盘/钉钉云盘');
+    expect(wrapped).toContain('禁止调用 `upload_file_to_temp_oss`');
+    expect(wrapped).toContain('1. 调用 `dws drive upload');
+    expect(wrapped).not.toContain('1. 优先调用 Agent 工具');
   });
 
   it('parses recipients from a stored prompt template', () => {

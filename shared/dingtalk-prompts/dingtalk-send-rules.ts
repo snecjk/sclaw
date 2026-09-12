@@ -12,7 +12,7 @@ import { DWS_CHAT_MESSAGE_SEND_AGENT_FORMAT_RULE } from '../dingtalk-send/dws-se
 export const DINGTALK_DRIVE_UPLOAD_CMD =
   'dws drive upload --file <本地路径（去掉 file:// 前缀）> -y --format json';
 
-/** Agent 本地文件转临时在线地址的首选工具（链接有效期 7 天）。 */
+/** Agent 本地文件转在线地址的首选工具。 */
 export const DINGTALK_TEMP_OSS_UPLOAD_TOOL =
   'upload_file_to_temp_oss（filePath=<本地路径>，可选 fileName=<文件名>）';
 
@@ -25,7 +25,7 @@ export const DINGTALK_ARTIFACT_URL_EMBED_RULE =
 
 /** 模块 A 规则 5–6 的短指针（模块 C / 附件工作流引用，避免再抄一遍细则）。 */
 export const DINGTALK_ARTIFACT_RULES_POINTER =
-  `产物分支遵守发送格式规则 5–6：在线 \`http(s)\` 地址按图片/文件类型使用 Markdown 嵌入；本地图片/文件须优先调用 \`${DINGTALK_TEMP_OSS_UPLOAD_TOOL}\` 取 \`data.url\`，仅当工具不可用或失败时才用 \`${DINGTALK_DRIVE_UPLOAD_CMD}\` 取 \`docUrl\` 兜底——**禁止**本地路径写入 \`--text\``;
+  `产物分支遵守发送格式规则 5–6：在线 \`http(s)\` 地址按图片/文件类型使用 Markdown 嵌入；若用户明确要求上传/保存到钉盘或钉钉云盘，直接调用 \`${DINGTALK_DRIVE_UPLOAD_CMD}\`，**禁止调用** \`upload_file_to_temp_oss\`；否则本地图片/文件优先调用 \`${DINGTALK_TEMP_OSS_UPLOAD_TOOL}\` 取 \`data.url\`，仅当工具不可用或失败时才用钉盘兜底——**禁止**本地路径写入 \`--text\``;
 
 /**
  * send-guard 拦到 `--text` 含本地产物路径时的拒因（与规则 5–6 同义、可操作）。
@@ -35,14 +35,27 @@ export const DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON = [
   '[SClaw 安全策略] 钉钉正文禁止含本地产物路径（`file://`、裸绝对路径、`.claw-output` 等，钉钉打不开）。',
   '分支：① 已有在线 `http(s)` → 按图片/文件类型用 Markdown 写入 `--text`（',
   DINGTALK_ARTIFACT_URL_EMBED_RULE,
-  '）；② 本地图片/文件 → 优先调用 Agent 工具 `',
+  '）；② 若用户明确要求上传/保存到钉盘或钉钉云盘 → 直接使用 `',
+  DINGTALK_DRIVE_UPLOAD_CMD,
+  '` 并取 `docUrl`，禁止调用 `upload_file_to_temp_oss`；③ 其他本地图片/文件 → 优先调用 Agent 工具 `',
   DINGTALK_TEMP_OSS_UPLOAD_TOOL,
   '`，从结果取 `data.url`，图片写成 `![文件名](data.url)`、普通文件写成 `[文件名](data.url)`，替换正文中的本地路径后再 `dws chat message send`；',
-  '③ 仅当该工具不可用或上传失败时，才使用 `',
+  '④ 仅当该工具不可用或上传失败时，才使用 `',
   DINGTALK_DRIVE_UPLOAD_CMD,
   '` 上传钉盘并取 `docUrl` 兜底；',
   '若上传失败则移除该产物链接，只发纯文字总结。',
 ].join('');
+
+/**
+ * 图片/文件分享规则 — UI @、口头发送与定时任务共用。
+ * 保留规则编号 5–6，便于附件工作流通过 `DINGTALK_ARTIFACT_RULES_POINTER` 引用。
+ */
+export const DINGTALK_ARTIFACT_SEND_FORMAT_RULES = [
+  '5. **产物分支（二选一，禁止把本地路径原样写入 `--text`）**：',
+  `   - **在线链接**（\`http(s)://\`，含工作流 \`artifacts[].url\` / \`previewUrl\` / \`tempUrl\` / 下载密钥链接等）：按类型嵌入 \`--text\`；${DINGTALK_ARTIFACT_URL_EMBED_RULE}`,
+  `   - **本地图片/文件**（\`file://\`、裸绝对路径如 \`/Users/.../.claw-output/报告.html\`、\`C:\\\\...\\\\.claw-output\\\\...\`、或 \`./.claw-output/...\`）：钉钉打不开，**禁止**写入 \`--text\`；必须先走规则 6 转成在线地址，再按在线链接规则嵌入`,
+  `6. **本地产物转在线地址**：若用户明确要求上传/保存到钉盘或钉钉云盘，直接用 \`${DINGTALK_DRIVE_UPLOAD_CMD}\`（**不需要 \`--space-id\`**）取 \`docUrl\`，**禁止调用** \`upload_file_to_temp_oss\`。否则优先调用 Agent 工具 \`${DINGTALK_TEMP_OSS_UPLOAD_TOOL}\`，从返回结果取 \`data.url\`；仅当工具不可用或上传失败时才用钉盘兜底。图片用 \`![文件名](在线地址)\`，普通文件用 \`[文件名](在线地址)\` 嵌入正文。两种上传都失败则移除该产物链接，仅发纯文字总结；\`drive upload\` 偶发失败最多重试 3 次再降级`,
+].join('\n');
 
 const DINGTALK_SEND_FORMAT_RULES_HEAD = [
   '钉钉发送格式规则：',
@@ -58,10 +71,7 @@ const DINGTALK_SEND_FORMAT_RULES_HEAD = [
   `   ${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`,
   '   ```',
   '   分隔线与说明文案不得改写或省略。',
-  '5. **产物分支（二选一，禁止把本地路径原样写入 `--text`）**：',
-  `   - **在线链接**（\`http(s)://\`，含工作流 \`artifacts[].url\` / \`previewUrl\` / \`tempUrl\` / 下载密钥链接等）：按类型嵌入 \`--text\`；${DINGTALK_ARTIFACT_URL_EMBED_RULE}`,
-  `   - **本地图片/文件**（\`file://\`、裸绝对路径如 \`/Users/.../.claw-output/报告.html\`、\`C:\\\\...\\\\.claw-output\\\\...\`、或 \`./.claw-output/...\`）：钉钉打不开，**禁止**写入 \`--text\`；必须先走规则 6 转成在线地址，再按在线链接规则嵌入`,
-  `6. **本地产物转在线地址**：优先调用 Agent 工具 \`${DINGTALK_TEMP_OSS_UPLOAD_TOOL}\`，从返回结果取 \`data.url\`（有效期 7 天）→ 图片用 \`![文件名](data.url)\`，普通文件用 \`[文件名](data.url)\` 嵌入正文。仅当工具不可用或上传失败时，才用 \`${DINGTALK_DRIVE_UPLOAD_CMD}\`（**不需要 \`--space-id\`**）取 \`docUrl\` 兜底。两种上传都失败则移除该产物链接，仅发纯文字总结；\`drive upload\` 偶发失败最多重试 3 次再降级`,
+  DINGTALK_ARTIFACT_SEND_FORMAT_RULES,
   '7. **安全限流**：禁止循环/批量 `dws chat message send`（含 shell `for`/`while`）；同一对话内 **文字** 与 **图片/文件** 分别限流：各 **每 20 秒最多发起 1 条**（**发起即计**：放行瞬间即记时间戳，失败/重试也占窗口；`--dry-run` 不计入）。**被挡时禁止绕过**——不要尝试 `sh -c`/heredoc/`2>&1` 套壳、`sai-cli message` 或换任何 CLI，SClaw 钩子正则扫命令文本里的 `dws chat message send`，套壳照样命中、绕不过。正确处置：等满 20 秒再发，或先 `--dry-run` 自检格式（不计窗口）',
 ].join('\n');
 
@@ -100,3 +110,9 @@ export const DINGTALK_ORAL_SEND_GUARD = [
   '- 有明确收件人姓名点名时，**禁止**调用 `share_to_dingtalk`（会唤起选人窗，无法按姓名直达）；须走搜人 + `dws chat message send`',
   '- 本护栏仅适用于无 @ 触发器的口头路径；有 @ 触发器的收件人 id 由结构化块提供，不适用本护栏',
 ].join('\n');
+
+/** 口头点名路径：收件人解析护栏 + 与 UI/定时任务相同的图片/文件规则。 */
+export const DINGTALK_ORAL_SEND_CONTEXT = [
+  DINGTALK_ORAL_SEND_GUARD,
+  DINGTALK_ARTIFACT_SEND_FORMAT_RULES,
+].join('\n\n');

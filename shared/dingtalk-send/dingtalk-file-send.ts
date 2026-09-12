@@ -31,10 +31,26 @@ export function shouldIncludeDingTalkFileSendWorkflow(
 export function buildDingTalkFileSendWorkflowContext(
   _mentions: DingTalkMention[],
   attachedFiles?: DingTalkAttachedFileHint[],
+  options?: { forceDingTalkDriveUpload?: boolean },
 ): string {
   const fileLines = attachedFiles?.map(
     (file) => `- ${file.fileName}（${file.mimeType}）→ ${file.filePath}`,
   ) ?? [];
+
+  const uploadSteps = options?.forceDingTalkDriveUpload
+    ? [
+        '**用户已明确要求上传到钉盘/钉钉云盘：禁止调用 `upload_file_to_temp_oss`。**',
+        `1. 调用 \`${DINGTALK_DRIVE_UPLOAD_CMD}\`（**不需要 \`--space-id\`**）→ 从返回 JSON 取 \`docUrl\``,
+        `2. 将 \`docUrl\` 按规则嵌入正文：${DINGTALK_ARTIFACT_URL_EMBED_RULE}`,
+        '3. `dws chat message send --group|--open-dingtalk-id <收件人ID> --title "消息" --text <含文件链接的完整正文含代发说明> --format json`',
+      ]
+    : [
+        '图片和普通文件（png/jpg/pdf/doc/ppt/zip 等）**必须**按顺序执行（工具与嵌入格式同发送格式规则 5–6）：',
+        `1. 优先调用 Agent 工具 \`${DINGTALK_TEMP_OSS_UPLOAD_TOOL}\` → 从返回结果取 \`data.url\``,
+        `2. 将 \`data.url\` 按规则嵌入正文：${DINGTALK_ARTIFACT_URL_EMBED_RULE}`,
+        '3. `dws chat message send --group|--open-dingtalk-id <收件人ID> --title "消息" --text <含文件链接的完整正文含代发说明> --format json`',
+        `4. 仅当 Agent 上传工具不可用或失败时，才用 \`${DINGTALK_DRIVE_UPLOAD_CMD}\`（**不需要 \`--space-id\`**）取 \`docUrl\` 兜底`,
+      ];
 
   return [
     '',
@@ -44,11 +60,7 @@ export function buildDingTalkFileSendWorkflowContext(
     '',
     '**目标：文字 + 图片/文件合成一条消息发送。** 先把本地附件转换为在线地址，再将地址嵌入文字正文，收件人点击链接即可查看或下载。',
     '',
-    '图片和普通文件（png/jpg/pdf/doc/ppt/zip 等）**必须**按顺序执行（工具与嵌入格式同发送格式规则 5–6）：',
-    `1. 优先调用 Agent 工具 \`${DINGTALK_TEMP_OSS_UPLOAD_TOOL}\` → 从返回结果取 \`data.url\`（有效期 7 天）`,
-    `2. 将 \`data.url\` 按规则嵌入正文：${DINGTALK_ARTIFACT_URL_EMBED_RULE}`,
-    '3. `dws chat message send --group|--open-dingtalk-id <收件人ID> --title "消息" --text <含文件链接的完整正文含代发说明> --format json`',
-    `4. 仅当 Agent 上传工具不可用或失败时，才用 \`${DINGTALK_DRIVE_UPLOAD_CMD}\`（**不需要 \`--space-id\`**）取 \`docUrl\` 兜底`,
+    ...uploadSteps,
     '',
     '最终合成示例（`--text` 值）：',
     '```',

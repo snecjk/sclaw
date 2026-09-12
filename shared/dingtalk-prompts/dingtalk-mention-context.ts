@@ -129,6 +129,8 @@ export function stripDingTalkMentionContextForDisplay(message: string): string {
 export interface DingTalkMentionContextOptions {
   sendFileIntent?: boolean;
   attachedFiles?: DingTalkAttachedFileHint[];
+  /** 用户明确要求产物保存到钉盘/钉钉云盘时，跳过临时 OSS 工具。 */
+  forceDingTalkDriveUpload?: boolean;
   /** 收件人块语义场景。`'scheduled-task'` 为定时任务必发语义；默认 `'chat'` 为对话 @ 需明确发送意图。 */
   scenario?: 'chat' | 'scheduled-task';
   /**
@@ -169,6 +171,16 @@ export function looksLikeDingTalkMentionSendIntent(text: string | undefined | nu
     return true;
   }
   return false;
+}
+
+/** 用户是否明确要求把文件上传或保存到钉盘。否定表达不算。 */
+export function looksLikeDingTalkDriveUploadIntent(text: string | undefined | null): boolean {
+  const trimmed = text?.trim();
+  if (!trimmed) return false;
+  const drive = '(?:钉盘|钉钉云盘)';
+  const negated = new RegExp(`(?:不要|不需要|无需|禁止|别|不准).{0,10}${drive}|${drive}.{0,10}(?:不要|不需要|无需|禁止|别|不准)`);
+  if (negated.test(trimmed)) return false;
+  return new RegExp(`(?:上传|传|放|存|保存|存储|同步)(?:到|至|进|入)?${drive}|(?:使用|用|走)${drive}|${drive}(?:里|中|上)?(?:上传|保存|存储|放|存|同步)`).test(trimmed);
 }
 
 /** 收件人 JSON 块头部 + 规则 1–3。chat-read 弱化「必须 send」措辞。 */
@@ -239,7 +251,9 @@ function buildFileSendContextIfAny(
   options?: DingTalkMentionContextOptions,
 ): string[] {
   return options?.sendFileIntent
-    ? [buildDingTalkFileSendWorkflowContext(mentions, options.attachedFiles)]
+    ? [buildDingTalkFileSendWorkflowContext(mentions, options.attachedFiles, {
+        forceDingTalkDriveUpload: options.forceDingTalkDriveUpload,
+      })]
     : [];
 }
 
@@ -271,7 +285,7 @@ function buildDingTalkMentionSystemContextForChatSend(
 ): string {
   return [
     ...buildRecipientHeader(mentions, 'chat-send'),
-    '4. **对话 @ 且用户已明确要求发送**：出现发给/发送给/推送给/转发给/分享给/把…发给…/发到群 等即为发送意图，须按规则 5 发送。**单独的「总结/分析/查看该群」不算发送意图。**「通知/告诉」单独出现也不算（除非同时有发给/发送给等）。',
+    '4. **对话 @ 且用户已明确要求发送**：出现发给/发送给/推送给/转发给/分享给/把…发给…/发到群，或本轮已携带待发送附件，即为发送意图；须按下方【钉钉发送格式规则】执行。**单独的「总结/分析/查看该群」不算发送意图。**「通知/告诉」单独出现也不算（除非同时有发给/发送给等）。',
     '5. **已明确要求发送时，直接发送，不要回头追问**。正文由你根据上下文组织；`--dry-run` 仅自检。**禁止原样执行**下方命令示例。',
     '6. ' + buildDingTalkReadHistoryGuidance(),
     ...buildSendFormatRules(),
@@ -329,17 +343,21 @@ export function appendDingTalkMentionContext(
 ): string {
   if (!hasResolvedDingTalkMentions(mentions)) return text;
 
-  const resolvedOptions: DingTalkMentionContextOptions =
-    options?.scenario === 'scheduled-task'
-      ? options
+  const forceDingTalkDriveUpload =
+    options?.forceDingTalkDriveUpload ?? looksLikeDingTalkDriveUploadIntent(text);
+  const resolvedOptions: DingTalkMentionContextOptions = {
+    ...options,
+    forceDingTalkDriveUpload,
+    ...(options?.scenario === 'scheduled-task'
+      ? {}
       : {
-          ...options,
           explicitSendIntent:
             options?.explicitSendIntent
-            ?? (options?.sendFileIntent === true
+            ?? (options?.sendFileIntent === true || forceDingTalkDriveUpload
               ? true
               : looksLikeDingTalkMentionSendIntent(text)),
-        };
+        }),
+  };
 
   const buildContext = resolveMentionSystemContextBuilder(options?.scenario);
   const header = [

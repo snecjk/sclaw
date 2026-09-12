@@ -5,9 +5,12 @@
  */
 export {
   DINGTALK_ARTIFACT_RULES_POINTER,
+  DINGTALK_ARTIFACT_SEND_FORMAT_RULES,
   DINGTALK_ARTIFACT_URL_EMBED_RULE,
   DINGTALK_DRIVE_UPLOAD_CMD,
+  DINGTALK_TEMP_OSS_UPLOAD_TOOL,
   DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON,
+  DINGTALK_ORAL_SEND_CONTEXT,
   DINGTALK_ORAL_SEND_GUARD,
   DINGTALK_SEND_FORMAT_RULES,
   DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
@@ -39,6 +42,7 @@ export {
   buildDingTalkMentionSystemContext,
   buildDingTalkMentionSystemContextForScheduledTask,
   ensureChatSendMessageWithDingTalkMentions,
+  looksLikeDingTalkDriveUploadIntent,
   looksLikeDingTalkMentionSendIntent,
   messageHasDingTalkRecipientContext,
   parseDingTalkRecipientsFromText,
@@ -56,6 +60,16 @@ import {
 import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
 
 const DWS_SEND_RE = /dws\s+chat\s+message\s+send\b/i;
+const SCHEDULED_DINGTALK_RULES_MARKER = '定时任务钉钉发送规则：';
+const SCHEDULED_DINGTALK_FORMAT_MARKER = '8. **定时任务**：';
+
+function promptHasScheduledTaskDingTalkRules(prompt: string): boolean {
+  return prompt.includes(SCHEDULED_DINGTALK_RULES_MARKER);
+}
+
+function promptHasScheduledTaskDingTalkFormat(prompt: string): boolean {
+  return prompt.includes(SCHEDULED_DINGTALK_FORMAT_MARKER);
+}
 
 /** 指令/上下文是否暗示需要钉钉发送格式（含收件人块或内嵌 send 命令）。 */
 export function promptNeedsDingTalkSendFormat(prompt: string | undefined | null): boolean {
@@ -80,10 +94,16 @@ export function buildScheduledTaskExecutionSystemPrompt(options?: {
 }): string {
   const prompt = options?.prompt ?? '';
   const parts = [SCHEDULED_TASK_CORE_PROMPT];
-  if (promptNeedsScheduledTaskDingTalkRules(prompt)) {
+  if (
+    promptNeedsScheduledTaskDingTalkRules(prompt)
+    && !promptHasScheduledTaskDingTalkRules(prompt)
+  ) {
     parts.push(SCHEDULED_TASK_DINGTALK_RULES);
-    parts.push(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
-  } else if (promptNeedsDingTalkSendFormat(prompt)) {
+  }
+  if (
+    promptNeedsDingTalkSendFormat(prompt)
+    && !promptHasScheduledTaskDingTalkFormat(prompt)
+  ) {
     parts.push(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
   }
   return parts.join('\n\n');
@@ -98,13 +118,19 @@ export function buildScheduledTaskExecutionSystemPrompt(options?: {
 export function buildScheduledTaskDingTalkPromptAppend(
   prompt: string | undefined | null,
 ): string | null {
-  if (promptNeedsScheduledTaskDingTalkRules(prompt)) {
-    return [SCHEDULED_TASK_DINGTALK_RULES, DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK].join(
-      '\n\n',
-    );
+  const source = prompt ?? '';
+  const parts: string[] = [];
+  if (
+    promptNeedsScheduledTaskDingTalkRules(source)
+    && !promptHasScheduledTaskDingTalkRules(source)
+  ) {
+    parts.push(SCHEDULED_TASK_DINGTALK_RULES);
   }
-  if (promptNeedsDingTalkSendFormat(prompt)) {
-    return DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK;
+  if (
+    promptNeedsDingTalkSendFormat(source)
+    && !promptHasScheduledTaskDingTalkFormat(source)
+  ) {
+    parts.push(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
   }
-  return null;
+  return parts.length > 0 ? parts.join('\n\n') : null;
 }

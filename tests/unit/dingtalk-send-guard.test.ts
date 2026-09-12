@@ -48,6 +48,12 @@ describe('classifyDwsChatMessageSendCategory', () => {
       'dws chat message send --user u1 --msg-type file --dentry-id d1 --space-id s1 --file-name "a.pdf" --format json';
     expect(classifyDwsChatMessageSendCategory(cmd)).toBe('image');
   });
+
+  it('keeps Markdown images sent through --text in the text bucket', () => {
+    const cmd =
+      'dws chat message send --user u1 --title "图片" --text "![截图](https://oss.example/a.png?token=1)" --format json';
+    expect(classifyDwsChatMessageSendCategory(cmd)).toBe('text');
+  });
 });
 
 describe('isSuccessfulDwsChatMessageSendResult', () => {
@@ -335,9 +341,7 @@ describe('resolveDwsChatMessageSendFileProtocolInText', () => {
       expect(result.reason).toContain('dws drive upload');
       expect(result.reason).toContain('docUrl');
       expect(result.reason).toContain('encodeURI');
-      expect(result.reason.indexOf('upload_file_to_temp_oss')).toBeLessThan(
-        result.reason.indexOf('dws drive upload'),
-      );
+      expect(result.reason).toContain('③ 其他本地图片/文件');
     }
   });
 

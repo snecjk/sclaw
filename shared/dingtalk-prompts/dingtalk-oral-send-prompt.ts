@@ -2,7 +2,10 @@
  * 口头「发给某人」意图检测与护栏导出。
  * 护栏正文 SSOT：`dingtalk-send-rules.ts` → `DINGTALK_ORAL_SEND_GUARD`。
  */
-export { DINGTALK_ORAL_SEND_GUARD } from './dingtalk-send-rules';
+export {
+  DINGTALK_ORAL_SEND_CONTEXT,
+  DINGTALK_ORAL_SEND_GUARD,
+} from './dingtalk-send-rules';
 import { DINGTALK_ORAL_SEND_GUARD } from './dingtalk-send-rules';
 
 /**

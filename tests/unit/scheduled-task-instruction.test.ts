@@ -14,6 +14,7 @@ import {
 } from '../../shared/scheduled-task-instruction';
 import { SCHEDULED_TASK_CORE_PROMPT as VENDORED_CORE } from '../../sto-plugin/openclaw/sto-scheduled-task-tool/shared/scheduled-task-core';
 import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
+import { appendDingTalkMentionContext } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
 
 describe('scheduled-task-instruction', () => {
   it('detects cron, Claude, and PI task execution session keys', () => {
@@ -143,6 +144,43 @@ describe('scheduled-task-instruction', () => {
     expect(withBlock).toContain(SCHEDULED_TASK_DINGTALK_RULES);
     expect(withBlock).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
     expect(withBlock).not.toContain(SCHEDULED_TASK_CORE_PROMPT);
+  });
+
+  it('does not append scheduled DingTalk modules that are already present', () => {
+    const completePrompt = [
+      DINGTALK_RECIPIENTS_MARKER,
+      SCHEDULED_TASK_DINGTALK_RULES,
+      DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
+    ].join('\n\n');
+
+    expect(buildScheduledTaskDingTalkPromptAppend(completePrompt)).toBeNull();
+    expect(buildScheduledTaskExecutionSystemPrompt({ prompt: completePrompt })).toBe(
+      SCHEDULED_TASK_CORE_PROMPT,
+    );
+  });
+
+  it('appends only the missing scheduled DingTalk module', () => {
+    const promptWithFormat = [
+      DINGTALK_RECIPIENTS_MARKER,
+      DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
+    ].join('\n\n');
+
+    expect(buildScheduledTaskDingTalkPromptAppend(promptWithFormat)).toBe(
+      SCHEDULED_TASK_DINGTALK_RULES,
+    );
+  });
+
+  it('does not duplicate format rules already built into scheduled mention context', () => {
+    const scheduledMentionPrompt = appendDingTalkMentionContext(
+      '执行任务',
+      [{ type: 'user', displayName: '张三', userId: 'u-001' }],
+      { scenario: 'scheduled-task' },
+    );
+    const appended = buildScheduledTaskDingTalkPromptAppend(scheduledMentionPrompt);
+
+    expect(appended).toBe(SCHEDULED_TASK_DINGTALK_RULES);
+    const combined = `${scheduledMentionPrompt}\n\n${appended}`;
+    expect(combined.match(/钉钉发送格式规则：/g)).toHaveLength(1);
   });
 
   it('deprecated full prompt is CORE + C + A composite', () => {

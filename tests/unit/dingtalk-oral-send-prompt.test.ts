@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DINGTALK_ORAL_SEND_CONTEXT,
   DINGTALK_ORAL_SEND_GUARD,
   DINGTALK_ORAL_SEND_PROMPT,
   looksLikeDingTalkOralSendIntent,
 } from '../../shared/dingtalk-prompts/dingtalk-oral-send-prompt';
 import { DINGTALK_ORAL_SEND_GUARD as GUARD_SSOT } from '../../shared/dingtalk-prompts';
-import { DINGTALK_ORAL_SEND_GUARD as VENDORED_GUARD } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-prompts/dingtalk-oral-send-prompt';
+import {
+  DINGTALK_ORAL_SEND_CONTEXT as VENDORED_CONTEXT,
+  DINGTALK_ORAL_SEND_GUARD as VENDORED_GUARD,
+} from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-prompts/dingtalk-oral-send-prompt';
 
 describe('looksLikeDingTalkOralSendIntent', () => {
   it('matches named recipient send phrases', () => {
@@ -35,5 +39,14 @@ describe('DINGTALK_ORAL_SEND_GUARD', () => {
     expect(DINGTALK_ORAL_SEND_PROMPT).toBe(DINGTALK_ORAL_SEND_GUARD);
     expect(DINGTALK_ORAL_SEND_GUARD).toBe(GUARD_SSOT);
     expect(VENDORED_GUARD).toBe(GUARD_SSOT);
+  });
+
+  it('combines the oral recipient guard with common artifact send rules', () => {
+    expect(DINGTALK_ORAL_SEND_CONTEXT).toContain(DINGTALK_ORAL_SEND_GUARD);
+    expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('upload_file_to_temp_oss');
+    expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('![文件名](在线地址)');
+    expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('[文件名](在线地址)');
+    expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('明确要求上传/保存到钉盘');
+    expect(VENDORED_CONTEXT).toBe(DINGTALK_ORAL_SEND_CONTEXT);
   });
 });

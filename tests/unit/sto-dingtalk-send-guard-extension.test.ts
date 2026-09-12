@@ -13,7 +13,10 @@ import {
   type DingTalkPendingContext,
   type StoDingTalkSendGuardPort,
 } from '../../electron/agent-extensions/extensions/sto-dingtalk-send-guard/capability';
-import { resolveDingTalkSendStaticProblem } from '../../electron/agent-extensions/extensions/sto-dingtalk-send-guard/command';
+import {
+  classifyDingTalkSend,
+  resolveDingTalkSendStaticProblem,
+} from '../../electron/agent-extensions/extensions/sto-dingtalk-send-guard/command';
 import { stoDingTalkSendGuardDefinition } from '../../electron/agent-extensions/extensions/sto-dingtalk-send-guard/definition';
 import {
   completeDingTalkSend,
@@ -122,6 +125,63 @@ describe('sto DingTalk send guard common extension', () => {
     });
   });
 
+  it('treats a pending attachment as explicit send intent', async () => {
+    const dependencies = createDependencies({
+      sessionKey: 'claude-dingtalk-file',
+      mentions: [{ type: 'user', displayName: '张三', userId: 'u-001' }],
+      userText: '这个文件',
+      writtenAt: Date.now(),
+      sendFileIntent: true,
+      attachedFiles: [{
+        fileName: 'report.pdf',
+        filePath: 'D:/workspace/report.pdf',
+        mimeType: 'application/pdf',
+      }],
+    });
+    const result = await buildClaudeAgentExtensions({
+      sessionKey: 'claude-dingtalk-file',
+      mode: 'interactive',
+      userPrompt: '这个文件',
+      entries: [{ common: stoDingTalkSendGuardDefinition }],
+      ...dependencies,
+    });
+
+    expect(result.options.systemPromptAppend).toContain('在线链接流程');
+    expect(result.options.systemPromptAppend).toContain('upload_file_to_temp_oss');
+    expect(result.options.systemPromptAppend).not.toContain('本轮禁止发送');
+  });
+
+  it('injects the direct DingTalk Drive branch when explicitly requested', async () => {
+    const dependencies = createDependencies({
+      sessionKey: 'claude-dingtalk-drive',
+      mentions: [{ type: 'user', displayName: '张三', userId: 'u-001' }],
+      userText: '把报告上传到钉盘再发给张三',
+      writtenAt: Date.now(),
+      sendFileIntent: true,
+      attachedFiles: [{
+        fileName: 'report.pdf',
+        filePath: 'D:/workspace/report.pdf',
+        mimeType: 'application/pdf',
+      }],
+    });
+    const result = await buildClaudeAgentExtensions({
+      sessionKey: 'claude-dingtalk-drive',
+      mode: 'interactive',
+      userPrompt: '把报告上传到钉盘再发给张三',
+      entries: [{ common: stoDingTalkSendGuardDefinition }],
+      ...dependencies,
+    });
+
+    expect(result.options.systemPromptAppend).toContain('用户已明确要求上传到钉盘/钉钉云盘');
+    expect(result.options.systemPromptAppend).toContain('禁止调用 `upload_file_to_temp_oss`');
+    expect(result.options.systemPromptAppend).not.toContain('1. 优先调用 Agent 工具');
+  });
+
+  it('keeps an OSS Markdown image in the text rate-limit bucket', () => {
+    const command = 'dws chat message send --user u1 --title "图片" --text "![截图](https://oss.example/a.png?token=1)" --format json';
+    expect(classifyDingTalkSend(command)).toBe('text');
+  });
+
   it('compiles prompt, patching, and completion into PI without registering a tool', async () => {
     const dependencies = createDependencies();
     const result = await buildPiAgentExtensions({
@@ -222,6 +282,10 @@ describe('sto DingTalk send guard common extension', () => {
     });
 
     expect(result.options.systemPromptAppend).toContain('dws chat message send');
+    expect(result.options.systemPromptAppend).toContain('upload_file_to_temp_oss');
+    expect(result.options.systemPromptAppend).toContain('![文件名](在线地址)');
+    expect(result.options.systemPromptAppend).toContain('[文件名](在线地址)');
+    expect(result.options.systemPromptAppend).toContain('明确要求上传/保存到钉盘');
   });
 
   it('reports a missing capability instead of partially installing the guard', async () => {

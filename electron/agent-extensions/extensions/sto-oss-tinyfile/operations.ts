@@ -5,7 +5,6 @@ import {
   type SclawToolOutcome,
 } from '../../../../shared/agent-extensions';
 import {
-  OSS_TINY_FILE_EXPIRES_SECONDS,
   STO_OSS_TINY_FILE_CAPABILITY,
 } from './capability';
 
@@ -27,7 +26,7 @@ async function run<T>(handler: () => Promise<T>): Promise<SclawToolOutcome<T>> {
       type: 'oss_file_uploaded',
       domain: 'oss',
       data: await handler(),
-      message: '文件已上传，在线地址有效期为 7 天。',
+      message: '文件已上传，可使用返回的在线地址。',
     };
   } catch (error) {
     return sclawToolFailure(
@@ -41,7 +40,7 @@ async function run<T>(handler: () => Promise<T>): Promise<SclawToolOutcome<T>> {
 export const uploadFileToTempOssTool: SclawToolDefinition<typeof uploadSchema> = {
   name: 'upload_file_to_temp_oss',
   label: '上传文件并获取在线地址',
-  description: '将一个本地文件上传到 STO OSS，返回有效期为 7 天的临时在线地址。',
+  description: '将一个本地文件上传到 STO OSS，并返回可访问的在线地址。',
   engines: ['claude', 'pi'],
   modes: ['interactive', 'scheduled'],
   parameters: uploadSchema,
@@ -62,7 +61,6 @@ export const uploadFileToTempOssTool: SclawToolDefinition<typeof uploadSchema> =
         ossKey: uploaded.ossKey,
         fileName: uploaded.name ?? fileName ?? null,
         fileType: uploaded.fileType,
-        expiresSeconds: OSS_TINY_FILE_EXPIRES_SECONDS,
         temporary: true,
       };
     });

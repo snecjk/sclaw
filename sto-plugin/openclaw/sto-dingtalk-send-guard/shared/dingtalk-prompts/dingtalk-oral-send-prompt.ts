@@ -3,7 +3,10 @@
  * Keep in sync with repository root `shared/dingtalk-prompts/dingtalk-oral-send-prompt.ts`.
  * Regenerate: `pnpm run sync:plugin-shared`
  */
-export { DINGTALK_ORAL_SEND_GUARD } from './dingtalk-send-rules';
+export {
+  DINGTALK_ORAL_SEND_CONTEXT,
+  DINGTALK_ORAL_SEND_GUARD,
+} from './dingtalk-send-rules';
 import { DINGTALK_ORAL_SEND_GUARD } from './dingtalk-send-rules';
 
 /**

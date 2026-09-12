@@ -15,7 +15,7 @@ import {
 } from './shared/dingtalk-prompts/dingtalk-mention-context.js';
 import { fixDwsChatMessageSendToolParamsForOpenClawExec } from './shared/dingtalk-send/dws-send-text.js';
 import {
-  DINGTALK_ORAL_SEND_GUARD,
+  DINGTALK_ORAL_SEND_CONTEXT,
   looksLikeDingTalkOralSendIntent,
 } from './shared/dingtalk-prompts/dingtalk-oral-send-prompt.js';
 import {
@@ -95,7 +95,7 @@ export default definePluginEntry({
       // 对话场景：口头护栏常驻（定时执行 session 不注）。有 @ 块时跳过（结构化路径优先）。
       // 分享选人窗：无 @、且非口头点名意图时注入。
       if (!isExecutionSession && !hasPendingMentions) {
-        appendBlocks.push(DINGTALK_ORAL_SEND_GUARD);
+        appendBlocks.push(DINGTALK_ORAL_SEND_CONTEXT);
         if (
           looksLikeDingTalkShareIntent(prompt)
           && !looksLikeDingTalkOralSendIntent(prompt)

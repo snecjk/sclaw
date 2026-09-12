@@ -93,7 +93,7 @@ describe('sto-oss-tinyfile common extension', () => {
     }));
   });
 
-  it('returns a seven-day temporary URL envelope', async () => {
+  it('returns an uploaded URL envelope without expiry guidance', async () => {
     const deps = dependencies();
     const outcome = await uploadFileToTempOssTool.execute({
       filePath: 'output/report.pdf',
@@ -115,10 +115,11 @@ describe('sto-oss-tinyfile common extension', () => {
       domain: 'oss',
       data: {
         url: 'https://oss.example.com/report.pdf?sig=1',
-        expiresSeconds: 604800,
         temporary: true,
       },
     });
+    expect(outcome).not.toHaveProperty('data.expiresSeconds');
+    expect(outcome.message).not.toMatch(/有效期|过期|7 天/);
     expect(deps.port.upload).toHaveBeenCalledWith(expect.objectContaining({
       filePath: 'output/report.pdf',
       cwd: 'D:/workspace',

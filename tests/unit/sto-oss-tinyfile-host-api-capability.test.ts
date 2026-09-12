@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { OSS_TINY_FILE_EXPIRES_SECONDS } from '../../electron/agent-extensions/extensions/sto-oss-tinyfile/capability';
 import { createHostApiOssTinyFilePort } from '../../electron/agent-extensions/extensions/sto-oss-tinyfile/host-api-capability';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('sto OSS tiny-file Host API capability', () => {
-  it('uploads with the fixed business type and seven-day expiry', async () => {
+  it('uploads with the fixed business type and configured backend parameters', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       url: 'https://oss.example.com/report.xlsx?sig=1',
       tempUrl: 'https://oss.example.com/report.xlsx?sig=1',
@@ -37,7 +38,7 @@ describe('sto OSS tiny-file Host API capability', () => {
       fileName: 'report.xlsx',
       cwd: 'D:/workspace',
       bizTypeEnum: 'claw_tiny_file',
-      expiresSeconds: 604800,
+      expiresSeconds: OSS_TINY_FILE_EXPIRES_SECONDS,
       source: 'sto-oss-tinyfile',
       includeDebugCurl: false,
     });
