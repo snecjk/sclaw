@@ -12,7 +12,7 @@ import {
 } from '../services/skills/session-skill-state-service';
 import { logger } from '../utils/logger';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
-import { sclawAgentExtensionState } from '../agent-extensions/runtime';
+import { claudeAgentExtensionState } from '../agent-extensions/adapters/claude/runtime';
 import {
   beginRuntimeSkillAccessTurn,
   clearRuntimeSkillAccess,
@@ -1892,7 +1892,7 @@ function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
   clearRuntimeSkillAccess(sessionKey);
-  sclawAgentExtensionState.clearSession(sessionKey);
+  claudeAgentExtensionState.clearSession(sessionKey);
   await ensureClaudeRuntimeReady();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   liveClaudeMessages.delete(sessionKey);

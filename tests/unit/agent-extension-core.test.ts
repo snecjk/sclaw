@@ -220,6 +220,7 @@ describe('agent extension registry validation', () => {
         'sto-workflow-tool',
         'sto-dingtalk-send-guard',
         'sto-skill-runtime',
+        'sto-oss-tinyfile',
       ]);
     expect(SCLAW_AGENT_EXTENSIONS[0].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS[1].common.engines).toEqual(['pi']);
@@ -227,6 +228,7 @@ describe('agent extension registry validation', () => {
     expect(SCLAW_AGENT_EXTENSIONS[3].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS[4].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS[5].common.engines).toEqual(['claude', 'pi']);
+    expect(SCLAW_AGENT_EXTENSIONS[6].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS.every((entry) => entry.native == null)).toBe(true);
   });
 

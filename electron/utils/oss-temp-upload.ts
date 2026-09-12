@@ -9,7 +9,7 @@ import { proxyAwareFetch } from './proxy-fetch';
 export const OSS_FILE_UPLOAD_PATH = '/agent/v1/oss-file/upload';
 export const OSS_FILE_GET_TEMP_URL_PATH = '/agent/v1/oss-file/getTempUrl';
 
-export type OssBizTypeEnum = 'temp' | 'workflow' | 'LLM' | 'skill';
+export type OssBizTypeEnum = 'temp' | 'workflow' | 'LLM' | 'skill' | 'claw_tiny_file';
 
 export type OssFileUploadResult = {
   ossKey: string;
@@ -29,6 +29,8 @@ export type UploadOssFileOptions = {
   logTag?: string;
   /** Include `debugCurl` in the upload result for client-side diagnostics. */
   includeDebugCurl?: boolean;
+  /** Abort the in-flight upload when the calling Agent turn is cancelled. */
+  signal?: AbortSignal;
 };
 
 const DEFAULT_EXPIRES_SECONDS = 86_400;
@@ -130,13 +132,15 @@ export async function uploadOssFile(
 
   const fileBuffer = await readFile(filePath);
   const baseUrl = await resolveStoBaseUrl();
-  const curl = buildOssFileUploadCurl({
-    baseUrl,
-    token,
-    filePath,
-    bizTypeEnum: options.bizTypeEnum,
-    expiresSeconds: options.expiresSeconds,
-  });
+  const debugCurl = options.includeDebugCurl
+    ? buildOssFileUploadCurl({
+        baseUrl,
+        token,
+        filePath,
+        bizTypeEnum: options.bizTypeEnum,
+        expiresSeconds: options.expiresSeconds,
+      })
+    : undefined;
   info(`[${logTag}] oss-upload start`, {
     filePath,
     fileName,
@@ -145,12 +149,11 @@ export async function uploadOssFile(
     endpoint: `${baseUrl}${OSS_FILE_UPLOAD_PATH}`,
     fileSizeBytes: fileBuffer.byteLength,
   });
-  info(`[${logTag}] oss-upload curl\n${curl}`);
-
   const response = await proxyAwareFetch(`${baseUrl}${OSS_FILE_UPLOAD_PATH}`, {
     method: 'POST',
     headers: buildStoMemoryCenterAuthHeaders(token),
     body: buildOssUploadFormData(fileBuffer, fileName, options),
+    signal: options.signal,
   });
 
   const rawText = await response.text().catch(() => '');
@@ -161,7 +164,6 @@ export async function uploadOssFile(
       filePath,
       fileName,
     });
-    error(`[${logTag}] oss-upload curl (retry)\n${curl}`);
     throw new Error(`OSS upload failed: ${response.status} ${rawText}`);
   }
 
@@ -174,7 +176,6 @@ export async function uploadOssFile(
       filePath,
       fileName,
     });
-    error(`[${logTag}] oss-upload curl (retry)\n${curl}`);
     throw new Error(`OSS upload failed: invalid JSON response (${rawText.slice(0, 200)})`);
   }
 
@@ -188,7 +189,7 @@ export async function uploadOssFile(
   });
   return {
     ...parsed,
-    debugCurl: options.includeDebugCurl ? curl : undefined,
+    debugCurl,
   };
 }
 

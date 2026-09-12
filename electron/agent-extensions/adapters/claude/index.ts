@@ -29,10 +29,10 @@ import {
 } from '../../../../shared/agent-extensions';
 import type { ClaudeRuntimeOptions } from '../../../engines/claude-runtime-extensions';
 import {
-  sclawAgentExtensionCapabilities,
-  sclawAgentExtensionLogger,
-  sclawAgentExtensionState,
-} from '../../runtime';
+  claudeAgentExtensionCapabilities,
+  claudeAgentExtensionLogger,
+  claudeAgentExtensionState,
+} from './runtime';
 import {
   isValidAgentExtensionId,
   isValidAgentExtensionResourceName,
@@ -207,9 +207,9 @@ export async function buildClaudeAgentExtensions(
   input: BuildClaudeAgentExtensionsInput,
 ): Promise<BuildClaudeAgentExtensionsResult> {
   const entries = input.entries ?? CLAUDE_AGENT_EXTENSIONS;
-  const capabilities = input.capabilities ?? sclawAgentExtensionCapabilities;
-  const stateManager = input.stateManager ?? sclawAgentExtensionState;
-  const extensionLogger = input.logger ?? sclawAgentExtensionLogger;
+  const capabilities = input.capabilities ?? claudeAgentExtensionCapabilities;
+  const stateManager = input.stateManager ?? claudeAgentExtensionState;
+  const extensionLogger = input.logger ?? claudeAgentExtensionLogger;
   const diagnostics = validateAgentExtensionRegistry(entries);
   const options: ClaudeRuntimeOptions = {};
   const usedExtensionIds = new Set<string>();

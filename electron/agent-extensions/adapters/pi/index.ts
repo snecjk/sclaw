@@ -1,6 +1,5 @@
 import type { InlineExtension } from '@earendil-works/pi-coding-agent';
 import {
-  SclawCapabilityRegistry,
   SclawExtensionStateManager,
   SclawToolExecutionError,
   buildSclawPrompt,
@@ -28,27 +27,13 @@ import {
   type RegisteredAgentExtension,
 } from '../../registry';
 import { selectPiAgentExtensions } from './registry';
-import { STO_BROWSER_BRIDGE_CAPABILITY } from '../../extensions/sto-browser-tool/capability';
-import { createHostApiBrowserBridgePort } from '../../extensions/sto-browser-tool/host-api-capability';
-import { STO_SCHEDULED_TASK_CAPABILITY } from '../../extensions/sto-scheduled-task-tool/capability';
-import { createHostApiScheduledTaskPort } from '../../extensions/sto-scheduled-task-tool/host-api-capability';
-import { STO_DINGTALK_SEND_GUARD_CAPABILITY } from '../../extensions/sto-dingtalk-send-guard/capability';
-import { createHostApiDingTalkSendGuardPort } from '../../extensions/sto-dingtalk-send-guard/host-api-capability';
-import { STO_SKILL_RUNTIME_CAPABILITY } from '../../extensions/sto-skill-runtime/capability';
-import { createHostApiSkillRuntimePort } from '../../extensions/sto-skill-runtime/host-api-capability';
-import { STO_WORKFLOW_CAPABILITY } from '../../extensions/sto-workflow-tool/capability';
-import { createHostApiWorkflowPort } from '../../extensions/sto-workflow-tool/host-api-capability';
+import { createHostApiAgentExtensionCapabilities } from '../../host-api-capabilities';
 import {
   beginRuntimeSkillAccessTurn,
   clearRuntimeSkillAccess,
 } from '../../extensions/sto-skill-runtime/access';
 
-const defaultCapabilities = new SclawCapabilityRegistry()
-  .provide(STO_BROWSER_BRIDGE_CAPABILITY, createHostApiBrowserBridgePort())
-  .provide(STO_SCHEDULED_TASK_CAPABILITY, createHostApiScheduledTaskPort())
-  .provide(STO_DINGTALK_SEND_GUARD_CAPABILITY, createHostApiDingTalkSendGuardPort())
-  .provide(STO_SKILL_RUNTIME_CAPABILITY, createHostApiSkillRuntimePort())
-  .provide(STO_WORKFLOW_CAPABILITY, createHostApiWorkflowPort());
+const defaultCapabilities = createHostApiAgentExtensionCapabilities();
 const defaultStateManager = new SclawExtensionStateManager();
 const defaultLogger: SclawExtensionLogger = {
   debug: (message, details) => console.debug(message, details ?? ''),

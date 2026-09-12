@@ -205,11 +205,6 @@ export async function loadClawInferenceRuntimeConfig(): Promise<void> {
   const ssoEnv = await getSsoEnvironment();
   const hqDomain = resolveHqInferencePortalDomain(ssoEnv);
   const siteDomain = resolveSiteInferencePortalDomain(ssoEnv);
-  logger.info(
-    `[ApolloConfig] Inference portal domains synced: ssoEnv=${ssoEnv ?? 'unknown'}, ` +
-      `hq=${hqDomain} (source=${hqInferencePortalDomain ? 'apollo' : 'fallback'}), ` +
-      `site=${siteDomain} (source=${siteInferencePortalDomain ? 'apollo' : 'fallback'})`,
-  );
 }
 
 export function hasHqInferencePortalDomainCached(): boolean {
@@ -280,7 +275,6 @@ function normalizeBalanceApplyUrl(value: string | null | undefined): string | nu
 export async function loadAppDevWhitelistUsers(): Promise<string[]> {
   const value = await fetchApolloConfigValue(APP_DEV_WHITELIST_USERS_KEY);
   const users = parseAppDevWhitelistUsers(value);
-  logger.info('[ApolloConfig] app-dev whitelist users loaded:', value, users);
   return users;
 }
 

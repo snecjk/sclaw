@@ -861,16 +861,18 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     } else if (phase === 'running') {
       this.clearRecovery(snapshot.sessionKey);
     }
-    const log = type === 'message.delta' || type === 'tool.updated' ? logger.debug : logger.info;
-    log('[chat-runtime]', {
-      sessionKey: snapshot.sessionKey,
-      runId: snapshot.runId,
-      idempotencyKey: snapshot.idempotencyKey,
-      eventType: type,
-      phase,
-      epoch: snapshot.epoch,
-      sequence: snapshot.sequence,
-    });
+    if (type !== 'message.delta' && type !== 'tool.updated') {
+      logger.info('[chat-runtime]', {
+        sessionKey: snapshot.sessionKey,
+        runId: snapshot.runId,
+        idempotencyKey: snapshot.idempotencyKey,
+        eventType: type,
+        phase,
+        epoch: snapshot.epoch,
+        sequence: snapshot.sequence,
+      });
+    }
+
     if (isTerminalChatRunPhase(phase) && type !== 'transcript.updated') {
       logger.info('[chat-runtime] run diagnostics', {
         sessionKey: snapshot.sessionKey,

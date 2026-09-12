@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { dialog, nativeImage } from 'electron';
 import crypto from 'node:crypto';
-import { extname, join } from 'node:path';
+import { extname, isAbsolute, join, resolve } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
-import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, stat, unlink } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
 import { existsSync } from 'node:fs';
@@ -61,6 +62,56 @@ function mimeToExt(mimeType: string): string {
 }
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
+const MAX_TEMP_OSS_FILE_BYTES = 200 * 1024 * 1024;
+
+function resolveTempOssUploadPath(filePath: string, cwd?: string): string {
+  const normalizedCwd = cwd?.trim();
+  if (/^file:\/\//iu.test(filePath)) return fileURLToPath(filePath);
+  if (/^~(?:[\\/]|$)/u.test(filePath)) {
+    return resolve(homedir(), filePath.slice(1).replace(/^[\\/]+/u, ''));
+  }
+  if (isAbsolute(filePath) || /^[A-Za-z]:[\\/]/u.test(filePath)) return filePath;
+  if (normalizedCwd) return resolve(resolveTempOssUploadPath(normalizedCwd), filePath);
+  return resolveWorkspaceFilePath(filePath);
+}
+
+async function validateTempOssUploadFile(filePath: string): Promise<void> {
+  let fileStat: Awaited<ReturnType<typeof stat>>;
+  try {
+    fileStat = await stat(filePath);
+  } catch {
+    throw Object.assign(new Error(`File not found: ${filePath}`), {
+      statusCode: 404,
+      errCode: 'OSS_FILE_NOT_FOUND',
+    });
+  }
+  if (!fileStat.isFile()) {
+    throw Object.assign(new Error('Selected path is not a regular file'), {
+      statusCode: 400,
+      errCode: 'OSS_FILE_NOT_REGULAR',
+    });
+  }
+  if (fileStat.size <= 0) {
+    throw Object.assign(new Error('File is empty'), {
+      statusCode: 400,
+      errCode: 'OSS_FILE_EMPTY',
+    });
+  }
+  if (fileStat.size > MAX_TEMP_OSS_FILE_BYTES) {
+    throw Object.assign(new Error('File cannot exceed 200 MiB'), {
+      statusCode: 413,
+      errCode: 'OSS_FILE_TOO_LARGE',
+    });
+  }
+}
+
+function fileRouteErrorStatus(error: unknown): number {
+  if (error && typeof error === 'object' && 'statusCode' in error) {
+    const statusCode = Number((error as { statusCode?: unknown }).statusCode);
+    if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 600) return statusCode;
+  }
+  return 500;
+}
 
 /**
  * Read file with EPERM/EACCES fallback: copy to temp directory and read from there.
@@ -69,8 +120,11 @@ const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 async function readFileWithFallback(filePath: string): Promise<Buffer> {
   try {
     return await readFile(filePath);
-  } catch (err: any) {
-    if (err.code === 'EPERM' || err.code === 'EACCES') {
+  } catch (err: unknown) {
+    const code = err && typeof err === 'object' && 'code' in err
+      ? String((err as { code?: unknown }).code)
+      : '';
+    if (code === 'EPERM' || code === 'EACCES') {
       const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-'));
       const tmpFile = join(tmpDir, 'tmpfile');
       try {
@@ -272,7 +326,8 @@ export async function handleFileRoutes(
       const body = await parseJsonBody<{
         filePath: string;
         fileName?: string;
-        bizTypeEnum?: 'temp' | 'workflow' | 'LLM' | 'skill';
+        cwd?: string;
+        bizTypeEnum?: 'temp' | 'workflow' | 'LLM' | 'skill' | 'claw_tiny_file';
         expiresSeconds?: number;
         /** Diagnostics tag for Main log grep, e.g. `dingtalk-share`. */
         source?: string;
@@ -283,7 +338,8 @@ export async function handleFileRoutes(
         sendJson(res, 400, { success: false, error: 'Missing filePath' });
         return true;
       }
-      const filePath = resolveWorkspaceFilePath(rawPath);
+      const filePath = resolveTempOssUploadPath(rawPath, body.cwd);
+      await validateTempOssUploadFile(filePath);
       const fileName = body.fileName?.trim() || filePath.split(/[\\/]/).pop() || 'file';
       const uploaded = await uploadOssFile(filePath, fileName, {
         bizTypeEnum: body.bizTypeEnum ?? 'temp',
@@ -301,7 +357,11 @@ export async function handleFileRoutes(
         ...(uploaded.debugCurl ? { debugCurl: uploaded.debugCurl } : {}),
       });
     } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
+      sendJson(res, fileRouteErrorStatus(error), {
+        success: false,
+        errCode: (error as { errCode?: string })?.errCode,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
     return true;
   }

@@ -12,6 +12,7 @@ import { stoDingTalkSendGuardDefinition } from './extensions/sto-dingtalk-send-g
 import { stoBrowserToolDefinition } from './extensions/sto-browser-tool/definition';
 import { piBrowserUseDefinition } from './extensions/pi-browser-use/definition';
 import { stoSkillRuntimeDefinition } from './extensions/sto-skill-runtime/definition';
+import { stoOssTinyFileDefinition } from './extensions/sto-oss-tinyfile/definition';
 
 export interface RegisteredAgentExtension {
   common: SclawAgentExtensionDefinition;
@@ -34,6 +35,8 @@ export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
   common: stoDingTalkSendGuardDefinition,
 }, {
   common: stoSkillRuntimeDefinition,
+}, {
+  common: stoOssTinyFileDefinition,
 }];
 
 const EXTENSION_ID_PATTERN = /^[a-z][a-z0-9-]{0,127}$/;
