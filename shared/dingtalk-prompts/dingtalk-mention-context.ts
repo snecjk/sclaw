@@ -150,6 +150,17 @@ export function looksLikeDingTalkMentionSendIntent(text: string | undefined | nu
   const trimmed = text?.trim();
   if (!trimmed) return false;
 
+  // 明确否定发送时，不得因后面的“发送给/发送到”字样误判。
+  if (/(?:不要|不需要|无需|禁止|别|不准|暂不|先不)\s*(?:再|进行)?\s*(?:发|发送|转发|推送|分享)/u.test(trimmed)) {
+    return false;
+  }
+
+  // 命令式“发送 + 任意业务内容 + 给/到目标”，覆盖“发送天气数据和截图到群聊”。
+  // 限定在句首或分句边界，避免把“查看别人发送到群里的截图”误判成本轮发送。
+  if (/(?:^|[，,。；;！!\n])\s*(?:请|再|然后|并|同时)?\s*(?:发|发送|转发|推送|分享).{0,100}(?:给|到|至)\s*(?:@|群|群聊|群里|钉钉|联系人|同事|部门|团队)/u.test(trimmed)) {
+    return true;
+  }
+
   // 明确「发给/发送给/推送给/转发给/分享给/发到群…」
   if (/(?:发给|发送给|推送给|转发给|转发到|分享给|发到(?:这个)?群|发到钉钉)/.test(trimmed)) {
     return true;
@@ -162,8 +173,8 @@ export function looksLikeDingTalkMentionSendIntent(text: string | undefined | nu
   if (/给[\u4e00-\u9fffA-Za-z0-9·•._-]{1,24}发(?:送|消息|一下|条|个|：|:)?/.test(trimmed)) {
     return true;
   }
-  // 「发送一下 / 发送出去 / 发送给…」
-  if (/发送(?:给|到|一下|出去|到群)/.test(trimmed)) {
+  // 「发送一下 / 发送出去」也须是句首或分句后的命令式表达。
+  if (/(?:^|[，,。；;！!\n])\s*(?:请|再|然后|并|同时)?\s*发送(?:给|到|一下|出去|到群)/u.test(trimmed)) {
     return true;
   }
   // 「发总结/报告到群」类

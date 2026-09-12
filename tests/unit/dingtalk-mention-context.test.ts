@@ -39,6 +39,18 @@ describe('looksLikeDingTalkDriveUploadIntent', () => {
     expect(looksLikeDingTalkDriveUploadIntent('不要上传到钉盘')).toBe(false);
     expect(looksLikeDingTalkDriveUploadIntent('介绍一下钉盘功能')).toBe(false);
   });
+
+  it('matches command-style sends with arbitrary content before the target', () => {
+    expect(looksLikeDingTalkMentionSendIntent(
+      '看一下最近三日上海天气情况，发送天气数据和截图到群聊 @Claw客户端开发测试群',
+    )).toBe(true);
+    expect(looksLikeDingTalkMentionSendIntent('发送运行结果和截图至 @测试群')).toBe(true);
+  });
+
+  it('does not turn negated or descriptive send phrases into send intent', () => {
+    expect(looksLikeDingTalkMentionSendIntent('不要发送天气截图到群聊 @测试群')).toBe(false);
+    expect(looksLikeDingTalkMentionSendIntent('查看别人发送到群里的截图')).toBe(false);
+  });
 });
 
 describe('dingtalk mention context', () => {

@@ -151,6 +151,32 @@ describe('sto DingTalk send guard common extension', () => {
     expect(result.options.systemPromptAppend).not.toContain('本轮禁止发送');
   });
 
+  it('treats command-style content sent to a selected group as explicit send intent', async () => {
+    const userPrompt = '看一下最近三日上海天气情况，发送天气数据和截图到群聊 @Claw客户端开发测试群';
+    const dependencies = createDependencies({
+      sessionKey: 'claude-dingtalk-weather-send',
+      mentions: [{
+        type: 'group',
+        displayName: 'Claw客户端开发测试群',
+        openConversationId: 'cid-test-group',
+      }],
+      userText: userPrompt,
+      writtenAt: Date.now(),
+    });
+    const result = await buildClaudeAgentExtensions({
+      sessionKey: 'claude-dingtalk-weather-send',
+      mode: 'interactive',
+      userPrompt,
+      entries: [{ common: stoDingTalkSendGuardDefinition }],
+      ...dependencies,
+    });
+
+    expect(result.options.systemPromptAppend).toContain('对话 @ 且用户已明确要求发送');
+    expect(result.options.systemPromptAppend).toContain('upload_file_to_temp_oss');
+    expect(result.options.systemPromptAppend).not.toContain('本轮默认禁止发送');
+    expect(result.options.systemPromptAppend).not.toContain('本轮禁止发送');
+  });
+
   it('injects the direct DingTalk Drive branch when explicitly requested', async () => {
     const dependencies = createDependencies({
       sessionKey: 'claude-dingtalk-drive',
