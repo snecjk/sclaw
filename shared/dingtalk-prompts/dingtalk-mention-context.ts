@@ -374,7 +374,7 @@ export function buildDingTalkMentionRpcExtras(
   const extras: Record<string, unknown> = { dingTalkMentions: mentions! };
   if (shouldIncludeDingTalkFileSendWorkflow(mentions, attachedFiles)) {
     extras.dingTalkSendFileIntent = true;
-    extras.dingTalkAttachedFiles = attachedFiles!.filter((file) => !file.mimeType.startsWith('image/'));
+    extras.dingTalkAttachedFiles = attachedFiles;
   }
   return extras;
 }

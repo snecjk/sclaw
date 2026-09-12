@@ -152,6 +152,7 @@ describe('scheduled-task-instruction', () => {
       DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
     );
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws chat message send');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('upload_file_to_temp_oss');
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws drive upload');
   });
 

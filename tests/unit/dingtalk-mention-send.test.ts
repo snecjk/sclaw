@@ -32,7 +32,7 @@ describe('preprocessChatSendParams', () => {
     expect(writePendingMock).toHaveBeenCalledOnce();
   });
 
-  it('injects file workflow when mentions and non-image attachments are present', async () => {
+  it('injects the preferred temporary-OSS workflow when mentions and attachments are present', async () => {
     const { preprocessChatSendParams } = await import('../../electron/utils/dingtalk-mention-send');
     const result = await preprocessChatSendParams({
       sessionKey: 'agent:main:abc',
@@ -48,7 +48,8 @@ describe('preprocessChatSendParams', () => {
       }],
     }) as Record<string, unknown>;
 
-    expect(String(result.message)).toContain('钉盘流程');
+    expect(String(result.message)).toContain('在线链接流程');
+    expect(String(result.message)).toContain('upload_file_to_temp_oss');
     expect(result.dingTalkAttachedFiles).toBeUndefined();
   });
 

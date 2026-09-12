@@ -101,7 +101,7 @@ describe('dingtalk mention context', () => {
     expect(buildDingTalkMentionRpcExtras(undefined)).toBeUndefined();
   });
 
-  it('adds file workflow extras only when mentions and non-image attachments coexist', () => {
+  it('adds online-link workflow extras when mentions and image/file attachments coexist', () => {
     const mentions = [{ type: 'group' as const, displayName: '自研 Claw', openConversationId: 'cid-1' }];
     const files = [{
       fileName: 'config.js',
@@ -109,18 +109,26 @@ describe('dingtalk mention context', () => {
       mimeType: 'text/javascript',
     }];
     const wrapped = appendDingTalkMentionContext('发给群', mentions, { sendFileIntent: true, attachedFiles: files });
-    expect(wrapped).toContain('钉盘流程');
-    expect(wrapped).toContain('drive upload');
+    expect(wrapped).toContain('在线链接流程');
+    expect(wrapped).toContain('upload_file_to_temp_oss');
+    expect(wrapped).toContain('![文件名](在线地址)');
+    expect(wrapped).toContain('[文件名](在线地址)');
+    expect(wrapped.indexOf('upload_file_to_temp_oss')).toBeLessThan(wrapped.indexOf('dws drive upload'));
     expect(buildDingTalkMentionRpcExtras(mentions, files)).toEqual({
       dingTalkMentions: mentions,
       dingTalkSendFileIntent: true,
       dingTalkAttachedFiles: files,
     });
-    expect(buildDingTalkMentionRpcExtras(mentions, [{
+    const imageFiles = [{
       fileName: 'a.png',
       filePath: '/tmp/a.png',
       mimeType: 'image/png',
-    }])).toEqual({ dingTalkMentions: mentions });
+    }];
+    expect(buildDingTalkMentionRpcExtras(mentions, imageFiles)).toEqual({
+      dingTalkMentions: mentions,
+      dingTalkSendFileIntent: true,
+      dingTalkAttachedFiles: imageFiles,
+    });
   });
 
   it('parses recipients from a stored prompt template', () => {
@@ -210,6 +218,7 @@ describe('dingtalk mention context scenario split', () => {
       { type: 'group' as const, displayName: '自研 Claw', openConversationId: 'cid-1' },
     ], { scenario: 'scheduled-task', sendFileIntent: true, attachedFiles: files });
     expect(ctx).toContain('指定即必发');
-    expect(ctx).toContain('钉盘流程');
+    expect(ctx).toContain('在线链接流程');
+    expect(ctx).toContain('upload_file_to_temp_oss');
   });
 });

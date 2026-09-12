@@ -320,7 +320,7 @@ describe('resolveDwsChatMessageSendFileProtocolInText', () => {
     resetDingTalkSendRateLimitForTests();
   });
 
-  it('blocks file:// path in --text and points to drive upload', () => {
+  it('blocks file:// path in --text and points to temporary OSS first', () => {
     const cmd =
       'dws chat message send --user u1 --text "周报：file:///Users/yaolei/.claw-output/report.html" --format json';
     expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).not.toBeNull();
@@ -328,9 +328,16 @@ describe('resolveDwsChatMessageSendFileProtocolInText', () => {
     expect(result.allowed).toBe(false);
     if (!result.allowed) {
       expect(result.reason).toContain('本地产物路径');
+      expect(result.reason).toContain('upload_file_to_temp_oss');
+      expect(result.reason).toContain('data.url');
+      expect(result.reason).toContain('![文件名](在线地址)');
+      expect(result.reason).toContain('[文件名](在线地址)');
       expect(result.reason).toContain('dws drive upload');
       expect(result.reason).toContain('docUrl');
       expect(result.reason).toContain('encodeURI');
+      expect(result.reason.indexOf('upload_file_to_temp_oss')).toBeLessThan(
+        result.reason.indexOf('dws drive upload'),
+      );
     }
   });
 
@@ -342,6 +349,7 @@ describe('resolveDwsChatMessageSendFileProtocolInText', () => {
     expect(result.allowed).toBe(false);
     if (!result.allowed) {
       expect(result.reason).toContain('本地产物路径');
+      expect(result.reason).toContain('upload_file_to_temp_oss');
       expect(result.reason).toContain('drive upload');
     }
   });
