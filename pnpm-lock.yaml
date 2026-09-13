@@ -133,6 +133,9 @@ importers:
       pg:
         specifier: 8.11.3
         version: 8.11.3
+      pi-memory:
+        specifier: 0.4.2
+        version: 0.4.2(@earendil-works/pi-ai@0.84.4(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@3.25.76))(ws@8.21.0)(zod@3.25.76))(@earendil-works/pi-coding-agent@0.84.4(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@3.25.76))(ws@8.21.0)(zod@3.25.76))
       posthog-node:
         specifier: ^5.28.0
         version: 5.38.2
@@ -6094,6 +6097,13 @@ packages:
 
   pgpass@1.0.6:
     resolution: {integrity: sha512-lqIfH7bdgsxHAY/ZnUOwm+aCFKrsHBDhSFuk9O0B9uCqJAIkrKTo/+LQqLPLUS4e04+jCmQVikxE3QipH5chPw==}
+
+  pi-memory@0.4.2:
+    resolution: {integrity: sha512-voH+1MalADyVN23p79g4atdtPxzr1bDcfk1y0uCJL0xfodiSzNA5V5CcmODBTtHlrQzDT+AgasYPlgNWg8YPRQ==}
+    engines: {node: '>=22.19.0'}
+    peerDependencies:
+      '@earendil-works/pi-ai': '>=0.81.1'
+      '@earendil-works/pi-coding-agent': '>=0.81.1'
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -14485,6 +14495,11 @@ snapshots:
       split2: 4.2.0
 
   pgpass@1.0.6: {}
+
+  pi-memory@0.4.2(@earendil-works/pi-ai@0.84.4(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@3.25.76))(ws@8.21.0)(zod@3.25.76))(@earendil-works/pi-coding-agent@0.84.4(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@3.25.76))(ws@8.21.0)(zod@3.25.76)):
+    dependencies:
+      '@earendil-works/pi-ai': 0.84.4(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@3.25.76))(ws@8.21.0)(zod@3.25.76)
+      '@earendil-works/pi-coding-agent': 0.84.4(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@3.25.76))(ws@8.21.0)(zod@3.25.76)
 
   picocolors@1.1.1: {}
 

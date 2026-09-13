@@ -214,7 +214,7 @@ describe('runMainChatSend memory boundary', () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
-  it('skips remote memory retrieval when personalized memory is disabled', async () => {
+  it('skips remote memory retrieval and capture when cloud memory is disabled', async () => {
     getSettingMock.mockResolvedValue(false);
     const emit = vi.fn();
     const dispatch = vi.fn().mockResolvedValue({ success: true, result: { runId: 'run-no-memory' } });
@@ -234,8 +234,33 @@ describe('runMainChatSend memory boundary', () => {
       expect.anything(),
       { injectedExecutionMemories: [] },
     );
-    expect(beginMock).toHaveBeenCalledWith(expect.objectContaining({ memories: [] }));
+    expect(beginMock).not.toHaveBeenCalled();
+    expect(bindMock).not.toHaveBeenCalled();
+    expect(rejectMock).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps cloud memory retrieval disabled when the preference cannot be read', async () => {
+    getSettingMock.mockRejectedValue(new Error('settings unavailable'));
+    const dispatch = vi.fn().mockResolvedValue({ success: true, result: { runId: 'run-default-off' } });
+    const prepareInjection = vi.fn((params) => params);
+
+    await runMainChatSend({} as never, {
+      sessionKey: 'agent:main:memory-default-off',
+      message: '查询数据',
+      sourceText: '查询数据',
+      idempotencyKey: 'memory-default-off-id',
+      engineType: 'openclaw',
+    }, prepareInjection, dispatch);
+
+    expect(prepareMock).not.toHaveBeenCalled();
+    expect(prepareInjection).toHaveBeenCalledWith(
+      expect.anything(),
+      { injectedExecutionMemories: [] },
+    );
+    expect(beginMock).not.toHaveBeenCalled();
+    expect(bindMock).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 

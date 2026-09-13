@@ -27,7 +27,7 @@ export interface AppSettings {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
-  /** Whether answer preparation may retrieve personalized memory from the remote service. */
+  /** Whether turns may retrieve or capture memory through the remote service. */
   personalizedMemoryEnabled: boolean;
   /** When true, keep the system awake while SClaw is running. */
   preventSystemSleep: boolean;
@@ -107,7 +107,7 @@ function createDefaultSettings(): AppSettings {
     language: resolveSupportedLanguage(getSystemLocale()),
     startMinimized: false,
     launchAtStartup: false,
-    personalizedMemoryEnabled: true,
+    personalizedMemoryEnabled: false,
     preventSystemSleep: false,
     // Telemetry is disabled by default for faster cold starts
     // Users can enable it in Settings > Advanced if they want to help improve the product

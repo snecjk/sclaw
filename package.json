@@ -128,6 +128,7 @@
     "node-machine-id": "^1.1.12",
     "ollama": "^0.5.18",
     "pg": "8.11.3",
+    "pi-memory": "0.4.2",
     "posthog-node": "^5.28.0",
     "pptx-preview": "^1.0.7",
     "redis": "^5.12.1",

@@ -216,6 +216,7 @@ describe('agent extension registry validation', () => {
       .toEqual([
         'sto-browser-tool',
         'pi-browser-use',
+        'pi-memory',
         'sto-scheduled-task-tool',
         'sto-workflow-tool',
         'sto-dingtalk-send-guard',
@@ -224,11 +225,12 @@ describe('agent extension registry validation', () => {
       ]);
     expect(SCLAW_AGENT_EXTENSIONS[0].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS[1].common.engines).toEqual(['pi']);
-    expect(SCLAW_AGENT_EXTENSIONS[2].common.engines).toBeUndefined();
-    expect(SCLAW_AGENT_EXTENSIONS[3].common.engines).toEqual(['claude', 'pi']);
+    expect(SCLAW_AGENT_EXTENSIONS[2].common.engines).toEqual(['pi']);
+    expect(SCLAW_AGENT_EXTENSIONS[3].common.engines).toBeUndefined();
     expect(SCLAW_AGENT_EXTENSIONS[4].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS[5].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS[6].common.engines).toEqual(['claude', 'pi']);
+    expect(SCLAW_AGENT_EXTENSIONS[7].common.engines).toEqual(['claude', 'pi']);
     expect(SCLAW_AGENT_EXTENSIONS.every((entry) => entry.native == null)).toBe(true);
   });
 

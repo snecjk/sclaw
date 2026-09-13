@@ -2,12 +2,21 @@ import { SCLAW_AGENT_EXTENSIONS, type RegisteredAgentExtension } from '../../reg
 import { isEmbedAppChatSessionKey } from '../../../../shared/session-type';
 import { WEB_BRIDGE_ORDINARY_CHAT_ENABLED } from '../../../../shared/browser-bridge/ship-gate';
 import { buildPiBrowserUseExtension } from '../../extensions/pi-browser-use/pi';
+import {
+  buildPiMemoryExtension,
+  PI_MEMORY_TOOL_NAMES,
+} from '../../extensions/pi-memory/pi';
 import type { PiNativeContribution } from './types';
 
 const PI_NATIVE_CONTRIBUTIONS: Readonly<Record<string, PiNativeContribution>> = {
   'pi-browser-use': {
     mode: 'replace',
     build: buildPiBrowserUseExtension,
+  },
+  'pi-memory': {
+    mode: 'replace',
+    claims: { tools: PI_MEMORY_TOOL_NAMES },
+    build: buildPiMemoryExtension,
   },
 };
 

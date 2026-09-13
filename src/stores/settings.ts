@@ -96,7 +96,7 @@ const defaultSettings = {
   language: resolveSupportedLanguage(typeof navigator !== 'undefined' ? navigator.language : undefined),
   startMinimized: false,
   launchAtStartup: false,
-  personalizedMemoryEnabled: true,
+  personalizedMemoryEnabled: false,
   skillDiscoveryEnabled: true,
   preventSystemSleep: false,
   // Telemetry disabled by default for faster cold starts

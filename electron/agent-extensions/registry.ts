@@ -11,6 +11,7 @@ import { stoWorkflowToolDefinition } from './extensions/sto-workflow-tool/defini
 import { stoDingTalkSendGuardDefinition } from './extensions/sto-dingtalk-send-guard/definition';
 import { stoBrowserToolDefinition } from './extensions/sto-browser-tool/definition';
 import { piBrowserUseDefinition } from './extensions/pi-browser-use/definition';
+import { piMemoryDefinition } from './extensions/pi-memory/definition';
 import { stoSkillRuntimeDefinition } from './extensions/sto-skill-runtime/definition';
 import { stoOssTinyFileDefinition } from './extensions/sto-oss-tinyfile/definition';
 
@@ -27,6 +28,8 @@ export const SCLAW_AGENT_EXTENSIONS: readonly RegisteredAgentExtension[] = [{
   common: stoBrowserToolDefinition,
 }, {
   common: piBrowserUseDefinition,
+}, {
+  common: piMemoryDefinition,
 }, {
   common: stoScheduledTaskToolDefinition,
 }, {

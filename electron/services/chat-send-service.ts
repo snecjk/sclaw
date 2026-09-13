@@ -57,13 +57,13 @@ export function runMainChatSend(
       };
     }
     const personalizedMemoryEnabled = await getSetting('personalizedMemoryEnabled').catch((error) => {
-      logger.warn('[memory] failed to read personalized memory preference; keeping retrieval enabled', {
+      logger.warn('[memory] failed to read cloud memory preference; keeping cloud memory disabled', {
         error: String(error),
       });
-      return true;
+      return false;
     });
     const skipRead = input.memoryPolicy?.skipRead === true || !personalizedMemoryEnabled;
-    const skipWrite = input.memoryPolicy?.skipWrite === true;
+    const skipWrite = input.memoryPolicy?.skipWrite === true || !personalizedMemoryEnabled;
     const showPreparationProgress = runtime.runtimePolicy.origin === 'interactive';
     if (showPreparationProgress && !skipRead) {
       emitAgentPreparationProgress(

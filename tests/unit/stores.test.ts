@@ -20,7 +20,7 @@ describe('Settings Store', () => {
       autoDownloadUpdate: true,
       startMinimized: false,
       launchAtStartup: false,
-      personalizedMemoryEnabled: true,
+      personalizedMemoryEnabled: false,
       skillDiscoveryEnabled: true,
       updateChannel: 'stable',
     });

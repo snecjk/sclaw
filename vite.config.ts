@@ -3,6 +3,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
+import { buildSync } from 'esbuild';
 import { resolve } from 'path';
 import {
   resolveAgentLoopBuildConfig,
@@ -22,6 +23,26 @@ function copyPiWindowsHidePreloadCjs(outDir: string) {
   if (!existsSync(src)) return;
   mkdirSync(outDir, { recursive: true });
   copyFileSync(src, resolve(outDir, 'windows-hide-preload.cjs'));
+}
+
+function bundlePiMemoryExtension(outDir: string) {
+  mkdirSync(outDir, { recursive: true });
+  buildSync({
+    entryPoints: [resolve(__dirname, 'node_modules/pi-memory/index.ts')],
+    outfile: resolve(outDir, 'pi-memory.mjs'),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+    sourcemap: false,
+    logLevel: 'warning',
+    external: [
+      '@earendil-works/pi-ai',
+      '@earendil-works/pi-ai/*',
+      '@earendil-works/pi-coding-agent',
+      '@earendil-works/pi-coding-agent/*',
+    ],
+  });
 }
 
 // https://vitejs.dev/config/
@@ -159,7 +180,9 @@ export default defineConfig(({ mode }) => {
               {
                 name: 'copy-pi-windows-hide-preload-cjs',
                 closeBundle() {
-                  copyPiWindowsHidePreloadCjs(resolve(__dirname, 'dist-electron/pi-runtime'));
+                  const outDir = resolve(__dirname, 'dist-electron/pi-runtime');
+                  copyPiWindowsHidePreloadCjs(outDir);
+                  bundlePiMemoryExtension(outDir);
                 },
               },
             ],
