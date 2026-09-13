@@ -457,7 +457,7 @@ export function FilePreviewViewer({
       if (officeError.includes('EPERM') || officeError.includes('EACCES')) {
         friendlyError = '文件被系统锁定，暂时无法预览';
       } else if (officeError.includes('ENOENT')) {
-        friendlyError = '文件不存在或路径有误';
+        friendlyError = '文件已清理、不存在或路径有误';
       }
       return (
         <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-sm text-muted-foreground', className)}>

@@ -46,6 +46,7 @@ import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
 import { ChromeAttachConsentDialog } from './components/browser-bridge/ChromeAttachConsentDialog';
 import { ChromeBridgeInstallDialog } from './components/browser-bridge/ChromeBridgeInstallDialog';
 import { ThemeController } from './components/theme/ThemeController';
+import { StorageReminderBanner } from './components/storage/StorageReminderBanner';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -306,6 +307,7 @@ function App() {
           <AppShellLayoutProvider>
             <ChatResultNotificationNavigator />
             <WorkflowCompletionNotifier />
+            <StorageReminderBanner />
             <Routes>
               {/* SSO Login page */}
               <Route path="/login" element={<Login />} />

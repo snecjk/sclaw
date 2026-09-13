@@ -62,6 +62,7 @@ import { handleAppDevRoutes } from './routes/app-dev';
 import { handleLearningCenterRoutes } from './routes/learning-center';
 import { handleAppExternalServiceRoutes } from './routes/app-external-services';
 import { handleAppTemplateRoutes } from './routes/app-templates';
+import { handleStorageRoutes } from './routes/storage';
 
 import { sendJson } from './route-utils';
 
@@ -81,6 +82,7 @@ const routeHandlers: RouteHandler[] = [
   handleAppRoutes,
   handleGatewayRoutes,
   handleSettingsRoutes,
+  handleStorageRoutes,
   handleMoreAppsRoutes,
   handleProviderRoutes,
   handleStoSyncRoutes,

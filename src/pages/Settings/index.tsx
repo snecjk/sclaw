@@ -30,6 +30,7 @@ import { UpdateChangelogPanel } from '@/components/settings/update/UpdateChangel
 import { DwsCliSettings } from '@/components/settings/DwsCliSettings';
 import { BrowserBridgeSettings } from '@/components/settings/BrowserBridgeSettings';
 import { SettingsShell, type SettingsSectionId } from '@/components/settings/SettingsShell';
+import { StorageSettings } from './StorageSettings';
 import {
   getGatewayWsDiagnosticEnabled,
   invokeIpc,
@@ -484,6 +485,7 @@ export function Settings() {
     : location.pathname.startsWith('/settings/models') ? 'models'
     : location.pathname.startsWith('/settings/channels') ? 'channels'
     : location.pathname.startsWith('/settings/gateway') ? 'gateway'
+    : location.pathname.startsWith('/settings/storage') ? 'storage'
     : location.pathname.startsWith('/settings/updates') ? 'updates'
     : location.pathname.startsWith('/settings/developer') ? 'developer'
     : 'general';
@@ -503,6 +505,7 @@ export function Settings() {
         {activeSection === 'agents' && <Agents />}
         {activeSection === 'models' && <Models />}
         {activeSection === 'channels' && <Channels />}
+        {activeSection === 'storage' && <StorageSettings />}
         {activeSection === 'general' && (
     <>
       <header className="shrink-0">

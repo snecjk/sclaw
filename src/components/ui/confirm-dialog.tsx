@@ -2,7 +2,7 @@
  * ConfirmDialog - In-DOM confirmation dialog (replaces window.confirm)
  * Keeps focus within the renderer to avoid Windows focus loss after native dialogs.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,7 @@ interface ConfirmDialogProps {
   open: boolean;
   title: string;
   message: string;
+  children?: ReactNode;
   confirmLabel?: string;
   /** Shown on the confirm button while an async onConfirm is in flight. */
   confirmingLabel?: string;
@@ -28,6 +29,7 @@ export function ConfirmDialog({
   open,
   title,
   message,
+  children,
   confirmLabel = 'OK',
   confirmingLabel,
   cancelLabel = 'Cancel',
@@ -112,6 +114,7 @@ export function ConfirmDialog({
         <p className="mt-2 text-[13px] leading-relaxed text-[var(--sto-text-tertiary)]">
           {message}
         </p>
+        {children}
         <div className="sto-dialog-footer mt-5">
           <Button
             ref={cancelRef}

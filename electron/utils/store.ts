@@ -81,6 +81,10 @@ export interface AppSettings {
 
   /** 浏览器自动化总开关：off 全链路禁用；dom/ax 为感知引擎。 */
   browserAutomationLevel: 'off' | 'dom' | 'ax';
+
+  // Storage
+  storageReminderEnabled: boolean;
+  storageReminderLastShownLocalDate: string | null;
 }
 
 /**
@@ -147,6 +151,9 @@ function createDefaultSettings(): AppSettings {
     channelSessionIdleHours: 24,
 
     browserAutomationLevel: 'dom',
+
+    storageReminderEnabled: true,
+    storageReminderLastShownLocalDate: null,
   };
 }
 

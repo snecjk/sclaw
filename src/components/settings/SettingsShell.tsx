@@ -2,7 +2,7 @@
  * Settings shell — two-column layout: back + nav (left) and section content (right).
  */
 import type { ComponentType, ReactNode } from 'react';
-import { ArrowLeft, Terminal } from 'lucide-react';
+import { ArrowLeft, HardDrive, Terminal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,9 @@ import {
   stoSettingsContentPanelWrapClass,
   stoSettingsContentInnerClass,
 } from '@/lib/surfaces';
+import { maxStorageSeverity } from '../../../shared/storage-management';
+import { useSettingsStore } from '@/stores/settings';
+import { useStorageStore } from '@/stores/storage';
 
 export type SettingsSectionId =
   | 'general'
@@ -28,6 +31,7 @@ export type SettingsSectionId =
   | 'models'
   | 'channels'
   | 'gateway'
+  | 'storage'
   | 'updates'
   | 'developer';
 
@@ -61,6 +65,10 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
   const navigate = useNavigate();
   const isMac = window.electron?.platform === 'darwin';
   const isWindows = window.electron?.platform === 'win32';
+  const storageOverview = useStorageStore((state) => state.overview);
+  const storageReminderEnabled = useSettingsStore((state) => state.storageReminderEnabled);
+  const showStorageBadge = storageReminderEnabled && storageOverview != null
+    && maxStorageSeverity(storageOverview.disk.severity, storageOverview.managedSeverity) !== 'normal';
 
   const workspaceItems: SettingsNavItem[] = [
     { id: 'agents', path: '/settings/agents', label: t('common:sidebar.agents'), icon: SettingsAgentsIcon },
@@ -70,6 +78,7 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
 
   const systemItems: SettingsNavItem[] = [
     { id: 'gateway', path: '/settings/gateway', label: t('settings:gateway.title'), icon: SettingsGatewayIcon },
+    { id: 'storage', path: '/settings/storage', label: t('settings:storage.title'), icon: HardDrive },
     { id: 'updates', path: '/settings/updates', label: t('common:sidebar.checkUpdates'), icon: SettingsUpdatesIcon },
   ];
 
@@ -150,6 +159,7 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
                     >
                       <item.icon className={settingsNavIconClass} />
                       {item.label}
+                      {item.id === 'storage' && showStorageBadge ? <span className="ml-auto h-2 w-2 rounded-full bg-red-500" aria-label={t('settings:storage.warningBadge')} /> : null}
                     </button>
                 ))}
               </div>

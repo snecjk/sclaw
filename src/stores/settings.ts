@@ -28,6 +28,8 @@ interface SettingsState {
   preventSystemSleep: boolean;
   telemetryEnabled: boolean;
   browserAutomationLevel: BrowserAutomationLevel;
+  storageReminderEnabled: boolean;
+  storageReminderLastShownLocalDate: string | null;
 
   // Gateway
   gatewayAutoStart: boolean;
@@ -67,6 +69,8 @@ interface SettingsState {
   setPreventSystemSleep: (value: boolean) => void;
   setTelemetryEnabled: (value: boolean) => void;
   setBrowserAutomationLevel: (value: BrowserAutomationLevel) => void;
+  setStorageReminderEnabled: (value: boolean) => void;
+  markStorageReminderShown: (localDate: string) => void;
   setGatewayAutoStart: (value: boolean) => void;
   setGatewayPort: (port: number) => void;
   setProxyEnabled: (value: boolean) => void;
@@ -99,6 +103,8 @@ const defaultSettings = {
   // Users can enable it in Settings > Advanced
   telemetryEnabled: false,
   browserAutomationLevel: 'dom' as BrowserAutomationLevel,
+  storageReminderEnabled: true,
+  storageReminderLastShownLocalDate: null as string | null,
   gatewayAutoStart: true,
   gatewayPort: 18789,
   proxyEnabled: false,
@@ -218,6 +224,20 @@ export const useSettingsStore = create<SettingsState>()(
         void hostApiFetch('/api/settings/browserAutomationLevel', {
           method: 'PUT',
           body: JSON.stringify({ value: level }),
+        }).catch(() => { });
+      },
+      setStorageReminderEnabled: (storageReminderEnabled) => {
+        set({ storageReminderEnabled });
+        void hostApiFetch('/api/settings/storageReminderEnabled', {
+          method: 'PUT',
+          body: JSON.stringify({ value: storageReminderEnabled }),
+        }).catch(() => { });
+      },
+      markStorageReminderShown: (storageReminderLastShownLocalDate) => {
+        set({ storageReminderLastShownLocalDate });
+        void hostApiFetch('/api/settings/storageReminderLastShownLocalDate', {
+          method: 'PUT',
+          body: JSON.stringify({ value: storageReminderLastShownLocalDate }),
         }).catch(() => { });
       },
       setGatewayAutoStart: (gatewayAutoStart) => {
