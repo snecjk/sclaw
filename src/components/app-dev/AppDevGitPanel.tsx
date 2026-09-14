@@ -10,10 +10,10 @@ import {
   createAppCheckpoint,
   listAppCheckpoints,
   listStoAppPushes,
-  pushStoApp,
   type AppCheckpoint,
   type StoAppDeployHistoryRecord,
 } from '@/lib/app-dev-api';
+import { submitStoAppWithAutoPull } from '@/lib/sto-app-submit';
 import { cn } from '@/lib/utils';
 import {
   codeDeployProgressLabel,
@@ -109,10 +109,16 @@ export function AppDevGitPanel({
     try {
       const note = message.trim() || '上传代码';
       if (cloudPush) {
-        await pushStoApp(workspaceId, note);
-        toast.success('已提交到 STO 应用');
-        setMessage('上传代码');
-        await refresh();
+        const outcome = await submitStoAppWithAutoPull(workspaceId, note);
+        if (outcome.kind === 'submitted') {
+          toast.success('已提交到 STO 应用');
+          setMessage('上传代码');
+          await refresh();
+        } else if (outcome.kind === 'conflicts') {
+          toast.message(outcome.message);
+        } else {
+          toast.error(outcome.message);
+        }
       } else {
         const { created } = await createAppCheckpoint(workspaceId, note);
         if (created) {

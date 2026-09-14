@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  Loader2,
   PanelRightClose,
   PanelRightOpen,
   Upload,
@@ -31,7 +32,6 @@ import { AppDevToolRollupLine } from '@/components/app-dev/AppDevToolRollupLine'
 import { AppDevTurnSummaryCard } from '@/components/app-dev/AppDevTurnSummaryCard';
 import { AppDevTurnVersionActions } from '@/components/app-dev/AppDevTurnVersionActions';
 import { AppDevTunePanel } from '@/components/app-dev/AppDevTunePanel';
-import { AppDevArtifactCard } from '@/components/app-dev/AppDevArtifactCard';
 import { AppDevPlanCard } from '@/components/app-dev/AppDevPlanCard';
 import {
   AppDevSuggestionChips,
@@ -100,7 +100,6 @@ import {
 import {
   createAppCheckpoint,
   continueStoAppMerge,
-  captureAppPreview,
   drainAppErrors,
   getAppDevEnvironment,
   getAppRuntimeStatus,
@@ -120,6 +119,7 @@ import { pullToastMessage } from '../../../shared/site-app-source-merge';
 import { submitStoAppWithAutoPull } from '@/lib/sto-app-submit';
 import { revealAppDevSourceFile } from '@/lib/app-dev-reveal-source';
 import { buildStoAppConflictAiPrompt } from '@/lib/sto-app-conflict-prompt';
+import { clearSessionComposerDraft } from '@/lib/composer-session-draft';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
 import { useAppDevStatusPoll } from '@/hooks/use-app-dev-status-poll';
@@ -127,7 +127,6 @@ import {
   type AppPlazaDevAppTab,
   useAppPlazaShellStore,
 } from '@/stores/app-plaza-shell';
-import { useAppDevArtifactsStore } from '@/stores/app-dev-artifacts';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions, canUseStoCloudPipeline } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { AppDevCodeFollow } from '@/hooks/use-app-dev-code-follow';
@@ -150,8 +149,6 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   composerSeed,
   onBeforeSend,
   onEditMessage,
-  onOpenPreview,
-  onOpenPublish,
   onPickSuggestion,
   auditsByTurn,
   onFixResponsive,
@@ -163,8 +160,6 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
   onBeforeSend?: (text: string) => boolean | string | void;
   /** T05：用户消息「编辑重发」——点击后由外层把文本回填 composer */
   onEditMessage?: (text: string) => void;
-  onOpenPreview?: () => void;
-  onOpenPublish?: () => void;
   onPickSuggestion?: (prompt: string) => void;
   auditsByTurn?: Record<string, AppDevResponsiveAuditResult>;
   onFixResponsive?: (result: AppDevResponsiveAuditResult) => void;
@@ -275,9 +270,7 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     prevSendingRef.current = sending;
   }, [sending, workspaceId]);
 
-  // 轮次汇总卡注入（ChatStaticItemsList renderTurnFooter；T04 操作按钮 / T09 产物卡亦经此挂载）
-  const artifactsByWorkspace = useAppDevArtifactsStore((s) => s.byWorkspace[workspaceId]);
-  const toggleFavorite = useAppDevArtifactsStore((s) => s.toggleFavorite);
+  // 轮次汇总卡注入（ChatStaticItemsList renderTurnFooter）
   const [dismissedPlans, setDismissedPlans] = useState<Record<string, true>>({});
   const [ratings, setRatings] = useState<Record<string, AppDevTurnRating>>({});
 
@@ -301,11 +294,10 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
       anchorAt: normalizeAppDevTimestamp(item.precedingUserMessage?.timestamp),
       endedAt: normalizeAppDevTimestamp(item.messages[item.messages.length - 1]?.timestamp),
     });
-    const artifact = (artifactsByWorkspace ?? []).find((x) => x.turnKey === item.key) ?? null;
     const fromAgent = extractSclawSuggestions(assistantText);
     const suggestions = fromAgent.length > 0
       ? fromAgent
-      : (artifact?.suggestions ?? []);
+      : buildFallbackSuggestions({});
     const hasFileOps = tools.some((tool) => classifyAppDevTool(tool.name) === 'file');
     const showPlan = Boolean(plan && !hasFileOps && !dismissedPlans[item.key]);
     const followUp = buildFollowUpQuestion(suggestions[0]?.label);
@@ -354,14 +346,6 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
             )}
           />
         ) : null}
-        {artifact ? (
-          <AppDevArtifactCard
-            artifact={artifact}
-            onOpenPreview={() => onOpenPreview?.()}
-            onPublish={onOpenPublish}
-            onToggleFavorite={() => void toggleFavorite(workspaceId, artifact.id)}
-          />
-        ) : null}
         {suggestions.length > 0 ? (
           <AppDevSuggestionChips
             suggestions={suggestions}
@@ -374,10 +358,6 @@ const WorkbenchChatPane = memo(function WorkbenchChatPane({
     sessionKey,
     workspaceId,
     engineType,
-    artifactsByWorkspace,
-    toggleFavorite,
-    onOpenPreview,
-    onOpenPublish,
     onPickSuggestion,
     auditsByTurn,
     onFixResponsive,
@@ -488,7 +468,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const setTuneMode = useAppDevWorkbenchStore((s) => s.setTuneMode);
   const inspectActive = useAppDevWorkbenchStore((s) => s.inspectActive);
   const setInspectActive = useAppDevWorkbenchStore((s) => s.setInspectActive);
-  const setMode = useAppDevWorkbenchStore((s) => s.setMode);
   const device = useAppDevWorkbenchStore((s) => s.device);
   const [previewBridge, setPreviewBridge] = useState<{
     executeJS: (code: string) => Promise<unknown>;
@@ -503,6 +482,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [conflictBusyPath, setConflictBusyPath] = useState<string | null>(null);
   const [conflictAskingAi, setConflictAskingAi] = useState(false);
   const [mergeContinuing, setMergeContinuing] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [menuPublishOpen, setMenuPublishOpen] = useState(false);
   const [deployHistoryOpen, setDeployHistoryOpen] = useState(false);
@@ -657,11 +637,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     };
   }, [active, workspaceId, appDevSessionKey, sending]);
 
-  useEffect(() => {
-    if (!workspaceId) return;
-    void useAppDevArtifactsStore.getState().load(workspaceId).catch(() => undefined);
-  }, [workspaceId]);
-
   const parseResponsiveAudit = useCallback((raw: unknown): AppDevResponsiveAuditResult | null => {
     let value: unknown = raw;
     if (typeof raw === 'string') {
@@ -728,32 +703,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           versionsStore.discardPendingTurn(workspaceId);
         }
 
-        // T09：轮结束截图 + 产物卡（失败降级无缩略图；建议 chips 在 footer 再解析助手文本）
+        // T11：轮结束响应式体检（结果挂汇总卡）
         if (pending?.turnKey) {
-          const webContentsId = previewBridge?.getWebContentsId() ?? null;
-          let thumbnailDataUrl: string | undefined;
-          if (webContentsId) {
-            await new Promise((r) => setTimeout(r, 800));
-            const shot = await captureAppPreview(workspaceId, webContentsId).catch(() => null);
-            thumbnailDataUrl = shot?.dataUrl;
-          }
-          const title = (pending.userTextExcerpt || '本轮产物').slice(0, 12);
-          void useAppDevArtifactsStore.getState().upsert(workspaceId, {
-            id: `${pending.turnKey}-${Date.now()}`,
-            turnKey: pending.turnKey,
-            commitHash: result?.hash,
-            title,
-            thumbnailDataUrl,
-            previewUrl: status?.previewUrl,
-            createdAt: new Date().toISOString(),
-            favorite: false,
-            suggestions: buildFallbackSuggestions({
-              changedStyles: /style|css|theme|颜色|样式|配色/i.test(title),
-              changedData: /接口|数据|列表|查询|api/i.test(title),
-            }),
-          });
-
-          // T11：轮结束响应式体检（mobile 设备或任意轮次均跑，结果挂汇总卡）
           await runResponsiveAudit(pending.turnKey);
         }
 
@@ -863,12 +814,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   };
 
   const handleSubmit = async (message: string) => {
-    if (stoStatus?.syncState === 'merge-required' && (stoStatus.conflicts?.length || conflicts.length)) {
-      toast.error('还有未解决的冲突，无法提交');
-      setConflicts(stoStatus.conflicts?.length ? stoStatus.conflicts : conflicts);
-      setConflictOpen(true);
-      return;
-    }
     const outcome = await submitStoAppWithAutoPull(workspaceId, message);
     if (outcome.status) setStoStatus(outcome.status);
     await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
@@ -917,6 +862,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   }, [workspaceId]);
 
   const handlePull = async () => {
+    if (pulling) return;
+    setPulling(true);
     try {
       const result = await pullStoApp(workspaceId);
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
@@ -943,6 +890,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
       if (nextStatus) setStoStatus(nextStatus);
       toast.error(error instanceof Error ? error.message : '拉取失败');
+    } finally {
+      setPulling(false);
     }
   };
 
@@ -999,12 +948,19 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     if (first) revealAppDevSourceFile(first);
     setTuneMode('chat');
     setConflictOpen(false);
-    setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
     setConflictAskingAi(true);
     try {
+      if (appDevSessionKey) {
+        clearSessionComposerDraft(appDevSessionKey);
+      }
       const sent = await sendAppDevChatPrompt(appDevSessionKey, prompt);
-      if (!sent) toast.message('已写入输入框，请确认后发送');
+      setComposerSeed(null);
+      if (!sent) {
+        setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
+        toast.message('已写入输入框，请确认后发送');
+      }
     } catch (error) {
+      setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
       toast.error(error instanceof Error ? error.message : '提交给 AI 失败');
     } finally {
       setConflictAskingAi(false);
@@ -1164,10 +1120,12 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
+              disabled={pulling}
               title="手动拉取远端最新代码"
               onClick={() => void handlePull()}
             >
-              拉取
+              {pulling ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+              {pulling ? '拉取中' : '拉取'}
             </Button>
           ) : null}
 
@@ -1270,11 +1228,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 composerSeed={composerSeed}
                 onBeforeSend={interceptRestartIntent}
                 onEditMessage={handleEditMessage}
-                onOpenPreview={() => {
-                  setMode('preview');
-                  setTuneMode('chat');
-                }}
-                onOpenPublish={canDeploy ? () => setDeployOpen(true) : undefined}
                 onPickSuggestion={(prompt) => {
                   setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
                   setTuneMode('chat');
@@ -1385,6 +1338,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         onAskAi={handleAskAiForConflicts}
         onResolve={handleResolveConflict}
         onContinue={handleMergeContinue}
+        onRefresh={() => { void refreshConflicts(); }}
       />
       <StoAppDeployDialog
         open={deployOpen}

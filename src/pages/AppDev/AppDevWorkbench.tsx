@@ -8,6 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
@@ -57,6 +58,7 @@ import { pullToastMessage } from '../../../shared/site-app-source-merge';
 import { revealAppDevSourceFile } from '@/lib/app-dev-reveal-source';
 import { sendAppDevChatPrompt } from '@/lib/send-app-dev-chat-prompt';
 import { buildStoAppConflictAiPrompt } from '@/lib/sto-app-conflict-prompt';
+import { clearSessionComposerDraft } from '@/lib/composer-session-draft';
 import { submitStoAppWithAutoPull } from '@/lib/sto-app-submit';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
@@ -212,6 +214,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   const [conflictBusyPath, setConflictBusyPath] = useState<string | null>(null);
   const [conflictAskingAi, setConflictAskingAi] = useState(false);
   const [mergeContinuing, setMergeContinuing] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [menuPublishOpen, setMenuPublishOpen] = useState(false);
   const [deployHistoryOpen, setDeployHistoryOpen] = useState(false);
@@ -315,12 +318,6 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   }, []);
 
   const handleSubmit = async (message: string) => {
-    if (stoStatus?.syncState === 'merge-required' && (stoStatus.conflicts?.length || conflicts.length)) {
-      toast.error('还有未解决的冲突，无法提交');
-      setConflicts(stoStatus.conflicts?.length ? stoStatus.conflicts : conflicts);
-      setConflictOpen(true);
-      return;
-    }
     const outcome = await submitStoAppWithAutoPull(workspaceId, message);
     if (outcome.status) setStoStatus(outcome.status);
     await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
@@ -369,6 +366,8 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   }, [workspaceId]);
 
   const handlePull = async () => {
+    if (pulling) return;
+    setPulling(true);
     try {
       const result = await pullStoApp(workspaceId);
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
@@ -395,6 +394,8 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
       const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
       if (nextStatus) setStoStatus(nextStatus);
       toast.error(error instanceof Error ? error.message : '拉取失败');
+    } finally {
+      setPulling(false);
     }
   };
 
@@ -450,12 +451,19 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
     const first = paths.find((path) => path.trim());
     if (first) revealAppDevSourceFile(first);
     setConflictOpen(false);
-    setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
     setConflictAskingAi(true);
     try {
+      if (appDevSessionKey) {
+        clearSessionComposerDraft(appDevSessionKey);
+      }
       const sent = await sendAppDevChatPrompt(appDevSessionKey, prompt);
-      if (!sent) toast.message('已写入输入框，请确认后发送');
+      setComposerSeed(null);
+      if (!sent) {
+        setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
+        toast.message('已写入输入框，请确认后发送');
+      }
     } catch (error) {
+      setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
       toast.error(error instanceof Error ? error.message : '提交给 AI 失败');
     } finally {
       setConflictAskingAi(false);
@@ -569,10 +577,12 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
             variant="ghost"
             size="sm"
             className="h-7 gap-1 px-2 text-xs"
+            disabled={pulling}
             title="手动拉取远端最新代码"
             onClick={() => void handlePull()}
           >
-            拉取
+            {pulling ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+            {pulling ? '拉取中' : '拉取'}
           </Button>
         ) : null}
 
@@ -696,6 +706,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
         onAskAi={handleAskAiForConflicts}
         onResolve={handleResolveConflict}
         onContinue={handleMergeContinue}
+        onRefresh={() => { void refreshConflicts(); }}
       />
       <StoAppDeployDialog
         open={deployOpen}

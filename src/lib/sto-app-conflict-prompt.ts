@@ -15,6 +15,6 @@ export function buildStoAppConflictAiPrompt(paths: string[]): string {
     '',
     ...list,
     '',
-    '处理完后不要提交；我会在冲突面板点「继续合并」。',
+    '处理完后不要提交；去掉冲突标记后，我会点「继续合并」确认，或直接提交（系统会检查标记是否已清）。',
   ].join('\n');
 }

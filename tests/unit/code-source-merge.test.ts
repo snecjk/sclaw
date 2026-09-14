@@ -6,6 +6,8 @@ import {
   applyArchiveFileDiff,
   beginThreeWayMerge,
   cacheBaseSnapshotFromWorkspace,
+  finalizeMergeContinue,
+  listUnresolvedConflicts,
 } from '../../electron/utils/code-source-merge';
 import {
   cleanupSourceSnapshot,
@@ -74,5 +76,33 @@ describe('code source merge workspace', () => {
     expect(result.autoMerged).toBe(true);
     expect(await readFile(join(workspace, 'src', 'a.ts'), 'utf8')).toBe('local-a\n');
     expect(await readFile(join(workspace, 'src', 'b.ts'), 'utf8')).toBe('remote-b\n');
+  });
+
+  it('reconciles conflict registry when markers are removed from workspace files', async () => {
+    const workspace = await makeWorkspace();
+    await writeFile(join(workspace, 'src', 'page.tsx'), 'base\n', 'utf8');
+    await cacheBaseSnapshotFromWorkspace(workspace);
+    await writeFile(join(workspace, 'src', 'page.tsx'), 'local\n', 'utf8');
+
+    const remoteRoot = await makeWorkspace();
+    await writeFile(join(remoteRoot, 'src', 'page.tsx'), 'remote\n', 'utf8');
+    const archive = await packWorkspace(remoteRoot);
+
+    const merge = await beginThreeWayMerge({
+      workspace,
+      remoteArchive: archive,
+      oursBaseRevisionId: 'rev-base',
+      theirsRevisionId: 'rev-head',
+      theirsCommitSha: 'sha-head',
+      theirsSourceSha256: 'deadbeef',
+    });
+    expect(merge.conflicts).toHaveLength(1);
+
+    await writeFile(join(workspace, 'src', 'page.tsx'), 'merged-final\n', 'utf8');
+    const unresolved = await listUnresolvedConflicts(workspace);
+    expect(unresolved).toEqual([]);
+
+    const state = await finalizeMergeContinue(workspace);
+    expect(state.theirsRevisionId).toBe('rev-head');
   });
 });
