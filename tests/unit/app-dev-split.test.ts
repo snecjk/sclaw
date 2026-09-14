@@ -16,7 +16,7 @@ import {
 
 describe('app-dev split metrics', () => {
   it('uses a two-column grid driven by --app-dev-chat-col', () => {
-    expect(appDevSplitRowClass).toContain('grid-cols-[minmax(0,1fr)_minmax(280px,var(--app-dev-chat-col,28%))]');
+    expect(appDevSplitRowClass).toContain('grid-cols-[minmax(280px,var(--app-dev-chat-col,28%))_minmax(0,1fr)]');
   });
 
   it('clamps percent to 22–55', () => {
@@ -76,14 +76,21 @@ describe('app-dev workbench split wiring', () => {
       'utf8',
     );
     expect(plazaSrc).toContain('AppDevSplitBody');
-    expect(plazaSrc).toContain('chatOpen={chatOpen}');
+    expect(plazaSrc).not.toContain('chatOpen={chatOpen}');
+    expect(plazaSrc).not.toContain('恢复上一版');
+    expect(plazaSrc).not.toContain('在编辑器打开');
+    expect(plazaSrc).not.toContain('MessageCircle');
     expect(workbenchSrc).toContain('AppDevSplitBody');
+    expect(plazaSrc).toContain('AppDevCodeFollow');
+    expect(workbenchSrc).toContain('AppDevCodeFollow');
     expect(plazaSrc).toContain('ChatStaticItemsList');
     expect(workbenchSrc).toContain('ChatStaticItemsList');
     expect(plazaSrc).not.toContain('staticItems.map');
     expect(workbenchSrc).not.toContain('staticItems.map');
     expect(plazaSrc).not.toContain('w-[400px] min-w-[340px]');
     expect(workbenchSrc).not.toContain('w-[400px] min-w-[340px]');
+    expect(plazaSrc).toContain('PanelRightClose');
+    expect(plazaSrc).not.toContain('PanelLeftClose');
   });
 
   it('does not re-render the workbench shell on every status poll or stream delta', () => {

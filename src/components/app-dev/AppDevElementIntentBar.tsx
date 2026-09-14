@@ -8,7 +8,6 @@ import {
   type AppDevElementRect,
   type AppDevPickedElement,
 } from '@/lib/app-dev-element-intent';
-import { cn } from '@/lib/utils';
 import './app-dev-element-intent.css';
 
 export type { AppDevPickedElement } from '@/lib/app-dev-element-intent';
@@ -24,6 +23,7 @@ interface AppDevElementIntentBarProps {
 
 const BAR_WIDTH = 560;
 const BAR_GAP = 10;
+const BAR_MIN_HEIGHT = 44;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -32,14 +32,22 @@ function clamp(value: number, min: number, max: number): number {
 function resolveBarPosition(
   rect: AppDevElementRect | undefined,
   host: DOMRect | null,
+  barHeight: number,
 ): { left: number; top: number; transform?: string } {
   const width = host ? Math.min(BAR_WIDTH, Math.max(280, host.width - 24)) : Math.min(BAR_WIDTH, 560);
+  const height = Math.max(BAR_MIN_HEIGHT, barHeight);
   if (!rect || !host) {
-    return { left: (host?.width ?? 0) / 2, top: (host?.height ?? 48) - 56, transform: 'translateX(-50%)' };
+    return {
+      left: (host?.width ?? 0) / 2,
+      top: Math.max(8, (host?.height ?? height) - height - 12),
+      transform: 'translateX(-50%)',
+    };
   }
   const left = clamp(rect.left + rect.width / 2, width / 2 + 12, Math.max(width / 2 + 12, host.width - width / 2 - 12));
   const below = rect.top + rect.height + BAR_GAP;
-  const top = below + 48 < host.height - 8 ? below : Math.max(8, rect.top - 48 - BAR_GAP);
+  const top = below + height + 8 < host.height
+    ? below
+    : Math.max(8, rect.top - height - BAR_GAP);
   return { left, top, transform: 'translateX(-50%)' };
 }
 
@@ -53,18 +61,22 @@ export function AppDevElementIntentBar({
   const [intent, setIntent] = useState('');
   const hostRef = useRef<HTMLDivElement>(null);
   const [hostBox, setHostBox] = useState<DOMRect | null>(null);
+  const [barHeight, setBarHeight] = useState(BAR_MIN_HEIGHT);
 
   useLayoutEffect(() => {
-    const node = hostRef.current?.offsetParent instanceof HTMLElement
-      ? hostRef.current.offsetParent
-      : hostRef.current?.parentElement;
-    if (!node) return;
+    const bar = hostRef.current;
+    const node = bar?.offsetParent instanceof HTMLElement
+      ? bar.offsetParent
+      : bar?.parentElement;
+    if (!node || !bar) return;
     const update = () => {
       setHostBox(new DOMRect(0, 0, node.clientWidth, node.clientHeight));
+      setBarHeight(bar.offsetHeight || BAR_MIN_HEIGHT);
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(node);
+    observer.observe(bar);
     return () => observer.disconnect();
   }, [elements.length, pickerActive]);
 
@@ -78,7 +90,7 @@ export function AppDevElementIntentBar({
   if (!pickerActive) return null;
 
   const anchor = elements[elements.length - 1]?.rect;
-  const position = resolveBarPosition(anchor, hostBox);
+  const position = resolveBarPosition(anchor, hostBox, barHeight);
   const canSend = Boolean(intent.trim()) && elements.length > 0;
 
   return (
@@ -93,27 +105,48 @@ export function AppDevElementIntentBar({
         width: `min(${BAR_WIDTH}px, calc(100% - 24px))`,
       }}
     >
-      <span className="app-dev-element-intent-bar__grip" aria-hidden>
-        <GripVertical className="h-3.5 w-3.5" />
-      </span>
-      <span className="app-dev-element-intent-bar__spark" aria-hidden>
-        <Sparkles className="h-3.5 w-3.5" />
-      </span>
-      {elements.length > 0 ? (
-        <div className="app-dev-element-intent-bar__chips">
-          {elements.map((el) => (
-            <span
-              key={el.selector}
-              className="app-dev-element-intent-bar__chip"
-              title={el.selector}
-            >
-              {formatAppDevElementLabel(el)}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <span className="app-dev-element-intent-bar__hint">点击预览中的元素，然后描述要改什么</span>
-      )}
+      <div className="app-dev-element-intent-bar__meta">
+        <span className="app-dev-element-intent-bar__grip" aria-hidden>
+          <GripVertical className="h-3.5 w-3.5" />
+        </span>
+        <span className="app-dev-element-intent-bar__spark" aria-hidden>
+          <Sparkles className="h-3.5 w-3.5" />
+        </span>
+        {elements.length > 0 ? (
+          <div className="app-dev-element-intent-bar__chips">
+            {elements.map((el) => (
+              <span
+                key={el.selector}
+                className="app-dev-element-intent-bar__chip"
+                title={el.selector}
+              >
+                {formatAppDevElementLabel(el)}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="app-dev-element-intent-bar__hint">点击预览中的元素，然后描述要改什么</span>
+        )}
+        {onOpenCode ? (
+          <button
+            type="button"
+            className="app-dev-element-intent-bar__icon-btn"
+            onClick={onOpenCode}
+            title="查看代码"
+            aria-label="查看代码"
+          >
+            <Code2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="app-dev-element-intent-bar__icon-btn"
+          onClick={onCancel}
+          aria-label="取消圈选"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
       <form
         className="app-dev-element-intent-bar__form"
         onSubmit={(event) => {
@@ -146,25 +179,6 @@ export function AppDevElementIntentBar({
           发送
         </button>
       </form>
-      {onOpenCode ? (
-        <button
-          type="button"
-          className="app-dev-element-intent-bar__icon-btn"
-          onClick={onOpenCode}
-          title="查看代码"
-          aria-label="查看代码"
-        >
-          <Code2 className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="app-dev-element-intent-bar__icon-btn"
-        onClick={onCancel}
-        aria-label="取消圈选"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
     </div>
   );
 }

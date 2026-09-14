@@ -289,6 +289,7 @@ function toolInputEqual(left: unknown, right: unknown): boolean {
 interface TimelineThinkingRowProps {
   content: string;
   liveParts?: string[];
+  liveLength?: number;
   skills: { id: string; slug?: string; name: string; title?: string }[];
   title: string;
   icon: ReturnType<typeof resolveChatThinkingIcon>;
@@ -301,27 +302,18 @@ interface TimelineThinkingRowProps {
   onRevealComplete: (resetKey: string) => void;
 }
 
-function useExpandedLiveThinking(content: string, liveParts?: string[]) {
-  const [text, setText] = useState(() => (liveParts?.length ? liveParts.join('') : content));
-  useEffect(() => {
-    if (liveParts?.length) return undefined;
-    setText(content);
-    return undefined;
-  }, [content, liveParts]);
-  useEffect(() => {
-    if (!liveParts?.length) return undefined;
-    const sync = () => setText(liveParts.join(''));
-    sync();
-    const timer = window.setInterval(sync, 250);
-    return () => window.clearInterval(timer);
-  }, [liveParts]);
-  return liveParts?.length ? text : content;
+function useExpandedLiveThinking(content: string, liveParts?: string[], liveLength = 0) {
+  return useMemo(
+    () => (liveParts?.length ? liveParts.join('') : content),
+    [content, liveLength, liveParts],
+  );
 }
 
 /** 单个深度思考块：props 全为基础类型/稳定引用，块内容未变时跳过整棵子树（含 ReactMarkdown） */
 const TimelineThinkingRow = memo(function TimelineThinkingRow({
   content,
   liveParts,
+  liveLength = 0,
   skills,
   title,
   icon,
@@ -333,7 +325,7 @@ const TimelineThinkingRow = memo(function TimelineThinkingRow({
   resetKey,
   onRevealComplete,
 }: TimelineThinkingRowProps) {
-  const source = useExpandedLiveThinking(content, liveParts);
+  const source = useExpandedLiveThinking(content, liveParts, liveLength);
   const thinkingContent = useMemo(
     () => maskDwsSensitiveIdsForDisplay(
       resolveSkillNamesInThinkingCached(source, skills),
@@ -510,6 +502,7 @@ function TimelineBody({
               key={blockResetKey}
               content={item.content}
               liveParts={item.liveParts}
+              liveLength={item.liveParts?.reduce((sum, part) => sum + part.length, 0) ?? 0}
               skills={skills}
               title={t('streaming.deepThinkingLabel')}
               icon={ThinkingIcon}
@@ -810,7 +803,7 @@ function ThinkingToolGroupPanel({
     }) || t('streaming.liveCurrentThinking');
   }, [isLiveCompact, liveActivity, stableTimeline, phaseText, t]);
   const lastThinking = [...stableTimeline].reverse().find((item) => item.type === 'thinking');
-  const peekFollowKey = `${stableTimeline.length}:${lastThinking && lastThinking.type === 'thinking' ? (lastThinking.liveParts?.length ?? lastThinking.content.length) : 0}:${liveActivity.kind === 'tool' ? liveActivity.name : ''}`;
+  const peekFollowKey = `${stableTimeline.length}:${lastThinking && lastThinking.type === 'thinking' ? (lastThinking.liveParts?.reduce((sum, part) => sum + part.length, 0) ?? lastThinking.content.length) : 0}:${liveActivity.kind === 'tool' ? liveActivity.name : ''}`;
   const peekStick = useThinkingPeekStick(expanded && isLiveCompact, peekFollowKey);
 
   if (!headerLabel) return null;

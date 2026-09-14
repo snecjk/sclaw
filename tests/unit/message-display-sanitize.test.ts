@@ -5,6 +5,13 @@ import {
   isWorkflowCompletionTranscript,
   stripDwsSendMetadataForDisplay,
 } from '../../src/pages/Chat/message-utils';
+import {
+  LIVE_BLOCK_INDEX_KEY,
+  LIVE_FIELD_KEY,
+  LIVE_PARTS_KEY,
+  LIVE_TAIL_KEY,
+  liveTextTail,
+} from '../../shared/chat-live-append';
 
 describe('message display sanitize', () => {
   it('removes task id suffix from assistant confirmation', () => {
@@ -77,5 +84,75 @@ describe('workflow completion transcript detection', () => {
 
   it('does not hide ordinary assistant text that merely mentions a run id', () => {
     expect(isWorkflowCompletionTranscript('我会继续检查 run_203443162047086592 的配置。')).toBe(false);
+  });
+});
+
+describe('extractText live append', () => {
+  const fullReply = [
+    '| 日期 | 最高 / 最低 | 降水 | 风速 |',
+    '| --- | --- | --- | --- |',
+    '| 09-03 | 30.5 / 25.1 | 4.3 | 17.2 |',
+    '| 09-04 | 30.7 / 25.4 | 2.9 | 17.4 |',
+    '| 09-05 | 30.7 / 24.1 | 1.2 | 16.8 |',
+    '明天起转多云到晴。',
+  ].join('\n');
+
+  it('joins live parts for string content instead of the 96-char preview tail', () => {
+    expect(fullReply.length).toBeGreaterThan(96);
+    const message = {
+      role: 'assistant',
+      content: fullReply.slice(0, 12),
+      _liveParts: [fullReply.slice(0, 80), fullReply.slice(80)],
+      _liveField: 'content',
+      _liveBlockIndex: null,
+      _liveTail: fullReply.slice(-96),
+    };
+    expect(extractText(message)).toBe(fullReply);
+    expect(extractText(message)).not.toBe(fullReply.slice(-96));
+  });
+
+  it('joins live parts for a growing text block instead of the seed or preview tail', () => {
+    const message = {
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: 'Let me build the reply.' },
+        { type: 'text', text: '| 日期 |' },
+      ],
+      _liveParts: [fullReply],
+      _liveField: 'text',
+      _liveBlockIndex: 1,
+      _liveTail: fullReply.slice(-96),
+    };
+    expect(extractText(message)).toBe(fullReply);
+    expect(extractText(message).length).toBeGreaterThan(96);
+  });
+});
+
+describe('live overlay body text', () => {
+  const fullReply = [
+    '| 日期 | 高温 / 低温 | 降水 | 风速 |',
+    '| --- | --- | --- | --- |',
+    '| 09-03 | 30.5 / 25.1 | 4.3 | 17.2 |',
+    '| 09-04 | 30.7 / 25.4 | 2.9 | 17.4 |',
+    '| 09-05 | 30.7 / 24.1 | 1.1 | 16.3 |',
+    '| 09-15 | 28.6 / 22.9 | 无雨 | 14.4 |',
+    '明天起转多云到晴，**9/13** 最低温。',
+  ].join('\n');
+
+  it('extractText joins _liveParts for growing body, not the 96-char preview tail', () => {
+    const overlay = {
+      role: 'assistant',
+      content: [{ type: 'text', text: '| 日期 |' }],
+      [LIVE_PARTS_KEY]: [fullReply],
+      [LIVE_FIELD_KEY]: 'text',
+      [LIVE_BLOCK_INDEX_KEY]: 0,
+      [LIVE_TAIL_KEY]: liveTextTail([fullReply]),
+    };
+
+    const text = extractText(overlay);
+    expect(text).toContain('09-03');
+    expect(text).toContain('明天起转多云到晴');
+    expect(text).toBe(fullReply);
+    expect(text).not.toBe(overlay[LIVE_TAIL_KEY]);
   });
 });

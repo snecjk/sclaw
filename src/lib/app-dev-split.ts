@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-/** 建站工作台：右侧会话宽度占容器百分比下限 / 默认 / 上限 */
+/** 建站工作台：左侧会话宽度占容器百分比下限 / 默认 / 上限 */
 export const APP_DEV_CHAT_SPLIT_MIN = 22;
 export const APP_DEV_CHAT_SPLIT_DEFAULT = 28;
 export const APP_DEV_CHAT_SPLIT_MAX = 55;
@@ -14,7 +14,7 @@ export const APP_DEV_SPLIT_RESIZE_SHIELD_ID = 'app-dev-split-resize-shield';
 
 export const appDevSplitRowClass = cn(
   'grid min-h-0 min-w-0 flex-1 overflow-hidden',
-  'grid-cols-[minmax(0,1fr)_minmax(280px,var(--app-dev-chat-col,28%))]',
+  'grid-cols-[minmax(280px,var(--app-dev-chat-col,28%))_minmax(0,1fr)]',
 );
 
 export function clampAppDevChatSplitPercent(

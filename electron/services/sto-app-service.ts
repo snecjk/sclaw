@@ -7,11 +7,14 @@ import {
   cloneCodeApplication,
   continueCodeApplicationMerge,
   getCodeCollabStatus,
+  listCodeApplicationConflicts,
   pullCodeApplication,
   pushCodeApplication,
+  resolveCodeApplicationConflict,
   type CodeCollabCommandResult,
   type CodeCollabStatusSummary,
 } from './code-collab-service';
+import type { SourceConflictFile } from '../../shared/site-app-source-merge';
 
 export interface StoAppCommandResult {
   ok: boolean;
@@ -20,6 +23,7 @@ export interface StoAppCommandResult {
 }
 
 export type StoAppStatusSummary = CodeCollabStatusSummary;
+export type StoAppConflictFile = SourceConflictFile;
 
 function toCommandResult(result: CodeCollabCommandResult): StoAppCommandResult {
   return {
@@ -66,6 +70,18 @@ export async function continueStoAppMerge(
   } catch (error) {
     throw error instanceof Error ? error : new Error(String(error));
   }
+}
+
+export async function listStoAppConflicts(appPath: string): Promise<StoAppConflictFile[]> {
+  return listCodeApplicationConflicts(appPath);
+}
+
+export async function resolveStoAppConflict(
+  appPath: string,
+  path: string,
+  choice: 'ours' | 'theirs',
+): Promise<StoAppConflictFile[]> {
+  return resolveCodeApplicationConflict(appPath, path, choice);
 }
 
 export async function cloneStoApp(

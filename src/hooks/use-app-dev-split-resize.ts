@@ -1,7 +1,7 @@
 /**
- * useAppDevSplitResize — 建站工作台预览 | 会话左右拖拽。
+ * useAppDevSplitResize — 建站工作台 会话 | 预览 左右拖拽。
  *
- * 空闲态写百分比；拖动中临时写 px；松手恢复百分比。
+ * 会话在左：向右拖会话变宽。空闲态写百分比；拖动中临时写 px；松手恢复百分比。
  * Pointer Capture + window 监听；全屏 shield 避免 Electron webview 吞掉 pointer。
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
@@ -167,7 +167,7 @@ export function useAppDevSplitResize(
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
-      const delta = startX - moveEvent.clientX;
+      const delta = moveEvent.clientX - startX;
       const width = splitRowRef.current?.clientWidth || containerWidth;
       pendingWidth = clampAppDevChatWidthPx(width, startWidth + delta);
       if (rafId === null) {

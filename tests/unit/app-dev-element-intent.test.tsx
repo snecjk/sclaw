@@ -38,6 +38,27 @@ describe('AppDevElementIntentBar', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0]).toBe('字体颜色改成红色');
     expect(onSubmit.mock.calls[0][1]).toEqual(ELEMENTS);
+    expect(screen.getByTestId('app-dev-element-intent-bar').querySelector('form')).toHaveClass(
+      'app-dev-element-intent-bar__form',
+    );
+  });
+
+  it('keeps element chips and the composer on separate wrap groups', () => {
+    render(
+      <div style={{ position: 'relative', width: 320, height: 400 }}>
+        <AppDevElementIntentBar
+          elements={ELEMENTS}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </div>,
+    );
+
+    const bar = screen.getByTestId('app-dev-element-intent-bar');
+    expect(bar.querySelector('.app-dev-element-intent-bar__meta')).toBeInTheDocument();
+    expect(bar.querySelector('.app-dev-element-intent-bar__chips')).toBeInTheDocument();
+    expect(screen.getByLabelText('选中区域修改意图')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument();
   });
 
   it('does not submit an empty intent', () => {

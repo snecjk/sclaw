@@ -32,12 +32,12 @@ function Harness({
 
   return (
     <div ref={splitRowRef} data-testid="split-row" style={{ width: 1000 }}>
-      <div data-testid="stage" />
       <section
         ref={chatPanelRef}
         data-testid="chat-panel"
         style={{ width: 280 }}
       />
+      <div data-testid="stage" />
       <div
         data-testid="resize-handle"
         onPointerDown={startResize}
@@ -135,7 +135,7 @@ describe('useAppDevSplitResize', () => {
         pointerId: 1,
         pointerType: 'mouse',
         button: 0,
-        clientX: 720,
+        clientX: 280,
       });
     });
 
@@ -145,7 +145,7 @@ describe('useAppDevSplitResize', () => {
 
     act(() => {
       window.dispatchEvent(
-        new PointerEvent('pointermove', { pointerId: 1, clientX: 600 }),
+        new PointerEvent('pointermove', { pointerId: 1, clientX: 400 }),
       );
       flushRaf();
     });
@@ -153,10 +153,11 @@ describe('useAppDevSplitResize', () => {
     const during = getHarness().getCol();
     expect(during.endsWith('px')).toBe(true);
     expect(during).not.toContain('%');
+    expect(during).toBe('400px');
 
     act(() => {
       window.dispatchEvent(
-        new PointerEvent('pointerup', { pointerId: 1, clientX: 600 }),
+        new PointerEvent('pointerup', { pointerId: 1, clientX: 400 }),
       );
     });
 
@@ -182,7 +183,7 @@ describe('useAppDevSplitResize', () => {
         pointerId: 1,
         pointerType: 'mouse',
         button: 0,
-        clientX: 720,
+        clientX: 280,
       });
     });
     expect(document.body.style.cursor).toBe('col-resize');
@@ -215,7 +216,7 @@ describe('useAppDevSplitResize', () => {
         pointerId: 1,
         pointerType: 'mouse',
         button: 0,
-        clientX: 720,
+        clientX: 280,
       });
     });
 

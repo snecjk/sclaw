@@ -1243,4 +1243,70 @@ describe('batch interrupt phase-text (图二)', () => {
     if (groups[0]?.kind !== 'tool-group') return;
     expect(groups[0].timeline.filter((item) => item.type === 'tool')).toHaveLength(1);
   });
+
+  it('keeps streamed body as full live parts, not the 96-char thinking preview tail', () => {
+    const fullReply = [
+      '| 日期 | 最高 / 最低 | 降水 | 风速 |',
+      '| --- | --- | --- | --- |',
+      '| 09-03 | 30.5 / 25.1 | 4.3 | 17.2 |',
+      '| 09-04 | 30.7 / 25.4 | 2.9 | 17.4 |',
+      '| 09-05 | 30.7 / 24.1 | 1.2 | 16.8 |',
+      '明天起转多云到晴。',
+    ].join('\n');
+    expect(fullReply.length).toBeGreaterThan(96);
+
+    const live = parseThinkingTurnLayout(
+      [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'Let me build the reply.' },
+            { type: 'text', text: '| 日期 |' },
+          ],
+          _liveParts: [fullReply],
+          _liveField: 'text',
+          _liveBlockIndex: 1,
+          _liveTail: fullReply.slice(-96),
+        } as never,
+      ],
+      { isLiveStream: true },
+    );
+
+    expect(live.finalReplyText).toBe(fullReply);
+    expect(live.finalReplyText).not.toBe(fullReply.slice(-96));
+  });
+
+  it('keeps live thinking parts so expanding can join the full process, not the 96-char tail', () => {
+    const fullThinking = [
+      'The previous constraint said wait for user confirmation then implement. ',
+      "The user's reply is a confirmation with a screenshot of the truncated table. ",
+      'I should restore full streaming for the reply body and keep folding only in thinking.',
+    ].join('');
+    expect(fullThinking.length).toBeGreaterThan(96);
+    const tail = fullThinking.slice(-96);
+
+    const live = parseThinkingTurnLayout(
+      [
+        {
+          role: 'assistant',
+          content: [{ type: 'thinking', thinking: 'The previous' }],
+          _liveParts: [fullThinking],
+          _liveField: 'thinking',
+          _liveBlockIndex: 0,
+          _liveTail: tail,
+        } as never,
+      ],
+      { isLiveStream: true },
+    );
+
+    const group = live.segments.find((segment) => segment.kind === 'tool-group');
+    expect(group?.kind).toBe('tool-group');
+    if (group?.kind !== 'tool-group') return;
+    const thinking = group.timeline.find((item) => item.type === 'thinking');
+    expect(thinking?.type).toBe('thinking');
+    if (thinking?.type !== 'thinking') return;
+    expect(thinking.liveParts?.join('')).toBe(fullThinking);
+    expect(thinking.content).not.toBe(fullThinking);
+    expect(thinking.liveParts?.join('')).not.toBe(tail);
+  });
 });

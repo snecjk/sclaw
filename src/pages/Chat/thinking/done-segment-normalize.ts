@@ -146,7 +146,7 @@ function rebuildDoneSegmentsFromEvents(
     }
 
     if (event.type === 'thinking') {
-      currentGroup = appendThinkingToGroup(currentGroup, event.content);
+      currentGroup = appendThinkingToGroup(currentGroup, event.content, event.liveParts);
       continue;
     }
 
@@ -237,8 +237,16 @@ function hasInterleavedNarrationTexts(
 function appendThinkingToGroup(
   group: ThinkingTimelineItem[],
   content: string,
+  liveParts?: string[],
 ): ThinkingTimelineItem[] {
-  return [...group, { type: 'thinking' as const, content }];
+  return [
+    ...group,
+    {
+      type: 'thinking' as const,
+      content,
+      ...(liveParts?.length ? { liveParts } : {}),
+    },
+  ];
 }
 
 function appendToolToGroup(

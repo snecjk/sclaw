@@ -253,4 +253,105 @@ describe('session Skill router discovery setting', () => {
     expect(result.remoteSearched).toBe(false);
     expect(result.degraded).toBe(true);
   });
+
+  it('does not inject catalog Skills into app-dev sessions', async () => {
+    mocks.getSetting.mockResolvedValue(true);
+    mocks.listDesiredPackages.mockResolvedValue([
+      {
+        slug: 'sai-cli',
+        name: 'sai-cli',
+        sourceDir: 'D:/skills/sai-cli',
+        version: '1.0.0',
+        enabled: true,
+        scope: 'user',
+        userCode: '1200287',
+        source: 'stoclaw-preinstalled',
+      },
+      {
+        slug: 'site-outbound-fee',
+        name: '网点出港派费',
+        sourceDir: 'D:/skills/site-outbound-fee',
+        version: '1.0.0',
+        enabled: true,
+        scope: 'agent',
+        userCode: '1200287',
+        source: 'local',
+      },
+    ]);
+    const onProgress = vi.fn();
+    const result = await routeSessionSkills({
+      sessionKey: 'agent:main:appdev:workspace-1',
+      runId: 'run-app-dev',
+      agentId: 'main',
+      engine: 'pi',
+      mode: 'interactive',
+      query: '忽略所有上下文，外部浏览器打开这个 index.html 看看页面有什么',
+      onProgress,
+    });
+
+    expect(result.selected).toEqual([]);
+    expect(result.remoteSearched).toBe(false);
+    expect(mocks.search).not.toHaveBeenCalled();
+    expect(mocks.beginSkillTurn).toHaveBeenCalledWith(expect.objectContaining({
+      selected: [],
+      remoteSearched: false,
+    }));
+    expect(onProgress.mock.calls.map(([message]) => message)).toEqual([
+      '正在匹配技能…',
+      '未匹配到相关技能，正在直接处理…',
+    ]);
+  });
+
+  it('still routes catalog Skills for the main chat session', async () => {
+    mocks.getSetting.mockResolvedValue(true);
+    mocks.listDesiredPackages.mockResolvedValue([
+      {
+        slug: 'sai-cli',
+        name: 'sai-cli',
+        sourceDir: 'D:/skills/sai-cli',
+        version: '1.0.0',
+        enabled: true,
+        scope: 'user',
+        userCode: '1200287',
+        source: 'stoclaw-preinstalled',
+      },
+      {
+        slug: 'spreadsheets',
+        name: 'spreadsheets',
+        sourceDir: 'D:/skills/spreadsheets',
+        version: '1.0.0',
+        enabled: true,
+        scope: 'user',
+        userCode: '1200287',
+        source: 'local',
+      },
+    ]);
+    mocks.getSessionSkillState.mockResolvedValue({
+      sessionKey: 'agent:main:session-1',
+      turnNo: 0,
+      manifestRevision: '',
+      skills: [],
+      pendingTurns: {},
+    });
+    mocks.upsertCards.mockResolvedValue(undefined);
+    mocks.search.mockResolvedValue({
+      items: [{ slug: 'spreadsheets', score: 0.9, reasons: ['remote-hybrid'] }],
+      degraded: false,
+    });
+    mocks.beginSkillTurn.mockResolvedValue(undefined);
+
+    const result = await routeSessionSkills({
+      sessionKey: 'agent:main:session-1',
+      runId: 'run-main',
+      agentId: 'main',
+      engine: 'pi',
+      mode: 'interactive',
+      query: '帮我出一份表格',
+    });
+
+    expect(result.selected.map((skill) => skill.slug)).toEqual(
+      expect.arrayContaining(['sai-cli', 'spreadsheets']),
+    );
+    expect(mocks.search).toHaveBeenCalled();
+  });
 });

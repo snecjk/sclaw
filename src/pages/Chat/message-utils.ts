@@ -18,7 +18,7 @@ import { stripFlowCardFences } from '@/lib/flow-card-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { AttachedFileMeta, RawMessage, ContentBlock } from '@/stores/chat';
-import { readLiveStreamParts, liveTextTail } from '../../../shared/chat-live-append';
+import { readLiveStreamParts, liveTextFull, liveTextTail } from '../../../shared/chat-live-append';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
@@ -647,17 +647,23 @@ export function extractText(message: RawMessage | unknown): string {
   const content = msg.content;
   const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
   const isUser = role === 'user';
+  const live = readLiveStreamParts(msg);
 
   let result = '';
 
   if (typeof content === 'string') {
-    result = content.trim().length > 0 ? content : '';
+    const liveContent = live && (live.field === 'content' || live.blockIndex === null)
+      ? liveTextFull(live.parts)
+      : content;
+    result = liveContent.trim().length > 0 ? liveContent : '';
   } else if (Array.isArray(content)) {
     const parts: string[] = [];
-    for (const block of content as ContentBlock[]) {
-      if (block.type === 'text' && block.text) {
-        if (block.text.trim().length > 0) {
-          parts.push(block.text);
+    for (const [blockIndex, block] of (content as ContentBlock[]).entries()) {
+      if (block.type === 'text' && typeof block.text === 'string') {
+        const isGrow = live && live.field === 'text' && live.blockIndex === blockIndex;
+        const text = isGrow ? liveTextFull(live.parts) : block.text;
+        if (text.trim().length > 0) {
+          parts.push(text);
         }
       }
     }

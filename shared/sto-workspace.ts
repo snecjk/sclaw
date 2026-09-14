@@ -23,6 +23,7 @@ export interface StoWorkspaceFields {
   baseRevisionId?: string | null;
   baseCommitSha?: string | null;
   baseSourceSha256?: string | null;
+  mergeParentRevisionId?: string | null;
 }
 
 function pickString(...values: unknown[]): string | undefined {
@@ -82,6 +83,13 @@ export function extractStoWorkspaceFields(json: unknown): StoWorkspaceFields {
   if (baseRevisionId) fields.baseRevisionId = baseRevisionId;
   if (baseCommitSha) fields.baseCommitSha = baseCommitSha;
   if (baseSourceSha256) fields.baseSourceSha256 = baseSourceSha256;
+  if (Object.prototype.hasOwnProperty.call(row, 'mergeParentRevisionId')
+    || Object.prototype.hasOwnProperty.call(row, 'merge_parent_revision_id')) {
+    fields.mergeParentRevisionId = pickString(
+      row.mergeParentRevisionId,
+      row.merge_parent_revision_id,
+    ) ?? null;
+  }
   return fields;
 }
 
@@ -96,6 +104,9 @@ export function mergeStoWorkspaceFields(
     if (part.baseRevisionId !== undefined) merged.baseRevisionId = part.baseRevisionId;
     if (part.baseCommitSha !== undefined) merged.baseCommitSha = part.baseCommitSha;
     if (part.baseSourceSha256 !== undefined) merged.baseSourceSha256 = part.baseSourceSha256;
+    if (part.mergeParentRevisionId !== undefined) {
+      merged.mergeParentRevisionId = part.mergeParentRevisionId;
+    }
   }
   return merged;
 }
@@ -192,6 +203,8 @@ export function buildStoWorkspaceFile(input: {
     baseRevisionId: input.fields.baseRevisionId ?? input.existing?.baseRevisionId ?? null,
     baseCommitSha: input.fields.baseCommitSha ?? input.existing?.baseCommitSha ?? null,
     baseSourceSha256: input.fields.baseSourceSha256 ?? input.existing?.baseSourceSha256 ?? null,
-    mergeParentRevisionId: input.existing?.mergeParentRevisionId ?? null,
+    mergeParentRevisionId: input.fields.mergeParentRevisionId !== undefined
+      ? input.fields.mergeParentRevisionId
+      : input.existing?.mergeParentRevisionId ?? null,
   };
 }

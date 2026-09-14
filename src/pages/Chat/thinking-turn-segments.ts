@@ -10,7 +10,7 @@ import {
   extractToolUse,
   type ThinkingTimelineItem,
 } from '@/pages/Chat/message-utils';
-import { liveTextTail, readLiveStreamParts } from '../../../shared/chat-live-append';
+import { liveTextFull, liveTextTail, readLiveStreamParts } from '../../../shared/chat-live-append';
 import {
   mergeAdjacentOrphanedThinkingAndToolGroups,
   relocateInterruptPhaseBetweenAdjacentToolGroups,
@@ -320,21 +320,37 @@ function enrichSegmentsWithStreamingInputs(
 function appendThinkingToGroup(
   group: ThinkingTimelineItem[],
   content: string,
+  liveParts?: string[],
 ): ThinkingTimelineItem[] {
   // Claude 流式：同一规划句重述（含 tool 后复述）→ 更新已有 thinking，不新增「思考次数」
   for (let i = group.length - 1; i >= 0; i -= 1) {
     const item = group[i];
-    if (item?.type === 'thinking' && isRedundantThinking(item.content, content)) {
-      const next = [...group];
-      next[i] = {
-        type: 'thinking',
-        content: content.length >= item.content.length ? content : item.content,
-      };
-      return next;
+    if (item?.type !== 'thinking') continue;
+    const sameLiveGrow = Boolean(liveParts?.length && item.liveParts?.length);
+    if (!sameLiveGrow && !isRedundantThinking(item.content, content)) {
+      // 正在生长的 live 块不要并进已经定稿的 thinking
+      if (liveParts?.length) break;
+      continue;
     }
+    const next = [...group];
+    next[i] = {
+      type: 'thinking',
+      content: liveParts?.length
+        ? content
+        : (content.length >= item.content.length ? content : item.content),
+      liveParts: liveParts ?? item.liveParts,
+    };
+    return next;
   }
 
-  return [...group, { type: 'thinking', content }];
+  return [
+    ...group,
+    {
+      type: 'thinking',
+      content,
+      ...(liveParts?.length ? { liveParts } : {}),
+    },
+  ];
 }
 
 function rebuildDoneSegmentsFromEvents(
@@ -390,7 +406,7 @@ function rebuildDoneSegmentsFromEvents(
     }
 
     if (event.type === 'thinking') {
-      currentGroup = appendThinkingToGroup(currentGroup, event.content);
+      currentGroup = appendThinkingToGroup(currentGroup, event.content, event.liveParts);
       continue;
     }
 
@@ -811,7 +827,9 @@ function extractOrderedEventsFromMessage(message: RawMessage): RawTurnEvent[] {
   if (typeof content === 'string') {
     const live = readLiveStreamParts(msg);
     if (live && (live.field === 'content' || live.blockIndex === null)) {
-      events.push({ type: 'text', text: live.tail || liveTextTail(live.parts) });
+      // `_liveTail` 只给折叠预览；正文事件必须 join 全文，否则气泡会变成 96 字滑动截断。
+      const text = liveTextFull(live.parts);
+      if (text) events.push({ type: 'text', text });
       return events;
     }
     const text = extractText(message).trim();
@@ -827,7 +845,8 @@ function extractOrderedEventsFromMessage(message: RawMessage): RawTurnEvent[] {
     if (block.type === 'text' && typeof block.text === 'string') {
       const isGrow = live && live.field === 'text' && live.blockIndex === blockIndex;
       if (isGrow) {
-        events.push({ type: 'text', text: live.tail || liveTextTail(live.parts) });
+        const text = liveTextFull(live.parts);
+        if (text) events.push({ type: 'text', text });
         continue;
       }
       const text = extractText({ role: 'assistant', content: [{ type: 'text', text: block.text }] }).trim();
@@ -1637,7 +1656,7 @@ export function parseThinkingTurnLayout(
 
     if (event.type === 'thinking') {
       candidateFinalReply = reclaimLeadingDeliverablePhaseText(segments, candidateFinalReply);
-      currentGroup = appendThinkingToGroup(currentGroup, event.content);
+      currentGroup = appendThinkingToGroup(currentGroup, event.content, event.liveParts);
       continue;
     }
 

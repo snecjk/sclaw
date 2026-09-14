@@ -37,11 +37,16 @@ export async function writeStoWorkspaceBinding(input: {
   payload?: unknown;
   cloud?: StoWorkspaceFields;
   fallback?: StoWorkspaceFields;
+  /** Explicit merge-parent override (null clears). */
+  mergeParentRevisionId?: string | null;
 }): Promise<StoWorkspaceFile | null> {
   const fields = mergeStoWorkspaceFields(
     input.fallback,
     input.cloud,
     extractStoWorkspaceFields(input.payload),
+    input.mergeParentRevisionId !== undefined
+      ? { mergeParentRevisionId: input.mergeParentRevisionId }
+      : undefined,
   );
   if (!fields.appCode || !isStoWorkspaceWritableStatus(fields.status)) {
     logger.warn(

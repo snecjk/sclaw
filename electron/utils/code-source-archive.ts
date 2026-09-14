@@ -12,6 +12,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   writeFile,
@@ -333,13 +334,6 @@ function safeRelative(value: string): string {
   return normalized;
 }
 
-function rootless(value: string, root: string): string {
-  const normalized = safeRelative(value);
-  if (normalized === root) return '';
-  if (!normalized.startsWith(`${root}/`)) throw new Error('归档顶层目录不一致');
-  return normalized.slice(root.length + 1);
-}
-
 function parsePaxPath(data: Buffer): string | null {
   let offset = 0;
   let path: string | null = null;
@@ -368,10 +362,28 @@ function entryDestination(target: string, path: string): string {
   return destination;
 }
 
+/**
+ * Cloud archives may wrap files in a single root folder. Local snapshots are flat.
+ * Unwrap only when that folder itself looks like a project root (has package.json).
+ */
+async function unwrapSingleProjectRoot(stage: string): Promise<void> {
+  const entries = await readdir(stage, { withFileTypes: true });
+  if (entries.length !== 1 || !entries[0]?.isDirectory()) return;
+  const onlyDir = join(stage, entries[0].name);
+  try {
+    await readFile(join(onlyDir, 'package.json'));
+  } catch {
+    return;
+  }
+  for (const name of await readdir(onlyDir)) {
+    await rename(join(onlyDir, name), join(stage, name));
+  }
+  await rm(onlyDir, { recursive: true, force: true });
+}
+
 export async function extractSourceArchive(archive: Buffer, target: string): Promise<void> {
   const tar = gunzipSync(archive);
   let offset = 0;
-  let root: string | null = null;
   let pendingPaxPath: string | null = null;
   let extracted = false;
   await mkdir(target, { recursive: true });
@@ -394,15 +406,10 @@ export async function extractSourceArchive(archive: Buffer, target: string): Pro
       const original = pendingPaxPath ?? pathFromHeader(header);
       pendingPaxPath = null;
       const normalized = safeRelative(original);
-      const first = normalized.split('/')[0];
-      if (!root) root = first;
-      if (first !== root) throw new Error('归档包含多个顶层目录');
-      const path = rootless(normalized, root);
-      const destination = entryDestination(target, path);
+      const destination = entryDestination(target, normalized);
       if (type === '5') {
         await mkdir(destination, { recursive: true });
       } else {
-        if (!path) throw new Error('归档文件不能覆盖顶层目录');
         await mkdir(dirname(destination), { recursive: true });
         await writeFile(destination, data, { mode: 0o600 });
       }
@@ -411,7 +418,8 @@ export async function extractSourceArchive(archive: Buffer, target: string): Pro
     offset += 512 + Math.ceil(size / 512) * 512;
   }
   if (pendingPaxPath) throw new Error('PAX 扩展头缺少对应条目');
-  if (!root || !extracted) throw new Error('归档为空');
+  if (!extracted) throw new Error('归档为空');
+  await unwrapSingleProjectRoot(target);
 }
 
 export async function applyArchiveToWorkspace(archive: Buffer, workspace: string): Promise<void> {
