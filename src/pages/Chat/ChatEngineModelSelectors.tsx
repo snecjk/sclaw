@@ -360,7 +360,11 @@ function useChatEngineSelection(allowSessionSwitch = false) {
   const [engineSaving, setEngineSaving] = useState(false);
 
   const handleEngineSwitch = useCallback(async (engineType: AgentEngineType, notify = true) => {
-    if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
+    if (
+      !canSwitchEngine
+      || engineType === 'openclaw'
+      || engineType === agentDefaultEngineType
+    ) return;
     setEngineSaving(true);
     try {
       const baseAgentId = resolveBaseAgentId(currentAgentId);
@@ -397,9 +401,20 @@ function useChatEngineSelection(allowSessionSwitch = false) {
   }, [agentDefaultEngineType, allowSessionSwitch, canSwitchEngine, currentAgentId, currentSessionKey, fetchAgents]);
 
   const effectivePolicyLoaded = policyLoaded && policyOwnerCode === (authUserKey.trim() || 'current-user');
-  const allowedEngineTypes = useMemo(
-    () => new Set(policyEngines.map((item) => item.code)),
+  const newSessionPolicyEngines = useMemo(
+    () => policyEngines.filter((engine) => engine.code !== 'openclaw'),
     [policyEngines],
+  );
+  const newSessionDefaultEngine = useMemo(
+    () => policyDefaultEngine !== 'openclaw'
+      && newSessionPolicyEngines.some((engine) => engine.code === policyDefaultEngine)
+      ? policyDefaultEngine
+      : newSessionPolicyEngines[0]?.code,
+    [newSessionPolicyEngines, policyDefaultEngine],
+  );
+  const allowedEngineTypes = useMemo(
+    () => new Set(newSessionPolicyEngines.map((item) => item.code)),
+    [newSessionPolicyEngines],
   );
   const autoEngineReconcileKeyRef = useRef('');
 
@@ -410,6 +425,7 @@ function useChatEngineSelection(allowSessionSwitch = false) {
       || engineSaving
       || !canSwitchEngine
       || !currentAgentId
+      || !newSessionDefaultEngine
       || allowedEngineTypes.has(agentDefaultEngineType)
     ) return;
     const reconcileKey = [
@@ -417,12 +433,12 @@ function useChatEngineSelection(allowSessionSwitch = false) {
       policyConfigVersion,
       currentAgentId,
       agentDefaultEngineType,
-      policyDefaultEngine,
+      newSessionDefaultEngine,
     ].join(':');
     if (autoEngineReconcileKeyRef.current === reconcileKey) return;
     autoEngineReconcileKeyRef.current = reconcileKey;
     const timer = window.setTimeout(() => {
-      void handleEngineSwitch(policyDefaultEngine, false);
+      void handleEngineSwitch(newSessionDefaultEngine, false);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [
@@ -434,12 +450,16 @@ function useChatEngineSelection(allowSessionSwitch = false) {
     engineSaving,
     handleEngineSwitch,
     policyConfigVersion,
-    policyDefaultEngine,
     policyLoading,
     policyOwnerCode,
+    newSessionDefaultEngine,
   ]);
 
-  const engineSelectDisabled = sending || !currentAgentId || policyLoading || !effectivePolicyLoaded;
+  const engineSelectDisabled = sending
+    || !currentAgentId
+    || policyLoading
+    || !effectivePolicyLoaded
+    || newSessionPolicyEngines.length === 0;
   const engineTriggerTitle = allowSessionSwitch
     ? '切换当前建站会话执行引擎'
     : canSwitchEngine
@@ -447,7 +467,7 @@ function useChatEngineSelection(allowSessionSwitch = false) {
     : isSclawBrowserEmbedChatSessionKey(currentSessionKey) && messages.length > 0
       ? '历史会话不可切换引擎（可切换模型）'
       : '当前会话不可切换引擎';
-  const engineOptions: SelectorMenuOption<AgentEngineType>[] = policyEngines.map((engine) => ({
+  const engineOptions: SelectorMenuOption<AgentEngineType>[] = newSessionPolicyEngines.map((engine) => ({
     key: engine.code,
     value: engine.code,
     label: getAgentEnginePolicyOptionLabel(engine),
