@@ -80,7 +80,7 @@ export function StoAppCommitDialog({
         <p className="mt-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
           {isGit
             ? `为「${appName}」填写本次提交说明，确认后将改动提交到本地 Git 仓库。`
-            : `为「${appName}」填写本次提交说明，确认后上传代码。`}
+            : `为「${appName}」填写本次提交说明。确认后会先自动拉取远端并检查冲突，无冲突再上传代码。`}
         </p>
 
         <label className="mt-4 block">

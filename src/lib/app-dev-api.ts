@@ -908,6 +908,12 @@ export async function installAppDevAssistSkill(
   });
 }
 
+export interface StoAppConflictFile {
+  path: string;
+  kind: 'text' | 'binary' | 'add-delete';
+  status: 'unresolved' | 'resolved';
+}
+
 export interface StoAppStatus {
   available: boolean;
   executable: string | null;
@@ -917,7 +923,10 @@ export interface StoAppStatus {
   appCode?: string;
   applicationName?: string;
   revisionId?: string;
+  remoteRevisionId?: string;
+  mergeTheirsRevisionId?: string;
   devCommitSha?: string;
+  conflicts?: StoAppConflictFile[];
   raw?: unknown;
 }
 
@@ -956,9 +965,16 @@ export async function pushStoApp(
   });
 }
 
+export type StoAppPullAction =
+  | 'already-synced'
+  | 'local-ahead'
+  | 'applied'
+  | 'merged'
+  | 'conflicts';
+
 export async function pullStoApp(
   workspaceId: string,
-): Promise<{ ok: boolean; output: string; json?: unknown }> {
+): Promise<{ ok: boolean; output: string; json?: { action?: StoAppPullAction; conflicts?: StoAppConflictFile[] } }> {
   return hostApiFetch('/api/app-dev/sto-app/pull', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -977,6 +993,31 @@ export async function continueStoAppMerge(
     body: JSON.stringify({ workspaceId, revisionId }),
     ...APP_DEV_LONG_RUNNING,
   });
+}
+
+export async function listStoAppConflicts(workspaceId: string): Promise<StoAppConflictFile[]> {
+  const res = await hostApiFetch<{ conflicts: StoAppConflictFile[] }>(
+    `/api/app-dev/sto-app/conflicts?workspaceId=${encodeURIComponent(workspaceId)}`,
+    APP_DEV_LONG_RUNNING,
+  );
+  return res.conflicts ?? [];
+}
+
+export async function resolveStoAppConflict(
+  workspaceId: string,
+  path: string,
+  choice: 'ours' | 'theirs',
+): Promise<StoAppConflictFile[]> {
+  const res = await hostApiFetch<{ conflicts: StoAppConflictFile[] }>(
+    '/api/app-dev/sto-app/conflicts/resolve',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId, path, choice }),
+      ...APP_DEV_LONG_RUNNING,
+    },
+  );
+  return res.conflicts ?? [];
 }
 
 export type CodeDeployEnv = 'daily' | 'stage' | 'online';

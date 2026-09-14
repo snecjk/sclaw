@@ -83,6 +83,7 @@ import {
 import { AppDevWorkbenchStage } from '@/components/app-dev/AppDevWorkbenchStage';
 import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
+import { StoAppConflictDialog } from '@/components/app-dev/StoAppConflictDialog';
 import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
 import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
 import { StoAppDeployHistoryDialog } from '@/components/app-dev/StoAppDeployHistoryDialog';
@@ -107,12 +108,18 @@ import {
   restartAppBackend,
   runAppRuntimeSmoke,
   getStoAppStatus,
+  listStoAppConflicts,
   pullStoApp,
   publishAppTemplateWorkspace,
-  pushStoApp,
+  resolveStoAppConflict,
+  type StoAppConflictFile,
   type StoAppStatus,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
+import { pullToastMessage } from '../../../shared/site-app-source-merge';
+import { submitStoAppWithAutoPull } from '@/lib/sto-app-submit';
+import { revealAppDevSourceFile } from '@/lib/app-dev-reveal-source';
+import { buildStoAppConflictAiPrompt } from '@/lib/sto-app-conflict-prompt';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
 import { useAppDevStatusPoll } from '@/hooks/use-app-dev-status-poll';
@@ -491,6 +498,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [auditsByTurn, setAuditsByTurn] = useState<Record<string, AppDevResponsiveAuditResult>>({});
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [conflicts, setConflicts] = useState<StoAppConflictFile[]>([]);
+  const [conflictBusyPath, setConflictBusyPath] = useState<string | null>(null);
+  const [conflictAskingAi, setConflictAskingAi] = useState(false);
+  const [mergeContinuing, setMergeContinuing] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [menuPublishOpen, setMenuPublishOpen] = useState(false);
   const [deployHistoryOpen, setDeployHistoryOpen] = useState(false);
@@ -851,20 +863,37 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   };
 
   const handleSubmit = async (message: string) => {
-    try {
-      await pushStoApp(workspaceId, message);
-      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
-      if (nextStatus) setStoStatus(nextStatus);
-      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
-      toast.success('已提交到 STO 应用');
-      setCommitOpen(false);
-      setSourceRevision((n) => n + 1);
-    } catch (error) {
-      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
-      if (nextStatus) setStoStatus(nextStatus);
-      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
-      toast.error(error instanceof Error ? error.message : '提交失败');
+    if (stoStatus?.syncState === 'merge-required' && (stoStatus.conflicts?.length || conflicts.length)) {
+      toast.error('还有未解决的冲突，无法提交');
+      setConflicts(stoStatus.conflicts?.length ? stoStatus.conflicts : conflicts);
+      setConflictOpen(true);
+      return;
     }
+    const outcome = await submitStoAppWithAutoPull(workspaceId, message);
+    if (outcome.status) setStoStatus(outcome.status);
+    await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
+    setSourceRevision((n) => n + 1);
+
+    if (outcome.kind === 'submitted') {
+      if (outcome.pulledAction === 'merged' || outcome.pulledAction === 'applied') {
+        toast.success('已同步远端并提交到 STO 应用');
+      } else {
+        toast.success('已提交到 STO 应用');
+      }
+      setCommitOpen(false);
+      setConflicts([]);
+      return;
+    }
+
+    if (outcome.kind === 'conflicts') {
+      setConflicts(outcome.conflicts);
+      setConflictOpen(true);
+      setCommitOpen(false);
+      toast.message(outcome.message);
+      return;
+    }
+
+    toast.error(outcome.message);
   };
 
   const handleGitSubmit = async (message: string) => {
@@ -880,6 +909,107 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       toast.error(error instanceof Error ? error.message : '提交失败');
     }
   };
+
+  const refreshConflicts = useCallback(async () => {
+    const items = await listStoAppConflicts(workspaceId).catch(() => [] as StoAppConflictFile[]);
+    setConflicts(items);
+    return items;
+  }, [workspaceId]);
+
+  const handlePull = async () => {
+    try {
+      const result = await pullStoApp(workspaceId);
+      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
+      if (nextStatus) setStoStatus(nextStatus);
+      setSourceRevision((n) => n + 1);
+      const action = result.json && typeof result.json === 'object'
+        ? (result.json as { action?: string; conflicts?: StoAppConflictFile[] }).action
+        : undefined;
+      const nextConflicts = result.json && typeof result.json === 'object'
+        ? (result.json as { conflicts?: StoAppConflictFile[] }).conflicts
+        : undefined;
+      if (action === 'conflicts') {
+        const items = nextConflicts ?? await refreshConflicts();
+        setConflicts(items);
+        setConflictOpen(true);
+      } else if (nextStatus?.syncState === 'merge-required') {
+        await refreshConflicts();
+        setConflictOpen(true);
+      }
+      const toastInfo = pullToastMessage(action, nextConflicts?.length ?? conflicts.length);
+      if (toastInfo.kind === 'message') toast.message(toastInfo.text);
+      else toast.success(toastInfo.text);
+    } catch (error) {
+      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
+      if (nextStatus) setStoStatus(nextStatus);
+      toast.error(error instanceof Error ? error.message : '拉取失败');
+    }
+  };
+
+  const handleMergeContinue = async () => {
+    const revisionId = (
+      stoStatus?.mergeTheirsRevisionId
+      ?? stoStatus?.remoteRevisionId
+      ?? stoStatus?.revisionId
+      ?? ''
+    ).trim();
+    if (!revisionId) {
+      toast.error('缺少冲突版本号，请先拉取远端更新');
+      return;
+    }
+    setMergeContinuing(true);
+    try {
+      await continueStoAppMerge(workspaceId, revisionId);
+      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
+      if (nextStatus) setStoStatus(nextStatus);
+      setConflicts([]);
+      setConflictOpen(false);
+      setSourceRevision((n) => n + 1);
+      toast.success('冲突已处理，可以提交');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '合并继续失败');
+      await refreshConflicts().catch(() => undefined);
+    } finally {
+      setMergeContinuing(false);
+    }
+  };
+
+  const handleResolveConflict = async (path: string, choice: 'ours' | 'theirs') => {
+    setConflictBusyPath(path);
+    try {
+      const remaining = await resolveStoAppConflict(workspaceId, path, choice);
+      setConflicts(remaining);
+      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
+      if (nextStatus) setStoStatus(nextStatus);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '处理冲突失败');
+    } finally {
+      setConflictBusyPath(null);
+    }
+  };
+
+  const handleOpenConflictFile = useCallback((path: string) => {
+    revealAppDevSourceFile(path);
+    setConflictOpen(false);
+  }, []);
+
+  const handleAskAiForConflicts = useCallback(async (paths: string[]) => {
+    const prompt = buildStoAppConflictAiPrompt(paths);
+    const first = paths.find((path) => path.trim());
+    if (first) revealAppDevSourceFile(first);
+    setTuneMode('chat');
+    setConflictOpen(false);
+    setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
+    setConflictAskingAi(true);
+    try {
+      const sent = await sendAppDevChatPrompt(appDevSessionKey, prompt);
+      if (!sent) toast.message('已写入输入框，请确认后发送');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '提交给 AI 失败');
+    } finally {
+      setConflictAskingAi(false);
+    }
+  }, [appDevSessionKey, setTuneMode]);
 
   const commitMode = isTemplateWorkspace || showGitCommit ? 'git' : 'sto';
 
@@ -1021,32 +1151,21 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
               disabled={!stoCloudPipelineReady}
+              title="提交前会自动拉取远端并检查冲突"
               onClick={() => setCommitOpen(true)}
             >
               提交
             </Button>
           ) : null}
 
-          {showCloudActions && stoStatus?.bound && (stoStatus.syncState === 'remote-ahead' || stoStatus.syncState === 'merge-required') ? (
+          {showCloudActions && stoStatus?.bound ? (
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
-              onClick={() => {
-                void pullStoApp(workspaceId)
-                  .then(async () => {
-                    const next = await getStoAppStatus(workspaceId).catch(() => null);
-                    if (next) setStoStatus(next);
-                    setSourceRevision((n) => n + 1);
-                    toast.success('已拉取远端更新');
-                  })
-                  .catch(async (error) => {
-                    const next = await getStoAppStatus(workspaceId).catch(() => null);
-                    if (next) setStoStatus(next);
-                    toast.error(error instanceof Error ? error.message : '拉取失败');
-                  });
-              }}
+              title="手动拉取远端最新代码"
+              onClick={() => void handlePull()}
             >
               拉取
             </Button>
@@ -1058,24 +1177,25 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
-              disabled={!stoStatus.revisionId}
               onClick={() => {
-                const revisionId = stoStatus.revisionId?.trim();
-                if (!revisionId) {
-                  toast.error('缺少冲突版本号');
-                  return;
-                }
-                void continueStoAppMerge(workspaceId, revisionId)
-                  .then(async () => {
-                    const next = await getStoAppStatus(workspaceId).catch(() => null);
-                    if (next) setStoStatus(next);
-                    setSourceRevision((n) => n + 1);
-                    toast.success('已继续合并');
-                  })
-                  .catch((error) => {
-                    toast.error(error instanceof Error ? error.message : '合并继续失败');
-                  });
+                void refreshConflicts().then((items) => {
+                  setConflicts(items.length ? items : stoStatus.conflicts ?? []);
+                  setConflictOpen(true);
+                });
               }}
+            >
+              处理冲突
+            </Button>
+          ) : null}
+
+          {showCloudActions && stoStatus?.bound && stoStatus.syncState === 'merge-required' ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={!(stoStatus.mergeTheirsRevisionId || stoStatus.remoteRevisionId || stoStatus.revisionId)}
+              onClick={() => void handleMergeContinue()}
             >
               继续合并
             </Button>
@@ -1244,9 +1364,27 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         open={commitOpen}
         appName={appName}
         mode={commitMode}
-        initialMessage={commitMode === 'git' ? `更新: ${appName}` : `更新应用: ${appName}`}
+        initialMessage={
+          commitMode === 'git'
+            ? `更新: ${appName}`
+            : stoStatus?.syncState === 'local-changes'
+              ? '合并远端更新'
+              : `更新应用: ${appName}`
+        }
         onCancel={() => setCommitOpen(false)}
         onConfirm={commitMode === 'git' ? handleGitSubmit : handleSubmit}
+      />
+      <StoAppConflictDialog
+        open={conflictOpen}
+        conflicts={conflicts.length ? conflicts : stoStatus?.conflicts ?? []}
+        busyPath={conflictBusyPath}
+        continuing={mergeContinuing}
+        askingAi={conflictAskingAi}
+        onClose={() => setConflictOpen(false)}
+        onOpenFile={handleOpenConflictFile}
+        onAskAi={handleAskAiForConflicts}
+        onResolve={handleResolveConflict}
+        onContinue={handleMergeContinue}
       />
       <StoAppDeployDialog
         open={deployOpen}

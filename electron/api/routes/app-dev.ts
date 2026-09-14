@@ -73,8 +73,10 @@ import { logger } from '../../utils/logger';
 import {
   continueStoAppMerge,
   getStoAppStatus,
+  listStoAppConflicts,
   pullStoApp,
   pushStoApp,
+  resolveStoAppConflict,
 } from '../../services/sto-app-service';
 import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
 import { readStoAppPushHistory } from '../../services/sto-app-push-history-store';
@@ -748,6 +750,29 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(body.workspaceId);
       const result = await continueStoAppMerge(appPath, body.revisionId ?? '');
       sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/conflicts' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, {
+        success: true,
+        conflicts: await listStoAppConflicts(appPath),
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/conflicts/resolve' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId: string;
+        path: string;
+        choice: 'ours' | 'theirs';
+      }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const choice = body.choice === 'theirs' ? 'theirs' : 'ours';
+      const conflicts = await resolveStoAppConflict(appPath, body.path ?? '', choice);
+      sendJson(res, 200, { success: true, conflicts });
       return true;
     }
 
