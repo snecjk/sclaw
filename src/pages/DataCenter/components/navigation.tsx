@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { dataCenterToolbarInteractiveSurfaceClass } from './toolbar-styles';
+import { dataCenterToolbarSearchSurfaceClass } from './toolbar-styles';
 
 export function DataCenterToolbarSearch({
   value,
@@ -16,7 +16,7 @@ export function DataCenterToolbarSearch({
   const accessibleLabel = inputProps['aria-label'] ?? placeholder;
 
   return (
-    <label className={cn(dataCenterToolbarInteractiveSurfaceClass, 'flex w-[300px] items-center gap-2 px-3')}>
+    <label className={cn(dataCenterToolbarSearchSurfaceClass, 'flex w-[300px] items-center gap-2 px-3')}>
       <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       <input
         {...inputProps}

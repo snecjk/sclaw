@@ -127,7 +127,7 @@ export function EntryList(props: EntryRenderProps) {
   }, [items.length, canLoadMore, loadingMore, onLoadMore]);
 
   return (
-    <div ref={listRef} className="h-full overflow-auto pr-1" onScroll={handleScroll}>
+    <div ref={listRef} className="sto-hide-scrollbar h-full overflow-auto" onScroll={handleScroll}>
       <div className="flex flex-col gap-2">
         {items.map((entry) => {
           const dropActive = dragOverEntryId === entry.entryId;
@@ -262,7 +262,7 @@ export function EntryGrid(props: EntryRenderProps) {
   };
 
   return (
-    <div className="h-full overflow-auto">
+    <div className="sto-hide-scrollbar h-full overflow-auto">
       <div className="grid grid-cols-[repeat(auto-fill,72px)] justify-start gap-x-[16px] gap-y-[22px] py-1">
         {props.items.map((entry) => {
           const dropActive = dragOverEntryId === entry.entryId;

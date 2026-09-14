@@ -248,10 +248,14 @@
   .sto-control--fill-action:is(:hover, [data-sto-state='hover']) { background-color: var(--sto-control-fill-hover-background); }
   .sto-control.sto-control--fill-action:is(:focus-visible, [data-sto-state='focus']) { outline: 2px solid var(--sto-focus-ring); outline-offset: 2px; box-shadow: none; }
   .sto-control--search-shell { background-color: var(--sto-card-panel-bg); border-color: var(--sto-border-default); color: var(--sto-text-tertiary); }
-  .sto-control--search-shell:is(:focus-within, [data-sto-state='focus']) { border-color: var(--sto-brand-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sto-brand-primary) 16%, transparent); }
+  .sto-control--search-shell:is(:focus-within, :has(:focus-visible), [data-sto-state='focus']) { border-color: var(--sto-border-heavy); box-shadow: none; }
   .sto-control--search-input { background-color: transparent; border-color: transparent; color: var(--sto-text-tertiary); }
   .sto-control--search-input::placeholder { color: var(--sto-text-quaternary); }
-  .sto-control--search-input:is(:focus, [data-sto-state='focus']) { color: var(--sto-segment-plain-selected-foreground); outline: none; }
+  .sto-control.sto-control--search-input:is(:focus, :focus-visible, [data-sto-state='focus']) {
+    color: var(--sto-segment-plain-selected-foreground);
+    outline: none;
+    box-shadow: none;
+  }
   .sto-control--favorite { background-color: transparent; border-color: transparent; color: var(--sto-text-quaternary); }
   .sto-control--favorite-subtle { color: var(--sto-icon-quaternary); }
   .sto-control--favorite:is(:hover, [data-sto-state='hover']) { background-color: color-mix(in srgb, var(--sto-feedback-favorite-foreground) 12%, transparent); color: var(--sto-feedback-favorite-foreground); }
@@ -310,11 +314,16 @@
     color: var(--sto-control-field-foreground);
   }
 
-  .sto-control:is(:focus-visible, [data-sto-state='focus']),
-  .sto-control--neutral-field:has(:focus-visible) {
+  .sto-control:is(:focus-visible, [data-sto-state='focus']):not(.sto-control--search-input) {
     outline: 2px solid transparent;
     outline-offset: 2px;
     box-shadow: var(--sto-control-focus-shadow);
+  }
+
+  .sto-control--neutral-field:has(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+    border-color: var(--sto-border-heavy);
   }
 
   .sto-control:is(.sto-control--neutral-outline, .sto-control--neutral-outline-default, .sto-control--neutral-field) {
@@ -352,12 +361,17 @@
     border-color: var(--sto-border-default);
   }
 
-  .sto-control--data-center-toolbar-interactive:is(:focus-within, [data-sto-state='focus']) {
-    background-color: var(--sto-control-hover-bg);
-    border-color: var(--sto-border-default);
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-    box-shadow: var(--sto-control-focus-shadow);
+  /* 双类选择器压过 neutral-outline 的 hover 规则，聚焦时鼠标仍在控件上也不铺灰底。 */
+  .sto-control.sto-control--data-center-toolbar-interactive:is(:focus-within, [data-sto-state='focus']) {
+    background-color: var(--sto-control-bg);
+    border-color: var(--sto-border-heavy);
+    outline: none;
+    box-shadow: none;
+  }
+
+  /* 搜索框只用边框反馈，hover 与聚焦都保持静息底色。 */
+  .sto-control.sto-control--data-center-toolbar-search:is(:hover, [data-sto-state='hover']) {
+    background-color: var(--sto-control-bg);
   }
 
   /* Navigation recipe: Radix highlighted/open remain native meanings. */
@@ -581,6 +595,13 @@
   .sto-overlay--content-border { border-color: var(--sto-overlay-content-border); }
   .sto-overlay--glass { background-color: var(--sto-glass-background); }
   .sto-overlay.glass { box-shadow: var(--sto-overlay-glass-shadow); }
+  .sto-overlay.sto-overlay--content-tooltip,
+  .sto-overlay.sto-overlay--content-tooltip.glass,
+  .sto-overlay.sto-overlay--content-tooltip:where(:hover, :active, :focus, :focus-visible, [data-sto-state='hover'], [data-sto-state='active'], [data-sto-state='focus']) {
+    border-color: transparent;
+    outline: none;
+    box-shadow: none;
+  }
   .sto-overlay--warm-dialog { background: var(--sto-overlay-warm-background); border-color: var(--sto-feature-divider); box-shadow: 0 20px 48px color-mix(in srgb, var(--sto-shadow-tone) 12%, transparent); }
   .sto-overlay--feature-menu { box-shadow: 0 8px 24px color-mix(in srgb, var(--sto-shadow-tone) 14%, transparent); }
   .sto-overlay--side-panel { box-shadow: -8px 0 24px color-mix(in srgb, var(--sto-shadow-tone) 6%, transparent); }

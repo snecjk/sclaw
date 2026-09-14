@@ -33,16 +33,26 @@ function DebouncedSkillSearch({
 }) {
   const [inputValue, setInputValue] = useState(searchQuery);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 记录本组件提交过的值，用来区分「自己的防抖回写」与「上传成功等外部重置」。 */
+  const committedRef = useRef(searchQuery);
 
   useEffect(() => {
+    if (searchQuery === committedRef.current) return;
+    committedRef.current = searchQuery;
+    setInputValue(searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (inputValue === committedRef.current) return;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      if (inputValue !== searchQuery) onSearchQueryChange(inputValue);
+      committedRef.current = inputValue;
+      onSearchQueryChange(inputValue);
     }, 300);
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-  }, [inputValue, searchQuery, onSearchQueryChange]);
+  }, [inputValue, onSearchQueryChange]);
 
   return (
     <StoSearchField
@@ -123,7 +133,6 @@ export function SkillPlazaHeader({
         {isSkills ? (
           <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
             <DebouncedSkillSearch
-              key={searchQuery}
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
               placeholder={t('plaza.searchPlaceholderShort', { defaultValue: '搜索技能' })}

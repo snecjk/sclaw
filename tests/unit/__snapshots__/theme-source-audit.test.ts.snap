@@ -5931,7 +5931,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/lib/surfaces.ts::rawColor::#1D2129::arTooltipContentClass = cn( 'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white', 'shadow-[0_6px_20px_r::1",
+    "key": "src/lib/surfaces.ts::rawColor::#1D2129::to-overlay--content-tooltip overflow-visible rounded-lg border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white', 'shadow-[0_6px_20px_r::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

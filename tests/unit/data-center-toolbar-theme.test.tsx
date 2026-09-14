@@ -140,7 +140,7 @@ describe('data center toolbar theme', () => {
     dispose();
   });
 
-  it('lightens interactive toolbar controls without strengthening the outline', () => {
+  it('lightens toolbar buttons but not the search field, and never strengthens the outline', () => {
     const dispose = installControlRecipes('dark');
     renderToolbar();
 
@@ -150,13 +150,17 @@ describe('data center toolbar theme', () => {
     const viewSwitch = viewOption.parentElement;
     const createFolder = screen.getByRole('button', { name: '新建文件夹' });
 
-    for (const control of [search, association, createFolder]) {
+    for (const control of [association, createFolder]) {
       if (!(control instanceof HTMLElement)) throw new Error('Expected interactive toolbar control');
       control.dataset.stoState = 'hover';
       const computed = getComputedStyle(control);
       expect(computed.backgroundColor).toBe('rgb(40, 40, 40)');
       expect(computed.borderTopColor).toBe('rgba(255, 255, 255, 0.08)');
     }
+    if (!(search instanceof HTMLElement)) throw new Error('Expected search toolbar surface');
+    search.dataset.stoState = 'hover';
+    expect(getComputedStyle(search).backgroundColor).toBe('rgb(33, 33, 33)');
+    expect(getComputedStyle(search).borderTopColor).toBe('rgba(255, 255, 255, 0.08)');
     if (!(viewSwitch instanceof HTMLElement)) throw new Error('Expected view toolbar surface');
     viewOption.dataset.stoState = 'hover';
     expect(getComputedStyle(viewOption).backgroundColor).toBe('rgb(40, 40, 40)');
@@ -179,21 +183,33 @@ describe('data center toolbar theme', () => {
     expect(screen.getByRole('textbox', { name: '搜索文件或文件夹' })).toBeTruthy();
   });
 
-  it('shows a focus ring on the search surface when its input receives keyboard focus', () => {
+  it('keeps the resting fill and swaps to a neutral heavy border when the search input is focused', () => {
     const dispose = installControlRecipes('dark');
-    const searchSurface = document.createElement('label');
-    searchSurface.className = 'sto-control sto-control--outline sto-control--neutral-outline-default sto-control--data-center-toolbar-interactive';
-    const searchInput = document.createElement('input');
-    searchSurface.append(searchInput);
-    document.body.append(searchSurface);
+    renderToolbar();
 
-    searchInput.focus();
-    expect(searchSurface.matches(':focus-within')).toBe(true);
+    const searchSurface = screen.getByPlaceholderText('搜索文件或文件夹').parentElement;
+    if (!(searchSurface instanceof HTMLElement)) throw new Error('Expected search toolbar surface');
     searchSurface.dataset.stoState = 'focus';
 
-    expect(getComputedStyle(searchSurface).boxShadow).not.toBe('');
-    expect(getComputedStyle(searchSurface).boxShadow).not.toBe('none');
-    searchSurface.remove();
+    const computed = getComputedStyle(searchSurface);
+    expect(computed.boxShadow).toBe('none');
+    expect(computed.borderTopColor).toBe('rgba(255, 255, 255, 0.16)');
+    expect(computed.backgroundColor).toBe('rgb(33, 33, 33)');
+    dispose();
+  });
+
+  it('keeps the focused search surface off the hover fill while the pointer rests on it', () => {
+    const dispose = installControlRecipes('dark');
+    renderToolbar();
+
+    const searchInput = screen.getByPlaceholderText('搜索文件或文件夹');
+    const searchSurface = searchInput.parentElement;
+    if (!(searchSurface instanceof HTMLElement)) throw new Error('Expected search toolbar surface');
+
+    searchSurface.dataset.stoState = 'hover';
+    searchInput.focus();
+    expect(searchSurface.matches(':focus-within')).toBe(true);
+    expect(getComputedStyle(searchSurface).backgroundColor).toBe('rgb(33, 33, 33)');
     dispose();
   });
 

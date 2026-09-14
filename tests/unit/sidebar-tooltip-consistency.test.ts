@@ -14,6 +14,8 @@ describe('Sidebar tooltip consistency', () => {
 
     expect(source).toContain('sidebarTooltipContentClass');
     expect(source).toContain('sidebarTooltipArrowClass');
+    expect(sidebarTooltipContentClass).toContain('sto-overlay--content-tooltip');
+    expect(sidebarTooltipContentClass).toContain('border-none');
     expect(sidebarTooltipContentClass).toContain('bg-[#1D2129]');
     expect(sidebarTooltipContentClass).toContain('rounded-lg');
     expect(sidebarTooltipArrowClass).toContain('fill-[#1D2129]');
