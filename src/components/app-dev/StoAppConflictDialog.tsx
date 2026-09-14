@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,8 @@ interface StoAppConflictDialogProps {
   onAskAi?: (paths: string[]) => void | Promise<void>;
   onResolve: (path: string, choice: 'ours' | 'theirs') => void | Promise<void>;
   onContinue: () => void | Promise<void>;
+  /** 打开弹窗时刷新冲突列表（会按磁盘标记对账） */
+  onRefresh?: () => void | Promise<void>;
 }
 
 function kindLabel(kind: StoAppConflictFile['kind']): string {
@@ -39,12 +42,19 @@ export function StoAppConflictDialog({
   onAskAi,
   onResolve,
   onContinue,
+  onRefresh,
 }: StoAppConflictDialogProps) {
+  useEffect(() => {
+    if (!open || !onRefresh) return;
+    void onRefresh();
+  }, [open, onRefresh]);
+
   if (!open) return null;
 
   const unresolved = conflicts.filter((item) => item.status !== 'resolved');
-  const canContinue = unresolved.length === 0 && !continuing && !askingAi;
   const actionsDisabled = Boolean(busyPath) || continuing || askingAi;
+  // 允许在标记已清但列表未刷新时点「继续合并」；服务端会再对账并校验
+  const canContinue = !actionsDisabled;
 
   return createPortal(
     <div
@@ -78,13 +88,14 @@ export function StoAppConflictDialog({
         </div>
 
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          本地和远端都改过这些文件。可整文件保留本地或采用远端，也可打开文件改冲突标记，或交给 AI 处理后继续合并。
+          本地和远端都改过这些文件。可整文件保留本地或采用远端，也可打开文件改掉冲突标记，或交给 AI 处理。
+          标记清掉后点「继续合并」确认即可；提交时也会自动检查。
         </p>
 
         <ul className="mt-4 min-h-0 flex-1 space-y-2 overflow-auto">
           {unresolved.length === 0 ? (
             <li className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-              冲突已处理完，可以继续合并。
+              冲突标记已处理完，点「继续合并」确认后即可提交。
             </li>
           ) : unresolved.map((item) => {
             const busy = busyPath === item.path;

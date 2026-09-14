@@ -5,13 +5,11 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { FileDiff, History, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { listAppCheckpoints, type AppCheckpoint } from '@/lib/app-dev-api';
-import { useAppDevArtifactsStore } from '@/stores/app-dev-artifacts';
 import { useAppDevVersionsStore } from '@/stores/app-dev-versions';
 import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import { cn } from '@/lib/utils';
 
 const EMPTY_VERSIONS: Record<string, never> = {};
-const EMPTY_ARTIFACTS: never[] = [];
 
 function formatRelativeTime(ts: number): string {
   const delta = Date.now() - ts;
@@ -40,9 +38,6 @@ export const AppDevVersionsPanel = memo(function AppDevVersionsPanel({
   const versions = useAppDevVersionsStore(
     (s) => s.versionsByWorkspace[workspaceId] ?? EMPTY_VERSIONS,
   );
-  const artifacts = useAppDevArtifactsStore(
-    (s) => s.byWorkspace[workspaceId] ?? EMPTY_ARTIFACTS,
-  );
 
   const hashToTurn = useMemo(() => {
     const map = new Map<string, { turnKey: string; excerpt: string }>();
@@ -51,16 +46,6 @@ export const AppDevVersionsPanel = memo(function AppDevVersionsPanel({
     }
     return map;
   }, [versions]);
-
-  const hashToThumb = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const art of artifacts) {
-      if (art.commitHash && art.thumbnailDataUrl) {
-        map.set(art.commitHash, art.thumbnailDataUrl);
-      }
-    }
-    return map;
-  }, [artifacts]);
 
   const reload = async () => {
     setLoading(true);
@@ -127,7 +112,6 @@ export const AppDevVersionsPanel = memo(function AppDevVersionsPanel({
             const versionNo = checkpoints.length - index - 1;
             const auto = isAutoSaveSubject(cp.subject);
             const mapped = hashToTurn.get(cp.hash);
-            const thumb = hashToThumb.get(cp.hash);
             const checked = selected.includes(cp.hash);
             return (
               <li
@@ -145,13 +129,9 @@ export const AppDevVersionsPanel = memo(function AppDevVersionsPanel({
                     onChange={() => toggleSelect(cp.hash)}
                     aria-label={`选择版本 v${versionNo}`}
                   />
-                  {thumb ? (
-                    <img src={thumb} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
-                  ) : (
-                    <div className="flex h-10 w-16 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
-                      v{versionNo}
-                    </div>
-                  )}
+                  <div className="flex h-10 w-16 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+                    v{versionNo}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-mono text-xs font-medium">v{versionNo}</span>

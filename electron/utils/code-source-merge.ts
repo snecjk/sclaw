@@ -222,9 +222,58 @@ function isBinaryPathish(path: string, buffer: Buffer): boolean {
   return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'pdf', 'woff', 'woff2', 'ttf', 'zip', 'gz'].includes(ext);
 }
 
+/**
+ * AI / 手动改掉冲突标记后，把 conflicts.json 里对应项标成 resolved。
+ * 二进制仍需显式「用我的/用远端」。
+ */
+export async function reconcileMergeConflictsFromWorkspace(
+  workspace: string,
+): Promise<SourceConflictFile[]> {
+  const state = await readMergeState(workspace);
+  if (!state) return [];
+
+  const files = await readMergeConflicts(workspace);
+  let changed = false;
+  const next: SourceConflictFile[] = [];
+
+  for (const item of files) {
+    if (item.status === 'resolved') {
+      next.push(item);
+      continue;
+    }
+    if (item.kind === 'binary') {
+      next.push(item);
+      continue;
+    }
+
+    const buffer = await readOptionalBuffer(join(workspace, ...item.path.split('/')));
+    if (!buffer) {
+      if (item.kind === 'add-delete') {
+        next.push({ ...item, status: 'resolved' });
+        changed = true;
+        continue;
+      }
+      next.push(item);
+      continue;
+    }
+    if (isBinaryPathish(item.path, buffer)) {
+      next.push(item);
+      continue;
+    }
+    if (!hasConflictMarkers(buffer.toString('utf8'))) {
+      next.push({ ...item, status: 'resolved' });
+      changed = true;
+      continue;
+    }
+    next.push(item);
+  }
+
+  if (changed) await writeMergeMeta(workspace, state, next);
+  return next.filter((item) => item.status !== 'resolved');
+}
+
 export async function listUnresolvedConflicts(workspace: string): Promise<SourceConflictFile[]> {
-  const listed = await readMergeConflicts(workspace);
-  const unresolved = listed.filter((item) => item.status !== 'resolved');
+  const unresolved = await reconcileMergeConflictsFromWorkspace(workspace);
   if (unresolved.length > 0) return unresolved;
   if (await workspaceHasConflictMarkers(workspace)) {
     return [{ path: '(conflict-markers)', kind: 'text', status: 'unresolved' }];
@@ -354,8 +403,7 @@ export async function resolveMergeConflictChoice(input: {
 export async function finalizeMergeContinue(workspace: string): Promise<MergeStateFile> {
   const state = await readMergeState(workspace);
   if (!state) throw new Error('当前没有待处理的合并');
-  const unresolved = (await readMergeConflicts(workspace))
-    .filter((item) => item.status !== 'resolved');
+  const unresolved = await reconcileMergeConflictsFromWorkspace(workspace);
   if (unresolved.length > 0) {
     throw new Error(`还有未解决的冲突：${unresolved.map((item) => item.path).join('、')}`);
   }
