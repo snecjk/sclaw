@@ -54,6 +54,7 @@ import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
 import { useAppDevStatusPoll } from '@/hooks/use-app-dev-status-poll';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
+import { AppDevCodeFollow } from '@/hooks/use-app-dev-code-follow';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions, canUseStoCloudPipeline } from '@/lib/app-dev-actions';
 import {
   APP_DEV_IDE_CHAT_SPLIT_DEFAULT,
@@ -398,6 +399,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <AppDevCodeFollow sessionKey={appDevSessionKey} />
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
         {layout === 'page' ? (
           <button

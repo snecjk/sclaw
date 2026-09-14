@@ -158,10 +158,14 @@ describe('AppDevSplitBody 收起工作区', () => {
     );
 
     expect(screen.getByTestId('chat-pane')).toBeInTheDocument();
-    // 工作台保活隐藏（避免 webview 重载），而不是卸载
+    // 工作台保活隐藏（避免 webview 重载），而不是卸载；收起后仍在右侧 0 宽。
+    const chat = screen.getByTestId('chat-pane');
     const stage = screen.getByTestId('stage-pane');
     expect(stage.parentElement).toHaveClass('w-0');
     expect(stage.parentElement).toHaveAttribute('aria-hidden', 'true');
+    expect(chat.compareDocumentPosition(stage) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it('renders the resizable split when not collapsed', async () => {
@@ -175,5 +179,10 @@ describe('AppDevSplitBody 收起工作区', () => {
     expect(screen.getByTestId('chat-pane')).toBeInTheDocument();
     expect(screen.getByTestId('stage-pane')).toBeInTheDocument();
     expect(screen.getByTestId('stage-pane').parentElement).not.toHaveClass('w-0');
+    const chat = screen.getByTestId('chat-pane');
+    const stage = screen.getByTestId('stage-pane');
+    expect(chat.compareDocumentPosition(stage) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 });

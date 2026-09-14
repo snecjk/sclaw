@@ -268,7 +268,7 @@ export function AppDevMonacoEditor({
                 {errorCount > 0 ? `${errorCount} 个错误` : null}
                 {errorCount > 0 && warningCount > 0 ? ' · ' : null}
                 {warningCount > 0 ? `${warningCount} 个警告` : null}
-                <span className="ml-2 text-muted-foreground/80">可一键填入右侧会话</span>
+                <span className="ml-2 text-muted-foreground/80">可一键填入左侧会话</span>
               </>
             ) : (
               <span>当前文件暂无诊断问题</span>

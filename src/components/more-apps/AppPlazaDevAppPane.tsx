@@ -1,6 +1,6 @@
 /**
  * AppPlazaDevAppPane — full-window app-dev workbench overlay.
- * Left: preview / Monaco code / file search; Right: project agent chat.
+ * Left: project agent chat; Right: preview / Monaco code / file search.
  * Portaled over the entire app shell (including sidebar) while active.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -8,11 +8,8 @@ import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   ArrowLeft,
-  Code2,
-  History,
-  MessageCircle,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -114,7 +111,6 @@ import {
   publishAppTemplateWorkspace,
   pushStoApp,
   type StoAppStatus,
-  restoreAppCheckpoint,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
@@ -127,11 +123,8 @@ import {
 import { useAppDevArtifactsStore } from '@/stores/app-dev-artifacts';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions, canUseStoCloudPipeline } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
-import { openAppDevIdeWindow, useAppDevIdeOwnership } from '@/hooks/use-app-dev-ide-ownership';
-import {
-  isSclawBrowserEmbedChatShortcut,
-  sclawBrowserEmbedChatShortcutLabel,
-} from '../../../shared/sclaw-embed-browser-shortcut';
+import { AppDevCodeFollow } from '@/hooks/use-app-dev-code-follow';
+import { useAppDevIdeOwnership } from '@/hooks/use-app-dev-ide-ownership';
 
 const CAPTURED_TURN_SUMMARY_LIMIT = 30;
 
@@ -481,9 +474,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [status, setStatus] = useState<AppDevStatus | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [composerSeed, setComposerSeed] = useState<{ text: string; version: number } | null>(null);
-  const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
   const stageCollapsed = useAppDevWorkbenchStore((s) => s.stageCollapsed);
   const toggleStageCollapsed = useAppDevWorkbenchStore((s) => s.toggleStageCollapsed);
   const tuneMode = useAppDevWorkbenchStore((s) => s.tuneMode);
@@ -543,7 +534,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     const prompt = stripPlanGatePromptForDisplay(tab.pendingPrompt ?? '').trim();
     if (!active || !prompt || !appDevSessionKey || sending) return;
     clearDevAppPendingPrompt(tab.id);
-    setChatOpen(true);
     setTuneMode('chat');
     setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
     void useChatStore.getState().sendMessage({
@@ -589,7 +579,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         text: prompt,
         version: (prev?.version ?? 0) + 1,
       }));
-      setChatOpen(true);
     },
     onSuccess: () => setMenuPublishOpen(true),
     onStatusRefresh: async () => {
@@ -598,22 +587,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
     },
   });
-
-  const platform = window.electron?.platform
-    ?? (navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'win32');
-  const chatShortcutLabel = sclawBrowserEmbedChatShortcutLabel(platform);
-
-  useEffect(() => {
-    if (!active) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isSclawBrowserEmbedChatShortcut(event, platform)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setChatOpen((open) => !open);
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [active, platform]);
 
   useEffect(() => {
     void getAppDevEnvironment()
@@ -650,7 +623,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       if (!escalate.prompt) return;
       healPendingRef.current = true;
       toast.message('出了点问题，正在自动修复…');
-      setChatOpen(true);
       setComposerSeed((prev) => ({
         text: escalate.prompt!,
         version: (prev?.version ?? 0) + 1,
@@ -821,7 +793,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     ].join('\n');
     setPendingErrors([]);
     setComposerSeed((prev) => ({ text, version: (prev?.version ?? 0) + 1 }));
-    setChatOpen(true);
   }, [pendingErrors]);
 
   const handlePreviewRuntimeError = useCallback((formattedLine: string) => {
@@ -838,7 +809,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     const trimmed = text.trim();
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
-    setChatOpen(true);
   }, []);
 
   const handleSubmitElementIntent = useCallback(async (
@@ -849,7 +819,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     if (!trimmed || !appDevSessionKey) return;
     if (interceptRestartIntent(trimmed)) return;
     setTuneMode('chat');
-    setChatOpen(true);
     const packed = buildElementIntentPrompt(trimmed, elements);
     const priorUserMessageCount = getSessionDisplayMessages(appDevSessionKey)
       .filter((message) => message.role === 'user').length;
@@ -869,18 +838,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     const trimmed = text.trim();
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
-    setChatOpen(true);
   }, []);
-
-  const handleRestore = async () => {
-    const result = await restoreAppCheckpoint(workspaceId);
-    if (result.restored) {
-      setSourceRevision((n) => n + 1);
-      toast.success('已恢复到上一版，页面稍后自动刷新');
-    } else {
-      toast.error('暂时无法恢复，请稍后再试');
-    }
-  };
 
   // T04：消息级「恢复版本」——汇总卡按钮 → store 请求 → 二次确认 → 回滚 + 刷新。
   const versionRestore = useAppDevVersionRestore({
@@ -955,6 +913,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       className="flex h-full min-h-0 w-full flex-col bg-background"
       data-app-dev-overlay={active ? 'active' : 'inactive'}
     >
+      <AppDevCodeFollow sessionKey={appDevSessionKey} />
       <header
         className={cn(
           'flex shrink-0 items-center gap-3 border-b border-border drag-region',
@@ -1142,34 +1101,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             type="button"
             variant="ghost"
             size="sm"
-            className={cn('gap-1 text-xs', !gitAvailable && 'hidden')}
-            disabled={!gitAvailable}
-            onClick={() => setConfirmRestore(true)}
-          >
-            <History className="h-3.5 w-3.5" aria-hidden />
-            恢复上一版
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            title="在独立编辑器窗口打开（代码 + 加宽对话）"
-            onClick={() => {
-              void openAppDevIdeWindow(workspaceId, appName).catch((error) => {
-                toast.error(error instanceof Error ? error.message : '无法打开编辑器');
-              });
-            }}
-          >
-            <Code2 className="h-3.5 w-3.5" aria-hidden />
-            {ideOwnership.open ? '回到编辑器' : '在编辑器打开'}
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
             className={cn(
               'h-7 gap-1 px-2 text-xs',
               stageCollapsed && 'bg-muted text-foreground',
@@ -1179,33 +1110,16 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             onClick={toggleStageCollapsed}
           >
             {stageCollapsed ? (
-              <PanelLeftOpen className="h-3.5 w-3.5" aria-hidden />
+              <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
             ) : (
-              <PanelLeftClose className="h-3.5 w-3.5" aria-hidden />
+              <PanelRightClose className="h-3.5 w-3.5" aria-hidden />
             )}
             {stageCollapsed ? '展开工作区' : '收起工作区'}
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'h-7 gap-1 px-2 text-xs',
-              chatOpen && 'bg-muted text-foreground',
-            )}
-            aria-pressed={chatOpen}
-            title={`AI 会话 (${chatShortcutLabel})`}
-            onClick={() => setChatOpen((open) => !open)}
-          >
-            <MessageCircle className="h-3.5 w-3.5" aria-hidden />
-            会话
           </Button>
         </div>
       </header>
 
       <AppDevSplitBody
-        chatOpen={chatOpen}
         stageCollapsed={stageCollapsed}
         chat={
           ideOwnership.open
@@ -1213,7 +1127,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
                 <p className="text-sm text-foreground">编程会话已在独立编辑器窗口</p>
                 <p className="max-w-[280px] text-xs leading-relaxed text-muted-foreground">
-                  广场窗口继续预览即可。点击「回到编辑器」继续改代码。
+                  广场窗口继续预览即可。请在独立编辑器窗口继续改代码。
                 </p>
               </div>
             )
@@ -1243,7 +1157,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 onOpenPublish={canDeploy ? () => setDeployOpen(true) : undefined}
                 onPickSuggestion={(prompt) => {
                   setComposerSeed((prev) => ({ text: prompt, version: (prev?.version ?? 0) + 1 }));
-                  setChatOpen(true);
                   setTuneMode('chat');
                 }}
                 auditsByTurn={auditsByTurn}
@@ -1252,7 +1165,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                     text: buildResponsiveFixPrompt(audit),
                     version: (prev?.version ?? 0) + 1,
                   }));
-                  setChatOpen(true);
                   setTuneMode('chat');
                 }}
               />
@@ -1278,13 +1190,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
               return;
             }
             setTuneMode('tune');
-            setChatOpen(true);
           }}
           tuneActive={tuneMode === 'tune'}
           onToggleInspect={() => {
             const next = !inspectActive;
             setInspectActive(next);
-            if (next) setChatOpen(true);
           }}
           inspectActive={inspectActive}
           onSubmitElementIntent={handleSubmitElementIntent}
@@ -1304,19 +1214,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         />
       </AppDevSplitBody>
 
-      <ConfirmDialog
-        open={confirmRestore}
-        title="恢复上一版"
-        message="将把应用恢复到上一次对话修改前的样子。当前内容会自动备份，可以放心恢复。"
-        confirmLabel="恢复"
-        confirmingLabel="恢复中…"
-        variant="destructive"
-        onConfirm={async () => {
-          await handleRestore();
-          setConfirmRestore(false);
-        }}
-        onCancel={() => setConfirmRestore(false)}
-      />
       <ConfirmDialog
         open={versionRestore.target != null}
         title="恢复版本"

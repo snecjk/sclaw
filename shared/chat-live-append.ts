@@ -10,7 +10,7 @@ export const LIVE_FIELD_KEY = '_liveField';
 export const LIVE_BLOCK_INDEX_KEY = '_liveBlockIndex';
 export const LIVE_TAIL_KEY = '_liveTail';
 
-/** 折叠预览只取末尾，避免为了最后一句去 join 全文。 */
+/** 折叠预览只取末尾，避免为了最后一句去 join 全文。思考折叠可用，正文禁止。 */
 export const LIVE_TEXT_TAIL_CHARS = 96;
 /** 相邻后缀合成一块，降低 parts 条目数；单次拷贝不超过这块大小。 */
 export const LIVE_PART_COALESCE_CHARS = 256;
@@ -175,6 +175,11 @@ export function liveTextTail(parts: readonly string[], maxChars = LIVE_TEXT_TAIL
     out = `${parts[index] ?? ''}${out}`;
   }
   return out.length > maxChars ? out.slice(-maxChars) : out;
+}
+
+/** 正文 / 解析必须拼回全文；禁止把 `_liveTail` 当成交付内容。 */
+export function liveTextFull(parts: readonly string[]): string {
+  return parts.join('');
 }
 
 function readLiveParts(message: OverlayMessage | null): string[] | null {

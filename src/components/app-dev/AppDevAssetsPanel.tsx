@@ -120,6 +120,7 @@ export const AppDevAssetsPanel = memo(function AppDevAssetsPanel({
                     variant="ghost"
                     className="h-7 text-xs"
                     onClick={() => {
+                      useAppDevWorkbenchStore.getState().pauseCodeFollow();
                       setAssetRevealPath(item.path);
                       setMode('code');
                     }}

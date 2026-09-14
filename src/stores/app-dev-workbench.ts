@@ -8,6 +8,7 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { APP_DEV_CODE_FOLLOW_IDLE_MS } from '@/lib/app-dev-code-follow-idle';
 
 /** 主区页签：预览 / 代码 / 版本 + 溢出菜单内的 more-* 面板。 */
 export type AppDevStageMode =
@@ -61,6 +62,11 @@ interface AppDevWorkbenchState {
   versionRestoreRequest: AppDevHashRequest | null;
   /** T14：从「文件」页跳转到代码页并打开路径（消费后清空）。 */
   assetRevealPath: string | null;
+  /**
+   * Agent 跟随时用户操作代码页的暂停截止时间。
+   * 0 表示正在跟随；用户切页/切文件后设为 now + idle。
+   */
+  codeFollowPausedUntil: number;
   setMode: (mode: AppDevStageMode) => void;
   setStageCollapsed: (collapsed: boolean) => void;
   toggleStageCollapsed: () => void;
@@ -70,6 +76,7 @@ interface AppDevWorkbenchState {
   setDiffRequest: (request: AppDevHashRequest | null) => void;
   setVersionRestoreRequest: (request: AppDevHashRequest | null) => void;
   setAssetRevealPath: (path: string | null) => void;
+  pauseCodeFollow: (idleMs?: number) => void;
 }
 
 export const useAppDevWorkbenchStore = create<AppDevWorkbenchState>()(
@@ -83,6 +90,7 @@ export const useAppDevWorkbenchStore = create<AppDevWorkbenchState>()(
       diffRequest: null,
       versionRestoreRequest: null,
       assetRevealPath: null,
+      codeFollowPausedUntil: 0,
 
       setMode: (mode) => {
         if (!isAppDevStageMode(mode)) return;
@@ -102,6 +110,12 @@ export const useAppDevWorkbenchStore = create<AppDevWorkbenchState>()(
       setDiffRequest: (request) => set({ diffRequest: request }),
       setVersionRestoreRequest: (request) => set({ versionRestoreRequest: request }),
       setAssetRevealPath: (path) => set({ assetRevealPath: path }),
+      pauseCodeFollow: (idleMs = APP_DEV_CODE_FOLLOW_IDLE_MS) => {
+        const duration = Number.isFinite(idleMs) && idleMs > 0
+          ? idleMs
+          : APP_DEV_CODE_FOLLOW_IDLE_MS;
+        set({ codeFollowPausedUntil: Date.now() + duration });
+      },
     }),
     {
       name: 'stoclaw:app-dev-workbench-v1',

@@ -304,6 +304,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   };
 
   const startElementPicker = async (mode: 'inspect' | 'tune' = pickerModeRef.current) => {
+    useAppDevWorkbenchStore.getState().pauseCodeFollow();
     setMode('preview');
     setPickerActive(true);
     emitPicks([]);
@@ -565,23 +566,47 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
-  const openFile = (path: string) => {
+  const openFile = (path: string, opts?: { fromUser?: boolean }) => {
+    if (opts?.fromUser) useAppDevWorkbenchStore.getState().pauseCodeFollow();
     setActivePath(path);
     setMode('code');
     setSidebar('files');
   };
 
-  // T14：从「文件」资产页请求打开源码路径。
+  // T14：从「文件」资产页 / Agent 跟随请求打开源码路径。
   const assetRevealPath = useAppDevWorkbenchStore((s) => s.assetRevealPath);
   useEffect(() => {
     if (!assetRevealPath) return;
-    openFile(assetRevealPath);
+    const path = assetRevealPath;
+    openFile(path);
     useAppDevWorkbenchStore.getState().setAssetRevealPath(null);
+    let cancelled = false;
+    void readAppSourceFile(workspaceId, path)
+      .then((file) => {
+        if (cancelled) return;
+        setTabs((prev) => {
+          const exists = prev.some((tab) => tab.path === file.path);
+          if (!exists) {
+            return [...prev, { path: file.path, draft: file.content, saved: file.content }];
+          }
+          return prev.map((tab) => (
+            tab.path === file.path && tab.draft === tab.saved
+              ? { ...tab, draft: file.content, saved: file.content }
+              : tab
+          ));
+        });
+        setActivePath(file.path);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
     // openFile 稳定引用不必要；仅消费路径请求
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assetRevealPath]);
+  }, [assetRevealPath, workspaceId]);
 
   const closeTab = (path: string) => {
+    useAppDevWorkbenchStore.getState().pauseCodeFollow();
     setTabs((prev) => {
       const next = prev.filter((t) => t.path !== path);
       if (path === activePath) {
@@ -596,6 +621,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   };
 
   const updateDraft = (next: string) => {
+    useAppDevWorkbenchStore.getState().pauseCodeFollow();
     setTabs((prev) => prev.map((t) => (t.path === activePath ? { ...t, draft: next } : t)));
   };
 
@@ -633,7 +659,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                   : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
               )}
               aria-pressed={active}
-              onClick={() => setMode(tab.id)}
+              onClick={() => {
+                useAppDevWorkbenchStore.getState().pauseCodeFollow();
+                setMode(tab.id);
+              }}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden />
               {tab.label}
@@ -668,7 +697,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     <DropdownMenuItem
                       key={tab.id}
                       className="gap-1.5 text-xs"
-                      onSelect={() => setMode(tab.id)}
+                      onSelect={() => {
+                        useAppDevWorkbenchStore.getState().pauseCodeFollow();
+                        setMode(tab.id);
+                      }}
                     >
                       <Icon className="h-3.5 w-3.5" aria-hidden />
                       {tab.label}
@@ -805,7 +837,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                     elements={pickedElements}
                     pickerActive={inspectOn}
                     onCancel={() => setInspectActive(false)}
-                    onOpenCode={() => setMode('code')}
+                    onOpenCode={() => {
+                      useAppDevWorkbenchStore.getState().pauseCodeFollow();
+                      setMode('code');
+                    }}
                     onSubmit={(intent, elements) => {
                       if (onSubmitElementIntent) {
                         void onSubmitElementIntent(intent, elements);
@@ -949,7 +984,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                   {filesLoading && files.length === 0 ? (
                     <p className="px-3 py-6 text-center text-xs text-muted-foreground">加载中…</p>
                   ) : (
-                    <AppDevFileTree nodes={tree} activePath={activePath} onOpenFile={openFile} />
+                    <AppDevFileTree nodes={tree} activePath={activePath} onOpenFile={(path) => openFile(path, { fromUser: true })} />
                   )}
                 </div>
               </>
@@ -991,7 +1026,7 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                           <button
                             type="button"
                             className="w-full rounded-md px-2 py-1.5 text-left hover:bg-background/80"
-                            onClick={() => openFile(hit.path)}
+                            onClick={() => openFile(hit.path, { fromUser: true })}
                           >
                             <div className="truncate text-[11px] font-medium text-foreground">
                               {hit.path}
@@ -1028,7 +1063,10 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
                         type="button"
                         className="min-w-0 flex-1 truncate text-left"
                         title={tab.path}
-                        onClick={() => setActivePath(tab.path)}
+                        onClick={() => {
+                          useAppDevWorkbenchStore.getState().pauseCodeFollow();
+                          setActivePath(tab.path);
+                        }}
                       >
                         {fileName(tab.path)}
                         {tabDirty ? ' •' : ''}

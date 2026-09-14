@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   isAppDevStageMode,
@@ -16,12 +16,16 @@ const DEFAULT_STATE = {
   diffRequest: null,
   versionRestoreRequest: null,
   assetRevealPath: null,
+  codeFollowPausedUntil: 0,
 } as const;
 
 describe('useAppDevWorkbenchStore', () => {
   beforeEach(() => {
     localStorage.clear();
     useAppDevWorkbenchStore.setState({ ...DEFAULT_STATE });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('starts with preview mode and expanded stage', () => {
@@ -33,6 +37,7 @@ describe('useAppDevWorkbenchStore', () => {
     expect(state.inspectActive).toBe(false);
     expect(state.diffRequest).toBeNull();
     expect(state.versionRestoreRequest).toBeNull();
+    expect(state.codeFollowPausedUntil).toBe(0);
   });
 
   it('switches mode from outside the stage component (对话侧驱动工作台)', () => {
@@ -79,6 +84,7 @@ describe('useAppDevWorkbenchStore', () => {
     next.setVersionRestoreRequest(null);
     expect(useAppDevWorkbenchStore.getState().diffRequest).toBeNull();
     expect(useAppDevWorkbenchStore.getState().versionRestoreRequest).toBeNull();
+    expect(useAppDevWorkbenchStore.getState().codeFollowPausedUntil).toBe(0);
   });
 
   it('starts inspect without entering 手动微调', () => {
@@ -98,6 +104,15 @@ describe('useAppDevWorkbenchStore', () => {
     useAppDevWorkbenchStore.getState().setInspectActive(true);
     expect(useAppDevWorkbenchStore.getState().tuneMode).toBe('chat');
     expect(useAppDevWorkbenchStore.getState().inspectActive).toBe(true);
+  });
+
+  it('pauses code follow for the idle window and then allows follow again', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    useAppDevWorkbenchStore.getState().pauseCodeFollow(15_000);
+    expect(useAppDevWorkbenchStore.getState().codeFollowPausedUntil).toBe(16_000);
+    vi.setSystemTime(16_000);
+    expect(useAppDevWorkbenchStore.getState().codeFollowPausedUntil).toBeLessThanOrEqual(Date.now());
   });
 
   it('does not persist inspectActive', () => {
