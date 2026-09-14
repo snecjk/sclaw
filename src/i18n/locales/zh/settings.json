@@ -393,6 +393,8 @@
     "reminderDesc": "空间不足或受管数据超过阈值时，每天最多提醒一次",
     "appRuntime": "应用缓存与日志",
     "appRuntimeDesc": "可安全清理的浏览器缓存和历史日志；保留登录状态、配置、数据库及当前日志",
+    "appCache": "应用缓存",
+    "appLogs": "历史日志",
     "openClaw": "OpenClaw 历史数据",
     "openClawDesc": "历史会话、任务日志、运行缓存和临时媒体",
     "projects": "项目产物",

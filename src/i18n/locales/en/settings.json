@@ -398,6 +398,8 @@
     "reminderDesc": "Remind at most once a day when disk space is low or managed data exceeds its threshold",
     "appRuntime": "Application cache and logs",
     "appRuntimeDesc": "Safely removable browser caches and historical logs; sign-in state, settings, databases, and the active log are kept",
+    "appCache": "Application cache",
+    "appLogs": "Historical logs",
     "openClaw": "OpenClaw history",
     "openClawDesc": "Historical sessions, task logs, runtime caches, and temporary media",
     "projects": "Project artifacts",

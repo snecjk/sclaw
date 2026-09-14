@@ -429,15 +429,21 @@ export class StorageManagementService {
       inUse: openClawInUse,
     });
 
-    const appRuntimeUsage = emptyUsage();
-    for (const path of await this.appRuntimeCleanupPaths()) mergeUsage(appRuntimeUsage, await scanTree(path));
-    const appRuntime = targetFromUsage('app-runtime-cache', 'Application cache and logs', appRuntimeUsage, {
-      exists: appRuntimeUsage.fileCount > 0,
+    const appCacheUsage = emptyUsage();
+    for (const path of await this.appCachePaths()) mergeUsage(appCacheUsage, await scanTree(path));
+    const appCache = targetFromUsage('app-cache', 'Application cache', appCacheUsage, {
+      exists: appCacheUsage.fileCount > 0,
+    });
+    const appLogsUsage = emptyUsage();
+    for (const path of await this.historicalLogPaths()) mergeUsage(appLogsUsage, await scanTree(path));
+    const appLogs = targetFromUsage('app-logs', 'Historical logs', appLogsUsage, {
+      exists: appLogsUsage.fileCount > 0,
     });
 
     const workflowBytes = workflowRuns.reduce((sum, item) => sum + item.bytes, 0);
     const workflowFiles = workflowRuns.reduce((sum, item) => sum + item.fileCount, 0);
-    const managedBytes = appRuntime.bytes
+    const managedBytes = appCache.bytes
+      + appLogs.bytes
       + openClaw.bytes
       + workflowBytes
       + workspaceTargets.reduce((sum, item) => sum + item.bytes, 0);
@@ -446,7 +452,8 @@ export class StorageManagementService {
       disk,
       managedBytes,
       managedSeverity: resolveManagedStorageSeverity(managedBytes),
-      appRuntime,
+      appCache,
+      appLogs,
       openClaw,
       workspaces: workspaceTargets,
       workflowRuntime: { bytes: workflowBytes, fileCount: workflowFiles, runs: workflowRuns },
@@ -473,12 +480,8 @@ export class StorageManagementService {
     return paths;
   }
 
-  /**
-   * Only return disposable Electron/Chromium data. Account state, cookies,
-   * databases, preferences, device identity and the active log are deliberately
-   * excluded even though they live under the same userData directory.
-   */
-  private async appRuntimeCleanupPaths(): Promise<string[]> {
+  /** Only disposable Electron/Chromium caches; browser state is excluded. */
+  private async appCachePaths(): Promise<string[]> {
     const root = app.getPath('userData');
     const paths = ELECTRON_CACHE_DIRS.map((name) => join(root, name));
 
@@ -490,6 +493,12 @@ export class StorageManagementService {
       }
     } catch { /* missing partitions */ }
 
+    return paths;
+  }
+
+  private async historicalLogPaths(): Promise<string[]> {
+    const root = app.getPath('userData');
+    const paths: string[] = [];
     const activeLog = getLogFilePath();
     const now = new Date();
     const activeLogName = `stoclaw-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.log`;
@@ -578,35 +587,8 @@ export class StorageManagementService {
     mode: StorageCleanupMode,
     policy?: StorageCleanupPolicy,
   ): Promise<StorageCleanupResult['targets'][number]> {
-    if (id === 'app-runtime-cache') {
-      let bytes = 0;
-      let matched = 0;
-      let cleaned = 0;
-      let failedCount = 0;
-      let failed: StorageCleanupErrorCode | undefined;
-      const root = app.getPath('userData');
-      for (const path of await this.appRuntimeCleanupPaths()) {
-        const usage = await scanTree(path);
-        if (usage.fileCount === 0 || !(await pathExists(path))) continue;
-        matched += usage.fileCount;
-        if (!(await validateTrashTarget(root, path)) || resolve(path) === resolve(root)) {
-          failed = 'PATH_INVALID';
-          failedCount += usage.fileCount;
-          continue;
-        }
-        try {
-          await removeManagedPath(path, mode);
-          bytes += usage.bytes;
-          cleaned += usage.fileCount;
-        } catch (error) {
-          failed = cleanupErrorCode(error, mode);
-          failedCount += usage.fileCount;
-        }
-      }
-      return cleanupResult(id, failed ? (cleaned > 0 ? 'partial' : 'failed') : matched > 0 ? 'cleaned' : 'skipped', {
-        bytes, matched, cleaned, failed: failedCount, errorCode: failed,
-      });
-    }
+    if (id === 'app-cache') return this.cleanupPathGroup(id, app.getPath('userData'), await this.appCachePaths(), mode);
+    if (id === 'app-logs') return this.cleanupPathGroup(id, app.getPath('userData'), await this.historicalLogPaths(), mode);
 
     if (id === 'openclaw-history') {
       if (openClawInUse) return cleanupResult(id, 'skipped', { errorCode: 'TARGET_IN_USE' });
@@ -677,6 +659,40 @@ export class StorageManagementService {
     }
 
     return cleanupResult(id, 'failed', { errorCode: 'PATH_INVALID' });
+  }
+
+  private async cleanupPathGroup(
+    id: string,
+    root: string,
+    paths: string[],
+    mode: StorageCleanupMode,
+  ): Promise<StorageCleanupResult['targets'][number]> {
+    let bytes = 0;
+    let matched = 0;
+    let cleaned = 0;
+    let failedCount = 0;
+    let failed: StorageCleanupErrorCode | undefined;
+    for (const path of paths) {
+      const usage = await scanTree(path);
+      if (usage.fileCount === 0 || !(await pathExists(path))) continue;
+      matched += usage.fileCount;
+      if (!(await validateTrashTarget(root, path)) || resolve(path) === resolve(root)) {
+        failed = 'PATH_INVALID';
+        failedCount += usage.fileCount;
+        continue;
+      }
+      try {
+        await removeManagedPath(path, mode);
+        bytes += usage.bytes;
+        cleaned += usage.fileCount;
+      } catch (error) {
+        failed = cleanupErrorCode(error, mode);
+        failedCount += usage.fileCount;
+      }
+    }
+    return cleanupResult(id, failed ? (cleaned > 0 ? 'partial' : 'failed') : matched > 0 ? 'cleaned' : 'skipped', {
+      bytes, matched, cleaned, failed: failedCount, errorCode: failed,
+    });
   }
 
   private async cleanupWorkspaceFilesOlderThan(

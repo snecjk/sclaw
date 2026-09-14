@@ -44,8 +44,10 @@ function StorageRow({ target, onDelete }: { target: StorageTarget; onDelete: (ta
   const { t } = useTranslation('settings');
   const displayName = target.id === 'workspace-artifacts:default'
     ? t('storage.defaultWorkspace')
-    : target.id === 'app-runtime-cache'
-      ? t('storage.appRuntime')
+    : target.id === 'app-cache'
+      ? t('storage.appCache')
+      : target.id === 'app-logs'
+        ? t('storage.appLogs')
     : target.id === 'openclaw-history'
       ? t('storage.openClaw')
       : target.name;
@@ -215,7 +217,10 @@ export function StorageSettings() {
 
       <section className={stoSettingsSectionCardClass}>
         <div className="mb-4 flex items-center gap-3"><Database className="h-5 w-5" /><div><h2 className="font-semibold">{t('storage.appRuntime')}</h2><p className="text-xs text-muted-foreground">{t('storage.appRuntimeDesc')}</p></div></div>
-        {overview ? <StorageRow target={overview.appRuntime} onDelete={(target) => requestCleanup([target])} /> : null}
+        {overview ? <>
+          <StorageRow target={overview.appCache} onDelete={(target) => requestCleanup([target])} />
+          <StorageRow target={overview.appLogs} onDelete={(target) => requestCleanup([target])} />
+        </> : null}
       </section>
 
       <section className={stoSettingsSectionCardClass}>

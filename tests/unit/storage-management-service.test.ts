@@ -120,4 +120,29 @@ describe('StorageManagementService workspace artifacts', () => {
     expect(mocks.trashItem).not.toHaveBeenCalled();
     expect(result).toMatchObject({ mode: 'delete', movedToTrashBytes: 0, permanentlyDeletedBytes: 3 });
   });
+
+  it('scans and cleans application caches separately from historical logs', async () => {
+    const cacheDir = join(mocks.root, 'Cache');
+    const logDir = join(mocks.root, 'logs');
+    const logFile = join(logDir, 'stoclaw-2000-01-01.log');
+    await mkdir(cacheDir, { recursive: true });
+    await mkdir(logDir, { recursive: true });
+    await writeFile(join(cacheDir, 'cache.bin'), 'cache');
+    await writeFile(logFile, 'log');
+
+    const { StorageManagementService } = await import('@electron/services/storage-management-service');
+    const service = new StorageManagementService();
+    const overview = await service.overview({ force: true });
+    expect(overview.appCache).toMatchObject({ id: 'app-cache', bytes: 5, fileCount: 1 });
+    expect(overview.appLogs).toMatchObject({ id: 'app-logs', bytes: 3, fileCount: 1 });
+
+    await service.cleanup(['app-cache'], { mode: 'trash' });
+    expect(mocks.trashItem).toHaveBeenCalledWith(cacheDir);
+    expect(mocks.trashItem).not.toHaveBeenCalledWith(logFile);
+
+    mocks.trashItem.mockClear();
+    await service.cleanup(['app-logs'], { mode: 'trash' });
+    expect(mocks.trashItem).toHaveBeenCalledWith(logFile);
+    expect(mocks.trashItem).not.toHaveBeenCalledWith(cacheDir);
+  });
 });

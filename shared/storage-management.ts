@@ -43,7 +43,8 @@ export interface StorageOverview {
   disk: StorageDiskSummary;
   managedBytes: number;
   managedSeverity: StorageSeverity;
-  appRuntime: StorageTarget;
+  appCache: StorageTarget;
+  appLogs: StorageTarget;
   openClaw: StorageTarget;
   workspaces: WorkspaceStorageTarget[];
   workflowRuntime: {
