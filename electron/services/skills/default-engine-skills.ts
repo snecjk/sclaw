@@ -12,6 +12,7 @@ export interface DefaultEngineSkillRule {
  */
 export const DEFAULT_ENGINE_SKILL_RULES: readonly DefaultEngineSkillRule[] = [
   { slug: 'sai-cli', engines: ['claude', 'pi'] },
+  { slug: 'dws', engines: ['claude', 'pi'] },
 ];
 
 export function getDefaultEngineSkillSlugs(input: {
