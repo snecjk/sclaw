@@ -17,8 +17,11 @@ import {
   isVersionConflictError,
 } from '../../shared/site-app-source-sync';
 import type { SourceConflictFile, SourcePullClientAction } from '../../shared/site-app-source-merge';
+import { resolveSiteAppGitGroup } from '../../shared/site-app-git-group';
+import { setSiteDepartmentTypes } from '../../shared/site-user-utils';
 import { siteAppToWorkspaceFields, type StoWorkspaceFile } from '../../shared/sto-workspace';
 import { createUlid } from '../utils/ulid';
+import { getAuthState } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import {
   cleanupSourceSnapshot,
@@ -46,6 +49,7 @@ import {
   getSiteApp,
   listSiteApps,
 } from './site-app-api';
+import { loadSiteDepartmentTypes } from './sto-apollo-config-service';
 import {
   getStoAppBindingByLocalPath,
   getStoAppBindingByWorkspaceId,
@@ -293,6 +297,26 @@ function isFirstPushBaselineReady(state: StoWorkspaceFile | null): boolean {
 }
 
 /**
+ * First source/commit only: bind Git Group from SSO identity.
+ * Subsequent commits omit group fields so the server reuses the existing binding.
+ */
+async function resolveGitGroupForFirstCommit(baseRevisionId: string | null | undefined) {
+  if (baseRevisionId) return null;
+  try {
+    const types = await loadSiteDepartmentTypes();
+    setSiteDepartmentTypes(types);
+  } catch (error) {
+    logger.warn('[code-collab] load site department types for git group failed:', error);
+  }
+  const { user } = await getAuthState();
+  const gitGroup = resolveSiteAppGitGroup(user ?? {});
+  if (!gitGroup) {
+    logger.warn('[code-collab] first commit missing SSO categoryCode/companyCode; omit git group');
+  }
+  return gitGroup;
+}
+
+/**
  * Bind workspace for push. Creates the cloud Site App on first commit only.
  * appCode is persisted immediately after cloud create so a later source-commit
  * failure will reuse the same application instead of creating another one.
@@ -527,6 +551,7 @@ export async function pushCodeApplication(
 
   const revisionId = createUlid();
   const snapshot = await createSourceSnapshot(cwd);
+  const gitGroup = await resolveGitGroupForFirstCommit(state.baseRevisionId);
   logger.info(
     `[code-collab] action=push snapshot revisionId=${revisionId} ${serializeForCodeCollabLog({
       archivePath: snapshot.archivePath,
@@ -535,6 +560,7 @@ export async function pushCodeApplication(
       archiveSizeBytes: snapshot.archiveSizeBytes,
       expandedSizeBytes: snapshot.expandedSizeBytes,
       fileCount: snapshot.fileCount,
+      gitGroup: gitGroup ?? null,
     })}`,
   );
 
@@ -554,6 +580,7 @@ export async function pushCodeApplication(
         expandedSizeBytes: snapshot.expandedSizeBytes,
         fileCount: snapshot.fileCount,
       },
+      gitGroup,
     }).catch(mapVersionConflict);
 
     if (revision.status.toLowerCase() !== 'ready' || !revision.commitSha) {
