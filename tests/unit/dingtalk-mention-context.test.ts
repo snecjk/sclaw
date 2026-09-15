@@ -267,5 +267,6 @@ describe('dingtalk mention context scenario split', () => {
     expect(ctx).toContain('指定即必发');
     expect(ctx).toContain('在线链接流程');
     expect(ctx).toContain('upload_file_to_temp_oss');
+    expect(ctx).toContain('不要在钉钉正文或发送后的对话回执中向用户提及过期时间');
   });
 });
