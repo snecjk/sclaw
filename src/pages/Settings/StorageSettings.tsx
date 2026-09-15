@@ -52,7 +52,7 @@ function StorageRow({ target, onDelete }: { target: StorageTarget; onDelete: (ta
       ? t('storage.openClaw')
       : target.name;
   return (
-    <div className="flex items-center gap-3 border-t border-border/60 py-3 first:border-t-0">
+    <div className="flex items-center gap-3 border-t border-border/60 py-3 first:border-t-0 dark:border-white/10">
       <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{displayName}</p>
@@ -86,7 +86,7 @@ function WorkspaceRow({
   const displayName = target.id === 'workspace-artifacts:default' ? t('storage.defaultWorkspace') : target.name;
   const cleanable = usage.fileCount > 0 && target.status === 'ready';
   return (
-    <div className="flex items-center gap-3 border-t border-border/60 py-3 first:border-t-0">
+    <div className="flex items-center gap-3 border-t border-border/60 py-3 first:border-t-0 dark:border-white/10">
       <input type="checkbox" checked={selected} disabled={!cleanable} onChange={(event) => onSelectedChange(event.target.checked)} />
       <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
@@ -209,7 +209,7 @@ export function StorageSettings() {
           <div><p className="text-xs text-muted-foreground">{t('storage.diskTotal')}</p><p className="mt-1 text-xl font-semibold">{overview ? formatBytes(overview.disk.totalBytes) : '—'}</p></div>
           <div><p className="text-xs text-muted-foreground">{t('storage.managed')}</p><p className="mt-1 text-xl font-semibold">{overview ? formatBytes(overview.managedBytes) : '—'}</p></div>
         </div>
-        <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
+        <div className="mt-5 flex items-center justify-between border-t border-border pt-4 dark:border-white/10">
           <div><p className="text-sm font-medium">{t('storage.reminder')}</p><p className="text-xs text-muted-foreground">{t('storage.reminderDesc')}</p></div>
           <Switch checked={reminderEnabled} onCheckedChange={setReminderEnabled} />
         </div>
@@ -279,13 +279,13 @@ export function StorageSettings() {
           <Workflow className="h-5 w-5" /><div className="min-w-0 flex-1"><h2 className="font-semibold">{t('storage.workflow')}</h2><p className="text-xs text-muted-foreground">{overview ? `${formatBytes(overview.workflowRuntime.bytes)} · ${overview.workflowRuntime.fileCount} ${t('storage.files')}` : t('storage.workflowDesc')}</p></div>
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
-        {expanded ? <div className="mt-4 border-t border-border pt-3">
+        {expanded ? <div className="mt-4 border-t border-border pt-3 dark:border-white/10">
           <div className="mb-2 flex items-center justify-between gap-2">
             {deletableRuns.length > 0 ? <Button size="sm" variant="outline" onClick={() => setSelectedRuns(new Set(deletableRuns.map((run) => run.id)))}>{t('storage.selectAll')}</Button> : <span />}
             <Button size="sm" variant="outline" disabled={selectedRuns.size === 0} onClick={() => requestCleanup(workflowRuns.filter((run) => selectedRuns.has(run.id)))}>{t('storage.cleanSelected')}</Button>
           </div>
           {workflowRuns.length === 0 ? <p className="py-4 text-sm text-muted-foreground">{t('storage.empty')}</p> : workflowRuns.map((run) => (
-            <label key={run.id} className="flex items-center gap-3 border-t border-border/60 py-3 first:border-t-0">
+            <label key={run.id} className="flex items-center gap-3 border-t border-border/60 py-3 first:border-t-0 dark:border-white/10">
               <input type="checkbox" disabled={!run.deletable || run.bytes === 0} checked={selectedRuns.has(run.id)} onChange={(event) => setSelectedRuns((current) => { const next = new Set(current); if (event.target.checked) next.add(run.id); else next.delete(run.id); return next; })} />
               <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{run.workflowName || run.runId}</p><p className="text-xs text-muted-foreground">{run.orphaned ? t('storage.orphaned') : run.runStatus} · {run.fileCount} {t('storage.files')}</p></div>
               <span className="text-sm tabular-nums text-muted-foreground">{formatBytes(run.bytes)}</span>
