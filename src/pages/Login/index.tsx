@@ -13,7 +13,6 @@ import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Select } from '@/components/ui/select';
-import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { invertedPrimarySurfaceClass } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
@@ -129,16 +128,29 @@ export function Login() {
   );
 
   return (
-    <div
-      className="relative flex h-screen flex-col overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, var(--canvas-from), var(--canvas-via), var(--canvas-to))' }}
-    >
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[#F7F8FA] dark:bg-[#0D0D0D]">
+      {/* 背景对齐设计稿：#AEB8C4 规则点阵（约 1.7px / 间距 13.93px）+ 四角白色径向光晕压淡点阵 */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 neural-grid opacity-40" />
-        <div className="absolute -top-24 left-[12%] h-72 w-72 rounded-full bg-cyan-400/18 blur-[110px]" />
-        <div className="absolute right-[10%] top-[18%] h-80 w-80 rounded-full bg-[rgba(255,140,0,0.08)] blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-[rgba(255,111,0,0.05)] blur-[120px]" />
-        <ParticleConstellation particleCount={34} connectionDistance={140} speed={0.24} />
+        <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            backgroundImage: [
+              'radial-gradient(600px 600px at 78.5% 11.4%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 90%)',
+              'radial-gradient(500px 500px at 5.3% 67.6%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 90%)',
+              'radial-gradient(400px 400px at 29.9% 6%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 16%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.18) 68%, rgba(255,255,255,0.06) 84%, rgba(255,255,255,0) 96%)',
+              'radial-gradient(500px 500px at 61.5% 87.1%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 16%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.18) 68%, rgba(255,255,255,0.06) 84%, rgba(255,255,255,0) 96%)',
+              'radial-gradient(circle, #AEB8C4 0.84px, transparent 0.92px)',
+            ].join(','),
+            backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%, 13.93px 13.93px',
+          }}
+        />
+        <div
+          className="absolute inset-0 hidden dark:block"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.12) 0.84px, transparent 0.92px)',
+            backgroundSize: '13.93px 13.93px',
+          }}
+        />
       </div>
 
       <TitleBar />
