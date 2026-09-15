@@ -1,5 +1,6 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { revealAppDevSourceFile } from '@/lib/app-dev-reveal-source';
+import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import { cn } from '@/lib/utils';
 
 interface AppDevFileJumpLinkProps {
@@ -17,6 +18,7 @@ export function AppDevFileJumpLink({ path, children, className }: AppDevFileJump
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    useAppDevWorkbenchStore.getState().pauseCodeFollow();
     revealAppDevSourceFile(trimmed);
   };
 

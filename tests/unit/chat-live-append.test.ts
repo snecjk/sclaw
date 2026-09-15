@@ -3,6 +3,8 @@ import {
   applyLiveMessagePayload,
   buildLiveDeltaPayload,
   LIVE_PARTS_KEY,
+  liveTextFull,
+  liveTextTail,
   materializeLiveMessage,
   mergeLiveDeltaPayloads,
   readLiveAppend,
@@ -85,6 +87,13 @@ describe('chat live append（累计快照 → 增量后缀，不截断）', () =
     const built = buildLiveDeltaPayload(cursor, withTool);
     expect(readLiveAppend(built.payload)).toBeNull();
     expect(built.payload).toEqual(withTool);
+  });
+
+  it('liveTextFull 拼回全文，不走 96 字预览尾', () => {
+    const parts = ['表头', '以及后面很长的天气明细行 '.repeat(8)];
+    expect(liveTextFull(parts)).toBe(parts.join(''));
+    expect(liveTextFull(parts).length).toBeGreaterThan(96);
+    expect(liveTextTail(parts).length).toBeLessThanOrEqual(96);
   });
 
   it('合帧时把连续 append 拼成一次追加', () => {

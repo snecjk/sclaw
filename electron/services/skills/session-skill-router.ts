@@ -14,6 +14,7 @@ import { orderSessionSkillLeases, type SelectedSkillInput } from './session-skil
 import { skillRoutingRemoteService } from './skill-routing-remote-service';
 import { computeSkillPackageHash } from './skill-package-hash';
 import { getDefaultEngineSkillSlugs } from './default-engine-skills';
+import { isAppDevSessionKey } from '../../../shared/app-dev-session';
 
 const INTERACTIVE_LIMIT = 6;
 const SCHEDULED_LIMIT = 4;
@@ -108,6 +109,32 @@ export async function routeSessionSkills(input: {
       })
       .join('\n'))
     .digest('hex');
+  if (isAppDevSessionKey(input.sessionKey)) {
+    // 建站会话只改当前应用源码/预览，不注入主会话业务技能（sai-cli、派费、报价等）。
+    await beginSkillTurn({
+      sessionKey: input.sessionKey,
+      runId: input.runId,
+      manifestRevision,
+      query: input.query,
+      selected: [],
+      remoteSearched: false,
+    });
+    if (skillDiscoveryEnabled) {
+      input.onProgress?.('未匹配到相关技能，正在直接处理…');
+    }
+    logger.debug('[skill-router] skip catalog routing for app-dev session', {
+      sessionKey: input.sessionKey,
+      engine: input.engine,
+    });
+    return {
+      selected: [],
+      skillSetHash: createHash('sha256').update('').digest('hex'),
+      manifestRevision,
+      remoteSearched: false,
+      degraded: false,
+      topicChanged: false,
+    };
+  }
   if (!skillDiscoveryEnabled) {
     const selected = desired.map((pkg) => ({
       slug: normalize(pkg.slug),

@@ -1,5 +1,6 @@
 /**
  * 选中区域对话修改浮条：overlay 语义，浅色值与现有 popover 对齐。
+ * 宽屏单行；手机预览等窄宽度下 meta / 输入自动换行。
  */
 
 .app-dev-element-intent-bar {
@@ -7,25 +8,36 @@
   position: absolute;
   z-index: 20;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 4px 6px 4px 8px;
+  gap: 6px 8px;
+  min-height: 44px;
+  padding: 6px 8px;
   border: 1px solid var(--sto-overlay-border);
-  border-radius: 999px;
+  border-radius: 16px;
   background: var(--sto-overlay-background);
   color: var(--sto-overlay-foreground);
   box-shadow: var(--sto-shadow-content-popover);
 }
 
+.app-dev-element-intent-bar__meta {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 160px;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-dev-element-intent-bar__grip {
   display: inline-flex;
+  flex-shrink: 0;
   color: var(--sto-icon-tertiary);
   cursor: default;
 }
 
 .app-dev-element-intent-bar__spark {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -37,39 +49,37 @@
 
 .app-dev-element-intent-bar__chips {
   display: flex;
-  max-width: 28%;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  overflow: hidden;
 }
 
 .app-dev-element-intent-bar__chip {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   border-radius: 6px;
   background: var(--sto-control-hover-bg);
   padding: 2px 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
+  line-height: 1.4;
   color: var(--sto-text-secondary);
 }
 
 .app-dev-element-intent-bar__hint {
-  flex-shrink: 0;
-  max-width: 36%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
   font-size: 12px;
+  line-height: 1.4;
   color: var(--sto-text-tertiary);
 }
 
 .app-dev-element-intent-bar__form {
   display: flex;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 220px;
   align-items: center;
   gap: 6px;
 }

@@ -16,16 +16,31 @@ import {
   decideSourcePullAction,
   isVersionConflictError,
 } from '../../shared/site-app-source-sync';
+import type { SourceConflictFile, SourcePullClientAction } from '../../shared/site-app-source-merge';
+import { resolveSiteAppGitGroup } from '../../shared/site-app-git-group';
+import { setSiteDepartmentTypes } from '../../shared/site-user-utils';
 import { siteAppToWorkspaceFields, type StoWorkspaceFile } from '../../shared/sto-workspace';
 import { createUlid } from '../utils/ulid';
+import { getAuthState } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import {
-  applyArchiveToWorkspace,
   cleanupSourceSnapshot,
   createSourceSnapshot,
   ensureEmptyDirectory,
   extractSourceArchive,
 } from '../utils/code-source-archive';
+import {
+  applyArchiveFileDiff,
+  beginThreeWayMerge,
+  cacheBaseSnapshotFromArchive,
+  cacheBaseSnapshotFromWorkspace,
+  clearMergeState,
+  finalizeMergeContinue,
+  listUnresolvedConflicts,
+  readMergeState,
+  resolveMergeConflictChoice,
+  workspaceHasConflictMarkers,
+} from '../utils/code-source-merge';
 import {
   commitSiteAppSource,
   createSiteApp,
@@ -34,6 +49,7 @@ import {
   getSiteApp,
   listSiteApps,
 } from './site-app-api';
+import { loadSiteDepartmentTypes } from './sto-apollo-config-service';
 import {
   getStoAppBindingByLocalPath,
   getStoAppBindingByWorkspaceId,
@@ -63,7 +79,10 @@ export interface CodeCollabStatusSummary {
   appCode?: string;
   applicationName?: string;
   revisionId?: string;
+  remoteRevisionId?: string;
+  mergeTheirsRevisionId?: string;
   devCommitSha?: string;
+  conflicts?: SourceConflictFile[];
   raw?: unknown;
 }
 
@@ -278,6 +297,26 @@ function isFirstPushBaselineReady(state: StoWorkspaceFile | null): boolean {
 }
 
 /**
+ * First source/commit only: bind Git Group from SSO identity.
+ * Subsequent commits omit group fields so the server reuses the existing binding.
+ */
+async function resolveGitGroupForFirstCommit(baseRevisionId: string | null | undefined) {
+  if (baseRevisionId) return null;
+  try {
+    const types = await loadSiteDepartmentTypes();
+    setSiteDepartmentTypes(types);
+  } catch (error) {
+    logger.warn('[code-collab] load site department types for git group failed:', error);
+  }
+  const { user } = await getAuthState();
+  const gitGroup = resolveSiteAppGitGroup(user ?? {});
+  if (!gitGroup) {
+    logger.warn('[code-collab] first commit missing SSO categoryCode/companyCode; omit git group');
+  }
+  return gitGroup;
+}
+
+/**
  * Bind workspace for push. Creates the cloud Site App on first commit only.
  * appCode is persisted immediately after cloud create so a later source-commit
  * failure will reuse the same application instead of creating another one.
@@ -374,6 +413,7 @@ async function updateWorkspaceBaseline(
   appPath: string,
   appCode: string,
   revision: { revisionId: string; commitSha: string; sourceSha256: string },
+  mergeParentRevisionId?: string | null,
 ): Promise<void> {
   await writeStoWorkspaceBinding({
     appPath,
@@ -385,6 +425,7 @@ async function updateWorkspaceBaseline(
       baseSourceSha256: revision.sourceSha256,
     },
     fallback: { appCode, status: 'ready' },
+    mergeParentRevisionId: mergeParentRevisionId === undefined ? undefined : mergeParentRevisionId,
   });
 }
 
@@ -400,6 +441,11 @@ export async function getCodeCollabStatus(appPath: string): Promise<CodeCollabSt
       logger.warn(`[code-collab] action=status detail fallback appCode=${state.appCode}:`, error);
     }
 
+    const mergeState = await readMergeState(cwd);
+    const conflicts = (await listUnresolvedConflicts(cwd))
+      .filter((item) => item.path !== '(conflict-markers)');
+    const markerConflicts = await workspaceHasConflictMarkers(cwd);
+
     let syncState: CodeCollabStatusSummary['syncState'] = 'unknown';
     const remoteRev = remote?.headRevisionId ?? null;
     const remoteCommit = remote?.headCommitSha ?? null;
@@ -414,7 +460,10 @@ export async function getCodeCollabStatus(appPath: string): Promise<CodeCollabSt
     const localChanged = Boolean(
       localSha && state.baseSourceSha256 && localSha !== state.baseSourceSha256,
     );
-    if (remoteChanged && localChanged) {
+
+    if (mergeState || conflicts.length > 0 || markerConflicts) {
+      syncState = 'merge-required';
+    } else if (remoteChanged && localChanged) {
       syncState = 'merge-required';
     } else if (remoteChanged) {
       syncState = 'remote-ahead';
@@ -433,8 +482,11 @@ export async function getCodeCollabStatus(appPath: string): Promise<CodeCollabSt
       appCode: state.appCode,
       applicationName: remote?.applicationName,
       revisionId: state.baseRevisionId ?? undefined,
+      remoteRevisionId: remote?.headRevisionId ?? undefined,
+      mergeTheirsRevisionId: mergeState?.theirsRevisionId ?? remote?.headRevisionId ?? undefined,
       devCommitSha: state.baseCommitSha ?? undefined,
-      raw: { local: state, remote },
+      conflicts: conflicts.length > 0 ? conflicts : undefined,
+      raw: { local: state, remote, mergeState },
     };
     logger.info(`[code-collab] action=status syncState=${summary.syncState} appCode=${summary.appCode}`);
     return summary;
@@ -480,6 +532,15 @@ export async function pushCodeApplication(
     })}`,
   );
 
+  const mergeState = await readMergeState(cwd);
+  if (mergeState) {
+    throw new Error('请先处理冲突并继续合并');
+  }
+  const unresolved = await listUnresolvedConflicts(cwd);
+  if (unresolved.length > 0 || await workspaceHasConflictMarkers(cwd)) {
+    throw new Error('还有未解决的冲突，无法提交');
+  }
+
   try {
     const remote = await getSiteApp(state.appCode);
     throwIfRemoteAhead(state, remote);
@@ -490,6 +551,7 @@ export async function pushCodeApplication(
 
   const revisionId = createUlid();
   const snapshot = await createSourceSnapshot(cwd);
+  const gitGroup = await resolveGitGroupForFirstCommit(state.baseRevisionId);
   logger.info(
     `[code-collab] action=push snapshot revisionId=${revisionId} ${serializeForCodeCollabLog({
       archivePath: snapshot.archivePath,
@@ -498,6 +560,7 @@ export async function pushCodeApplication(
       archiveSizeBytes: snapshot.archiveSizeBytes,
       expandedSizeBytes: snapshot.expandedSizeBytes,
       fileCount: snapshot.fileCount,
+      gitGroup: gitGroup ?? null,
     })}`,
   );
 
@@ -510,13 +573,14 @@ export async function pushCodeApplication(
         revisionMessage: trimmed,
         baseRevisionId: state.baseRevisionId,
         parentRevisionId: state.baseRevisionId,
-        mergeParentRevisionId: null,
+        mergeParentRevisionId: state.mergeParentRevisionId,
         sourceSha256: snapshot.sourceSha256,
         archiveSha256: snapshot.archiveSha256,
         archiveSizeBytes: snapshot.archiveSizeBytes,
         expandedSizeBytes: snapshot.expandedSizeBytes,
         fileCount: snapshot.fileCount,
       },
+      gitGroup,
     }).catch(mapVersionConflict);
 
     if (revision.status.toLowerCase() !== 'ready' || !revision.commitSha) {
@@ -536,6 +600,9 @@ export async function pushCodeApplication(
       revisionId: revision.revisionId,
       commitSha: revision.commitSha,
       sourceSha256: snapshot.sourceSha256,
+    }, null);
+    await cacheBaseSnapshotFromWorkspace(cwd).catch((err) => {
+      logger.warn('[code-collab] base snapshot cache after push failed:', err);
     });
     await upsertStoAppPushHistory(cwd, {
       revisionId: revision.revisionId,
@@ -571,16 +638,65 @@ export async function pullCodeApplication(appPath: string): Promise<CodeCollabCo
   logger.info(`[code-collab] action=pull decision=${decision} appCode=${state.appCode}`);
 
   if (decision === 'already-synced') {
-    return { ok: true, output: '已是最新', json: remote };
+    return {
+      ok: true,
+      output: '已是最新',
+      json: { action: 'already-synced' satisfies SourcePullClientAction, remote },
+    };
   }
   if (decision === 'local-ahead') {
-    return { ok: true, output: '本地已有未提交改动，未覆盖本地代码。请直接提交。', json: remote };
-  }
-  if (decision === 'diverged') {
-    throw new Error('本地和远端都有更新，禁止直接覆盖。请先处理差异后再拉取');
+    return {
+      ok: true,
+      output: '本地已有未提交改动，未覆盖本地代码。请直接提交。',
+      json: { action: 'local-ahead' satisfies SourcePullClientAction, remote },
+    };
   }
 
-  await applyArchiveToWorkspace(archive, cwd);
+  if (decision === 'diverged') {
+    if (!state.baseRevisionId) {
+      throw new Error('本地和远端都有更新，但缺少本地基线，无法自动合并');
+    }
+    const merge = await beginThreeWayMerge({
+      workspace: cwd,
+      remoteArchive: archive,
+      oursBaseRevisionId: state.baseRevisionId,
+      theirsRevisionId: remote.revisionId,
+      theirsCommitSha: remote.commitSha,
+      theirsSourceSha256: remote.sourceSha256,
+    });
+    if (merge.conflicts.length > 0) {
+      logger.info(
+        `[code-collab] action=pull conflicts count=${merge.conflicts.length} appCode=${state.appCode}`,
+      );
+      return {
+        ok: true,
+        output: `有 ${merge.conflicts.length} 个文件需要处理`,
+        json: {
+          action: 'conflicts' satisfies SourcePullClientAction,
+          remote,
+          conflicts: merge.conflicts,
+        },
+      };
+    }
+    await updateWorkspaceBaseline(cwd, state.appCode, {
+      revisionId: remote.revisionId,
+      commitSha: remote.commitSha,
+      sourceSha256: remote.sourceSha256,
+    }, state.baseRevisionId);
+    await clearMergeState(cwd);
+    await cacheBaseSnapshotFromArchive(archive, cwd).catch((err) => {
+      logger.warn('[code-collab] base snapshot cache after merge failed:', err);
+    });
+    logger.info(`[code-collab] action=pull merged appCode=${state.appCode}`);
+    return {
+      ok: true,
+      output: '已合并远端更新，请检查后提交',
+      json: { action: 'merged' satisfies SourcePullClientAction, remote },
+    };
+  }
+
+  // remote-ahead or initialize on empty workspace
+  await applyArchiveFileDiff(archive, cwd);
   const appliedSha = await localSourceSha256(cwd);
   if (appliedSha !== remote.sourceSha256) {
     throw new Error('拉取校验失败：本地源码摘要与远端不一致');
@@ -589,9 +705,16 @@ export async function pullCodeApplication(appPath: string): Promise<CodeCollabCo
     revisionId: remote.revisionId,
     commitSha: remote.commitSha,
     sourceSha256: remote.sourceSha256,
+  }, null);
+  await cacheBaseSnapshotFromArchive(archive, cwd).catch((err) => {
+    logger.warn('[code-collab] base snapshot cache after pull failed:', err);
   });
   logger.info(`[code-collab] action=pull success appCode=${state.appCode}`);
-  return { ok: true, output: '拉取成功', json: remote };
+  return {
+    ok: true,
+    output: '拉取成功',
+    json: { action: 'applied' satisfies SourcePullClientAction, remote },
+  };
 }
 
 export async function cloneCodeApplication(
@@ -615,6 +738,9 @@ export async function cloneCodeApplication(
     revisionId: remote.revisionId,
     commitSha: remote.commitSha,
     sourceSha256: remote.sourceSha256,
+  }, null);
+  await cacheBaseSnapshotFromArchive(archive, target).catch((err) => {
+    logger.warn('[code-collab] base snapshot cache after clone failed:', err);
   });
   logger.info(`[code-collab] action=clone success appCode=${code} targetDir=${target}`);
   return {
@@ -625,8 +751,55 @@ export async function cloneCodeApplication(
 }
 
 export async function continueCodeApplicationMerge(
-  _appPath: string,
-  _revisionId: string,
+  appPath: string,
+  revisionId: string,
 ): Promise<CodeCollabCommandResult> {
-  throw new Error('当前版本暂不支持 merge continue，请先手动处理冲突后重新拉取并提交');
+  const { cwd, state } = await requireWorkspace(appPath);
+  const mergeState = await finalizeMergeContinue(cwd);
+  const expected = mergeState.theirsRevisionId;
+  const requested = revisionId.trim();
+  if (requested && requested !== expected && requested !== state.baseRevisionId) {
+    throw new Error(`合并版本不匹配：期望 ${expected}`);
+  }
+  await updateWorkspaceBaseline(cwd, state.appCode, {
+    revisionId: mergeState.theirsRevisionId,
+    commitSha: mergeState.theirsCommitSha,
+    sourceSha256: mergeState.theirsSourceSha256,
+  }, mergeState.oursBaseRevisionId);
+  await clearMergeState(cwd);
+  await cacheBaseSnapshotFromWorkspace(cwd).catch((err) => {
+    logger.warn('[code-collab] base snapshot cache after continue failed:', err);
+  });
+  logger.info(
+    `[code-collab] action=merge-continue success appCode=${state.appCode} theirs=${mergeState.theirsRevisionId}`,
+  );
+  return {
+    ok: true,
+    output: '冲突已处理，可以提交',
+    json: {
+      action: 'merged',
+      remote: {
+        revisionId: mergeState.theirsRevisionId,
+        commitSha: mergeState.theirsCommitSha,
+        sourceSha256: mergeState.theirsSourceSha256,
+      },
+    },
+  };
+}
+
+export async function listCodeApplicationConflicts(
+  appPath: string,
+): Promise<SourceConflictFile[]> {
+  const { cwd } = await requireWorkspace(appPath);
+  return (await listUnresolvedConflicts(cwd))
+    .filter((item) => item.path !== '(conflict-markers)');
+}
+
+export async function resolveCodeApplicationConflict(
+  appPath: string,
+  path: string,
+  choice: 'ours' | 'theirs',
+): Promise<SourceConflictFile[]> {
+  const { cwd } = await requireWorkspace(appPath);
+  return resolveMergeConflictChoice({ workspace: cwd, path, choice });
 }

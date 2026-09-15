@@ -18,6 +18,7 @@ import {
   type SiteAppSourceCommitResult,
   type SiteAppSourceRemote,
 } from '../../shared/site-app-source-sync';
+import type { SiteAppGitGroupParams } from '../../shared/site-app-git-group';
 import { logger } from '../utils/logger';
 import { buildSiteAppCreateParams, resolveSiteappDeployCreateParams } from '../utils/siteapp-cli';
 import {
@@ -183,6 +184,8 @@ export async function commitSiteAppSource(input: {
     expandedSizeBytes: number;
     fileCount: number;
   };
+  /** First-commit Git Group binding; omit on subsequent commits. Both fields required together. */
+  gitGroup?: SiteAppGitGroupParams | null;
 }): Promise<SiteAppSourceCommitResult> {
   const appCode = input.appCode.trim();
   if (!appCode) throw new Error('缺少 app_code');
@@ -201,6 +204,12 @@ export async function commitSiteAppSource(input: {
     expanded_size_bytes: input.metadata.expandedSizeBytes,
     file_count: input.metadata.fileCount,
   };
+  const groupType = input.gitGroup?.groupType?.trim() || '';
+  const groupCode = input.gitGroup?.groupCode?.trim() || '';
+  if ((groupType && !groupCode) || (!groupType && groupCode)) {
+    throw new Error('group_type 与 group_code 必须同时传');
+  }
+
   const form = new FormData();
   form.append('metadata', JSON.stringify(metadata));
   form.append(
@@ -208,6 +217,10 @@ export async function commitSiteAppSource(input: {
     new Blob([new Uint8Array(archive)], { type: 'application/gzip' }),
     'source.tar.gz',
   );
+  if (groupType && groupCode) {
+    form.append('group_type', groupType);
+    form.append('group_code', groupCode);
+  }
 
   const path = `/api/v1/site-apps/source/commit/${encodeURIComponent(appCode)}`;
   const json = await fetchSiteAppJson('action=source-commit', path, {
@@ -217,6 +230,7 @@ export async function commitSiteAppSource(input: {
   }, {
     app_code: appCode,
     metadata,
+    ...(groupType && groupCode ? { group_type: groupType, group_code: groupCode } : {}),
     source_file: {
       filename: 'source.tar.gz',
       contentType: 'application/gzip',
