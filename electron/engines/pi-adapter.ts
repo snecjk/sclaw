@@ -48,6 +48,7 @@ import type {
 } from '../../shared/pi-runtime-protocol';
 import { CHAT_HISTORY_LIMIT } from '../../shared/chat-config';
 import { isWorkflowPiSessionKey } from '../../shared/workflow-pi-session';
+import { getAgentCurrentUserContextPrompt } from '../services/agent-current-user-context';
 
 const BUILTIN_PI_PROVIDERS = new Set(['anthropic', 'openai', 'google', 'openrouter']);
 const attachedEventSinks = new WeakSet<object>();
@@ -221,11 +222,16 @@ async function sendPiMessage(
     await upsertEngineSessionRegistryEntry(entry);
     let result: PiPromptResult;
     try {
+      const currentUserContext = await getAgentCurrentUserContextPrompt();
+      const systemPromptAppend = [
+        currentUserContext,
+        params.systemPromptAppend?.trim(),
+      ].filter(Boolean).join('\n\n') || undefined;
       const payload = {
         config,
         message: params.normalizedTurn?.modelText ?? params.message,
         runId,
-        systemPromptAppend: params.systemPromptAppend?.trim() || undefined,
+        systemPromptAppend,
         media: (params.media ?? []) satisfies PiPromptAttachment[],
         referencesEmbedded: Boolean(params.normalizedTurn && !params.normalizedTurn.legacy),
       } satisfies PiPromptPayload;
