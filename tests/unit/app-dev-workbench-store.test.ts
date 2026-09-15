@@ -16,6 +16,7 @@ const DEFAULT_STATE = {
   diffRequest: null,
   versionRestoreRequest: null,
   assetRevealPath: null,
+  agentSourceReloadRequest: null,
   codeFollowPausedUntil: 0,
 } as const;
 
@@ -113,6 +114,21 @@ describe('useAppDevWorkbenchStore', () => {
     expect(useAppDevWorkbenchStore.getState().codeFollowPausedUntil).toBe(16_000);
     vi.setSystemTime(16_000);
     expect(useAppDevWorkbenchStore.getState().codeFollowPausedUntil).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('requestAgentSourceReload bumps token so the same path can reload twice', () => {
+    useAppDevWorkbenchStore.getState().requestAgentSourceReload('src/App.tsx');
+    expect(useAppDevWorkbenchStore.getState().agentSourceReloadRequest).toEqual({
+      path: 'src/App.tsx',
+      token: 1,
+    });
+    useAppDevWorkbenchStore.getState().requestAgentSourceReload('src/App.tsx');
+    expect(useAppDevWorkbenchStore.getState().agentSourceReloadRequest).toEqual({
+      path: 'src/App.tsx',
+      token: 2,
+    });
+    useAppDevWorkbenchStore.getState().clearAgentSourceReloadRequest();
+    expect(useAppDevWorkbenchStore.getState().agentSourceReloadRequest).toBeNull();
   });
 
   it('does not persist inspectActive', () => {

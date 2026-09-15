@@ -23,6 +23,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
 import { AppDevAssetsPanel } from '@/components/app-dev/AppDevAssetsPanel';
 import { AppDevRuntimePanel } from '@/components/app-dev/AppDevRuntimePanel';
@@ -38,6 +39,7 @@ import {
   buildElementIntentPrompt,
   type AppDevPickedElement,
 } from '@/components/app-dev/AppDevElementIntentBar';
+import { useAppDevVersionRestore } from '@/hooks/use-app-dev-version-restore';
 import {
   SclawBrowserFrame,
   type SclawBrowserFrameHandle,
@@ -155,6 +157,8 @@ interface AppDevWorkbenchStageProps {
   deployHistory?: StoAppDeployHistoryRecord[];
   onOpenDeploy?: () => void;
   onOpenDeployHistory?: (deploymentId: string) => void;
+  /** Local checkpoint restore completed — bump sourceRevision / refresh preview. */
+  onLocalVersionRestored?: () => void;
 }
 
 function fileName(path: string): string {
@@ -189,12 +193,17 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   deployHistory = [],
   onOpenDeploy,
   onOpenDeployHistory,
+  onLocalVersionRestored,
 }: AppDevWorkbenchStageProps) {
   // mode 提升到全局 store：对话侧可通过 setMode 驱动工作台切换（T04/T09 依赖）。
   const mode = useAppDevWorkbenchStore((s) => s.mode);
   const setMode = useAppDevWorkbenchStore((s) => s.setMode);
   // 预览设备（T03）：desktop / mobile，设备框纯 CSS 过渡，不 remount webview。
   const device = useAppDevWorkbenchStore((s) => s.device);
+  const versionRestore = useAppDevVersionRestore({
+    workspaceId,
+    onRestored: onLocalVersionRestored,
+  });
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
   const [files, setFiles] = useState<AppSourceFileEntry[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -604,6 +613,53 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
     // openFile 稳定引用不必要；仅消费路径请求
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetRevealPath, workspaceId]);
+
+  // Write/Edit 落盘后：强制从磁盘重读（短重试，避免工具刚 completed 时文件尚未刷完）。
+  const agentSourceReloadRequest = useAppDevWorkbenchStore((s) => s.agentSourceReloadRequest);
+  useEffect(() => {
+    if (!agentSourceReloadRequest) return;
+    const path = agentSourceReloadRequest.path;
+    useAppDevWorkbenchStore.getState().clearAgentSourceReloadRequest();
+    openFile(path);
+    void loadFileList();
+
+    let cancelled = false;
+    const delays = [0, 80, 200];
+    void (async () => {
+      for (const delay of delays) {
+        if (cancelled) return;
+        if (delay > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, delay));
+          if (cancelled) return;
+        }
+        try {
+          const file = await readAppSourceFile(workspaceId, path);
+          if (cancelled) return;
+          setTabs((prev) => {
+            const exists = prev.some((tab) => tab.path === file.path);
+            if (!exists) {
+              return [...prev, { path: file.path, draft: file.content, saved: file.content }];
+            }
+            return prev.map((tab) => (
+              tab.path === file.path && tab.draft === tab.saved
+                ? { ...tab, draft: file.content, saved: file.content }
+                : tab
+            ));
+          });
+          setActivePath(file.path);
+          return;
+        } catch {
+          // retry
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // token 变化才重跑；openFile/loadFileList 不入依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentSourceReloadRequest?.token, agentSourceReloadRequest?.path, workspaceId]);
 
   const closeTab = (path: string) => {
     useAppDevWorkbenchStore.getState().pauseCodeFollow();
@@ -1126,6 +1182,23 @@ export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
           </div>
         </div>
       ) : null}
+
+      {/*
+        AppPlazaDevAppPane 全屏层 zIndex=240；webview 也会盖住默认 z-50。
+        确认框 portal 到 body，必须高于广场层，否则点了像没反应。
+      */}
+      <ConfirmDialog
+        open={versionRestore.target != null}
+        title="恢复本地版本"
+        message={`将把本机代码恢复到「${versionRestore.target?.label ?? ''}」。只影响本机，不会回滚云端提交或线上发布。当前未保存的改动会尽量自动备份。`}
+        confirmLabel="恢复"
+        confirmingLabel="恢复中…"
+        cancelLabel="取消"
+        variant="destructive"
+        overlayClassName="z-[300]"
+        onConfirm={versionRestore.confirm}
+        onCancel={versionRestore.cancel}
+      />
     </section>
   );
 });

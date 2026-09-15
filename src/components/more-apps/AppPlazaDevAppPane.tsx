@@ -68,9 +68,7 @@ import {
   setAppDevTurnRating,
   type AppDevTurnRating,
 } from '@/lib/app-dev-turn-feedback';
-import { useAppDevVersionRestore } from '@/hooks/use-app-dev-version-restore';
 import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';
 import { TemplateProjectUploadControl } from './TemplateProjectUploadControl';
 import { BuiltinTemplateDebugControl } from './BuiltinTemplateDebugControl';
@@ -803,12 +801,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
   }, []);
 
-  // T04：消息级「恢复版本」——汇总卡按钮 → store 请求 → 二次确认 → 回滚 + 刷新。
-  const versionRestore = useAppDevVersionRestore({
-    workspaceId,
-    onRestored: () => setSourceRevision((n) => n + 1),
-  });
-
   const handleBack = () => {
     closeDevAppTab(tab.id);
   };
@@ -1284,19 +1276,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             setInitialDeploymentId(deploymentId);
             setDeployHistoryOpen(true);
           }}
+          onLocalVersionRestored={() => setSourceRevision((n) => n + 1)}
         />
       </AppDevSplitBody>
 
-      <ConfirmDialog
-        open={versionRestore.target != null}
-        title="恢复版本"
-        message={`将把应用恢复到该轮对话结束时的版本（${versionRestore.target?.label ?? ''}）。当前未提交的改动会自动备份，可以放心恢复。`}
-        confirmLabel="恢复"
-        confirmingLabel="恢复中…"
-        variant="destructive"
-        onConfirm={versionRestore.confirm}
-        onCancel={versionRestore.cancel}
-      />
       <TemplatePublishConfirmDialog
         open={templatePublishConfirm}
         onConfirm={async () => {

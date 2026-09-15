@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/app-dev-api', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/app-dev-api')>(),
   listAppCheckpoints: vi.fn().mockResolvedValue([]),
-  listStoAppPushes: vi.fn().mockResolvedValue([]),
+  listStoAppPushes: vi.fn().mockResolvedValue({ source: 'local', items: [] }),
+  listStoAppCloudDeployments: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('@/lib/host-api', () => ({
+  hostApiFetch: vi.fn().mockResolvedValue({ groupName: null }),
 }));
 
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';

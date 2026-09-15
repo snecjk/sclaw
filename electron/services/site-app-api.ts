@@ -242,14 +242,24 @@ export async function commitSiteAppSource(input: {
   return revision;
 }
 
-export async function downloadSiteAppSourceSnapshot(appCode: string): Promise<{
+export async function downloadSiteAppSourceSnapshot(
+  appCode: string,
+  options?: { revisionId?: string | null },
+): Promise<{
   archive: Buffer;
   remote: SiteAppSourceRemote;
 }> {
   const code = appCode.trim();
   if (!code) throw new Error('缺少 app_code');
-  const path = `/api/v1/site-apps/source/snapshot/${encodeURIComponent(code)}`;
-  logger.info(`[site-app] action=source-snapshot request path=${path} body=${serializeForSiteAppLog({ app_code: code })}`);
+  const revisionId = options?.revisionId?.trim() || '';
+  const query = revisionId ? `?revision_id=${encodeURIComponent(revisionId)}` : '';
+  const path = `/api/v1/site-apps/source/snapshot/${encodeURIComponent(code)}${query}`;
+  logger.info(
+    `[site-app] action=source-snapshot request path=${path} body=${serializeForSiteAppLog({
+      app_code: code,
+      revision_id: revisionId || null,
+    })}`,
+  );
   try {
     const { buffer, headers } = await memoryCenterFetchBinaryForSession(path, {
       method: 'GET',
@@ -284,6 +294,76 @@ export async function downloadSiteAppSourceSnapshot(appCode: string): Promise<{
     );
     throw error;
   }
+}
+
+export async function listSiteAppSourceRevisions(
+  appCode: string,
+  limit = 50,
+): Promise<import('../../shared/site-app-source-revisions').SiteAppSourceRevision[]> {
+  const { parseSiteAppSourceRevisions } = await import('../../shared/site-app-source-revisions');
+  const code = appCode.trim();
+  if (!code) throw new Error('缺少 app_code');
+  const capped = Math.min(Math.max(Math.trunc(limit) || 50, 1), 100);
+  const path =
+    `/api/v1/site-apps/${encodeURIComponent(code)}/source/revisions?limit=${capped}`;
+  const json = await fetchSiteAppJson(
+    'action=source-revisions',
+    path,
+    { method: 'GET', timeoutMs: SITE_APP_SOURCE_TIMEOUT_MS },
+    { app_code: code, limit: capped },
+  );
+  return parseSiteAppSourceRevisions(json);
+}
+
+export async function listSiteAppDeployments(input: {
+  appCode: string;
+  groupName: string;
+}): Promise<import('../../shared/site-app-deployments').SiteAppDeploymentRecord[]> {
+  const { parseSiteAppDeploymentList } = await import('../../shared/site-app-deployments');
+  const appCode = input.appCode.trim();
+  const groupName = input.groupName.trim();
+  if (!appCode) throw new Error('缺少 app_code');
+  if (!groupName) throw new Error('缺少 group_name');
+  const path =
+    `/api/v1/site-apps/site-deployments/${encodeURIComponent(appCode)}` +
+    `?group_name=${encodeURIComponent(groupName)}`;
+  const json = await fetchSiteAppJson(
+    'action=site-deployments',
+    path,
+    { method: 'GET', timeoutMs: SITE_APP_SOURCE_TIMEOUT_MS },
+    { app_code: appCode, group_name: groupName },
+  );
+  return parseSiteAppDeploymentList(json);
+}
+
+export async function rollbackSiteAppDeployment(input: {
+  appCode: string;
+  groupName: string;
+  targetRecordId: number;
+}): Promise<import('../../shared/site-app-deployments').SiteAppDeployRollbackResult> {
+  const { parseSiteAppDeployRollbackResult } = await import('../../shared/site-app-deployments');
+  const appCode = input.appCode.trim();
+  const groupName = input.groupName.trim();
+  const targetRecordId = Math.trunc(input.targetRecordId);
+  if (!appCode) throw new Error('缺少 app_code');
+  if (!groupName) throw new Error('缺少 group_name');
+  if (!Number.isFinite(targetRecordId) || targetRecordId <= 0) {
+    throw new Error('缺少 target_record_id');
+  }
+  const path = `/api/v1/site-apps/site-deployments/rollback/${encodeURIComponent(appCode)}`;
+  const body = { group_name: groupName, target_record_id: targetRecordId };
+  const json = await fetchSiteAppJson(
+    'action=site-deployments-rollback',
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      timeoutMs: SITE_APP_SOURCE_TIMEOUT_MS,
+    },
+    { app_code: appCode, ...body },
+  );
+  return parseSiteAppDeployRollbackResult(json);
 }
 
 /** HTTP detail may omit gitlab fields until the first source commit creates the repository. */

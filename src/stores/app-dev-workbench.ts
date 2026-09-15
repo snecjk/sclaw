@@ -28,6 +28,8 @@ export interface AppDevHashRequest {
   hash: string;
   /** T10：任意两版对比时的 base（省略则相对父 commit）。 */
   baseHash?: string;
+  /** 「恢复版本」确认框展示文案（可选）。 */
+  label?: string;
 }
 
 const APP_DEV_STAGE_MODES: readonly AppDevStageMode[] = [
@@ -63,6 +65,11 @@ interface AppDevWorkbenchState {
   /** T14：从「文件」页跳转到代码页并打开路径（消费后清空）。 */
   assetRevealPath: string | null;
   /**
+   * Agent Write/Edit 落盘后强制刷右侧编辑器。
+   * token 递增保证同一 path 连续两次完成也能触发。
+   */
+  agentSourceReloadRequest: { path: string; token: number } | null;
+  /**
    * Agent 跟随时用户操作代码页的暂停截止时间。
    * 0 表示正在跟随；用户切页/切文件后设为 now + idle。
    */
@@ -76,6 +83,8 @@ interface AppDevWorkbenchState {
   setDiffRequest: (request: AppDevHashRequest | null) => void;
   setVersionRestoreRequest: (request: AppDevHashRequest | null) => void;
   setAssetRevealPath: (path: string | null) => void;
+  requestAgentSourceReload: (path: string) => void;
+  clearAgentSourceReloadRequest: () => void;
   pauseCodeFollow: (idleMs?: number) => void;
 }
 
@@ -90,6 +99,7 @@ export const useAppDevWorkbenchStore = create<AppDevWorkbenchState>()(
       diffRequest: null,
       versionRestoreRequest: null,
       assetRevealPath: null,
+      agentSourceReloadRequest: null,
       codeFollowPausedUntil: 0,
 
       setMode: (mode) => {
@@ -110,6 +120,17 @@ export const useAppDevWorkbenchStore = create<AppDevWorkbenchState>()(
       setDiffRequest: (request) => set({ diffRequest: request }),
       setVersionRestoreRequest: (request) => set({ versionRestoreRequest: request }),
       setAssetRevealPath: (path) => set({ assetRevealPath: path }),
+      requestAgentSourceReload: (path) => {
+        const next = path.replace(/\\/g, '/').trim();
+        if (!next) return;
+        set((state) => ({
+          agentSourceReloadRequest: {
+            path: next,
+            token: (state.agentSourceReloadRequest?.token ?? 0) + 1,
+          },
+        }));
+      },
+      clearAgentSourceReloadRequest: () => set({ agentSourceReloadRequest: null }),
       pauseCodeFollow: (idleMs = APP_DEV_CODE_FOLLOW_IDLE_MS) => {
         const duration = Number.isFinite(idleMs) && idleMs > 0
           ? idleMs

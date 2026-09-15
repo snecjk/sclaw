@@ -28,6 +28,7 @@ import {
   createSourceSnapshot,
   ensureEmptyDirectory,
   extractSourceArchive,
+  applyArchiveToWorkspace,
 } from '../utils/code-source-archive';
 import {
   applyArchiveFileDiff,
@@ -47,6 +48,7 @@ import {
   downloadSiteAppSourceSnapshot,
   enrichSiteAppRecord,
   getSiteApp,
+  listSiteAppSourceRevisions,
   listSiteApps,
 } from './site-app-api';
 import { loadSiteDepartmentTypes } from './sto-apollo-config-service';
@@ -802,4 +804,96 @@ export async function resolveCodeApplicationConflict(
 ): Promise<SourceConflictFile[]> {
   const { cwd } = await requireWorkspace(appPath);
   return resolveMergeConflictChoice({ workspace: cwd, path, choice });
+}
+
+/**
+ * Restore local workspace to a cloud source revision snapshot, then optionally
+ * push a new commit so cloud HEAD also returns to that content (revert-style).
+ *
+ * Push must base on current remote HEAD (not the historical revision), otherwise
+ * the server rejects with VERSION_CONFLICT.
+ */
+export async function restoreCodeApplicationToRevision(
+  appPath: string,
+  revisionId: string,
+  options?: { push?: boolean; message?: string; workspaceId?: string },
+): Promise<CodeCollabCommandResult> {
+  const targetRevisionId = revisionId.trim();
+  if (!targetRevisionId) throw new Error('缺少 revisionId');
+  const { cwd, state } = await requireWorkspace(appPath);
+  const mergeState = await readMergeState(cwd);
+  if (mergeState) throw new Error('请先处理冲突并继续合并');
+
+  logger.info(
+    `[code-collab] action=restore-revision start appPath=${cwd} revisionId=${targetRevisionId} push=${Boolean(options?.push)}`,
+  );
+
+  let headRemote: SiteAppRecord | null = null;
+  try {
+    headRemote = await getSiteApp(state.appCode);
+  } catch (error) {
+    logger.warn('[code-collab] restore-revision head detail fallback:', error);
+  }
+
+  const { archive, remote } = await downloadSiteAppSourceSnapshot(state.appCode, {
+    revisionId: targetRevisionId,
+  });
+  await applyArchiveToWorkspace(archive, cwd);
+
+  const pushBaseRevisionId = headRemote?.headRevisionId ?? state.baseRevisionId;
+  const pushBaseCommitSha = headRemote?.headCommitSha ?? state.baseCommitSha;
+  const pushBaseSourceSha = headRemote?.headSourceSha256 ?? state.baseSourceSha256;
+
+  // Local working tree matches historical content; baseline stays at HEAD so a
+  // subsequent commit is accepted as a forward revert.
+  if (pushBaseRevisionId && pushBaseCommitSha && pushBaseSourceSha) {
+    await updateWorkspaceBaseline(cwd, state.appCode, {
+      revisionId: pushBaseRevisionId,
+      commitSha: pushBaseCommitSha,
+      sourceSha256: pushBaseSourceSha,
+    }, null);
+  }
+  // Keep base-snapshot aligned with baseline (HEAD), not the historical tree.
+  if (options?.push) {
+    // pushCodeApplication will refresh baseline + cache after commit.
+  } else if (pushBaseRevisionId && pushBaseRevisionId !== remote.revisionId) {
+    try {
+      const headSnap = await downloadSiteAppSourceSnapshot(state.appCode);
+      await cacheBaseSnapshotFromArchive(headSnap.archive, cwd);
+    } catch (error) {
+      logger.warn('[code-collab] HEAD base snapshot after restore-revision failed:', error);
+    }
+  } else {
+    await cacheBaseSnapshotFromArchive(archive, cwd).catch((err) => {
+      logger.warn('[code-collab] base snapshot cache after restore-revision failed:', err);
+    });
+  }
+  try {
+    const { createCheckpoint } = await import('./app-dev-service');
+    await createCheckpoint(cwd, `本地恢复到 ${targetRevisionId.slice(0, 8)}`);
+  } catch (error) {
+    logger.warn('[code-collab] local checkpoint after restore-revision failed:', error);
+  }
+
+  if (options?.push) {
+    const message = options.message?.trim()
+      || `恢复到修订 ${remote.revisionId.slice(0, 8)}`;
+    return pushCodeApplication(cwd, message, { workspaceId: options.workspaceId });
+  }
+
+  return {
+    ok: true,
+    output: '已恢复本地源码到所选云端修订（未推送到云端）',
+    json: {
+      action: 'restored-local',
+      revisionId: remote.revisionId,
+      commitSha: remote.commitSha,
+      baseRevisionId: pushBaseRevisionId,
+    },
+  };
+}
+
+export async function listCodeApplicationRevisions(appPath: string, limit = 50) {
+  const { state } = await requireWorkspace(appPath);
+  return listSiteAppSourceRevisions(state.appCode, limit);
 }

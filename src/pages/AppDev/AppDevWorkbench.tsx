@@ -678,6 +678,7 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
             setInitialDeploymentId(deploymentId);
             setDeployHistoryOpen(true);
           }}
+          onLocalVersionRestored={() => setSourceRevision((n) => n + 1)}
         />
       </AppDevSplitBody>
 
