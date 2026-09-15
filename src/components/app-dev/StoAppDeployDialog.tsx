@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import type { CodeDeployEnv } from '@/lib/app-dev-api';
 import { listAppExternalServiceBindings } from '@/lib/app-dev-api';
 import type { CodeApplicationPageType } from '../../../shared/code-application-catalog';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 const ENV_OPTIONS: Array<{ value: CodeDeployEnv; label: string; hint: string }> = [
   { value: 'daily', label: '日常 (daily)', hint: '开发/联调环境' },
@@ -35,15 +36,18 @@ export function StoAppDeployDialog({
   onCancel,
   onConfirm,
 }: StoAppDeployDialogProps) {
+  const { isProduction } = getCurrentEnvConfig();
+  const envOptions = ENV_OPTIONS.filter((option) => !isProduction || option.value !== 'daily');
+  const defaultEnv: CodeDeployEnv = isProduction ? 'stage' : 'daily';
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const [env, setEnv] = useState<CodeDeployEnv>('daily');
+  const [env, setEnv] = useState<CodeDeployEnv>(defaultEnv);
   const [deploymentVersion, setDeploymentVersion] = useState('');
   const [showAssetsIdentityWarning, setShowAssetsIdentityWarning] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     const timer = window.setTimeout(() => {
-      setEnv('daily');
+      setEnv(defaultEnv);
       setDeploymentVersion('');
       setShowAssetsIdentityWarning(false);
       cancelRef.current?.focus();
@@ -56,7 +60,7 @@ export function StoAppDeployDialog({
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [open, pageType, workspaceId]);
+  }, [open, pageType, workspaceId, defaultEnv]);
 
   if (!open) return null;
 
@@ -112,7 +116,7 @@ export function StoAppDeployDialog({
 
         <fieldset className="mt-4 space-y-2">
           <legend className="mb-1.5 text-xs font-medium text-foreground">部署环境</legend>
-          {ENV_OPTIONS.map((option) => (
+          {envOptions.map((option) => (
             <label
               key={option.value}
               className={cn(
