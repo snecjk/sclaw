@@ -5,6 +5,7 @@ import { prepareClaudeRuntime } from '../../engines/claude-sdk-runtime';
 import { getDefaultProviderAccountId } from '../../services/providers/provider-store';
 import { workflowExecLog } from './logging';
 import { prepareWorkflowSkills } from './skill-loader';
+import { buildAgentLoopRequestEnv } from '../../utils/agentloop-context';
 import {
   WORKFLOW_AGENT_HARD_DEADLINE_MS,
   WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS,
@@ -143,7 +144,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     requestedAccountId: accountId,
     requestedModel: args.model,
   });
-  const env = args.env ?? preparedRuntime?.env ?? {};
+  const env = await buildAgentLoopRequestEnv(args.env ?? preparedRuntime?.env ?? {});
   // Match the chat adapter exactly: the DSL/default value only expresses a
   // preference.  The Claude runtime selection resolves it against the active
   // provider account catalog and returns the one model identifier that may be

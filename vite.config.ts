@@ -6,6 +6,7 @@ import renderer from 'vite-plugin-electron-renderer';
 import { buildSync } from 'esbuild';
 import { resolve } from 'path';
 import {
+  applyAgentLoopRuntimeEnv,
   resolveAgentLoopBuildConfig,
   serializeAgentLoopSecrets,
   toAgentLoopProcessEnvDefine,
@@ -61,6 +62,10 @@ export default defineConfig(({ mode }) => {
   for (const warning of agentLoopConfig.warnings) {
     console.warn(warning);
   }
+  // The main and preload watchers can each be the first one to ask
+  // vite-plugin-electron to start Electron. Seed non-secret values on the
+  // parent process so both startup paths inherit the same AgentLoop config.
+  applyAgentLoopRuntimeEnv(agentLoopConfig, process.env);
   const envDefine = {
     'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
     'process.env.STO_MEMORY_CENTER_BASE_URL': JSON.stringify(stoMemoryCenterBaseUrl),

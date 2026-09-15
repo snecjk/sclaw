@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyAgentLoopRuntimeEnv,
   resolveAgentLoopBuildConfig,
   serializeAgentLoopSecrets,
   toAgentLoopProcessEnvDefine,
@@ -146,6 +147,26 @@ describe('AgentLoop 构建期配置解析（task 1.2）', () => {
       expect(config.define.ARMS_ENABLE_CONSOLE_EXPORTER).toBeUndefined();
       // License 去空白后仍有效
       expect(config.secrets.licenseKey).toBe('lic');
+    });
+  });
+
+  describe('development Electron 启动环境', () => {
+    it('只同步非敏感配置，不把 License 写入进程环境', () => {
+      const config = resolveAgentLoopBuildConfig('development', {
+        ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-Dev',
+        ARMS_LICENSE_KEY: 'lic-secret',
+        ARMS_REGION_ID: 'cn-shanghai',
+      }, {});
+      const targetEnv: Record<string, string | undefined> = {};
+
+      applyAgentLoopRuntimeEnv(config, targetEnv);
+
+      expect(targetEnv).toEqual({
+        ARMS_APP_NAME: 'SClaw-Claude_Agent_SDK-Dev',
+        ARMS_REGION_ID: 'cn-shanghai',
+      });
+      expect(targetEnv.ARMS_LICENSE_KEY).toBeUndefined();
+      expect(targetEnv.ARMS_LICENSE).toBeUndefined();
     });
   });
 

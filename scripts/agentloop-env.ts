@@ -109,6 +109,22 @@ export function toAgentLoopProcessEnvDefine(config: AgentLoopBuildConfig): Recor
   return result;
 }
 
+/**
+ * Make non-secret AgentLoop settings available to Electron processes spawned
+ * during Vite development. vite-plugin-electron may start from either the main
+ * or preload watcher, so relying only on one onstart callback's env is racy.
+ * License credentials are intentionally excluded because they live in
+ * agentloop.config.json.
+ */
+export function applyAgentLoopRuntimeEnv(
+  config: AgentLoopBuildConfig,
+  targetEnv: EnvSource,
+): void {
+  for (const [key, value] of Object.entries(config.define)) {
+    targetEnv[key] = value;
+  }
+}
+
 /** License 写入安装包前的脱敏序列化：绝不允许把 secrets 打进 Vite define 或构建日志。 */
 export function serializeAgentLoopSecrets(secrets: AgentLoopSecretsConfig): string {
   return JSON.stringify(secrets, null, 2);

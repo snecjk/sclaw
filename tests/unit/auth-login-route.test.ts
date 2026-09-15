@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 const mocks = vi.hoisted(() => ({
   startLogin: vi.fn(), parseJsonBody: vi.fn(), sendJson: vi.fn(), setAuthUser: vi.fn(),
   checkAccess: vi.fn(), runSetup: vi.fn(), loadConfig: vi.fn(), startPeriodicSync: vi.fn(),
+  openingStatus: vi.fn(),
   onUserAuthenticated: vi.fn(), getImpersonationOrigin: vi.fn(), loadSiteDepartmentTypes: vi.fn(),
 }));
 
@@ -40,6 +41,11 @@ vi.mock('@electron/services/sto-apollo-config-service', () => ({
 vi.mock('@electron/services/client-site-access-service', () => ({
   getClientSiteAccessService: () => ({ checkAccess: (...args: unknown[]) => mocks.checkAccess(...args) }),
 }));
+vi.mock('@electron/services/site-opening-registration-service', () => ({
+  getSiteOpeningRegistrationService: () => ({
+    getStatus: (...args: unknown[]) => mocks.openingStatus(...args),
+  }),
+}));
 vi.mock('@electron/services/claude-context-sync', () => ({ syncClaudeDefaultContext: vi.fn() }));
 vi.mock('@electron/services/account-switch-service', () => ({ fetchAccountSwitchOptions: vi.fn(), switchAccountViaMemoryCenter: vi.fn() }));
 vi.mock('@electron/services/sto-auth-mode', () => ({ resolveAuthMode: vi.fn() }));
@@ -64,6 +70,7 @@ describe('auth login completion boundary', () => {
     mocks.parseJsonBody.mockResolvedValue({ environment: 'production-external' });
     mocks.startLogin.mockResolvedValue(user);
     mocks.checkAccess.mockResolvedValue({ allowed: true });
+    mocks.openingStatus.mockResolvedValue({ status: 'ENABLED', statusName: '已开通' });
     mocks.setAuthUser.mockResolvedValue(undefined);
     mocks.loadConfig.mockResolvedValue(undefined);
     mocks.getImpersonationOrigin.mockResolvedValue(null);
@@ -110,6 +117,29 @@ describe('auth login completion boundary', () => {
     expect(mocks.setAuthUser).not.toHaveBeenCalled();
     expect(mocks.sendJson).toHaveBeenCalledWith(
       expect.anything(), 200, expect.objectContaining({ success: false, accessDenied: true }),
+    );
+  });
+
+  it('requires complete opening status for site users', async () => {
+    const siteUser = { ...user, categoryCode: '独立网点', companyCode: '272100' };
+    mocks.startLogin.mockResolvedValue(siteUser);
+    mocks.checkAccess.mockResolvedValue({ allowed: true });
+    mocks.openingStatus.mockResolvedValue({ status: 'REGISTERED', statusName: '已登记，等待处理' });
+    const { handleAuthRoutes } = await import('@electron/api/routes/auth');
+
+    await handleAuthRoutes(
+      { method: 'POST' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/auth/login'),
+      { mainWindow: { isDestroyed: () => false }, gatewayManager: {} } as never,
+    );
+
+    expect(mocks.setAuthUser).not.toHaveBeenCalled();
+    expect(mocks.openingStatus).toHaveBeenCalledWith('token');
+    expect(mocks.sendJson).toHaveBeenCalledWith(
+      expect.anything(),
+      200,
+      expect.objectContaining({ success: false, accessDenied: true }),
     );
   });
 });

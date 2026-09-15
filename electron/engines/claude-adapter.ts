@@ -62,6 +62,7 @@ import { bindClaudeLoopGuardAbort, unbindClaudeLoopGuardAbort } from './claude-l
 import { getChatRuntimeRepository } from '../db/repositories/chat-runtime-repository';
 import { ActiveQueryRegistry } from './active-query-registry';
 import { logUserSend } from '../../shared/user-send-log';
+import { buildAgentLoopRequestEnv } from '../utils/agentloop-context';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -1621,9 +1622,10 @@ async function startClaudeQuery(
           ? 'bypassPermissions'
           : undefined;
     const allowDangerouslySkipPermissions = permissionMode === 'bypassPermissions';
+    const queryEnv = await buildAgentLoopRequestEnv(sharedRuntime.env);
     const queryBaseOptions = {
       cwd,
-      env: sharedRuntime.env,
+      env: queryEnv,
       permissionMode,
       allowDangerouslySkipPermissions,
       settingSources: ['user' as const],

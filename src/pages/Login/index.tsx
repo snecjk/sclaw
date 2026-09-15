@@ -1,29 +1,34 @@
 /**
  * SSO Login Page
  * 开发模式（pnpm dev）显示 SSO 环境选择；其他构建环境根据 env-config 固定 SSO 环境。
+ * 卡片内容按状态切换（对照设计稿三个容器）：
+ *   登录前 - 默认登录卡片；登录后 - 组织未开通，引导报名；报名后 - 已登记审核中。
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Building2,
-  Loader2,
-  LogIn,
-  MapPin,
-  Orbit,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { Loader2, TriangleAlert } from 'lucide-react';
 import { TitleBar } from '@/components/layout/TitleBar';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { Select } from '@/components/ui/select';
-import { ParticleConstellation } from '@/components/common/ParticleConstellation';
+import { invertedPrimarySurfaceClass } from '@/lib/surfaces';
+import { cn } from '@/lib/utils';
 import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
+import { hostApiFetch } from '@/lib/host-api';
 import clawxIcon from '@/assets/rectangle_icon.png';
 
 const envConfig = getCurrentEnvConfig();
+
+type OpeningStatus = 'NOT_REGISTERED' | 'REGISTERED' | 'ENABLED';
+
+interface OpeningStatusData {
+  status: OpeningStatus;
+  statusName: string;
+  applicationNo?: string | null;
+}
 
 const DEV_SSO_ENV_OPTIONS: SsoEnvironment[] = [
   'local',
@@ -33,16 +38,21 @@ const DEV_SSO_ENV_OPTIONS: SsoEnvironment[] = [
   'production-external',
 ];
 
+const pageStatusItems = ['连接：正常', '服务：就绪', '登录：安全'];
+
 export function Login() {
   const { t } = useTranslation(['auth']);
   const isLoggingIn = useAuthStore((s) => s.isLoggingIn);
   const error = useAuthStore((s) => s.error);
   const accessDenied = useAuthStore((s) => s.accessDenied);
-  const accessCheck = useAuthStore((s) => s.accessCheck);
   const ssoEnvironment = useAuthStore((s) => s.ssoEnvironment);
   const login = useAuthStore((s) => s.login);
   const setSsoEnvironment = useAuthStore((s) => s.setSsoEnvironment);
   const clearAccessDenied = useAuthStore((s) => s.clearAccessDenied);
+  const [openingStatus, setOpeningStatus] = useState<OpeningStatusData | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [openingError, setOpeningError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!envConfig.isDevelopment) {
@@ -50,215 +60,228 @@ export function Login() {
     }
   }, [setSsoEnvironment]);
 
+  useEffect(() => {
+    if (!accessDenied) return;
+    let cancelled = false;
+    const loadOpeningStatus = async () => {
+      setOpeningStatus(null);
+      setOpeningError(null);
+      setStatusLoading(true);
+      try {
+        const result = await hostApiFetch<{
+          success: boolean;
+          data?: OpeningStatusData;
+          error?: string;
+        }>('/api/auth/site-opening/status');
+        if (!result.success || !result.data) throw new Error(result.error || '状态查询失败');
+        if (!cancelled) setOpeningStatus(result.data);
+      } catch (statusError) {
+        if (!cancelled) {
+          setOpeningError(statusError instanceof Error ? statusError.message : String(statusError));
+        }
+      } finally {
+        if (!cancelled) setStatusLoading(false);
+      }
+    };
+    void loadOpeningStatus();
+    return () => { cancelled = true; };
+  }, [accessDenied]);
+
+  const registerOpening = async () => {
+    setRegistering(true);
+    setOpeningError(null);
+    try {
+      const result = await hostApiFetch<{ success: boolean; data?: OpeningStatusData; error?: string }>(
+        '/api/auth/site-opening/register',
+        { method: 'POST' },
+      );
+      if (!result.success || !result.data) throw new Error(result.error || '登记失败');
+      setOpeningStatus(result.data);
+    } catch (registerError) {
+      setOpeningError(registerError instanceof Error ? registerError.message : String(registerError));
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   const handleLogin = () => {
     void login(envConfig.isDevelopment ? undefined : (envConfig.ssoEnvironment as SsoEnvironment));
   };
 
+  // 已开通：回到登录卡片并提示重新登录；其余拦截状态走"登录后/报名后"卡片
+  const openingEnabled = accessDenied && openingStatus?.status === 'ENABLED';
+  const openingPending = accessDenied && openingStatus?.status === 'REGISTERED';
+  const showDeniedCard = accessDenied && !openingEnabled;
+
+  const deniedHint = (() => {
+    if (openingError) return openingError;
+    if (openingPending) return '工作人员将在1个工作日内钉钉联系您';
+    if (statusLoading) return '正在查询开通状态…';
+    return '点击报名按钮开通客户端权限';
+  })();
+
+  // 深底白字主操作钮：复用全局反色主钮 token（亮色深底/暗色浅底），尺寸按设计稿 320x58
+  const darkActionClass = cn(
+    'h-[58px] w-full rounded-xl text-lg font-medium leading-[26px]',
+    'shadow-[14px_14px_45px_4px_rgba(191,193,212,0.2)]',
+    invertedPrimarySurfaceClass,
+  );
+
   return (
-    <div
-      className="relative flex h-screen flex-col overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, var(--canvas-from), var(--canvas-via), var(--canvas-to))' }}
-    >
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[#F7F8FA] dark:bg-[#0D0D0D]">
+      {/* 背景对齐设计稿：#AEB8C4 规则点阵（约 1.7px / 间距 13.93px）+ 四角白色径向光晕压淡点阵 */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 neural-grid opacity-40" />
-        <div className="absolute -top-24 left-[12%] h-72 w-72 rounded-full bg-cyan-400/18 blur-[110px]" />
-        <div className="absolute right-[10%] top-[18%] h-80 w-80 rounded-full bg-[rgba(255,140,0,0.08)] blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-[rgba(255,111,0,0.05)] blur-[120px]" />
-        <ParticleConstellation particleCount={34} connectionDistance={140} speed={0.24} />
+        <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            backgroundImage: [
+              'radial-gradient(600px 600px at 78.5% 11.4%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 90%)',
+              'radial-gradient(500px 500px at 5.3% 67.6%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 90%)',
+              'radial-gradient(400px 400px at 29.9% 6%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 16%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.18) 68%, rgba(255,255,255,0.06) 84%, rgba(255,255,255,0) 96%)',
+              'radial-gradient(500px 500px at 61.5% 87.1%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 16%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.18) 68%, rgba(255,255,255,0.06) 84%, rgba(255,255,255,0) 96%)',
+              'radial-gradient(circle, #AEB8C4 0.84px, transparent 0.92px)',
+            ].join(','),
+            backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%, 13.93px 13.93px',
+          }}
+        />
+        <div
+          className="absolute inset-0 hidden dark:block"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.12) 0.84px, transparent 0.92px)',
+            backgroundSize: '13.93px 13.93px',
+          }}
+        />
       </div>
 
       <TitleBar />
 
-      <div className="relative z-10 flex flex-1 items-center justify-center p-4">
-        <div className="glass-panel relative w-[460px] overflow-hidden rounded-[28px] border border-glass-border p-10">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(103,232,249,0.14),_transparent_34%),radial-gradient(circle_at_80%_18%,_rgba(191,219,254,0.16),_transparent_24%)]" />
-          <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/60 to-transparent" />
-
-          <div className="relative space-y-8">
-            <div className="flex items-center justify-center gap-2">
-              <span className="glow-badge inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em]">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                智能工作台
-              </span>
-              <span className="glow-badge inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em]">
-                <Orbit className="h-3.5 w-3.5" />
-                安全登录
-              </span>
-            </div>
-
-            <div className="flex flex-col items-center gap-5">
-              <div className="relative">
-                <div className="absolute inset-0 rounded-[26px] bg-cyan-400/20 blur-2xl" />
-                <div className="relative overflow-hidden rounded-[16px] border border-cyan-300/20 shadow-[0_0_0_1px_rgba(103,232,249,0.12),0_24px_50px_rgba(8,47,73,0.26)]">
-                  <img src={clawxIcon} alt="StoClaw" className="h-16 w-16 object-cover" />
-                </div>
-              </div>
-
-              <div className="space-y-2 text-center">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.24em] text-foreground/65">
-                  <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
-                  SClaw 智能助手
-                </div>
-                <h1 className="text-3xl font-semibold tracking-[-0.04em] text-foreground">
-                  {t('auth:login.title')}
-                </h1>
-                <p className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
-                  {t('auth:login.subtitle')}
-                </p>
-              </div>
-            </div>
-
-            {error && error !== 'SSO_LOGIN_CANCELLED' && !accessDenied && (
-              <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_10px_30px_rgba(127,29,29,0.12)]">
-                {t('auth:login.error', { error })}
-              </div>
-            )}
-
-            {envConfig.isDevelopment && (
-              <div className="space-y-2">
-                <label htmlFor="sto-sso-env" className="text-xs font-medium uppercase tracking-[0.18em] text-foreground/55">
-                  {t('auth:environment.label')}
-                </label>
-                <Select
-                  id="sto-sso-env"
-                  value={ssoEnvironment}
-                  onChange={(e) => void setSsoEnvironment(e.target.value as SsoEnvironment)}
-                  disabled={isLoggingIn}
-                  className="h-11 rounded-xl border-white/12"
-                >
-                  {DEV_SSO_ENV_OPTIONS.map((env) => (
-                    <option key={env} value={env}>
-                      {t(`auth:environment.${env}`)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
-
-            <Button
-              className="h-12 w-full rounded-2xl border border-cyan-200/30 bg-[linear-gradient(135deg,rgba(125,211,252,0.98),rgba(56,189,248,0.92))] text-[15px] font-semibold text-slate-950 shadow-[0_18px_44px_rgba(56,189,248,0.24)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_56px_rgba(56,189,248,0.32)]"
-              size="lg"
-              onClick={handleLogin}
-              disabled={isLoggingIn}
-            >
-              {isLoggingIn ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('auth:login.loggingIn')}
-                </>
-              ) : (
-                <>
-                  <LogIn className="mr-2 h-4 w-4" />
-                  {t('auth:login.button')}
-                </>
-              )}
-            </Button>
-
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">连接</div>
-                <div className="mt-1 text-sm font-medium text-cyan-200">正常</div>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">服务</div>
-                <div className="mt-1 text-sm font-medium text-orange-400 dark:text-orange-300">就绪</div>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
-                <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">登录</div>
-                <div className="mt-1 text-sm font-medium text-emerald-200">安全</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {accessDenied && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="client-site-access-denied-title"
-            className="glass-panel relative w-full max-w-[420px] overflow-hidden rounded-[28px] border border-amber-200/25 p-8 shadow-[0_24px_80px_rgba(120,53,15,0.28)]"
-          >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.16),_transparent_42%),radial-gradient(circle_at_80%_20%,_rgba(248,113,113,0.12),_transparent_28%)]" />
-            <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/70 to-transparent" />
-
-            <button
-              type="button"
-              onClick={clearAccessDenied}
-              className="absolute right-4 top-4 z-10 rounded-xl border border-white/10 bg-white/5 p-2 text-foreground/60 transition-colors hover:bg-white/10 hover:text-foreground"
-              aria-label="关闭"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
-            <div className="relative space-y-6">
-              <div className="flex justify-center">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-amber-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-950 shadow-sm">
-                  <ShieldAlert className="h-3.5 w-3.5 text-amber-800" />
-                  访问受限
-                </span>
-              </div>
-
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div className="relative">
-                  <div className="absolute inset-0 rounded-full bg-amber-400/25 blur-2xl" />
-                  <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-300/50 bg-[linear-gradient(135deg,rgba(254,243,199,0.95),rgba(253,230,138,0.75))] shadow-[0_0_0_1px_rgba(217,119,6,0.12),0_16px_40px_rgba(120,53,15,0.15)]">
-                    <ShieldAlert className="h-8 w-8 text-amber-800" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h2
-                    id="client-site-access-denied-title"
-                    className="text-2xl font-semibold tracking-[-0.03em] text-foreground"
-                  >
-                    无法登录
-                  </h2>
-                  <p className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
-                    {error || '您的所属组织无权使用 StoClaw，请联系管理员开通网点访问权限。'}
+      {/* 设计稿卡片顶部约 186px：用底部留白把居中位置整体抬高 */}
+      <div className="relative z-10 flex flex-1 items-center justify-center p-4 pb-20">
+        <Card className="flex w-[436px] flex-col items-center gap-10 rounded-[24px] border-0 bg-card px-[58px] py-20 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+          {showDeniedCard ? (
+            <>
+              <div className="flex flex-col items-center gap-5">
+                <TriangleAlert className="h-16 w-16 text-white" fill="#FAAD14" strokeWidth={1.5} />
+                <div className="flex flex-col items-center gap-1.5 text-center">
+                  <h1 className="text-2xl font-semibold leading-9 text-[#1D2129] dark:text-foreground">
+                    访问受限无法登录
+                  </h1>
+                  <p className="text-[13px] leading-[18px] text-[#86909C] dark:text-muted-foreground">
+                    所属组织不在客户端白名单内
                   </p>
                 </div>
               </div>
 
-              {(accessCheck?.categoryCode || accessCheck?.companyCode) && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-left">
-                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground/45">
-                      <Building2 className="h-3.5 w-3.5" />
-                      组织类型
-                    </div>
-                    <div className="mt-1.5 text-sm font-semibold text-foreground">
-                      {accessCheck.categoryCode || '—'}
-                    </div>
+              <div className="flex w-80 flex-col items-center gap-[18px]">
+                {openingPending ? (
+                  <div className="flex h-[58px] w-full items-center justify-center rounded-xl bg-warning text-lg font-medium leading-[26px] text-white shadow-[14px_14px_45px_4px_rgba(191,193,212,0.2)]">
+                    报名成功，审核中...
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-left">
-                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground/45">
-                      <MapPin className="h-3.5 w-3.5" />
-                      组织编码
-                    </div>
-                    <div className="mt-1.5 truncate text-sm font-semibold text-foreground">
-                      {accessCheck.companyCode || '—'}
-                    </div>
-                  </div>
+                ) : (
+                  <Button
+                    className={darkActionClass}
+                    disabled={statusLoading || registering}
+                    onClick={() => void registerOpening()}
+                  >
+                    {registering && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                    去报名开通
+                  </Button>
+                )}
+                <p
+                  className={`text-center text-[13px] leading-4 ${
+                    openingError ? 'text-red-500' : 'text-[#4E5969] dark:text-muted-foreground'
+                  }`}
+                >
+                  {deniedHint}
+                </p>
+                <Button
+                  type="button"
+                  variant="link"
+                  onClick={clearAccessDenied}
+                  className="h-auto p-0 text-[13px] font-normal leading-4 text-[#86909C] underline-offset-4 transition-colors hover:text-[#4E5969] hover:underline dark:text-muted-foreground dark:hover:text-foreground"
+                >
+                  返回登录
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col items-center gap-5">
+                <img
+                  src={clawxIcon}
+                  alt="SClaw"
+                  className="h-16 w-16 rounded-2xl object-cover shadow-[inset_0_0_9px_rgba(255,255,255,0.15)]"
+                />
+                <div className="flex flex-col items-center gap-1.5 text-center">
+                  <h1 className="text-2xl font-semibold leading-9 text-[#1D2129] dark:text-foreground">
+                    {t('auth:login.title')}
+                  </h1>
+                  <p className="text-[13px] leading-[18px] text-[#86909C] dark:text-muted-foreground">
+                    {t('auth:login.subtitle')}
+                  </p>
                 </div>
+              </div>
+
+              <div className="flex w-80 flex-col items-center gap-[18px]">
+                {envConfig.isDevelopment && (
+                  <div className="w-full space-y-2">
+                    <Label
+                      htmlFor="sto-sso-env"
+                      className="text-xs font-medium text-[#86909C] dark:text-muted-foreground"
+                    >
+                      {t('auth:environment.label')}
+                    </Label>
+                    <Select
+                      id="sto-sso-env"
+                      value={ssoEnvironment}
+                      onChange={(e) => void setSsoEnvironment(e.target.value as SsoEnvironment)}
+                      disabled={isLoggingIn}
+                      className="h-11 w-full rounded-xl"
+                    >
+                      {DEV_SSO_ENV_OPTIONS.map((env) => (
+                        <option key={env} value={env}>
+                          {t(`auth:environment.${env}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                {error && error !== 'SSO_LOGIN_CANCELLED' && !accessDenied && (
+                  <p className="text-center text-[13px] leading-4 text-red-500">
+                    {t('auth:login.error', { error })}
+                  </p>
+                )}
+                <Button className={darkActionClass} onClick={handleLogin} disabled={isLoggingIn}>
+                  {isLoggingIn && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                  {isLoggingIn ? t('auth:login.loggingIn') : t('auth:login.button')}
+                </Button>
+                <p
+                  className={`text-center text-[13px] leading-4 ${
+                    openingEnabled
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-[#4E5969] dark:text-muted-foreground'
+                  }`}
+                >
+                  {openingEnabled ? '权限已开通，请重新登录' : t('auth:login.hint')}
+                </p>
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
+
+      <div className="relative z-10 flex justify-center pb-[54px]">
+        <div className="flex items-center text-[13px] leading-4 text-[#4E5969] dark:text-muted-foreground">
+          {pageStatusItems.map((item, index) => (
+            <span key={item} className="flex items-center">
+              {index > 0 && (
+                <Separator orientation="vertical" className="h-3 w-[1px] bg-[#C9CDD4] dark:bg-white/15" />
               )}
-
-              <p className="rounded-2xl border border-amber-200/40 bg-amber-50/80 px-4 py-3 text-center text-xs leading-5 text-amber-950/80">
-                如需开通权限，请联系系统管理员在「客户端网点配置」中将您的组织加入白名单。
-              </p>
-
-              <Button
-                className="h-12 w-full rounded-2xl border border-amber-200/35 bg-[linear-gradient(135deg,rgba(251,191,36,0.95),rgba(245,158,11,0.9))] text-[15px] font-semibold text-slate-950 shadow-[0_16px_40px_rgba(245,158,11,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(245,158,11,0.3)]"
-                size="lg"
-                onClick={clearAccessDenied}
-              >
-                我知道了
-              </Button>
-            </div>
-          </div>
+              <span className="px-[18px]">{item}</span>
+            </span>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
