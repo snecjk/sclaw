@@ -5,9 +5,18 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { FileDiff, History, Loader2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { listAppCheckpoints, type AppCheckpoint } from '@/lib/app-dev-api';
+import { hostApiFetch } from '@/lib/host-api';
 import { useAppDevVersionsStore } from '@/stores/app-dev-versions';
 import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import { cn } from '@/lib/utils';
+
+function logVersionRestoreClick(message: string, data?: unknown): void {
+  console.info(message, data);
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({ level: 'info', message, data }),
+  }).catch(() => undefined);
+}
 
 const EMPTY_VERSIONS: Record<string, never> = {};
 
@@ -87,6 +96,9 @@ export const AppDevVersionsPanel = memo(function AppDevVersionsPanel({
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
         <History className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         <span className="text-xs font-medium">版本历史</span>
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          仅本机
+        </span>
         <span className="flex-1" />
         {selected.length === 2 ? (
           <Button type="button" size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={compareSelected}>
@@ -104,7 +116,7 @@ export const AppDevVersionsPanel = memo(function AppDevVersionsPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {checkpoints.length === 0 && !loading ? (
           <p className="px-2 py-8 text-center text-xs text-muted-foreground">
-            还没有版本记录。对话改动后会自动生成 checkpoint。
+            还没有本机版本记录。对话改动后会自动生成 checkpoint；恢复只改本机代码，不会回滚云端。
           </p>
         ) : null}
         <ol className="space-y-2">
@@ -168,7 +180,21 @@ export const AppDevVersionsPanel = memo(function AppDevVersionsPanel({
                     size="sm"
                     variant="outline"
                     className="h-7 gap-1 text-xs"
-                    onClick={() => setVersionRestoreRequest({ hash: cp.hash })}
+                    onClick={() => {
+                      const request = {
+                        hash: cp.hash,
+                        label: mapped?.excerpt || cp.subject,
+                      };
+                      logVersionRestoreClick('[app-dev][version-restore] click 恢复此版', {
+                        workspaceId,
+                        ...request,
+                      });
+                      setVersionRestoreRequest(request);
+                      logVersionRestoreClick(
+                        '[app-dev][version-restore] store after set',
+                        useAppDevWorkbenchStore.getState().versionRestoreRequest,
+                      );
+                    }}
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     恢复此版

@@ -1,5 +1,6 @@
 /**
  * 建站工作台：Agent 正在改的文件自动打开到右侧代码页。
+ * Write/Edit 完成后从磁盘强制刷新编辑器内容。
  * 用户切换代码/页签后暂停，空闲后再跟。
  */
 import { useEffect, useRef, useState } from 'react';
@@ -7,6 +8,7 @@ import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import { revealAppDevSourceFile } from '@/lib/app-dev-reveal-source';
 import {
+  extractCompletedAppDevFileReloads,
   followAppDevLiveTools,
   isAppDevCodeFollowPaused,
 } from '@/lib/app-dev-code-follow';
@@ -24,10 +26,12 @@ export function useAppDevCodeFollow(sessionKey: string | null) {
   const inspectActive = useAppDevWorkbenchStore((state) => state.inspectActive);
   const tuneMode = useAppDevWorkbenchStore((state) => state.tuneMode);
   const lastKeyRef = useRef<string | null>(null);
+  const seenCompletedKeysRef = useRef<Set<string>>(new Set());
   const [resumeAt, setResumeAt] = useState(0);
 
   useEffect(() => {
     lastKeyRef.current = null;
+    seenCompletedKeysRef.current = new Set();
   }, [sessionKey]);
 
   useEffect(() => {
@@ -40,12 +44,28 @@ export function useAppDevCodeFollow(sessionKey: string | null) {
   useEffect(() => {
     if (!sessionKey) return;
     if (inspectActive || tuneMode === 'tune') return;
+
     const next = followAppDevLiveTools(streamingTools, {
       pausedUntil,
       lastKey: lastKeyRef.current,
     });
     lastKeyRef.current = next.nextKey;
     if (next.revealPath) revealAppDevSourceFile(next.revealPath);
+
+    if (isAppDevCodeFollowPaused(pausedUntil)) return;
+
+    const reloads = extractCompletedAppDevFileReloads(
+      streamingTools,
+      seenCompletedKeysRef.current,
+    );
+    seenCompletedKeysRef.current = reloads.nextSeenKeys;
+    if (reloads.reloadPaths.length === 0) return;
+
+    const workbench = useAppDevWorkbenchStore.getState();
+    for (const path of reloads.reloadPaths) {
+      revealAppDevSourceFile(path);
+      workbench.requestAgentSourceReload(path);
+    }
   }, [sessionKey, streamingTools, pausedUntil, resumeAt, inspectActive, tuneMode]);
 }
 

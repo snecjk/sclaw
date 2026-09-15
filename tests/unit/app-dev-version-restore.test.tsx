@@ -54,7 +54,7 @@ describe('useAppDevVersionRestore（恢复版本请求-消费）', () => {
     useAppDevWorkbenchStore.setState({ ...WORKBENCH_DEFAULTS });
   });
 
-  it('消费 versionRestoreRequest：出现确认目标（label 取 checkpoint subject），请求被清空', async () => {
+  it('打开 versionRestoreRequest：出现确认目标（label 取 checkpoint subject），请求保留到确认/取消', async () => {
     const { result } = renderHook(() =>
       useAppDevVersionRestore({ workspaceId: 'ws-1', onRestored: vi.fn() }),
     );
@@ -70,7 +70,7 @@ describe('useAppDevVersionRestore（恢复版本请求-消费）', () => {
         label: '对话修改 · 把标题改蓝',
       });
     });
-    expect(useAppDevWorkbenchStore.getState().versionRestoreRequest).toBeNull();
+    expect(useAppDevWorkbenchStore.getState().versionRestoreRequest).toEqual({ hash: 'hash-u1' });
   });
 
   it('confirm 成功：restoreAppCheckpoint 带 hash 调用，触发 onRestored + 成功提示并关闭', async () => {
@@ -93,6 +93,7 @@ describe('useAppDevVersionRestore（恢复版本请求-消费）', () => {
     expect(onRestored).toHaveBeenCalledTimes(1);
     expect(mocks.toastSuccess).toHaveBeenCalled();
     expect(result.current.target).toBeNull();
+    expect(useAppDevWorkbenchStore.getState().versionRestoreRequest).toBeNull();
   });
 
   it('confirm 失败：错误提示，不触发刷新，也关闭确认框', async () => {
@@ -149,6 +150,7 @@ describe('useAppDevVersionRestore（恢复版本请求-消费）', () => {
 
     expect(result.current.target).toBeNull();
     expect(mocks.restoreAppCheckpoint).not.toHaveBeenCalled();
+    expect(useAppDevWorkbenchStore.getState().versionRestoreRequest).toBeNull();
   });
 
   it('无映射记录时 label 退化为短 hash', async () => {

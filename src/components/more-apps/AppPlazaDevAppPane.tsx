@@ -68,9 +68,7 @@ import {
   setAppDevTurnRating,
   type AppDevTurnRating,
 } from '@/lib/app-dev-turn-feedback';
-import { useAppDevVersionRestore } from '@/hooks/use-app-dev-version-restore';
 import { Button } from '@/components/ui/button';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TemplatePublishConfirmDialog } from './TemplatePublishConfirmDialog';
 import { TemplateProjectUploadControl } from './TemplateProjectUploadControl';
 import { BuiltinTemplateDebugControl } from './BuiltinTemplateDebugControl';
@@ -100,12 +98,9 @@ import {
 import {
   createAppCheckpoint,
   continueStoAppMerge,
-  drainAppErrors,
   getAppDevEnvironment,
   getAppRuntimeStatus,
   consumeAppRuntimeEscalate,
-  restartAppBackend,
-  runAppRuntimeSmoke,
   getStoAppStatus,
   listStoAppConflicts,
   pullStoApp,
@@ -115,6 +110,7 @@ import {
   type StoAppStatus,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
+import { runAppDevPostTurnVerify } from '@/lib/app-dev-post-turn-verify';
 import { pullToastMessage } from '../../../shared/site-app-source-merge';
 import { submitStoAppWithAutoPull } from '@/lib/sto-app-submit';
 import { revealAppDevSourceFile } from '@/lib/app-dev-reveal-source';
@@ -708,45 +704,20 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           await runResponsiveAudit(pending.turnKey);
         }
 
-        const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
-        if (errors.length > 0) setPendingErrors(errors);
         setSourceRevision((n) => n + 1);
 
-        // 全栈：回合结束后重启后端 + smoke。仅在自愈链路中提示「已修好」；失败再自动塞修复回合。
-        const runtime = await getAppRuntimeStatus(workspaceId).catch(() => null);
-        if (runtime?.fullstack) {
-          try {
-            await restartAppBackend(workspaceId);
-            const smoke = await runAppRuntimeSmoke(workspaceId);
-            if (smoke.ok) {
-              if (healPendingRef.current) {
-                healPendingRef.current = false;
-                toast.success('已修好，可以继续用');
-              }
-            } else if (smoke.prompt) {
-              healPendingRef.current = true;
-              toast.message('复检未通过，继续自动修复…');
-              setComposerSeed((prev) => ({
-                text: smoke.prompt!,
-                version: (prev?.version ?? 0) + 1,
-              }));
-              if (appDevSessionKey) {
-                void useChatStore.getState().sendMessage({
-                  text: smoke.prompt,
-                  sessionKey: appDevSessionKey,
-                }).catch(() => {
-                  healPendingRef.current = false;
-                });
-              }
-            }
-          } catch {
-            // ignore — escalate poll will pick up hard crashes
-          }
-        }
+        // 综合自检（typecheck/build/test + 预览报错 + 全栈 smoke）；失败仅向建站会话自动修复。
+        await runAppDevPostTurnVerify({
+          workspaceId,
+          appDevSessionKey,
+          pendingPreviewErrors: pendingErrors,
+          healPendingRef,
+          onPreviewErrors: (errors) => setPendingErrors(errors),
+        });
       })();
     }
     prevSendingRef.current = sending;
-  }, [sending, workspaceId, previewBridge, status?.previewUrl, runResponsiveAudit, appDevSessionKey]);
+  }, [sending, workspaceId, previewBridge, status?.previewUrl, runResponsiveAudit, appDevSessionKey, pendingErrors]);
 
   const handleFixErrors = useCallback(() => {
     const text = [
@@ -802,12 +773,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
   }, []);
-
-  // T04：消息级「恢复版本」——汇总卡按钮 → store 请求 → 二次确认 → 回滚 + 刷新。
-  const versionRestore = useAppDevVersionRestore({
-    workspaceId,
-    onRestored: () => setSourceRevision((n) => n + 1),
-  });
 
   const handleBack = () => {
     closeDevAppTab(tab.id);
@@ -1284,19 +1249,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             setInitialDeploymentId(deploymentId);
             setDeployHistoryOpen(true);
           }}
+          onLocalVersionRestored={() => setSourceRevision((n) => n + 1)}
         />
       </AppDevSplitBody>
 
-      <ConfirmDialog
-        open={versionRestore.target != null}
-        title="恢复版本"
-        message={`将把应用恢复到该轮对话结束时的版本（${versionRestore.target?.label ?? ''}）。当前未提交的改动会自动备份，可以放心恢复。`}
-        confirmLabel="恢复"
-        confirmingLabel="恢复中…"
-        variant="destructive"
-        onConfirm={versionRestore.confirm}
-        onCancel={versionRestore.cancel}
-      />
       <TemplatePublishConfirmDialog
         open={templatePublishConfirm}
         onConfirm={async () => {

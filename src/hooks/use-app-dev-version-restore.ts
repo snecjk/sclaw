@@ -1,14 +1,14 @@
 /**
- * useAppDevVersionRestore — 消息级「恢复版本」请求消费 hook（P1 交互改造 T04）。
+ * useAppDevVersionRestore — 「恢复版本」确认流。
  *
- * 请求-消费模式：汇总卡按钮只 setVersionRestoreRequest({hash})，
- * 本 hook 在 AppPlazaDevAppPane 消费（置 null）并弹出二次确认；
- * confirm 走 restoreAppCheckpoint(workspaceId, hash)（服务层自动建 sclaw-backup-* 分支），
- * 成功后 onRestored 触发代码/预览刷新。
+ * 请求放在 workbench store 里，直到 confirm / cancel 才清空。
+ * 不能在 effect 里立刻置 null：React Strict Mode 重挂载会丢掉本地 state，
+ * 导致点了「恢复此版本」却没有任何反馈。
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { restoreAppCheckpoint } from '@/lib/app-dev-api';
+import { hostApiFetch } from '@/lib/host-api';
 import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
 import { useAppDevVersionsStore } from '@/stores/app-dev-versions';
 
@@ -16,6 +16,14 @@ export interface AppDevVersionRestoreTarget {
   hash: string;
   /** 确认框里展示的标签：checkpoint subject，缺失时退化为短 hash。 */
   label: string;
+}
+
+function logVersionRestore(message: string, data?: unknown): void {
+  console.info(message, data);
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({ level: 'info', message, data }),
+  }).catch(() => undefined);
 }
 
 export function useAppDevVersionRestore(input: {
@@ -28,33 +36,61 @@ export function useAppDevVersionRestore(input: {
 } {
   const { workspaceId, onRestored } = input;
   const request = useAppDevWorkbenchStore((s) => s.versionRestoreRequest);
-  const [target, setTarget] = useState<AppDevVersionRestoreTarget | null>(null);
+  const versions = useAppDevVersionsStore(
+    (s) => s.versionsByWorkspace[workspaceId] ?? null,
+  );
   const onRestoredRef = useRef(onRestored);
   onRestoredRef.current = onRestored;
 
-  useEffect(() => {
-    if (!request) return;
-    useAppDevWorkbenchStore.getState().setVersionRestoreRequest(null);
-    const records = useAppDevVersionsStore.getState().versionsByWorkspace[workspaceId] ?? {};
-    const record = Object.values(records).find((item) => item.hash === request.hash);
-    setTarget({
-      hash: request.hash,
-      label: record?.subject?.trim() || request.hash.slice(0, 7),
+  const target = useMemo<AppDevVersionRestoreTarget | null>(() => {
+    const hash = request?.hash?.trim();
+    if (!hash) {
+      if (request != null) {
+        logVersionRestore('[app-dev][version-restore] hook target=null (empty hash)', { request });
+      }
+      return null;
+    }
+    const explicitLabel = request?.label?.trim();
+    const resolved = explicitLabel
+      ? { hash, label: explicitLabel }
+      : {
+          hash,
+          label: (
+            versions
+              ? Object.values(versions).find((item) => item.hash === hash)
+              : undefined
+          )?.subject?.trim() || hash.slice(0, 7),
+        };
+    logVersionRestore('[app-dev][version-restore] hook target → dialog should open', {
+      workspaceId,
+      ...resolved,
     });
-  }, [request, workspaceId]);
+    return resolved;
+  }, [request, versions, workspaceId]);
 
-  const cancel = useCallback(() => setTarget(null), []);
+  const cancel = useCallback(() => {
+    logVersionRestore('[app-dev][version-restore] cancel');
+    useAppDevWorkbenchStore.getState().setVersionRestoreRequest(null);
+  }, []);
 
   const confirm = useCallback(async () => {
     if (!target) return;
-    const result = await restoreAppCheckpoint(workspaceId, target.hash).catch(() => null);
+    logVersionRestore('[app-dev][version-restore] confirm start', {
+      workspaceId,
+      hash: target.hash,
+    });
+    const result = await restoreAppCheckpoint(workspaceId, target.hash).catch((err: unknown) => ({
+      restored: false as const,
+      error: err instanceof Error ? err.message : '暂时无法恢复',
+    }));
+    logVersionRestore('[app-dev][version-restore] confirm result', result);
     if (result?.restored) {
-      toast.success('已恢复到所选版本，页面稍后自动刷新');
+      toast.success('已恢复到所选本地版本（仅本机，未回滚云端）');
       onRestoredRef.current?.();
     } else {
-      toast.error('暂时无法恢复，请稍后再试');
+      toast.error(result?.error?.trim() || '暂时无法恢复本地版本');
     }
-    setTarget(null);
+    useAppDevWorkbenchStore.getState().setVersionRestoreRequest(null);
   }, [target, workspaceId]);
 
   return { target, confirm, cancel };

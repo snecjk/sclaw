@@ -528,6 +528,42 @@ export async function runAppRuntimeSmoke(workspaceId: string): Promise<{
   };
 }
 
+export interface AppDevVerifyStep {
+  name: string;
+  ok: boolean;
+  output?: string;
+}
+
+export async function runAppDevVerify(
+  workspaceId: string,
+  options?: { previewErrors?: string[]; includeSmoke?: boolean },
+): Promise<{
+  ok: boolean;
+  steps: AppDevVerifyStep[];
+  prompt?: string;
+}> {
+  const res = await hostApiFetch<{
+    success: boolean;
+    ok: boolean;
+    steps?: AppDevVerifyStep[];
+    prompt?: string;
+  }>('/api/app-dev/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspaceId,
+      previewErrors: options?.previewErrors ?? [],
+      includeSmoke: options?.includeSmoke,
+    }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return {
+    ok: Boolean(res.ok),
+    steps: res.steps ?? [],
+    prompt: res.prompt,
+  };
+}
+
 export async function restartAppBackend(workspaceId: string): Promise<AppRuntimeStatus> {
   const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/restart-backend', {
     method: 'POST',
@@ -650,7 +686,7 @@ export async function diffAppCheckpoint(
 export async function restoreAppCheckpoint(
   workspaceId: string,
   hash?: string,
-): Promise<{ restored: boolean }> {
+): Promise<{ restored: boolean; backupRef?: string; error?: string }> {
   return hostApiFetch('/api/app-dev/checkpoints/restore', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -940,17 +976,85 @@ export async function getStoAppStatus(workspaceId: string): Promise<StoAppStatus
 
 export interface StoAppPushHistoryItem {
   revisionId: string;
-  appCode: string;
+  appCode?: string;
   message: string;
   commitSha?: string;
   createdAt: number;
+  hash?: string;
+  subject?: string;
+  timestamp?: number;
 }
 
-export async function listStoAppPushes(workspaceId: string): Promise<StoAppPushHistoryItem[]> {
-  const res = await hostApiFetch<{ items: StoAppPushHistoryItem[] }>(
-    `/api/app-dev/sto-app/pushes?workspaceId=${encodeURIComponent(workspaceId)}`,
+export async function listStoAppPushes(workspaceId: string): Promise<{
+  source: 'cloud' | 'local';
+  items: StoAppPushHistoryItem[];
+}> {
+  const res = await hostApiFetch<{
+    source?: 'cloud' | 'local';
+    items: Array<StoAppPushHistoryItem & {
+      hash?: string;
+      subject?: string;
+      timestamp?: number;
+      revisionId?: string;
+    }>;
+  }>(`/api/app-dev/sto-app/pushes?workspaceId=${encodeURIComponent(workspaceId)}`);
+  const items = (res.items ?? []).map((item) => ({
+    revisionId: item.revisionId || item.hash || '',
+    appCode: item.appCode,
+    message: item.subject || item.message || '',
+    commitSha: item.commitSha || item.hash,
+    createdAt: item.timestamp || item.createdAt || Date.now(),
+    hash: item.hash || item.commitSha || item.revisionId,
+    subject: item.subject || item.message,
+    timestamp: item.timestamp || item.createdAt,
+  }));
+  return { source: res.source === 'cloud' ? 'cloud' : 'local', items };
+}
+
+export async function restoreStoAppRevision(
+  workspaceId: string,
+  revisionId: string,
+  options?: { push?: boolean; message?: string },
+): Promise<{ ok: boolean; output: string; json?: unknown }> {
+  return hostApiFetch('/api/app-dev/sto-app/restore-revision', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspaceId,
+      revisionId,
+      push: options?.push !== false,
+      message: options?.message,
+    }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export async function listStoAppCloudDeployments(
+  workspaceId: string,
+  groupName: string,
+): Promise<import('../../shared/site-app-deployments').SiteAppDeploymentRecord[]> {
+  const res = await hostApiFetch<{
+    items: import('../../shared/site-app-deployments').SiteAppDeploymentRecord[];
+  }>(
+    `/api/app-dev/sto-app/deployments?workspaceId=${encodeURIComponent(workspaceId)}` +
+      `&groupName=${encodeURIComponent(groupName)}`,
   );
   return res.items ?? [];
+}
+
+export async function rollbackStoAppCloudDeployment(
+  workspaceId: string,
+  input: { groupName: string; targetRecordId: number; syncLocal?: boolean },
+): Promise<{
+  rollback: import('../../shared/site-app-deployments').SiteAppDeployRollbackResult;
+  localSync?: { ok: boolean; output: string } | null;
+}> {
+  return hostApiFetch('/api/app-dev/sto-app/deployments/rollback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, ...input }),
+    ...APP_DEV_LONG_RUNNING,
+  });
 }
 
 export async function pushStoApp(

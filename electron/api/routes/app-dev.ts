@@ -63,6 +63,7 @@ import {
   restartBackendOnly,
   runAppSmoke,
 } from '../../services/app-runtime-manager';
+import { runAppDevVerify } from '../../services/app-dev-verify';
 import {
   deleteAppDevSecret,
   listAppDevSecretKeys,
@@ -73,13 +74,17 @@ import { logger } from '../../utils/logger';
 import {
   continueStoAppMerge,
   getStoAppStatus,
+  listStoAppCloudDeployments,
   listStoAppConflicts,
+  listStoAppPushTimeline,
+  getStoAppDeployGroupName,
   pullStoApp,
   pushStoApp,
   resolveStoAppConflict,
+  restoreStoAppToRevision,
+  rollbackStoAppCloudDeployment,
 } from '../../services/sto-app-service';
 import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
-import { readStoAppPushHistory } from '../../services/sto-app-push-history-store';
 import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 import { handleAppDevSsoAuthRoute } from './app-dev-sso-auth';
 import { handleAppDevDeployResourceRoute } from './app-dev-deploy-resource';
@@ -433,6 +438,23 @@ export async function handleAppDevRoutes(
       return true;
     }
 
+    if (url.pathname === '/api/app-dev/verify' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId: string;
+        previewErrors?: string[];
+        includeSmoke?: boolean;
+      }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await runAppDevVerify({
+        workspaceId: body.workspaceId,
+        appPath,
+        previewErrors: Array.isArray(body.previewErrors) ? body.previewErrors : [],
+        includeSmoke: body.includeSmoke,
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
     if (url.pathname === '/api/app-dev/runtime/logs' && req.method === 'GET') {
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
       const source = (url.searchParams.get('source') as 'frontend' | 'backend' | 'all' | null) ?? 'all';
@@ -716,7 +738,63 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/sto-app/pushes' && req.method === 'GET') {
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
       const appPath = await resolveAppPath(workspaceId);
-      sendJson(res, 200, { success: true, items: await readStoAppPushHistory(appPath) });
+      const timeline = await listStoAppPushTimeline(appPath);
+      sendJson(res, 200, {
+        success: true,
+        source: timeline.source,
+        items: timeline.items,
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/restore-revision' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId: string;
+        revisionId: string;
+        push?: boolean;
+        message?: string;
+      }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await restoreStoAppToRevision(appPath, body.revisionId ?? '', {
+        push: body.push !== false,
+        message: body.message,
+        workspaceId: body.workspaceId,
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/deploy-group' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      const groupName = await getStoAppDeployGroupName(appPath);
+      sendJson(res, 200, { success: true, groupName });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/deployments' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const groupName = url.searchParams.get('groupName') ?? url.searchParams.get('group_name') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      const items = await listStoAppCloudDeployments(appPath, groupName || undefined);
+      sendJson(res, 200, { success: true, items });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/deployments/rollback' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId: string;
+        groupName: string;
+        targetRecordId: number;
+        syncLocal?: boolean;
+      }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await rollbackStoAppCloudDeployment(appPath, {
+        groupName: body.groupName ?? '',
+        targetRecordId: Number(body.targetRecordId),
+        syncLocal: body.syncLocal !== false,
+      });
+      sendJson(res, 200, { success: true, ...result });
       return true;
     }
 

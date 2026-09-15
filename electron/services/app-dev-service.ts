@@ -171,6 +171,35 @@ export function hasGitRepo(appPath: string): boolean {
   return existsSync(join(appPath, '.git'));
 }
 
+/** Keep local checkpoints out of `.sto` metadata / base-snapshot noise. */
+async function ensureStoIgnoredInGit(appPath: string): Promise<void> {
+  const ignorePath = join(appPath, '.gitignore');
+  let existing = '';
+  try {
+    existing = await readFile(ignorePath, 'utf8');
+  } catch {
+    existing = '';
+  }
+  if (/(^|\n)\s*\.sto\/?\s*($|\n)/.test(existing)) return;
+  const prefix = existing && !existing.endsWith('\n') ? `${existing}\n` : existing;
+  await writeFile(ignorePath, `${prefix}.sto/\n`, 'utf8');
+}
+
+/**
+ * Ensure the app folder has a local git repo for checkpoint history.
+ * Best-effort: creation/setup must not hard-fail if git is unavailable.
+ */
+export async function ensureLocalGitRepo(appPath: string): Promise<boolean> {
+  if (!(await isGitAvailable())) return false;
+  await ensureStoIgnoredInGit(appPath);
+  if (hasGitRepo(appPath)) return true;
+  const init = await runGit(appPath, ['init']);
+  if (!init.ok) return false;
+  await runGit(appPath, ['add', '-A']);
+  await runGit(appPath, ['commit', '-m', '初始化本地版本']);
+  return hasGitRepo(appPath);
+}
+
 async function readAppDevMarkerFields(appPath: string): Promise<{
   projectType: string;
   createdAt: string;
@@ -1987,7 +2016,7 @@ export async function createCheckpointDetailed(
   appPath: string,
   message: string,
 ): Promise<AppCheckpointCreateResult> {
-  if (!(await isGitAvailable())) return { status: 'failed' };
+  if (!(await ensureLocalGitRepo(appPath))) return { status: 'failed' };
   const status = await runGit(appPath, ['status', '--porcelain']);
   if (!status.ok) return { status: 'failed' };
   if (!status.output) {
@@ -2014,7 +2043,7 @@ export async function createCheckpoint(appPath: string, message: string): Promis
 }
 
 export async function listCheckpoints(appPath: string, limit = 20): Promise<AppCheckpoint[]> {
-  if (!(await isGitAvailable())) return [];
+  if (!(await ensureLocalGitRepo(appPath))) return [];
   const log = await runGit(appPath, ['log', `-${limit}`, '--pretty=format:%H%x09%ct%x09%s']);
   if (!log.ok || !log.output) return [];
   return log.output.split('\n').map((line) => {
@@ -2023,24 +2052,57 @@ export async function listCheckpoints(appPath: string, limit = 20): Promise<AppC
   });
 }
 
-/**
- * Restore the working tree to a checkpoint (default: previous one), creating
- * a safety backup branch first so the discarded state stays recoverable.
- */
-export async function restoreCheckpoint(appPath: string, hash?: string): Promise<{ restored: boolean; backupRef?: string }> {
-  if (!(await isGitAvailable())) return { restored: false };
+export interface RestoreCheckpointResult {
+  restored: boolean;
+  backupRef?: string;
+  /** Human-readable failure reason for UI toast. */
+  error?: string;
+}
 
-  // Preserve any uncommitted work in the backup too.
-  await createCheckpoint(appPath, '恢复前自动保存');
+/**
+ * Restore the working tree to a local checkpoint (default: previous one).
+ * Local-only: does not push / roll back cloud source or deployments.
+ */
+export async function restoreCheckpoint(
+  appPath: string,
+  hash?: string,
+): Promise<RestoreCheckpointResult> {
+  if (!(await isGitAvailable())) {
+    return { restored: false, error: '本机未安装 Git，无法恢复本地版本' };
+  }
+  if (!(await ensureLocalGitRepo(appPath))) {
+    return { restored: false, error: '无法初始化本地版本仓库' };
+  }
+
+  // Preserve any uncommitted work in the backup too (best-effort).
+  await createCheckpoint(appPath, '恢复前自动保存').catch(() => false);
 
   const backupRef = `sclaw-backup-${Date.now()}`;
   const branch = await runGit(appPath, ['branch', backupRef]);
-  if (!branch.ok) return { restored: false };
+  if (!branch.ok) {
+    return {
+      restored: false,
+      error: branch.output.trim() || '创建本地备份分支失败',
+    };
+  }
 
   const target = hash?.trim() || 'HEAD~1';
-  const reset = await runGit(appPath, ['reset', '--hard', target]);
+  const verify = await runGit(appPath, ['rev-parse', '--verify', `${target}^{commit}`]);
+  if (!verify.ok) {
+    return {
+      restored: false,
+      backupRef,
+      error: '找不到该本地版本（可能已被清理或不在本机）',
+    };
+  }
+
+  const reset = await runGit(appPath, ['reset', '--hard', verify.output]);
   if (!reset.ok) {
-    return { restored: false, backupRef };
+    return {
+      restored: false,
+      backupRef,
+      error: reset.output.trim() || '恢复本地文件失败',
+    };
   }
   return { restored: true, backupRef };
 }

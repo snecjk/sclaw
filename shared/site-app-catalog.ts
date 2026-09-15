@@ -19,6 +19,8 @@ export interface SiteAppRecord {
   permissionsUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
+  /** DevOps Founder Group for site-deployments list/rollback. */
+  devopsGroupName?: string;
   pageType: SiteAppPageType;
   iconUrl?: string;
 }
@@ -75,6 +77,15 @@ export function normalizeSiteApp(item: unknown): SiteAppRecord | null {
     permissionsUrl: pickString(row.permissionsUrl, row.permissions_url),
     gitlabProjectId: pickId(row.gitlabProjectId, row.gitlab_project_id),
     devopsApplicationId: pickId(row.devopsApplicationId, row.devops_application_id),
+    /** DevOps Founder Group for site-deployments APIs (≠ git group_code). */
+    devopsGroupName: pickString(
+      row.devopsGroupName,
+      row.devops_group_name,
+      row.groupName,
+      row.group_name,
+      row.founderGroupName,
+      row.founder_group_name,
+    ),
     pageType: normalizeSiteAppPageType(row.pageType ?? row.page_type),
     iconUrl: pickString(row.iconUrl, row.icon_url),
   };
@@ -152,6 +163,7 @@ export function mergeSiteAppRecords(
     permissionsUrl: overlay.permissionsUrl ?? base.permissionsUrl,
     gitlabProjectId: overlay.gitlabProjectId ?? base.gitlabProjectId,
     devopsApplicationId: overlay.devopsApplicationId ?? base.devopsApplicationId,
+    devopsGroupName: overlay.devopsGroupName ?? base.devopsGroupName,
     pageType: overlay.pageType ?? base.pageType,
     iconUrl: overlay.iconUrl ?? base.iconUrl,
   };

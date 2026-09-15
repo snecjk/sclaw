@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ToolStatus } from '@/stores/chat';
 import {
   APP_DEV_CODE_FOLLOW_IDLE_MS,
+  extractCompletedAppDevFileReloads,
   extractLatestAppDevCodeFollowTarget,
   followAppDevLiveTools,
   isAppDevCodeFollowPaused,
@@ -28,7 +29,7 @@ describe('extractLatestAppDevCodeFollowTarget', () => {
         input: { file_path: '/app/src/b.tsx', content: 'x' },
       }),
     ]);
-    expect(target).toEqual({ path: 'src/b.tsx', key: 'w1:running' });
+    expect(target).toEqual({ path: 'src/b.tsx', key: 'w1:running', status: 'running' });
   });
 
   it('uses completed status in the follow key so a reload can happen after write finishes', () => {
@@ -51,6 +52,76 @@ describe('extractLatestAppDevCodeFollowTarget', () => {
     expect(running?.path).toBe('frontend/src/App.tsx');
     expect(done?.path).toBe('frontend/src/App.tsx');
     expect(running?.key).not.toBe(done?.key);
+  });
+});
+
+describe('extractCompletedAppDevFileReloads', () => {
+  it('emits reload paths for newly completed Write/Edit tools', () => {
+    const first = extractCompletedAppDevFileReloads([
+      tool({
+        name: 'Write',
+        toolCallId: 'w1',
+        input: { file_path: '/app/src/a.tsx', content: 'one' },
+      }),
+      tool({
+        name: 'Edit',
+        toolCallId: 'e1',
+        status: 'running',
+        input: { file_path: '/app/src/b.tsx', old_string: 'a', new_string: 'b' },
+      }),
+    ], new Set());
+
+    expect(first.reloadPaths).toEqual(['src/a.tsx']);
+    expect(first.nextSeenKeys.has('w1:completed')).toBe(true);
+
+    const second = extractCompletedAppDevFileReloads([
+      tool({
+        name: 'Write',
+        toolCallId: 'w1',
+        input: { file_path: '/app/src/a.tsx', content: 'one' },
+      }),
+      tool({
+        name: 'Edit',
+        toolCallId: 'e1',
+        status: 'completed',
+        input: { file_path: '/app/src/b.tsx', old_string: 'a', new_string: 'b' },
+      }),
+    ], first.nextSeenKeys);
+
+    expect(second.reloadPaths).toEqual(['src/b.tsx']);
+    expect(second.nextSeenKeys.has('e1:completed')).toBe(true);
+  });
+
+  it('does not re-emit a completed tool that was already seen', () => {
+    const tools = [
+      tool({
+        name: 'Write',
+        toolCallId: 'w1',
+        input: { file_path: 'src/App.tsx', content: 'x' },
+      }),
+    ];
+    const once = extractCompletedAppDevFileReloads(tools, new Set());
+    const twice = extractCompletedAppDevFileReloads(tools, once.nextSeenKeys);
+    expect(once.reloadPaths).toEqual(['src/App.tsx']);
+    expect(twice.reloadPaths).toEqual([]);
+  });
+
+  it('still reloads a completed Write when a newer Edit is already running', () => {
+    const result = extractCompletedAppDevFileReloads([
+      tool({
+        name: 'Write',
+        toolCallId: 'w1',
+        input: { file_path: '/app/src/a.tsx', content: 'done' },
+      }),
+      tool({
+        name: 'Edit',
+        toolCallId: 'e1',
+        status: 'running',
+        input: { file_path: '/app/src/b.tsx', old_string: 'a', new_string: 'b' },
+      }),
+    ], new Set());
+
+    expect(result.reloadPaths).toEqual(['src/a.tsx']);
   });
 });
 
