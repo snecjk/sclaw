@@ -43,7 +43,6 @@ import { useMoreAppsStore } from '@/stores/more-apps';
 import {
   createAppCheckpoint,
   continueStoAppMerge,
-  drainAppErrors,
   getAppDevEnvironment,
   getStoAppStatus,
   listStoAppConflicts,
@@ -54,6 +53,7 @@ import {
   type StoAppStatus,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
+import { runAppDevPostTurnVerify } from '@/lib/app-dev-post-turn-verify';
 import { pullToastMessage } from '../../../shared/site-app-source-merge';
 import { revealAppDevSourceFile } from '@/lib/app-dev-reveal-source';
 import { sendAppDevChatPrompt } from '@/lib/send-app-dev-chat-prompt';
@@ -222,6 +222,8 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
   const [sourceRevision, setSourceRevision] = useState(0);
   const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
+  /** True after auto-heal injected a repair turn; clears on verify.ok. */
+  const healPendingRef = useRef(false);
   if (statusWorkspaceId !== workspaceId) {
     setStatusWorkspaceId(workspaceId);
     setSourceRevision(0);
@@ -282,18 +284,23 @@ export default function AppDevWorkbench({ layout = 'page' }: { layout?: 'page' |
 
   useAppDevStatusPoll(workspaceId, setStatus);
 
-  // 每轮对话结束：自动保存版本 + 收集报错 + 刷新右侧已打开代码。
+  // 每轮对话结束：自动保存版本 + 综合自检 +（失败时）建站会话自动修复。
   useEffect(() => {
     if (prevSendingRef.current && !sending && workspaceId) {
       void (async () => {
         await createAppCheckpoint(workspaceId, '对话修改').catch(() => undefined);
-        const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
-        if (errors.length > 0) setPendingErrors(errors);
         setSourceRevision((n) => n + 1);
+        await runAppDevPostTurnVerify({
+          workspaceId,
+          appDevSessionKey,
+          pendingPreviewErrors: pendingErrors,
+          healPendingRef,
+          onPreviewErrors: (errors) => setPendingErrors(errors),
+        });
       })();
     }
     prevSendingRef.current = sending;
-  }, [sending, workspaceId]);
+  }, [sending, workspaceId, appDevSessionKey, pendingErrors]);
 
   const handleFixErrors = useCallback(() => {
     const text = `右侧预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;

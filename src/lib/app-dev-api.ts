@@ -528,6 +528,42 @@ export async function runAppRuntimeSmoke(workspaceId: string): Promise<{
   };
 }
 
+export interface AppDevVerifyStep {
+  name: string;
+  ok: boolean;
+  output?: string;
+}
+
+export async function runAppDevVerify(
+  workspaceId: string,
+  options?: { previewErrors?: string[]; includeSmoke?: boolean },
+): Promise<{
+  ok: boolean;
+  steps: AppDevVerifyStep[];
+  prompt?: string;
+}> {
+  const res = await hostApiFetch<{
+    success: boolean;
+    ok: boolean;
+    steps?: AppDevVerifyStep[];
+    prompt?: string;
+  }>('/api/app-dev/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspaceId,
+      previewErrors: options?.previewErrors ?? [],
+      includeSmoke: options?.includeSmoke,
+    }),
+    ...APP_DEV_LONG_RUNNING,
+  });
+  return {
+    ok: Boolean(res.ok),
+    steps: res.steps ?? [],
+    prompt: res.prompt,
+  };
+}
+
 export async function restartAppBackend(workspaceId: string): Promise<AppRuntimeStatus> {
   const res = await hostApiFetch<{ status: AppRuntimeStatus }>('/api/app-dev/runtime/restart-backend', {
     method: 'POST',

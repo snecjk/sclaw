@@ -63,6 +63,7 @@ import {
   restartBackendOnly,
   runAppSmoke,
 } from '../../services/app-runtime-manager';
+import { runAppDevVerify } from '../../services/app-dev-verify';
 import {
   deleteAppDevSecret,
   listAppDevSecretKeys,
@@ -434,6 +435,23 @@ export async function handleAppDevRoutes(
           prompt: buildBackendRepairPrompt(message.split('\n').slice(-30)),
         });
       }
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/verify' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId: string;
+        previewErrors?: string[];
+        includeSmoke?: boolean;
+      }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await runAppDevVerify({
+        workspaceId: body.workspaceId,
+        appPath,
+        previewErrors: Array.isArray(body.previewErrors) ? body.previewErrors : [],
+        includeSmoke: body.includeSmoke,
+      });
+      sendJson(res, 200, { success: true, ...result });
       return true;
     }
 
