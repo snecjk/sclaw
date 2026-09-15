@@ -19,7 +19,7 @@ export const DINGTALK_TEMP_OSS_UPLOAD_TOOL =
  * 用 Markdown 隐藏较长的 OSS 地址，同时禁止再次编码（避免 `%`→`%25`）。
  */
 export const DINGTALK_ARTIFACT_URL_EMBED_RULE =
-  '图片使用标准 Markdown 图片语法 `![文件名](在线地址)`；普通文件使用 Markdown 链接语法 `[文件名](在线地址)`，不要在正文中暴露冗长的 OSS 裸地址；**禁止**对 URL 再调用 `encodeURI` / `encodeURIComponent`（会双重编码 `%`→`%25` 使链接失效）；即便已是双重编码也**原样**嵌入，send-guard 规范化层会塌缩';
+  '图片使用标准 Markdown 图片语法 `![文件名](在线地址)`；普通文件使用 Markdown 链接语法 `[文件名](在线地址)`，不要在正文中暴露冗长的 OSS 裸地址；使用 `upload_file_to_temp_oss` 得到临时地址时，直接嵌入该地址，**不要在钉钉正文或发送后的对话回执中向用户提及过期时间**；**禁止**对 URL 再调用 `encodeURI` / `encodeURIComponent`（会双重编码 `%`→`%25` 使链接失效）；即便已是双重编码也**原样**嵌入，send-guard 规范化层会塌缩';
 
 /** 模块 A 规则 5–6 的短指针（模块 C / 附件工作流引用，避免再抄一遍细则）。 */
 export const DINGTALK_ARTIFACT_RULES_POINTER =

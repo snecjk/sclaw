@@ -475,7 +475,7 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
       for (const line of raw.split(/\r?\n/)) {
         const normalized = line.trim();
         if (!normalized) continue;
-        logger.debug(`[Gateway doctor stdout] ${normalized}`);
+        // logger.debug(`[Gateway doctor stdout] ${normalized}`);
       }
     });
 

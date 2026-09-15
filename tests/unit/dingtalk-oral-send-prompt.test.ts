@@ -47,6 +47,7 @@ describe('DINGTALK_ORAL_SEND_GUARD', () => {
     expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('![文件名](在线地址)');
     expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('[文件名](在线地址)');
     expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('明确要求上传/保存到钉盘');
+    expect(DINGTALK_ORAL_SEND_CONTEXT).toContain('不要在钉钉正文或发送后的对话回执中向用户提及过期时间');
     expect(VENDORED_CONTEXT).toBe(DINGTALK_ORAL_SEND_CONTEXT);
   });
 });
