@@ -1,7 +1,7 @@
 /**
  * TemplateSelectModal 组件
  * 官方推荐弹窗：展示推荐位全部类型（工作流模版/实例、技能、提示词），无分类 Tab。
- * 卡片复用首页 RecommendCard；选中后由父级把内容写入任务描述（技能保留安装/更新）。
+ * 卡片复用首页 RecommendCard；选中后由父级把标题写入任务名称、描述写入任务描述（技能保留安装/更新）。
  */
 
 import { useCallback } from 'react';
@@ -20,7 +20,7 @@ interface TemplateSelectModalProps {
   /** 推荐位条目（工作流 / 技能 / 提示词等） */
   items: RecommendItem[];
   /**
-   * 选中条目回调：父级关闭弹窗并打开 TaskCreateModal，预填任务描述。
+   * 选中条目回调：父级关闭弹窗并打开 TaskCreateModal，预填任务名称与描述。
    * 技能在安装/更新完成后也会走此回调。
    */
   onSelect: (item: RecommendItem) => void;
@@ -104,6 +104,7 @@ export function TemplateSelectModal({
                       <div key={`${item.item_type}:${item.item_ref_id}`} role="listitem" className="min-h-0">
                         <RecommendCard
                           item={item}
+                          skillClickMode="use-only"
                           onClick={() => handleNonSkillClick(item)}
                           onSkillUse={() => onSelect(item)}
                           onSkillInstalled={() => {

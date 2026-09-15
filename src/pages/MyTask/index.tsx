@@ -25,6 +25,7 @@ import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import {
+  flattenComposerSegmentsForTaskCard,
   stripInstructionFromTaskMessage,
 } from '@/lib/scheduled-task-recipients';
 import { useShallow } from 'zustand/react/shallow';
@@ -44,7 +45,8 @@ import { hostApiFetch } from '@/lib/host-api';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
 import { TemplateSelectModal } from './components/TemplateSelectModal';
-import { buildRecommendTaskMessage } from './components/template-select-message';
+import { buildRecommendTaskPrefill } from './components/template-select-message';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { MyTaskSection, TaskView, TaskViewModel, ExecutionRecord } from './types';
@@ -71,16 +73,17 @@ import { useWorkflowUiStore } from '@/stores/workflow-ui';
 /** 将 ScheduleTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
   const segments = Array.isArray(task.extra?.composerSegments)
-    ? (task.extra!.composerSegments as Array<{ type?: string }>)
+    ? (task.extra!.composerSegments as PersistedComposerSegment[])
     : [];
   const hasWorkflow = segments.some((seg) => seg?.type === 'workflow')
     || Boolean(task.workflowCode); // 迁移前短暂兼容列
   const hasSkill = segments.some((seg) => seg?.type === 'skill')
     || Boolean(task.skillCode);
+  const fromSegments = flattenComposerSegmentsForTaskCard(segments);
   return {
     id: task.id,
     name: task.name,
-    description: stripInstructionFromTaskMessage(task.prompt || ''),
+    description: fromSegments || stripInstructionFromTaskMessage(task.prompt || ''),
     cronExpr: task.cronExpr,
     enabled: task.enabled,
     nextRunAt: task.nextRunAt ?? null,
@@ -185,7 +188,8 @@ export default function MyTask() {
   /** 从官方推荐选中后预填到创建弹窗的名称 / 任务描述 */
   const [recommendPrefill, setRecommendPrefill] = useState<{
     name: string;
-    message: string;
+    message?: string;
+    composerSegments?: PersistedComposerSegment[];
   } | null>(null);
   const [hasCloudUpdates, setHasCloudUpdates] = useState(false);
   const [pulling, setPulling] = useState(false);
@@ -449,11 +453,11 @@ export default function MyTask() {
   }, [deleteTarget, deleteJob, t]);
 
   const handleRecommendSelect = useCallback((item: RecommendItem) => {
-    const message = buildRecommendTaskMessage(item);
-    if (!message) return;
+    const prefill = buildRecommendTaskPrefill(item);
+    if (!prefill.name && !prefill.message && !prefill.composerSegments?.length) return;
     setTemplateOpen(false);
     setEditingJob(null);
-    setRecommendPrefill({ name: item.title || '', message });
+    setRecommendPrefill(prefill);
     setCreateOpen(true);
   }, []);
 
@@ -658,9 +662,14 @@ export default function MyTask() {
           setRecommendPrefill(null);
         }}
         onSave={(input) => handleSave(input)}
+        showInstructionsAtHint={Boolean(recommendPrefill)}
         initialValues={
           recommendPrefill
-            ? { name: recommendPrefill.name, message: recommendPrefill.message }
+            ? {
+                name: recommendPrefill.name,
+                message: recommendPrefill.message,
+                composerSegments: recommendPrefill.composerSegments,
+              }
             : undefined
         }
       />

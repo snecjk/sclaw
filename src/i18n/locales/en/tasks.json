@@ -140,6 +140,7 @@
       "workflowPlaceholder": "Select",
       "workflowEmpty": "No workflows available",
       "instructionsLabel": "Task Content",
+      "instructionsAtHint": "Type <at>@</at> to pick DingTalk contacts or groups; results are sent automatically when the task finishes",
       "instructionsPlaceholder": "Describe what you want SClaw to do...\n- You can set a start or reminder time, e.g. “Start every weekday at 9:00, notify me when done”\n- You can share results, e.g. “Send @DingTalk contact or group”; results are sent to the @target when the task finishes",
       "instructionsRequired": "Please describe what SClaw should do",
       "workflowAutoHint": "Linked workflow — description auto-generated",

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { X, Loader2, ChevronDown, Check, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -157,14 +157,31 @@ interface TaskCreateModalProps {
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
   /** workflowCode：从工作流页入口打开时，seed 为 composer workflow token（不再用表单下拉） */
-  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string };
+  initialValues?: {
+    name?: string;
+    message?: string;
+    schedule?: string;
+    workflowCode?: string;
+    workflowName?: string;
+    composerSegments?: PersistedComposerSegment[];
+  };
+  /** 仅官方推荐唤起创建时展示任务内容旁的 @ 提示 */
+  showInstructionsAtHint?: boolean;
 }
 
 interface TaskCreateModalInnerProps {
   job?: ManagedLocalTask | null;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
-  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string };
+  initialValues?: {
+    name?: string;
+    message?: string;
+    schedule?: string;
+    workflowCode?: string;
+    workflowName?: string;
+    composerSegments?: PersistedComposerSegment[];
+  };
+  showInstructionsAtHint?: boolean;
 }
 
 function buildWorkflowInstructions(workflowCode: string, label?: string, t?: (key: string, options?: Record<string, unknown>) => string): string {
@@ -194,7 +211,14 @@ function seedWorkflowSegment(
 
 export function computeInitialValues(
   job: ManagedLocalTask | null | undefined,
-  initialValues: { name?: string; message?: string; schedule?: string; workflowCode?: string; workflowName?: string } | undefined,
+  initialValues: {
+    name?: string;
+    message?: string;
+    schedule?: string;
+    workflowCode?: string;
+    workflowName?: string;
+    composerSegments?: PersistedComposerSegment[];
+  } | undefined,
   workflowLabelResolver?: (code: string) => string | undefined,
 ) {
 
@@ -316,21 +340,28 @@ export function computeInitialValues(
   }
 
   if (initialValues) {
-    const seededWorkflow = seedWorkflowSegment(
-      initialValues.workflowCode,
-      initialValues.workflowName
+    const prefillSegments = initialValues.composerSegments?.length
+      ? initialValues.composerSegments
+      : null;
+    const seededWorkflow = prefillSegments
+      ? null
+      : seedWorkflowSegment(
+        initialValues.workflowCode,
+        initialValues.workflowName
+          || (initialValues.workflowCode
+            ? workflowLabelResolver?.(initialValues.workflowCode)
+            : undefined),
+      );
+    const instructions = prefillSegments
+      ? ''
+      : (initialValues.message
         || (initialValues.workflowCode
-          ? workflowLabelResolver?.(initialValues.workflowCode)
-          : undefined),
-    );
-    const instructions = initialValues.message
-      || (initialValues.workflowCode
-        ? buildWorkflowInstructions(
-          initialValues.workflowCode,
-          initialValues.workflowName
-            || workflowLabelResolver?.(initialValues.workflowCode),
-        )
-        : '');
+          ? buildWorkflowInstructions(
+            initialValues.workflowCode,
+            initialValues.workflowName
+              || workflowLabelResolver?.(initialValues.workflowCode),
+          )
+          : ''));
     const decoded = initialValues.schedule
       ? tryCronToScheduleValue(initialValues.schedule)
       : defaultScheduleValue();
@@ -342,7 +373,7 @@ export function computeInitialValues(
       scheduleLocked,
       originalCronExpr: scheduleLocked ? initialValues.schedule ?? null : null,
       recipients: [] as DingTalkMention[],
-      composerSegments: seededWorkflow,
+      composerSegments: prefillSegments ?? seededWorkflow,
       engineType: DEFAULT_TASK_ENGINE_TYPE,
       createdViaNl: false,
       saveToMyArtifact: false,
@@ -866,6 +897,7 @@ export function TaskCreateModal({
   onClose,
   onSave,
   initialValues,
+  showInstructionsAtHint = false,
 }: TaskCreateModalProps) {
   return (
     <AnimatePresence>
@@ -879,13 +911,20 @@ export function TaskCreateModal({
           onClose={onClose}
           onSave={onSave}
           initialValues={initialValues}
+          showInstructionsAtHint={showInstructionsAtHint}
         />
       )}
     </AnimatePresence>
   );
 }
 
-function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreateModalInnerProps) {
+function TaskCreateModalInner({
+  job,
+  onClose,
+  onSave,
+  initialValues,
+  showInstructionsAtHint = false,
+}: TaskCreateModalInnerProps) {
   const { t } = useTranslation('tasks');
   const authUser = useAuthStore((s) => s.user);
   const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
@@ -1152,35 +1191,48 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3">
-              <label className={taskCreateFormLabelClass}>
+              <label className={cn(taskCreateFormLabelClass, 'shrink-0')}>
                 {t('myTask.createModal.instructionsLabel')}
               </label>
-              <AiBeautifyButton
-                type="task"
-                value={instructions}
-                disabled={saving}
-                className="shrink-0"
-                hasStructuredChips={() =>
-                  (composerSnapshotRef.current?.segments ?? []).some(
-                    (seg) => seg.type === 'file' || seg.type === 'skill' || seg.type === 'workflow',
-                  )
-                }
-                resolveWorkflow={() => {
-                  const wf = composerSnapshotRef.current?.workflows[0];
-                  return { workflowId: wf?.id, workflowName: wf?.name };
-                }}
-                onBeautified={(next) => {
-                  if (instructionComposerRef.current) {
-                    instructionComposerRef.current.applyBeautifiedText(next);
-                  } else {
-                    setInstructions(next);
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+                {showInstructionsAtHint ? (
+                  <span className="truncate text-right text-xs text-muted-foreground">
+                    <Trans
+                      i18nKey="myTask.createModal.instructionsAtHint"
+                      ns="tasks"
+                      components={{
+                        at: <span className="text-[#ff6700]" />,
+                      }}
+                    />
+                  </span>
+                ) : null}
+                <AiBeautifyButton
+                  type="task"
+                  value={instructions}
+                  disabled={saving}
+                  className="shrink-0"
+                  hasStructuredChips={() =>
+                    (composerSnapshotRef.current?.segments ?? []).some(
+                      (seg) => seg.type === 'file' || seg.type === 'skill' || seg.type === 'workflow',
+                    )
                   }
-                  if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
-                }}
-                onEmpty={() => {
-                  setErrors((p) => ({ ...p, instructions: t('myTask.createModal.instructionsRequired') }));
-                }}
-              />
+                  resolveWorkflow={() => {
+                    const wf = composerSnapshotRef.current?.workflows[0];
+                    return { workflowId: wf?.id, workflowName: wf?.name };
+                  }}
+                  onBeautified={(next) => {
+                    if (instructionComposerRef.current) {
+                      instructionComposerRef.current.applyBeautifiedText(next);
+                    } else {
+                      setInstructions(next);
+                    }
+                    if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
+                  }}
+                  onEmpty={() => {
+                    setErrors((p) => ({ ...p, instructions: t('myTask.createModal.instructionsRequired') }));
+                  }}
+                />
+              </div>
             </div>
             <TaskInstructionComposer
               ref={instructionComposerRef}

@@ -33,6 +33,12 @@ export interface RecommendItem {
   recommend_category?: string | null;
   /** 提示词正文（item_type 为 prompt 时） */
   content?: string | null;
+  /** 提示词混排 segments（item_type 为 prompt 且有 composerSegments 时） */
+  composer_segments?: Array<
+    | { type: 'text'; text: string }
+    | { type: 'skill'; slug: string; title: string }
+    | { type: 'workflow'; id: string; name: string; source?: string }
+  > | null;
   // 技能相关字段（item_type 为 skill 时使用）
   skill_slug?: string;
   skill_installed?: boolean;

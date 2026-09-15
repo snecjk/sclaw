@@ -135,6 +135,10 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     }
 
     if (item.item_type === 'prompt') {
+      if (item.composer_segments?.length) {
+        applyRecommendToComposer({ segments: item.composer_segments });
+        return;
+      }
       const text = (item.content || item.title || '').trim();
       if (!text) return;
       applyRecommendToComposer({ text });
