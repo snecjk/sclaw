@@ -129,6 +129,8 @@ export interface ProviderAccount {
     resourceUrl?: string;
     customModels?: string[];
     managedBy?: string;
+    /** 网关模型详情（model ID → 元数据），由 /agent/v1/gateway-models 接口填充 */
+    customModelDetails?: Record<string, { inputContent?: string; maxContextWindow?: string; category?: string; ability?: string }>;
   };
   createdAt: string;
   updatedAt: string;

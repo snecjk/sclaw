@@ -1055,6 +1055,12 @@ export async function consumeClaudeQuery(
             startedAt: Date.now(),
             reason: recoveryOptions?.compactionReason ?? 'unknown',
           };
+          logger.info('[claude-adapter] compaction triggered', {
+            sessionKey,
+            runId,
+            reason: activeCompaction.reason,
+            contextWindow: process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS ?? null,
+          });
           emitEngineEvent({
             type: 'context.compaction.started',
             attemptId: activeCompaction.attemptId,
@@ -1086,6 +1092,15 @@ export async function consumeClaudeQuery(
             reason: metadata?.trigger ?? attempt.reason,
             tokensBefore: metadata?.pre_tokens ?? attempt.tokensBefore,
             tokensAfter: metadata?.post_tokens,
+            durationMs: metadata?.duration_ms ?? Date.now() - attempt.startedAt,
+          });
+          logger.info('[claude-adapter] compaction completed', {
+            sessionKey,
+            runId,
+            reason: metadata?.trigger ?? attempt.reason,
+            tokensBefore: metadata?.pre_tokens ?? attempt.tokensBefore ?? null,
+            tokensAfter: metadata?.post_tokens ?? null,
+            contextWindow: process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS ?? null,
             durationMs: metadata?.duration_ms ?? Date.now() - attempt.startedAt,
           });
           lastCompactionCompletedAt = Date.now();
@@ -1212,6 +1227,17 @@ export async function consumeClaudeQuery(
             ? (message as { model: string }).model
             : undefined,
         });
+        if (!seenResult) {
+          logger.info('[claude-adapter] turn completed (no compaction)', {
+            sessionKey,
+            runId,
+            model: typeof (message as { model?: unknown }).model === 'string'
+              ? (message as { model: string }).model
+              : undefined,
+            contextWindow: process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS ?? null,
+            compactionTriggered: false,
+          });
+        }
         flushPendingToolInputDelta();
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
