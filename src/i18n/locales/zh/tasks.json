@@ -140,6 +140,7 @@
       "workflowPlaceholder": "请选择",
       "workflowEmpty": "暂无可用工作流",
       "instructionsLabel": "任务内容",
+      "instructionsAtHint": "输入 <at>@</at> 选择钉钉联系人或群，任务完成后自动发送结果",
       "instructionsPlaceholder": "描述你想让 SClaw 做的事...\n-可输入任务开始时间或提醒时间，例如「每个工作日9:00开始执行，执行完成通知我」\n-可分享任务结果，例如「发送@钉钉联系人或群」，任务执行完成后结果将自动发送给@对象",
       "instructionsRequired": "请描述让 SClaw 帮你做什么",
       "workflowAutoHint": "已关联工作流，描述内容自动生成",

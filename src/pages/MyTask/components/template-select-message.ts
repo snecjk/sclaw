@@ -1,17 +1,23 @@
 import type { RecommendItem } from '@/lib/recommend-api';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 
-/** 由推荐条目生成写入任务描述的文案 */
-export function buildRecommendTaskMessage(item: RecommendItem): string {
-  switch (item.item_type) {
-    case 'workflow_template':
-      return `/${item.title}`.trim();
-    case 'workflow_instance':
-      return `帮我执行 id 为：${item.item_ref_id} 的工作流 【${item.title}】`;
-    case 'prompt':
-      return (item.content || item.title || '').trim();
-    case 'skill':
-      return (item.skill_default_prompt || item.title || '').trim();
-    default:
-      return (item.title || '').trim();
+export type RecommendTaskPrefill = {
+  name: string;
+  message?: string;
+  composerSegments?: PersistedComposerSegment[];
+};
+
+/** 由推荐卡片生成创建弹窗预填：标题 → 任务名称；有 segments 则真混排，否则描述 → 任务描述 */
+export function buildRecommendTaskPrefill(item: RecommendItem): RecommendTaskPrefill {
+  const name = (item.title || '').trim();
+  if (item.composer_segments?.length) {
+    return {
+      name,
+      composerSegments: item.composer_segments as PersistedComposerSegment[],
+    };
   }
+  return {
+    name,
+    message: (item.description || '').trim(),
+  };
 }

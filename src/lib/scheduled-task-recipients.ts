@@ -7,6 +7,7 @@ import {
 } from '@/lib/dingtalk-mention-context';
 import { stripComposerModelBakeForDisplay } from '@/lib/user-message-display';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 
 /** DingTalk recipient fields shared by local cron/claude task definitions. */
 interface ScheduledTaskDingTalkFields {
@@ -141,6 +142,36 @@ export function stripInstructionFromTaskMessage(
   // 老数据兜底：组合清洗（剥收件人块 + 剥占位符），保留剩余正文，避免编辑框空白。
   const fallback = stripComposerModelBakeForDisplay(stripRecipientBlockLenient(withoutSkillMarker)).trim();
   return fallback;
+}
+
+/**
+ * 卡片描述：prompt 故意不含 skill/workflow chip 文案（真源在 composerSegments），
+ * 列表展示时把 segments 展平成可读纯文本（技能用 title、提及用 @名）。
+ */
+export function flattenComposerSegmentsForTaskCard(
+  segments: PersistedComposerSegment[] | null | undefined,
+): string {
+  if (!segments?.length) return '';
+  return segments
+    .map((seg) => {
+      switch (seg.type) {
+        case 'text':
+          return seg.text;
+        case 'mention':
+          return `@${seg.mention.displayName}`;
+        case 'skill':
+          return seg.title?.trim() || seg.slug;
+        case 'workflow':
+          return seg.name?.trim() || seg.id;
+        case 'file':
+          return seg.fileName?.trim() || '';
+        default:
+          return '';
+      }
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** @deprecated 使用 prepareDingTalkAgentTurnMessage */

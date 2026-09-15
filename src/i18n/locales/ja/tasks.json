@@ -140,6 +140,7 @@
       "workflowPlaceholder": "選択",
       "workflowEmpty": "使用可能なワークフローがありません",
       "instructionsLabel": "タスク内容",
+      "instructionsAtHint": "<at>@</at> で钉钉の連絡先またはグループを選択。完了後、結果が自動送信されます",
       "instructionsPlaceholder": "SClawに任せたいことを書いてください...\n- 開始時間やリマインドを指定できます。例：「毎営業日9:00に開始し、完了したら通知」\n- 結果を共有できます。例：「@DingTalkの連絡先またはグループに送信」。完了後、結果が自動送信されます",
       "instructionsRequired": "SClawにさせる内容を説明してください",
       "workflowAutoHint": "関連ワークフロー — 説明は自動生成されます",
