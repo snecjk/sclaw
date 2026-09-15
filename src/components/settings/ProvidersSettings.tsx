@@ -389,12 +389,12 @@ export function ProvidersSettings() {
         <h2 className="text-lg font-semibold tracking-tight text-foreground">
           {t('aiProviders.title', 'AI Providers')}
         </h2>
-        {!isSite && (
+        {/*!isSite && (
           <Button onClick={() => setShowAddDialog(true)} className={settingsPrimaryActionButtonClass}>
             <Plus className="mr-2 h-4 w-4" />
             {t('aiProviders.add')}
           </Button>
-        )}
+        )*/}
       </div>
 
       {/* STO 模型同步失败 / 进行中 */}
