@@ -5,8 +5,8 @@ import { isScheduledTaskExecutionSessionKey } from '../../shared/scheduled-task-
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
-import { getAuthState } from '../utils/auth-store';
 import { logger } from '../utils/logger';
+import { getAgentCurrentUserContextPrompt } from '../services/agent-current-user-context';
 import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
 import { buildConnectorBashGateHooks } from '../connectors/claude-binary-gate';
 import { buildClaudeLoopGuardHooks } from './claude-loop-guard';
@@ -89,28 +89,8 @@ const ssoUserContextExtension: ClaudeRuntimeExtension = {
       buildWorkspaceArtifactOutputRule(undefined, { workspaceAbsolutePath }),
     ].join('\n'));
 
-    try {
-      const auth = await getAuthState();
-      const user = auth.user;
-      if (user?.userName) {
-        const lines: string[] = [];
-        lines.push('当前登录用户信息（已认证）：');
-        lines.push(`- 用户名：${user.userName}`);
-        if (user.realName) lines.push(`- 真实姓名：${user.realName}`);
-        if (user.companyCode) lines.push(`- 网点编码（companyCode）：${user.companyCode}`);
-        if (user.companyName) lines.push(`- 网点名称（companyName）：${user.companyName}`);
-        if (user.departmentCode) lines.push(`- 组织编码（departmentCode）：${user.departmentCode}`);
-        if (user.departmentName) lines.push(`- 组织名称（departmentName）：${user.departmentName}`);
-        lines.push('');
-        lines.push('⚠️ 重要：当调用任何技能、工具或工作流时，如果参数要求提供网点编码（companyCode）或组织编码（departmentCode），而用户没有明确指定其他网点/组织，必须直接使用上述当前登录用户的网点编码和组织编码，禁止向用户询问。不要在对话中要求用户提供这些信息。');
-        blocks.push(lines.join('\n'));
-        logger.info(`[claude-sso-context] injected SSO user context for ${user.userName}`);
-      } else {
-        logger.debug('[claude-sso-context] no SSO user found, skipping user context injection');
-      }
-    } catch (err) {
-      logger.warn(`[claude-sso-context] failed to read SSO auth (${String(err)}), skipping user context injection`);
-    }
+    const currentUserContext = await getAgentCurrentUserContextPrompt();
+    if (currentUserContext) blocks.push(currentUserContext);
 
     return {
       systemPromptAppend: blocks.join('\n\n'),
