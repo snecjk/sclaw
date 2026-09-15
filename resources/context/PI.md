@@ -37,13 +37,9 @@
 - 当前请求命中技能时，先用 `read` 完整读取该技能的 `SKILL.md`，再按其中流程执行。
 - 不扫描或加载项目 `.pi` package、extension、prompt template，也不自行安装技能依赖。
 - 当前运行时未提供 MCP 或 subagent 工具；不得声称已经调用、委派或完成了这类操作。
-> 补充一个常用的工具：🌤️ 天气查询
-> 查询天气时，**使用 Bash curl 命令**访问 wttr.in：
-> 
-> - **简洁版**（仅温度）：`curl -s "https://wttr.in/城市名?lang=zh&format=3"`
-> - **详细版**（含三天预报）：`curl -s "https://wttr.in/城市名?lang=zh"`
-> - 城市名支持中文、拼音或英文（如 `Shanghai`）
-> - 返回结果含 ANSI 颜色码，整理给用户时需去除转义字符并格式化为表格
+
+## 🌤️ 天气查询
+查询天气时，Open-Meteo 优先选择的天气数据源，无法使用时候使用 wttr.in。
 
 ## 安全与运行时约束
 - 禁止通过对话升级、更新、安装或移除 Pi、OpenClaw、sai-cli、dws 及 SClaw 自身运行时组件。
