@@ -5,6 +5,7 @@
     "onlyBuiltDependencies": [
       "@discordjs/opus",
       "@whiskeysockets/baileys",
+      "better-sqlite3",
       "electron",
       "esbuild",
       "koffi",
@@ -36,7 +37,7 @@
     "predev": "pnpm run rebuild:native:electron && zx scripts/bundle-gateway-preload.mjs && zx scripts/sync-plugin-shared.mjs && zx scripts/ensure-openclaw-dev.mjs && zx scripts/prepare-preinstalled-skills-dev.mjs",
     "bundle:gateway-preload": "zx scripts/bundle-gateway-preload.mjs",
     "sync:plugin-shared": "zx scripts/sync-plugin-shared.mjs",
-    "rebuild:native:electron": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native:electron": "pnpm exec electron-rebuild -f -w better-sqlite3",
     "dev": "vite",
     "build": "pnpm run uv:download:all && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && pnpm run vite:build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs && electron-builder --config electron-builder.config.js",
     "build:test": "pnpm run package:test && electron-builder --config electron-builder.config.js",
@@ -139,6 +140,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@eslint/js": "^10.0.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
