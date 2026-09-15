@@ -374,7 +374,7 @@ export function Models() {
           <ProvidersSettings />
         </section>
 
-        <section className={glassSectionSurface}>
+        {/*<section className={glassSectionSurface}>
           <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
             {t('dashboard:recentTokenHistory.title', 'Token Usage History')}
           </h2>
@@ -571,7 +571,7 @@ export function Models() {
               </div>
             )}
           </div>
-        </section>
+        </section>*/}
       </div>
       {devModeUnlocked && selectedUsageEntry && (
         <UsageContentPopup
