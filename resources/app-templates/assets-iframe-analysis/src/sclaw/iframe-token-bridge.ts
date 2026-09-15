@@ -1,5 +1,3 @@
-import { getIframeApplicationId } from './iframe-app-config';
-
 export const IDENTITY_BRIDGE_PROTOCOL = 'sclaw:identity-bridge/v1' as const;
 
 export type DeployEnv = 'daily' | 'stage' | 'online';
@@ -32,7 +30,6 @@ export function initializeIframeTokenBridge(referrer = document.referrer): Promi
   if (window.parent === window) return Promise.reject(new Error('请从政策管家入口打开当前应用'));
   if (tokenPromise) return tokenPromise;
 
-  const applicationId = getIframeApplicationId();
   const origin = new URL(referrer).origin;
   if (!TRUSTED_HOST_ENVIRONMENTS.has(origin)) {
     return Promise.reject(new Error(`不受信任的 iframe 宿主：${origin}`));
@@ -49,8 +46,7 @@ export function initializeIframeTokenBridge(referrer = document.referrer): Promi
       const data = event.data;
       if (!data || typeof data !== 'object') return;
       const message = data as Record<string, unknown>;
-      if (message.protocolVersion !== IDENTITY_BRIDGE_PROTOCOL
-        || message.requestId !== requestId || message.applicationId !== applicationId) return;
+      if (message.protocolVersion !== IDENTITY_BRIDGE_PROTOCOL || message.requestId !== requestId) return;
       if (message.type === 'sclaw:identity:error') {
         cleanup();
         reject(new Error('iframe 宿主身份不可用'));
@@ -72,7 +68,6 @@ export function initializeIframeTokenBridge(referrer = document.referrer): Promi
       type: 'sclaw:identity:request',
       protocolVersion: IDENTITY_BRIDGE_PROTOCOL,
       requestId,
-      applicationId,
       capabilities: ['stoToken'],
     }, origin);
   }).catch((error) => {
@@ -91,7 +86,6 @@ export function notifyHostTokenInvalid(): void {
   window.parent.postMessage({
     type: 'sclaw:identity:invalid',
     protocolVersion: IDENTITY_BRIDGE_PROTOCOL,
-    applicationId: getIframeApplicationId(),
     reason: 'UNAUTHORIZED',
   }, hostOrigin);
 }
