@@ -128,27 +128,21 @@ export function Login() {
   );
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[#F7F8FA] dark:bg-[#0D0D0D]">
-      {/* 背景对齐设计稿：#AEB8C4 规则点阵（约 1.7px / 间距 13.93px）+ 四角白色径向光晕压淡点阵 */}
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--sto-surface-canvas)]">
+      {/* 背景对齐设计稿：规则点阵（约 1.7px / 间距 13.93px）+ 四角径向光晕压淡点阵；
+          颜色消费主题 token（--sto-login-dot / --sto-login-glow），暗色映射见 tokens.css */}
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="absolute inset-0 dark:hidden"
+          className="absolute inset-0"
           style={{
             backgroundImage: [
-              'radial-gradient(600px 600px at 78.5% 11.4%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 90%)',
-              'radial-gradient(500px 500px at 5.3% 67.6%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 90%)',
-              'radial-gradient(400px 400px at 29.9% 6%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 16%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.18) 68%, rgba(255,255,255,0.06) 84%, rgba(255,255,255,0) 96%)',
-              'radial-gradient(500px 500px at 61.5% 87.1%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 16%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.18) 68%, rgba(255,255,255,0.06) 84%, rgba(255,255,255,0) 96%)',
-              'radial-gradient(circle, #AEB8C4 0.84px, transparent 0.92px)',
+              'radial-gradient(600px 600px at 78.5% 11.4%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.55) 52%, rgb(var(--sto-login-glow) / 0) 90%)',
+              'radial-gradient(500px 500px at 5.3% 67.6%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.55) 52%, rgb(var(--sto-login-glow) / 0) 90%)',
+              'radial-gradient(400px 400px at 29.9% 6%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.92) 16%, rgb(var(--sto-login-glow) / 0.5) 46%, rgb(var(--sto-login-glow) / 0.18) 68%, rgb(var(--sto-login-glow) / 0.06) 84%, rgb(var(--sto-login-glow) / 0) 96%)',
+              'radial-gradient(500px 500px at 61.5% 87.1%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.92) 16%, rgb(var(--sto-login-glow) / 0.5) 46%, rgb(var(--sto-login-glow) / 0.18) 68%, rgb(var(--sto-login-glow) / 0.06) 84%, rgb(var(--sto-login-glow) / 0) 96%)',
+              'radial-gradient(circle, var(--sto-login-dot) 0.84px, transparent 0.92px)',
             ].join(','),
             backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%, 13.93px 13.93px',
-          }}
-        />
-        <div
-          className="absolute inset-0 hidden dark:block"
-          style={{
-            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.12) 0.84px, transparent 0.92px)',
-            backgroundSize: '13.93px 13.93px',
           }}
         />
       </div>
@@ -157,7 +151,7 @@ export function Login() {
 
       {/* 设计稿卡片顶部约 186px：用底部留白把居中位置整体抬高 */}
       <div className="relative z-10 flex flex-1 items-center justify-center p-4 pb-20">
-        <Card className="flex w-[436px] flex-col items-center gap-10 rounded-[24px] border-0 bg-card px-[58px] py-20 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+        <Card className="flex w-[436px] flex-col items-center gap-10 rounded-[24px] border-0 bg-card px-[58px] py-20 shadow-[0_4px_30px_rgba(0,0,0,0.1)] dark:border dark:border-[var(--sto-border-default)] dark:bg-[var(--sto-surface-primary)] dark:shadow-none">
           {showDeniedCard ? (
             <>
               <div className="flex flex-col items-center gap-5">
