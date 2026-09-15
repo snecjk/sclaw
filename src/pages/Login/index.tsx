@@ -2,7 +2,7 @@
  * SSO Login Page
  * 开发模式（pnpm dev）显示 SSO 环境选择；其他构建环境根据 env-config 固定 SSO 环境。
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Building2,
@@ -21,9 +21,18 @@ import { Select } from '@/components/ui/select';
 import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
+import { hostApiFetch } from '@/lib/host-api';
 import clawxIcon from '@/assets/rectangle_icon.png';
 
 const envConfig = getCurrentEnvConfig();
+
+type OpeningStatus = 'NOT_REGISTERED' | 'REGISTERED' | 'ENABLED';
+
+interface OpeningStatusData {
+  status: OpeningStatus;
+  statusName: string;
+  applicationNo?: string | null;
+}
 
 const DEV_SSO_ENV_OPTIONS: SsoEnvironment[] = [
   'local',
@@ -43,12 +52,59 @@ export function Login() {
   const login = useAuthStore((s) => s.login);
   const setSsoEnvironment = useAuthStore((s) => s.setSsoEnvironment);
   const clearAccessDenied = useAuthStore((s) => s.clearAccessDenied);
+  const [openingStatus, setOpeningStatus] = useState<OpeningStatusData | null>(null);
+  const [openingLoading, setOpeningLoading] = useState(false);
+  const [openingError, setOpeningError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!envConfig.isDevelopment) {
       void setSsoEnvironment(envConfig.ssoEnvironment as SsoEnvironment);
     }
   }, [setSsoEnvironment]);
+
+  useEffect(() => {
+    if (!accessDenied) return;
+    let cancelled = false;
+    const loadOpeningStatus = async () => {
+      setOpeningStatus(null);
+      setOpeningError(null);
+      setOpeningLoading(true);
+      try {
+        const result = await hostApiFetch<{
+          success: boolean;
+          data?: OpeningStatusData;
+          error?: string;
+        }>('/api/auth/site-opening/status');
+        if (!result.success || !result.data) throw new Error(result.error || '状态查询失败');
+        if (!cancelled) setOpeningStatus(result.data);
+      } catch (statusError) {
+        if (!cancelled) {
+          setOpeningError(statusError instanceof Error ? statusError.message : String(statusError));
+        }
+      } finally {
+        if (!cancelled) setOpeningLoading(false);
+      }
+    };
+    void loadOpeningStatus();
+    return () => { cancelled = true; };
+  }, [accessDenied]);
+
+  const registerOpening = async () => {
+    setOpeningLoading(true);
+    setOpeningError(null);
+    try {
+      const result = await hostApiFetch<{ success: boolean; data?: OpeningStatusData; error?: string }>(
+        '/api/auth/site-opening/register',
+        { method: 'POST' },
+      );
+      if (!result.success || !result.data) throw new Error(result.error || '登记失败');
+      setOpeningStatus(result.data);
+    } catch (registerError) {
+      setOpeningError(registerError instanceof Error ? registerError.message : String(registerError));
+    } finally {
+      setOpeningLoading(false);
+    }
+  };
 
   const handleLogin = () => {
     void login(envConfig.isDevelopment ? undefined : (envConfig.ssoEnvironment as SsoEnvironment));
@@ -244,9 +300,26 @@ export function Login() {
                 </div>
               )}
 
-              <p className="rounded-2xl border border-amber-200/40 bg-amber-50/80 px-4 py-3 text-center text-xs leading-5 text-amber-950/80">
-                如需开通权限，请联系系统管理员在「客户端网点配置」中将您的组织加入白名单。
-              </p>
+              <div className="rounded-2xl border border-amber-200/40 bg-amber-50/80 px-4 py-3 text-center text-xs leading-5 text-amber-950/80">
+                {openingLoading ? '正在查询开通状态…' : null}
+                {!openingLoading && openingStatus?.status === 'REGISTERED' ? '已登记，等待管理员处理。' : null}
+                {!openingLoading && openingStatus?.status === 'ENABLED' ? '权限已开通，请重新登录。' : null}
+                {!openingLoading && !openingStatus && !openingError ? '如需使用，请提交开通登记。' : null}
+                {openingError ? openingError : null}
+              </div>
+
+              {openingStatus?.applicationNo ? (
+                <p className="text-center text-xs text-muted-foreground">报名编号：{openingStatus.applicationNo}</p>
+              ) : null}
+
+              {openingStatus?.status !== 'REGISTERED' && openingStatus?.status !== 'ENABLED' ? (
+                <Button
+                  className="h-12 w-full rounded-2xl border border-cyan-200/35 bg-[linear-gradient(135deg,rgba(103,232,249,0.95),rgba(56,189,248,0.9))] text-[15px] font-semibold text-slate-950"
+                  size="lg"
+                  disabled={openingLoading}
+                  onClick={() => void registerOpening()}
+                >申请开通</Button>
+              ) : null}
 
               <Button
                 className="h-12 w-full rounded-2xl border border-amber-200/35 bg-[linear-gradient(135deg,rgba(251,191,36,0.95),rgba(245,158,11,0.9))] text-[15px] font-semibold text-slate-950 shadow-[0_16px_40px_rgba(245,158,11,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(245,158,11,0.3)]"
