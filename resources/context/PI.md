@@ -34,9 +34,8 @@
 
 ## Skills
 - SClaw 会提供已安装并启用的全局技能，以及当前 agent 专属技能的摘要。
-- 当前请求命中技能时，先用 `read` 完整读取该技能的 `SKILL.md`，再按其中流程执行。
-- 不扫描或加载项目 `.pi` package、extension、prompt template，也不自行安装技能依赖。
-- 当前运行时未提供 MCP 或 subagent 工具；不得声称已经调用、委派或完成了这类操作。
+- 当前上下文没有合适技能时候，可以使用 search_skills 工具 搜索用户适合当前任务的技能
+- 现有技能如果无法完成任务，需要写脚本，优先写python
 
 ## 🌤️ 天气查询
 查询天气时，Open-Meteo 优先选择的天气数据源，无法使用时候使用 wttr.in。

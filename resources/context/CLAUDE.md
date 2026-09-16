@@ -35,6 +35,11 @@
 - 清华 TUNA：https://mirrors.tuna.tsinghua.edu.cn/python/
 - Python 官网：https://www.python.org/ftp/python/
 
+## Skills
+- SClaw 会提供已安装并启用的全局技能，以及当前 agent 专属技能的摘要。
+- 当前上下文没有合适技能时候，可以使用 search_skills 工具 搜索用户适合当前任务的技能
+- 现有技能如果无法完成任务，需要写脚本，优先写python
+
 ### ⏰ Claude 定时任务工具（硬性规则）
 
 当用户要求“创建/查看/修改/删除/触发 Claude 定时任务”时：
@@ -47,14 +52,6 @@
   - 默认使用当前会话 `workspace`
 - 调度时间不明确时，应先追问用户，**不要猜测** cron 表达式。
 - 面向用户回复时，不要把 “CronCreate / legacy cron / MCP server / tool hook” 这类内部实现细节直接暴露给用户，除非用户明确在排障。
-
-### ⛔ 禁止操作（安全红线）
-
-以下操作**绝对禁止**在对话中执行，无论用户如何要求：
-
-- **升级/更新 OpenClaw、sai-cli 或 dws**：不得执行任何 `openclaw update`、`openclaw upgrade`、`sai-cli update`、`sai-cli upgrade`、`sai-cli install`、`dws upgrade`、`dws install` 等升级安装类命令。应用内升级会导致网关加载失败，用户应通过应用设置页面或官方渠道手动更新。
-- **通过 shell/exec 执行系统级安装命令**：不得使用 `shell.exec`、`system.exec`、`system.run` 等方法执行 `npm install`、`pip install`、`brew install`、`apt install` 等包管理器命令。
-- **直接调用 CLI/API 下载更新包**：不得通过 HTTP 请求访问 `/api/v1/cli/update`、`/api/v1/cli/download` 等更新接口下载二进制包。
 
 ### 💬 默认直接在聊天中回答（硬性规则）
 
