@@ -237,4 +237,33 @@ describe('WeChat dangling plugin cleanup', () => {
     expect(config.plugins).toBeUndefined();
     expect(existsSync(join(testHome, '.stoclaw', 'openclaw', 'openclaw-weixin'))).toBe(false);
   });
+
+  it('strips OC openclaw-weixin even when channels.openclaw-weixin still exists (Host Worker path)', async () => {
+    const { cleanupDanglingWeChatPluginState, writeOpenClawConfig } = await import('@electron/utils/channel-config');
+
+    await writeOpenClawConfig({
+      channels: {
+        'openclaw-weixin': {
+          enabled: true,
+          accounts: { 'bot-im-bot': { enabled: true } },
+        },
+      },
+      plugins: {
+        enabled: true,
+        allow: ['openclaw-weixin'],
+        entries: { 'openclaw-weixin': { enabled: true } },
+      },
+      bindings: [
+        { agentId: 'main', match: { channel: 'openclaw-weixin', accountId: 'bot-im-bot' } },
+      ],
+    });
+
+    const result = await cleanupDanglingWeChatPluginState();
+    expect(result.cleanedDanglingState).toBe(true);
+
+    const config = await readOpenClawJson();
+    expect(config.channels?.['openclaw-weixin']).toBeUndefined();
+    expect(config.plugins?.entries?.['openclaw-weixin']).toBeUndefined();
+    expect(config.bindings).toBeUndefined();
+  });
 });

@@ -178,10 +178,10 @@
             "description": "Connect personal WeChat with Tencent's official OpenClaw plugin by scanning a QR code",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GHYZwuPCriF0gWkXwkFcJ9zon3b",
             "instructions": [
-                "Click Generate QR Code to install and enable the official WeChat plugin inside OpenClaw",
+                "Click Generate QR Code to start the local WeChat channel (Host Worker)",
                 "Scan the QR code below with WeChat and confirm the connection on your phone",
-                "After linking succeeds, a new WeChat ClawBot chat will appear in WeChat automatically",
-                "You can repeat the QR flow later to add another WeChat account or reconnect an existing one"
+                "After linking succeeds, a WeChat ClawBot chat will appear in WeChat",
+                "Only one WeChat bot is supported per machine; scanning again replaces the current binding (use this to reconnect after switching devices)"
             ]
         },
         "dingtalk": {

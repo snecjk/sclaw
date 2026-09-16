@@ -114,6 +114,15 @@ export async function ensureSclawHubConnected(
     wireSclawInboundListener();
     wireSclawBindReplacedListener();
 
+    // Phase 1: start Weixin Host Worker when credentials exist (independent of Hub).
+    void import('../message-channel/weixin/service').then(({ getWeixinChannelService }) => {
+      const svc = getWeixinChannelService();
+      if (gatewayManager) svc.setGatewayManager(gatewayManager);
+      return svc.start(gatewayManager ?? null);
+    }).catch((error) => {
+      logger.warn('[Weixin] channel service start failed', error);
+    });
+
     if (!resolveSclawHubBaseUrl()) {
       logger.info('[SclawHub] skip connect: hub base URL not configured');
       return;

@@ -33,9 +33,6 @@ vi.mock('@electron/utils/agent-config', () => ({
 
 vi.mock('@electron/utils/plugin-install', () => ({
   ensureDingTalkPluginInstalled: vi.fn(),
-  ensureQQBotPluginInstalled: vi.fn(),
-  ensureWeChatPluginInstalled: vi.fn(),
-  ensureWeComPluginInstalled: vi.fn(),
 }));
 
 vi.mock('@electron/utils/wechat-login', () => ({
@@ -239,7 +236,7 @@ describe('handleChannelRoutes', () => {
     );
   });
 
-  it('restarts gateway when binding a plugin-managed WeChat account', async () => {
+  it('reloads gateway when binding a Host-Worker WeChat account (no plugin restart)', async () => {
     parseJsonBodyMock.mockResolvedValue({
       channelType: 'wechat',
       accountId: 'bot-im-bot',
@@ -269,8 +266,8 @@ describe('handleChannelRoutes', () => {
       'openclaw-weixin',
       'bot-im-bot',
     );
-    expect(debouncedRestart).toHaveBeenCalledWith(4000);
-    expect(debouncedReload).not.toHaveBeenCalled();
+    expect(debouncedReload).toHaveBeenCalled();
+    expect(debouncedRestart).not.toHaveBeenCalled();
   });
 
   it('does not auto-bind WeChat accounts when listing channel accounts', async () => {

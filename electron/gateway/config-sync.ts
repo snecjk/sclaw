@@ -65,11 +65,9 @@ export interface GatewayLaunchContext {
 
 // ── Auto-upgrade bundled plugins on startup ──────────────────────
 
+/** Phase 2: only DingTalk remains as an OC channel plugin; WeChat is Host Worker. */
 const CHANNEL_PLUGIN_MAP: Record<string, { dirName: string; npmName: string }> = {
   dingtalk: { dirName: 'dingtalk', npmName: '@soimy/dingtalk' },
-  wecom: { dirName: 'wecom', npmName: '@wecom/wecom-openclaw-plugin' },
-  qqbot: { dirName: 'qqbot', npmName: '@sliverp/qqbot' },
-  'openclaw-weixin': { dirName: 'openclaw-weixin', npmName: '@tencent-weixin/openclaw-weixin' },
 };
 
 function _readPluginVersion(pkgJsonPath: string): string | null {

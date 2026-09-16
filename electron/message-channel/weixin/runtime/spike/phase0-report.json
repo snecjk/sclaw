@@ -1,0 +1,38 @@
+{
+  "startedAt": "2026-09-15T11:32:36.704Z",
+  "r1": {
+    "thinTransport": true,
+    "forbiddenImportsOk": true,
+    "getUpdatesSmokeOk": true,
+    "notes": [
+      "transport/* import graph OK (no process-message / hooks / pairing / channel plugin / npm plugin)",
+      "using accountId=0f8c8fb31500-im-bot stateDir=/Users/yaolei/.stoclaw/weixin",
+      "smoke getUpdates ok msgs=0"
+    ]
+  },
+  "r4": {
+    "migrateOk": true,
+    "copiedFiles": [
+      "weixin/accounts.json",
+      "accounts/0f8c8fb31500-im-bot.context-tokens.json",
+      "accounts/0f8c8fb31500-im-bot.json",
+      "accounts/0f8c8fb31500-im-bot.sync.json"
+    ],
+    "successfulRounds": 33,
+    "observedMs": 613608,
+    "passed": true,
+    "notes": [
+      "migrated from /Users/yaolei/.stoclaw/openclaw/openclaw-weixin → /Users/yaolei/.stoclaw/weixin (4 files)",
+      "successfulRounds=33 observedMs=613608 passed=true"
+    ]
+  },
+  "r2": {
+    "mvpScope": "typing + commit (+ cancel); no outbound.sendText draft snapshot",
+    "draftSnapshotTested": false,
+    "notes": [
+      "Phase 0 does not exercise MessagePort draft snapshots.",
+      "Optional GENERATING probe is out of MVP; not run in this spike."
+    ]
+  },
+  "finishedAt": "2026-09-15T11:43:05.322Z"
+}

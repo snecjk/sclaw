@@ -460,7 +460,7 @@ export function Channels() {
     | { kind: 'available'; type: ChannelType; recommended?: boolean };
 
   const channelListItems = useMemo((): ChannelListItem[] => {
-    const order: ChannelType[] = ['dingtalk', 'wechat', 'wecom', 'qqbot'];
+    const order: ChannelType[] = ['dingtalk', 'wechat'];
     const items: ChannelListItem[] = [];
     const used = new Set<string>();
 
@@ -905,7 +905,7 @@ export function Channels() {
                           ? agents.find((agent) => agent.id === boundAgentId)
                           : undefined;
                         const boundEngineType = isWeChat
-                          ? 'openclaw'
+                          ? 'pi'
                           : (isDingTalk ? dingTalkBinding?.engineType : null) ||
                             boundAgent?.engineType ||
                             null;
@@ -1114,28 +1114,30 @@ export function Channels() {
                                   <>
                                     <ChannelInlineSelect
                                       className="w-[120px]"
-                                      value="openclaw"
+                                      value="pi"
                                       disabled
                                       ariaLabel={t('hub.dingtalk.engineLabel')}
-                                      options={[
-                                        { value: 'claude', label: 'Claude' },
-                                        { value: 'openclaw', label: 'OpenClaw' },
-                                      ]}
+                                      options={[{ value: 'pi', label: 'Pi' }]}
                                       onChange={() => undefined}
                                     />
                                     <ChannelInlineSelect
                                       className="w-[140px]"
-                                      value={weChatAccount?.agentId || ''}
+                                      value={weChatAccount?.agentId || 'main'}
                                       ariaLabel={t('account.bindAgentLabel')}
-                                      options={[
-                                        { value: '', label: t('account.unassigned') },
-                                        ...agents.map((agent) => ({
+                                      options={agents
+                                        .filter((agent) => {
+                                          const engine =
+                                            agent.engineType === 'claude' || agent.engineType === 'openclaw'
+                                              ? agent.engineType
+                                              : 'pi';
+                                          return engine === 'pi' || agent.id === 'main';
+                                        })
+                                        .map((agent) => ({
                                           value: agent.id,
                                           label: agent.name,
-                                        })),
-                                      ]}
+                                        }))}
                                       onChange={(nextAgentId) => {
-                                        if (!weChatAccount) return;
+                                        if (!weChatAccount || !nextAgentId) return;
                                         void handleBindAgent(
                                           group.channelType,
                                           weChatAccount.accountId,

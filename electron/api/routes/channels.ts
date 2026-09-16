@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import {
   deleteChannelAccountConfig,
   deleteChannelConfig,
-  cleanupDanglingWeChatPluginState,
   getChannelFormValues,
   listConfiguredChannelAccounts,
   listConfiguredChannels,
@@ -18,13 +17,9 @@ import {
   clearAllBindingsForChannel,
   clearChannelBinding,
   listAgentsSnapshot,
-  saveWeChatChannelWithBinding,
 } from '../../utils/agent-config';
 import {
   ensureDingTalkPluginInstalled,
-  ensureQQBotPluginInstalled,
-  ensureWeChatPluginInstalled,
-  ensureWeComPluginInstalled,
 } from '../../utils/plugin-install';
 import {
   computeChannelRuntimeStatus,
@@ -138,8 +133,16 @@ async function awaitWeChatQrLogin(
       baseUrl: result.baseUrl,
       userId: result.userId,
     });
-    await saveWeChatChannelWithBinding(normalizedAccountId, 'main');
-    scheduleGatewayChannelSaveRefresh(ctx, OPENCLAW_WECHAT_CHANNEL_TYPE, `wechat:loginSuccess:${normalizedAccountId}`);
+    // Phase 1: Host Worker owns transport — do NOT enable OC openclaw-weixin plugin.
+    const { getWeixinChannelService } = await import('../../message-channel/weixin/service');
+    getWeixinChannelService().setGatewayManager(ctx.gatewayManager);
+    await getWeixinChannelService().applyLoginSuccess({
+      accountId: normalizedAccountId,
+      token: result.botToken,
+      baseUrl: result.baseUrl,
+      userId: result.userId,
+      agentId: 'main',
+    });
 
     if (!isActiveQrLogin(loginKey, sessionKey)) {
       return;
@@ -174,7 +177,7 @@ function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): voi
 // Plugin-based channels require a full Gateway process restart to properly
 // initialize / tear-down plugin connections.  SIGUSR1 in-process reload is
 // not sufficient for channel plugins (see restartGatewayForAgentDeletion).
-const FORCE_RESTART_CHANNELS = new Set(['dingtalk', 'wecom', 'whatsapp', 'qqbot', OPENCLAW_WECHAT_CHANNEL_TYPE]);
+const FORCE_RESTART_CHANNELS = new Set(['dingtalk', 'whatsapp']);
 
 /** Coalesce rapid plugin-channel saves with OpenClaw's own config-driven restart. */
 const PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS = 4000;
@@ -400,6 +403,56 @@ async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAcc
   return channels.sort((left, right) => left.channelType.localeCompare(right.channelType));
 }
 
+/** Merge Host-Worker WeChat account into the channels list (independent of OC plugin). */
+async function mergeWeixinHostChannel(
+  channels: ChannelAccountsView[],
+): Promise<ChannelAccountsView[]> {
+  try {
+    const { getWeixinBinding, getBoundWeixinAccountId } = await import(
+      '../../message-channel/weixin/binding'
+    );
+    const { getWeixinChannelService } = await import('../../message-channel/weixin/service');
+    const binding = await getWeixinBinding();
+    const accountId = binding?.accountId || getBoundWeixinAccountId();
+    if (!accountId) return channels;
+
+    const svc = getWeixinChannelService();
+    const connected = svc.isMonitorRunning();
+    const status: ChannelAccountsView['status'] = connected
+      ? 'connected'
+      : svc.isReady()
+        ? 'connecting'
+        : 'disconnected';
+    const weixinView: ChannelAccountsView = {
+      channelType: UI_WECHAT_CHANNEL_TYPE,
+      defaultAccountId: accountId,
+      status,
+      accounts: [
+        {
+          accountId,
+          name: accountId,
+          configured: true,
+          connected,
+          running: connected,
+          linked: true,
+          status,
+          isDefault: true,
+          agentId: binding?.agentId || 'main',
+        },
+      ],
+    };
+
+    const withoutOcWeixin = channels.filter(
+      (ch) => ch.channelType !== UI_WECHAT_CHANNEL_TYPE && ch.channelType !== OPENCLAW_WECHAT_CHANNEL_TYPE,
+    );
+    return [...withoutOcWeixin, weixinView].sort((a, b) =>
+      a.channelType.localeCompare(b.channelType),
+    );
+  } catch {
+    return channels;
+  }
+}
+
 async function mergeHubDingTalkChannel(
   channels: ChannelAccountsView[],
 ): Promise<ChannelAccountsView[]> {
@@ -459,7 +512,9 @@ export async function handleChannelRoutes(
 
   if (url.pathname === '/api/channels/accounts' && req.method === 'GET') {
     try {
-      const channels = await mergeHubDingTalkChannel(await buildChannelAccountsView(ctx));
+      const channels = await mergeWeixinHostChannel(
+        await mergeHubDingTalkChannel(await buildChannelAccountsView(ctx)),
+      );
       sendJson(res, 200, { success: true, channels });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -549,13 +604,11 @@ export async function handleChannelRoutes(
       const body = await parseJsonBody<{ accountId?: string }>(req);
       const requestedAccountId = body.accountId?.trim() || undefined;
 
-      const installResult = await ensureWeChatPluginInstalled();
-      if (!installResult.installed) {
-        sendJson(res, 500, { success: false, error: installResult.warning || 'WeChat plugin install failed' });
-        return true;
-      }
+      const { getWeixinChannelService } = await import('../../message-channel/weixin/service');
+      // Single-Bot: allow re-scan to refresh/replace the local slot (WeChat may issue a new accountId).
+      // Do not 409 when already bound — reconnect is the supported recovery path across machines.
 
-      await cleanupDanglingWeChatPluginState();
+      // Phase 1: Host Worker path — do NOT install OC WeChat plugin.
       const startResult = await startWeChatQrLogin(ctx, requestedAccountId);
       if (!startResult.qrcodeUrl || !startResult.sessionKey) {
         throw new Error(startResult.message || 'Failed to generate WeChat QR code');
@@ -568,6 +621,8 @@ export async function handleChannelRoutes(
         sessionKey: startResult.sessionKey,
       });
       void awaitWeChatQrLogin(ctx, startResult.sessionKey, loginKey);
+      // Warm worker early (idle until credentials upsert on success).
+      void getWeixinChannelService().ensureReady().catch(() => {});
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -596,6 +651,13 @@ export async function handleChannelRoutes(
     try {
       const body = await parseJsonBody<{ channelType: string; config: Record<string, unknown>; accountId?: string }>(req);
       const storedChannelType = resolveStoredChannelType(body.channelType);
+      if (storedChannelType === 'wecom' || storedChannelType === 'qqbot') {
+        sendJson(res, 410, {
+          success: false,
+          error: '该渠道已下线，请使用钉钉或微信。',
+        });
+        return true;
+      }
       if (storedChannelType === 'dingtalk') {
         const installResult = await ensureDingTalkPluginInstalled();
         if (!installResult.installed) {
@@ -608,26 +670,8 @@ export async function handleChannelRoutes(
           return true;
         }
       }
-      if (storedChannelType === 'wecom') {
-        const installResult = await ensureWeComPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'WeCom plugin install failed' });
-          return true;
-        }
-      }
-      if (storedChannelType === 'qqbot') {
-        const installResult = await ensureQQBotPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'QQ Bot plugin install failed' });
-          return true;
-        }
-      }
       if (storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE) {
-        const installResult = await ensureWeChatPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'WeChat plugin install failed' });
-          return true;
-        }
+        // Phase 1: WeChat uses Host Worker — skip OC plugin install.
       }
       const existingValues = await getChannelFormValues(body.channelType, body.accountId);
       if (isSameConfigValues(existingValues, body.config)) {
@@ -684,6 +728,20 @@ export async function handleChannelRoutes(
         await deleteChannelConfig(channelType);
         await clearAllBindingsForChannel(storedChannelType);
         scheduleGatewayChannelRestart(ctx, `channel:deleteConfig:${storedChannelType}`);
+      }
+      if (
+        toUiChannelType(channelType) === UI_WECHAT_CHANNEL_TYPE
+        || storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE
+      ) {
+        const removeId =
+          accountId?.trim()
+          || (await import('../../message-channel/weixin/binding')).getBoundWeixinAccountId()
+          || 'default';
+        const { unbindWeixinBot } = await import('../../message-channel/weixin/binding');
+        const { getWeixinChannelService } = await import('../../message-channel/weixin/service');
+        await getWeixinChannelService().stopMonitor();
+        getWeixinChannelService().sendCommand({ type: 'account.remove', accountId: removeId });
+        await unbindWeixinBot();
       }
       sendJson(res, 200, { success: true });
     } catch (error) {

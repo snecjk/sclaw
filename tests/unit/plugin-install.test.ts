@@ -260,9 +260,6 @@ describe('plugin installer diagnostics', () => {
 });
 
 describe('channel plugin runtime layout', () => {
-  const targetDir = '/home/test/.stoclaw/openclaw/extensions/openclaw-weixin';
-  const sharedRuntimeDir = '/home/test/.stoclaw/openclaw/runtime/openclaw';
-
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -272,165 +269,20 @@ describe('channel plugin runtime layout', () => {
 
   it('treats non-channel plugins as layout-complete', async () => {
     const { channelPluginRuntimeLayoutComplete } = await import('@electron/utils/plugin-install');
-    expect(channelPluginRuntimeLayoutComplete('sto-workflow-tool', targetDir)).toBe(true);
+    expect(channelPluginRuntimeLayoutComplete('sto-workflow-tool', '/any')).toBe(true);
   });
 
-  it('returns false when openclaw peer package is missing', async () => {
-    mockExistsSync.mockImplementation((input: string) => {
-      const path = String(input);
-      if (path.endsWith('openclaw.plugin.json')) return true;
-      if (path.endsWith('/mock/openclaw/package.json')) return true;
-      return false;
-    });
-    mockReadFileSync.mockReturnValue(JSON.stringify({ dependencies: { openclaw: '1.0.0', zod: '^4.3.6' } }));
-
+  it('treats retired OC channel plugins as layout-complete (no npm channel plugins left)', async () => {
     const { channelPluginRuntimeLayoutComplete } = await import('@electron/utils/plugin-install');
-    expect(channelPluginRuntimeLayoutComplete('openclaw-weixin', targetDir)).toBe(false);
+    expect(channelPluginRuntimeLayoutComplete('openclaw-weixin', '/any')).toBe(true);
+    expect(channelPluginRuntimeLayoutComplete('wecom', '/any')).toBe(true);
+    expect(channelPluginRuntimeLayoutComplete('qqbot', '/any')).toBe(true);
   });
 
-  it('returns false when materialized peer is missing runtime deps beyond tslog', async () => {
-    mockGetOpenClawDir.mockReturnValue('/mock/openclaw.asar');
-    mockExistsSync.mockImplementation((input: string) => {
-      const path = String(input);
-      return path.endsWith('openclaw.plugin.json')
-        || path.endsWith('/mock/openclaw.asar/package.json')
-        || path.endsWith('node_modules/openclaw')
-        || path.endsWith(`${sharedRuntimeDir}/package.json`)
-        || path.endsWith(`${sharedRuntimeDir}/openclaw.mjs`)
-        || path.endsWith(`${sharedRuntimeDir}/dist/plugin-sdk/channel-config-schema.js`)
-        || path.endsWith(`${sharedRuntimeDir}/node_modules/tslog/package.json`)
-        || path.endsWith('node_modules/zod/package.json');
-    });
-    mockReadFileSync.mockImplementation((input: string) => {
-      const path = String(input);
-      if (path.endsWith('extensions/openclaw-weixin/package.json')) {
-        return JSON.stringify({ dependencies: { openclaw: '1.0.0', zod: '^4.3.6' } });
-      }
-      if (path.endsWith('node_modules/zod/package.json')) {
-        return JSON.stringify({ version: '4.4.3' });
-      }
-      return '{}';
-    });
-    mockLstatSync.mockReturnValue({ isSymbolicLink: () => true });
-    mockReadlinkSync.mockReturnValue(sharedRuntimeDir);
-
-    const { channelPluginRuntimeLayoutComplete } = await import('@electron/utils/plugin-install');
-    expect(channelPluginRuntimeLayoutComplete('openclaw-weixin', targetDir)).toBe(false);
-  });
-
-  it('returns false when installed zod major version does not satisfy plugin range', async () => {
-    mockExistsSync.mockImplementation((input: string) => {
-      const path = String(input);
-      return path.endsWith('openclaw.plugin.json')
-        || path.endsWith('/mock/openclaw/package.json')
-        || path.endsWith('node_modules/openclaw/package.json')
-        || path.endsWith('node_modules/openclaw/openclaw.mjs')
-        || path.endsWith('node_modules/openclaw/dist/plugin-sdk/channel-config-schema.js')
-        || path.endsWith('node_modules/openclaw/node_modules/tslog/package.json')
-        || path.endsWith('node_modules/openclaw/node_modules/json5/package.json')
-        || path.endsWith('node_modules/openclaw/node_modules/chalk/package.json')
-        || path.endsWith('node_modules/zod/package.json');
-    });
-    mockReadFileSync.mockImplementation((input: string) => {
-      const path = String(input);
-      if (path.endsWith('extensions/openclaw-weixin/package.json')) {
-        return JSON.stringify({ dependencies: { openclaw: '1.0.0', zod: '^4.3.6' } });
-      }
-      if (path.endsWith('node_modules/zod/package.json')) {
-        return JSON.stringify({ version: '3.25.76' });
-      }
-      return '{}';
-    });
-    mockLstatSync.mockReturnValue({ isSymbolicLink: () => false, isDirectory: () => true });
-
-    const { channelPluginRuntimeLayoutComplete } = await import('@electron/utils/plugin-install');
-    expect(channelPluginRuntimeLayoutComplete('openclaw-weixin', targetDir)).toBe(false);
-  });
-
-  it('returns true when shared materialized openclaw runtime and matching deps are present', async () => {
-    mockGetOpenClawDir.mockReturnValue('/mock/openclaw.asar');
-    mockExistsSync.mockImplementation((input: string) => {
-      const path = String(input);
-      return path.endsWith('openclaw.plugin.json')
-        || path.endsWith('/mock/openclaw.asar/package.json')
-        || path.endsWith('node_modules/openclaw')
-        || path.endsWith(`${sharedRuntimeDir}/package.json`)
-        || path.endsWith(`${sharedRuntimeDir}/openclaw.mjs`)
-        || path.endsWith(`${sharedRuntimeDir}/dist/plugin-sdk/channel-config-schema.js`)
-        || path.endsWith(`${sharedRuntimeDir}/node_modules/tslog/package.json`)
-        || path.endsWith(`${sharedRuntimeDir}/node_modules/json5/package.json`)
-        || path.endsWith(`${sharedRuntimeDir}/node_modules/chalk/package.json`)
-        || path.endsWith('node_modules/zod/package.json');
-    });
-    mockReadFileSync.mockImplementation((input: string) => {
-      const path = String(input);
-      if (path.endsWith('extensions/openclaw-weixin/package.json')) {
-        return JSON.stringify({ dependencies: { openclaw: '1.0.0', zod: '^4.3.6' } });
-      }
-      if (path.endsWith('node_modules/zod/package.json')) {
-        return JSON.stringify({ version: '4.4.3' });
-      }
-      return '{}';
-    });
-    mockLstatSync.mockReturnValue({ isSymbolicLink: () => true });
-    mockReadlinkSync.mockReturnValue(sharedRuntimeDir);
-
-    const { channelPluginRuntimeLayoutComplete } = await import('@electron/utils/plugin-install');
-    expect(channelPluginRuntimeLayoutComplete('openclaw-weixin', targetDir)).toBe(true);
-  });
-
-  it('returns true when legacy in-plugin materialized openclaw has full runtime deps', async () => {
-    mockExistsSync.mockImplementation((input: string) => {
-      const path = String(input);
-      return path.endsWith('openclaw.plugin.json')
-        || path.endsWith('/mock/openclaw/package.json')
-        || path.endsWith('node_modules/openclaw')
-        || path.endsWith('node_modules/openclaw/package.json')
-        || path.endsWith('node_modules/openclaw/openclaw.mjs')
-        || path.endsWith('node_modules/openclaw/dist/plugin-sdk/channel-config-schema.js')
-        || path.endsWith('node_modules/openclaw/node_modules/tslog/package.json')
-        || path.endsWith('node_modules/openclaw/node_modules/json5/package.json')
-        || path.endsWith('node_modules/openclaw/node_modules/chalk/package.json')
-        || path.endsWith('node_modules/zod/package.json');
-    });
-    mockReadFileSync.mockImplementation((input: string) => {
-      const path = String(input);
-      if (path.endsWith('extensions/openclaw-weixin/package.json')) {
-        return JSON.stringify({ dependencies: { openclaw: '1.0.0', zod: '^4.3.6' } });
-      }
-      if (path.endsWith('node_modules/zod/package.json')) {
-        return JSON.stringify({ version: '4.4.3' });
-      }
-      return '{}';
-    });
-    mockLstatSync.mockReturnValue({ isSymbolicLink: () => false, isDirectory: () => true });
-
-    const { channelPluginRuntimeLayoutComplete } = await import('@electron/utils/plugin-install');
-    expect(channelPluginRuntimeLayoutComplete('openclaw-weixin', targetDir)).toBe(true);
-  });
-
-  it('returns true when dev symlink openclaw package and matching dep versions are present', async () => {
-    mockExistsSync.mockImplementation((input: string) => {
-      const path = String(input);
-      return path.endsWith('openclaw.plugin.json')
-        || path.endsWith('/mock/openclaw/package.json')
-        || path.endsWith('node_modules/openclaw')
-        || path.endsWith('node_modules/zod/package.json');
-    });
-    mockReadFileSync.mockImplementation((input: string) => {
-      const path = String(input);
-      if (path.endsWith('extensions/openclaw-weixin/package.json')) {
-        return JSON.stringify({ dependencies: { openclaw: '1.0.0', zod: '^4.3.6' } });
-      }
-      if (path.endsWith('node_modules/zod/package.json')) {
-        return JSON.stringify({ version: '4.4.3' });
-      }
-      return '{}';
-    });
-    mockLstatSync.mockReturnValue({ isSymbolicLink: () => true });
-    mockReadlinkSync.mockReturnValue('/mock/openclaw');
-
-    const { channelPluginRuntimeLayoutComplete } = await import('@electron/utils/plugin-install');
-    expect(channelPluginRuntimeLayoutComplete('openclaw-weixin', targetDir)).toBe(true);
+  it('retired WeChat/WeCom/QQ ensure* helpers refuse install', async () => {
+    const pluginInstall = await import('@electron/utils/plugin-install');
+    expect(pluginInstall.ensureWeChatPluginInstalled().installed).toBe(false);
+    expect(pluginInstall.ensureWeComPluginInstalled().installed).toBe(false);
+    expect(pluginInstall.ensureQQBotPluginInstalled().installed).toBe(false);
   });
 });

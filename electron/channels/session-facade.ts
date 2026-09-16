@@ -155,6 +155,17 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
   agentId: string;
   engineType: AgentEngineType;
 }> {
+  if (channelType === 'wechat') {
+    const { getWeixinBinding } = await import('../message-channel/weixin/binding');
+    const binding = await getWeixinBinding();
+    if (!binding) {
+      throw new Error('wechat bot not bound');
+    }
+    return {
+      agentId: resolveChannelBaseAgentId(binding.agentId),
+      engineType: 'pi',
+    };
+  }
   const conn = await getChannelConnection(channelType);
   if (!conn || conn.bindStatus !== 'bound') {
     throw new Error(`${channelType} hub not bound`);

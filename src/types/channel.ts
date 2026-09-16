@@ -508,7 +508,8 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
  * Get primary supported channels (non-plugin, commonly used)
  */
 export function getPrimaryChannels(): ChannelType[] {
-  return ['dingtalk', 'wechat', 'wecom', 'qqbot'];
+  // Phase 1: DingTalk Hub + Weixin Host Worker only.
+  return ['dingtalk', 'wechat'];
 }
 
 /**

@@ -207,6 +207,48 @@ export default defineConfig(({ mode }) => {
             },
           },
         },
+        {
+          // Weixin iLink transport: isolated Electron utilityProcess entry.
+          entry: 'electron/message-channel/weixin/runtime/worker-entry.ts',
+          vite: {
+            define: envDefine,
+            plugins: [
+              {
+                name: 'write-weixin-runtime-package-json',
+                closeBundle() {
+                  const outDir = resolve(__dirname, 'dist-electron/weixin-runtime');
+                  mkdirSync(outDir, { recursive: true });
+                  // Must NOT set "type":"module" — vite emits CJS for utilityProcess.
+                  // Keep name/version/ilink_appid so vendor api buildBaseInfo can resolve them.
+                  writeFileSync(
+                    resolve(outDir, 'package.json'),
+                    `${JSON.stringify(
+                      {
+                        name: '@tencent-weixin/openclaw-weixin',
+                        version: '2.4.9-beta.0',
+                        private: true,
+                        ilink_appid: 'bot',
+                      },
+                      null,
+                      2,
+                    )}\n`,
+                    'utf-8',
+                  );
+                },
+              },
+            ],
+            build: {
+              outDir: 'dist-electron/weixin-runtime',
+              rollupOptions: {
+                external: ['electron', /^node:/],
+                output: {
+                  entryFileNames: 'worker-entry.js',
+                  inlineDynamicImports: true,
+                },
+              },
+            },
+          },
+        },
       ]),
       renderer(),
     ],

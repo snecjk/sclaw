@@ -163,15 +163,6 @@ function removePluginRegistration(currentConfig: OpenClawConfig, pluginId: strin
     return modified;
 }
 
-function channelHasConfiguredAccounts(channelSection: ChannelConfigData | undefined): boolean {
-    if (!channelSection || typeof channelSection !== 'object') return false;
-    const accounts = channelSection.accounts as Record<string, ChannelConfigData> | undefined;
-    if (accounts && typeof accounts === 'object') {
-        return Object.keys(accounts).length > 0;
-    }
-    return Object.keys(channelSection).some((key) => !CHANNEL_TOP_LEVEL_KEYS_TO_KEEP.has(key));
-}
-
 // ── Types ────────────────────────────────────────────────────────
 
 export interface ChannelConfigData {
@@ -190,6 +181,7 @@ export interface OpenClawConfig {
     channels?: Record<string, ChannelConfigData>;
     plugins?: PluginsConfig;
     commands?: Record<string, unknown>;
+    bindings?: Array<Record<string, unknown>>;
     [key: string]: unknown;
 }
 
@@ -1072,23 +1064,38 @@ export async function setChannelEnabled(channelType: string, enabled: boolean): 
 export async function cleanupDanglingWeChatPluginState(): Promise<{ cleanedDanglingState: boolean }> {
     return withConfigLock(async () => {
         const currentConfig = await readOpenClawConfig();
-        const channelSection = currentConfig.channels?.[WECHAT_PLUGIN_ID];
-        const hasConfiguredWeChatAccounts = channelHasConfiguredAccounts(channelSection);
-        const hadPluginRegistration = Boolean(
-            currentConfig.plugins?.entries?.[WECHAT_PLUGIN_ID]
-            || currentConfig.plugins?.allow?.includes(WECHAT_PLUGIN_ID),
-        );
+        // Phase 2: Host Worker owns WeChat — always strip OC openclaw-weixin plugin wiring
+        // so Gateway does not dual-poll alongside the utilityProcess worker.
+        let modified = removePluginRegistration(currentConfig, WECHAT_PLUGIN_ID);
 
-        if (hasConfiguredWeChatAccounts) {
-            return { cleanedDanglingState: false };
+        if (currentConfig.channels?.[WECHAT_PLUGIN_ID]) {
+            delete currentConfig.channels[WECHAT_PLUGIN_ID];
+            modified = true;
+            if (Object.keys(currentConfig.channels).length === 0) {
+                delete currentConfig.channels;
+            }
         }
 
-        const modified = removePluginRegistration(currentConfig, WECHAT_PLUGIN_ID);
+        if (Array.isArray(currentConfig.bindings)) {
+            const nextBindings = (currentConfig.bindings as Array<Record<string, unknown>>).filter((binding) => {
+                const match = binding.match as { channel?: string } | undefined;
+                return match?.channel !== WECHAT_PLUGIN_ID;
+            });
+            if (nextBindings.length !== currentConfig.bindings.length) {
+                currentConfig.bindings = nextBindings;
+                modified = true;
+            }
+            if (nextBindings.length === 0) {
+                delete currentConfig.bindings;
+            }
+        }
+
         if (modified) {
             await writeOpenClawConfig(currentConfig);
         }
+        // Legacy OC credential tree only (Host Worker uses ~/.stoclaw/weixin).
         await deleteWeChatState();
-        return { cleanedDanglingState: hadPluginRegistration || modified };
+        return { cleanedDanglingState: modified };
     });
 }
 

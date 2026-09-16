@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-export type PlatformChannelType = 'dingtalk' | 'mobile';
+export type PlatformChannelType = 'dingtalk' | 'mobile' | 'wechat';
+
+const SUPPORTED_CHANNEL_TYPES = new Set<PlatformChannelType>(['dingtalk', 'mobile', 'wechat']);
 
 /**
  * 平台 Channel 会话键：
@@ -17,7 +19,7 @@ export function buildChannelSessionKey(
   nonce = randomUUID().replace(/-/g, '').slice(0, 4),
 ): string {
   const safeChannel = channelType.trim().toLowerCase() as PlatformChannelType;
-  if (safeChannel !== 'dingtalk' && safeChannel !== 'mobile') {
+  if (!SUPPORTED_CHANNEL_TYPES.has(safeChannel)) {
     throw new Error(`unsupported channelType: ${channelType}`);
   }
   const safeAgent = (agentId || 'main').trim().toLowerCase() || 'main';
@@ -58,8 +60,8 @@ export function parseChannelSessionKey(sessionKey: string): {
 } | null {
   const parts = sessionKey.split(':');
   if (parts.length < 4 || parts[0] !== 'agent') return null;
-  const channelType = parts[2];
-  if (channelType !== 'dingtalk' && channelType !== 'mobile') return null;
+  const channelType = parts[2] as PlatformChannelType;
+  if (!SUPPORTED_CHANNEL_TYPES.has(channelType)) return null;
   return {
     agentId: parts[1] || 'main',
     channelType,

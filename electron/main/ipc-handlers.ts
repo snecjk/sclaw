@@ -44,8 +44,6 @@ import {
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import {
   ensureDingTalkPluginInstalled,
-  ensureQQBotPluginInstalled,
-  ensureWeComPluginInstalled,
 } from '../utils/plugin-install';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
@@ -1350,7 +1348,7 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
   // Plugin-based channels require a full Gateway process restart to properly
   // initialize / tear-down plugin connections.  SIGUSR1 in-process reload is
   // not sufficient for channel plugins (see restartGatewayForAgentDeletion).
-  const forceRestartChannels = new Set(['dingtalk', 'wecom', 'whatsapp', 'qqbot']);
+  const forceRestartChannels = new Set(['dingtalk', 'whatsapp']);
 
   const scheduleGatewayChannelRestart = (reason: string): void => {
     if (gatewayManager.getStatus().state !== 'stopped') {
@@ -1451,36 +1449,10 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
           warning: installResult.warning,
         };
       }
-      if (channelType === 'wecom') {
-        const installResult = await ensureWeComPluginInstalled();
-        if (!installResult.installed) {
-          return {
-            success: false,
-            error: installResult.warning || 'WeCom plugin install failed',
-          };
-        }
-        await saveChannelConfig(channelType, config);
-        scheduleGatewayChannelSaveRefresh(channelType, `channel:saveConfig (${channelType})`);
+      if (channelType === 'wecom' || channelType === 'qqbot') {
         return {
-          success: true,
-          pluginInstalled: installResult.installed,
-          warning: installResult.warning,
-        };
-      }
-      if (channelType === 'qqbot') {
-        const installResult = await ensureQQBotPluginInstalled();
-        if (!installResult.installed) {
-          return {
-            success: false,
-            error: installResult.warning || 'QQ Bot plugin install failed',
-          };
-        }
-        await saveChannelConfig(channelType, config);
-        scheduleGatewayChannelSaveRefresh(channelType, `channel:saveConfig (${channelType})`);
-        return {
-          success: true,
-          pluginInstalled: installResult.installed,
-          warning: installResult.warning,
+          success: false,
+          error: '该渠道已下线，请使用钉钉或微信。',
         };
       }
       await saveChannelConfig(channelType, config);
