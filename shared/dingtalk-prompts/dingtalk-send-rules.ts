@@ -60,7 +60,7 @@ export const DINGTALK_ARTIFACT_SEND_FORMAT_RULES = [
 const DINGTALK_SEND_FORMAT_RULES_HEAD = [
   '钉钉发送格式规则：',
   '1. **`--title` 必填**（单聊/群聊均需）；无特定标题时用 `消息`',
-  '2. **正文**用钉钉 IM Markdown：`###` 标题、`**加粗**`、`-` 列表等；段落之间要换行空一行；正文内**禁止** HTML（`<font>`、`<br>` 等会乱版）',
+  '2. **正文**用钉钉 IM Markdown：`###` 标题、`**加粗**`、`-` 列表等；段落之间要换行空一行。需要彩色文字时，仅允许钉钉专用且成对完整的 `<font colorTokenV2=common_red1_color>文字</font>`（token 必须无引号、使用 `common_颜色_序号_color`）。常用颜色 Key：红 `common_red1_color`、蓝 `common_blue1_color`、绿 `common_green1_color`、黄 `common_yellow1_color`、橙 `common_orange1_color`、灰 `common_gray1_color`；除此之外正文内**禁止** HTML（包括 `<font color=...>`、`style`、额外属性和 `<br>`）',
   `3. ${DWS_CHAT_MESSAGE_SEND_AGENT_FORMAT_RULE}`,
   '4. **正文末尾必须附加代发说明**（`---` 分隔线 + Markdown 引用说明，固定格式）：',
   '   ```',

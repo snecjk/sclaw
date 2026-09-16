@@ -5,6 +5,7 @@ import {
   dwsChatMessageSendTextContainsLocalArtifactPath,
   extractNormalizedDwsSendArgv,
   fixDwsChatMessageSendToolParams,
+  resolveDingTalkColorTokenV2MarkupProblem,
 } from '../../../../shared/dingtalk-send/dws-send-text';
 import type { DingTalkSendCategory } from './capability';
 
@@ -75,9 +76,8 @@ export function resolveDingTalkSendStaticProblem(command: string): string | null
   }
   if (!/--text\s+/i.test(command)) return null;
   const example = buildDingTalkSendRetryExample();
-  if (/<\/?font\b/i.test(command)) {
-    return `钉钉发送正文禁止使用 <font> HTML。请改用 Markdown 底栏，示例：\n${example}`;
-  }
+  const fontProblem = resolveDingTalkColorTokenV2MarkupProblem(command);
+  if (fontProblem) return `${fontProblem}\n${example}`;
   if (
     /--text\s+\$'[\s\S]*'/i.test(command)
     || /--text\s+\$[A-Za-z_][A-Za-z0-9_]*/i.test(command)

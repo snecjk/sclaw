@@ -49,6 +49,16 @@ describe('dws-send-text normalization', () => {
     expect(normalized).not.toContain('\\n');
   });
 
+  it('preserves DingTalk colorTokenV2 markup in shared and plugin normalization', () => {
+    const colored = '"<font colorTokenV2=common_orange1_color>橙色</font> 正文"';
+    expect(normalizeDwsChatMessageSendText(colored)).toContain(
+      '<font colorTokenV2=common_orange1_color>橙色</font>',
+    );
+    expect(pluginNormalize(colored)).toContain(
+      '<font colorTokenV2=common_orange1_color>橙色</font>',
+    );
+  });
+
   it('fixDwsChatMessageSendToolParams rewrites exec tool command', () => {
     const params = { command: cmd };
     const fixed = fixDwsChatMessageSendToolParams(params);
