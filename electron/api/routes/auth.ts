@@ -20,6 +20,7 @@ import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-au
 import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache, fetchHqBalanceApplyUrl, DEFAULT_HQ_BALANCE_APPLY_URL, loadAppDevWhitelistUsers } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
+import { requiresClientSiteAccessCheck } from '../../../shared/client-site-access';
 import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
 import {
   fetchAccountSwitchOptions,
@@ -47,6 +48,7 @@ function disconnectSclawHubOnLogout(): void {
 }
 
 const CLIENT_SITE_ACCESS_DENIED_MESSAGE = '您的所属组织无权使用 StoClaw';
+let pendingAccessDeniedUser: SsoUserInfo | null = null;
 
 async function loadInferenceRuntimeConfigBeforeSetup(): Promise<void> {
   try {
@@ -67,6 +69,46 @@ function toAccessCheckPayload(result: ClientSiteAccessCheckResult) {
     errCode: result.errCode,
     errMessage: result.errMessage,
   };
+}
+
+async function checkSclawEntryAccess(
+  token: string,
+  user: SsoUserInfo,
+  options?: { forceOpeningCheck?: boolean },
+): Promise<ClientSiteAccessCheckResult> {
+  const accessCheck = await getClientSiteAccessService().checkAccess(token, {
+    categoryCode: user.categoryCode,
+  });
+  if (!accessCheck.allowed) return accessCheck;
+  if (!options?.forceOpeningCheck && !requiresClientSiteAccessCheck(user.categoryCode)) {
+    return accessCheck;
+  }
+
+  try {
+    const { getSiteOpeningRegistrationService } = await import(
+      '../../services/site-opening-registration-service'
+    );
+    const opening = await getSiteOpeningRegistrationService().getStatus(token);
+    const allowed = opening.status === 'ENABLED';
+    return {
+      ...accessCheck,
+      allowed,
+      clientCode: accessCheck.clientCode || 'StoClaw',
+      categoryCode: user.categoryCode || accessCheck.categoryCode,
+      companyCode: user.companyCode || accessCheck.companyCode,
+      errCode: allowed ? '200' : opening.status,
+      errMessage: allowed ? 'OK' : opening.statusName || '尚未完成SClaw开通',
+    };
+  } catch (error) {
+    return {
+      ...accessCheck,
+      allowed: false,
+      categoryCode: user.categoryCode || accessCheck.categoryCode,
+      companyCode: user.companyCode || accessCheck.companyCode,
+      errCode: 'OPENING_STATUS_ERROR',
+      errMessage: error instanceof Error ? error.message : '开通状态查询失败',
+    };
+  }
 }
 
 /** 已认证入口：认领 + startScheduler。幂等，login / session/commit / 切号共用。 */
@@ -182,6 +224,42 @@ export async function handleAuthRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  if (url.pathname === '/api/auth/site-opening/status' && req.method === 'GET') {
+    const token = pendingAccessDeniedUser?.stoToken || await getStoToken();
+    if (!token) {
+      sendJson(res, 401, { success: false, error: '没有可用的登录凭证，请重新登录' });
+      return true;
+    }
+    try {
+      const { getSiteOpeningRegistrationService } = await import(
+        '../../services/site-opening-registration-service'
+      );
+      const result = await getSiteOpeningRegistrationService().getStatus(token);
+      sendJson(res, 200, { success: true, data: result });
+    } catch (error) {
+      sendJson(res, 502, { success: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/auth/site-opening/register' && req.method === 'POST') {
+    const token = pendingAccessDeniedUser?.stoToken || await getStoToken();
+    if (!token) {
+      sendJson(res, 401, { success: false, error: '没有可用的登录凭证，请重新登录' });
+      return true;
+    }
+    try {
+      const { getSiteOpeningRegistrationService } = await import(
+        '../../services/site-opening-registration-service'
+      );
+      const result = await getSiteOpeningRegistrationService().register(token);
+      sendJson(res, 200, { success: true, data: result });
+    } catch (error) {
+      sendJson(res, 502, { success: false, error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
   // GET /api/auth/status — return current auth state
   if (url.pathname === '/api/auth/status' && req.method === 'GET') {
     try {
@@ -202,10 +280,9 @@ export async function handleAuthRoutes(
           return true;
         }
 
-        const accessCheck = await getClientSiteAccessService().checkAccess(token, {
-          categoryCode: state.user?.categoryCode,
-        });
+        const accessCheck = await checkSclawEntryAccess(token, state.user!);
         if (!accessCheck.allowed) {
+          pendingAccessDeniedUser = state.user;
           await clearAuthAfterAccessDenied();
           logger.info(
             `[auth] Client site access denied on status check: category=${accessCheck.categoryCode} company=${accessCheck.companyCode} err=${accessCheck.errMessage}`,
@@ -247,10 +324,9 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
 
-      const accessCheck = await getClientSiteAccessService().checkAccess(user.stoToken ?? '', {
-        categoryCode: user.categoryCode,
-      });
+      const accessCheck = await checkSclawEntryAccess(user.stoToken ?? '', user);
       if (!accessCheck.allowed) {
+        pendingAccessDeniedUser = user;
         logger.info(
           `[auth] Client site access denied on login: user=${user.code} category=${accessCheck.categoryCode} company=${accessCheck.companyCode} err=${accessCheck.errMessage}`,
         );
@@ -264,6 +340,7 @@ export async function handleAuthRoutes(
       }
 
       await setAuthUser(user);
+      pendingAccessDeniedUser = null;
 
       const stoSyncService = getStoModelSyncService();
       if (ctx.gatewayManager) {
@@ -293,6 +370,7 @@ export async function handleAuthRoutes(
 
   // POST /api/auth/logout — sign out
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
+    pendingAccessDeniedUser = null;
     // Pre-skills-store only: persist mount-point skills back to openclaw/users.
     // After migration, canonical state is skills-store — skip so logout does not
     // resurrect the legacy users tree.
@@ -512,10 +590,11 @@ export async function handleAuthRoutes(
 
       const newUser = await switchAccountViaMemoryCenter(token, targetCode);
 
-      const accessCheck = await getClientSiteAccessService().checkAccess(newUser.stoToken ?? '', {
-        categoryCode: newUser.categoryCode,
+      const accessCheck = await checkSclawEntryAccess(newUser.stoToken ?? '', newUser, {
+        forceOpeningCheck: true,
       });
       if (!accessCheck.allowed) {
+        pendingAccessDeniedUser = newUser;
         if (!existingOrigin) {
           await clearImpersonationOrigin();
         }

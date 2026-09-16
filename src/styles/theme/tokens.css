@@ -77,6 +77,9 @@
     --sto-panel-bg: #ffffff;
     --sto-surface-under: var(--sto-shell-bg);
     --sto-surface-canvas: #f7f8fa;
+    /* 登录页画布点阵纹理：浅色为设计稿冻结值（#AEB8C4 点 + 白色光晕） */
+    --sto-login-dot: #aeb8c4;
+    --sto-login-glow: 255 255 255;
     --sto-surface-primary: var(--sto-workspace-bg);
     --sto-surface-secondary: var(--sto-panel-bg);
     --sto-surface-elevated: #ffffff;
@@ -511,6 +514,9 @@
 
     --sto-surface-under: #0d0d0d;
     --sto-surface-canvas: #0d0d0d;
+    /* 登录页画布点阵纹理：暗色低对比白点 + 一级 Surface 光晕（#181818） */
+    --sto-login-dot: rgb(255 255 255 / 14%);
+    --sto-login-glow: 24 24 24;
     --sto-surface-primary: #181818;
     --sto-surface-secondary: #212121;
     --sto-surface-elevated: #282828;
