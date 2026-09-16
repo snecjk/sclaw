@@ -1,22 +1,13 @@
-# dingtalk（占位）
+# dingtalk
 
-钉钉渠道的 **目标归属目录**。
+钉钉渠道说明目录。**可运行实现不在本目录**，而在：
 
-## 现状
+- `../hub/` — Hub 绑定、WS、ingress、delivery、Host API routes
+- `../common/` — session-facade / session-key / lifecycle
 
-- 可运行实现仍在 [`electron/channels/`](../../channels/)（Hub 客户端、ingress、delivery、binding 等）。
-- 本目录 **仅作占位说明**，当前无业务代码。
-
-## 迁入时机
-
-**等微信渠道（`../weixin/`）稳定上线后**，再单独开机械 PR，将钉钉相关实现迁入本目录（或迁入 `../common/` 并由本目录承接钉钉专用部分）。
-
-迁入要求：
-
-- 行为零变化，与微信功能迭代拆开合入。
-- 迁入完成后更新本 README，并删除或改写 `electron/channels/` 中的对应实现（可短暂保留 re-export）。
+钉钉与 Mobile 共用 Hub，故传输层不放在 `dingtalk/`，避免 Mobile 反向依赖钉钉目录。
 
 ## 参考
 
 - 伞说明：[`../README.md`](../README.md)
-- 技术方案：[`docs/微信渠道-Host-Worker技术方案.md`](../../../docs/微信渠道-Host-Worker技术方案.md)
+- 迁移计划：[`docs/钉钉Hub与Mobile迁入message-channel计划.md`](../../../docs/钉钉Hub与Mobile迁入message-channel计划.md)

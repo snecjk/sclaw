@@ -3,7 +3,7 @@
 > 状态：**Phase 3 媒体已落地最小闭环**（Phase 0/1/2 已于 2026-09-15 通过；引用缓存与工具进度气泡仍可选）
 > 范围：下线 OpenClaw 微信/企微/QQ 等 OC 渠道插件路径；在 `electron/message-channel/weixin` 新建基于 iLink Bot 协议的微信渠道 Worker；**微信路径固定 Pi**（`engineType` 字段保留，不实现 claude）。  
 > 非目标（本方案不包含）：删除整个 OpenClaw 引擎与 Gateway 进程；Claude 迁入 utilityProcess。  
-> 延后：钉钉 Hub 目录迁入 `message-channel`（等微信渠道稳定上线后再做，见 §4.1）。
+> 延后：无（钉钉 Hub / Mobile 已迁入 `message-channel/`，见 [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md)）。
 >
 > Phase 0 报告：`electron/message-channel/weixin/runtime/spike/phase0-report.json`
 
@@ -44,7 +44,7 @@
 | 决策 | 选择 | 理由 |
 | --- | --- | --- |
 | 目录伞 | 新建 `electron/message-channel/` | IM 渠道子系统收口；微信用独立树，避免与 Hub 文件平铺混乱 |
-| 钉钉目录 | **本期不迁代码**；建 `message-channel/dingtalk/README.md` 占位 | 标明归属与迁入时机；实现仍在 `electron/channels/`，微信上线后再机械迁入 |
+| 钉钉目录 | **已迁入** `message-channel/{hub,common,mobile}`（钉钉专用说明见 `dingtalk/README.md`） | Hub 与 Mobile 共用传输层，不可只塞 `dingtalk/`；见迁移计划 |
 | 微信进程模型 | `utilityProcess` Worker | 与 Pi 一致；长轮询与加解密不堵主进程 |
 | 引擎位置 | 保持现状（Claude 主进程 / Pi Worker） | 与微信 Worker 解耦；facade 已按引擎分流 |
 | 编排复用 | 复用 `session-facade` + 入站/发送链（catalog、Supervisor）；**出站不复用**钉钉 `delivery` 的卡片覆盖语义，按 §4.4.1（typing + commit） | 与钉钉同会话模型；微信无消息编辑 API |
@@ -105,7 +105,7 @@ UI 扫码 → wechat-login（Host）→ 凭证写入 ~/.stoclaw/openclaw/opencla
 
 说明：上图微信路径 **仅 Pi**；侧栏正文 **不经** Worker 流式投递。`session-facade` 保留 claude 能力是给钉钉等其它渠道，勿与「微信仅 Pi」决策混淆。
 
-钉钉 Hub **实现本期不变**（仍在 `electron/channels/`）；在 `message-channel/dingtalk/` 仅放占位说明。微信 Host 桥调用同一套 facade / delivery，在 **编排层汇合**。
+钉钉 Hub / Mobile **已迁入** `message-channel/{hub,common,mobile}`（见 [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md)）。微信 Host 桥调用同一套 facade，在 **编排层汇合**；出站仍不复用 Hub `delivery`。
 
 ---
 
@@ -115,9 +115,12 @@ UI 扫码 → wechat-login（Host）→ 凭证写入 ~/.stoclaw/openclaw/opencla
 
 ```
 electron/message-channel/
-  README.md                 # 伞说明
+  README.md
+  common/                   # session-facade / session-key / lifecycle / …
+  hub/                      # Hub WS/HTTP/binding/ingress/delivery + routes.ts
+  mobile/                   # history-facade
   dingtalk/
-    README.md               # 占位：实现仍在 electron/channels/；微信上线后再迁入
+    README.md               # 说明：实现在 hub/ + common/
   weixin/
     service.ts              # 主进程：fork、IPC、对外 API
     bridge-inbound.ts       # WireEvent → 与 hub 对齐的入站结构
@@ -142,22 +145,18 @@ electron/message-channel/
         openclaw-weixin-main/  # ★ 已入库的上游快照（目录名以仓库实际为准）
           README.VENDOR.md     # 待补：来源 tag/commit、裁剪清单、许可证
 
-electron/channels/          # 钉钉 Hub 等实现（本期不动；迁入后删除或变 re-export）
-  ingress.ts / delivery.ts / session-facade.ts / hub-* …
-
 shared/weixin-runtime-protocol.ts   # 主进程 ↔ Worker 唯一 Wire 契约（对齐 shared/pi-runtime-protocol）
 ```
 
 原则：
 
 - **Worker 内可以脏，根目录 `shared/` 契约必须稳**；不要使用 `electron/shared/runtime-protocol`（与 Pi 惯例冲突，且命名过泛）。
-- **允许** `message-channel/dingtalk/` 仅含占位 `README.md`，**不要**在迁入前放入可执行 TS/空壳模块，以免误导为已实现。
-- 微信稳定上线后：另开机械 PR，将 `electron/channels/*` 迁入 `message-channel/common/` 与/或充实 `dingtalk/`，与微信行为变更拆开。
+- 钉钉 Hub / Mobile 已迁入 `common/`、`hub/`、`mobile/`；`dingtalk/` 仅保留说明 README。
 
 `electron/message-channel/README.md` 须包含至少：
 
-1. 本目录为 IM 渠道伞；当前实现重点在微信。  
-2. 钉钉实现仍在 `electron/channels/`，详见 `dingtalk/README.md`；**待微信渠道稳定上线后再迁入**。  
+1. 本目录为 IM 渠道伞（微信 / 钉钉 Hub / Mobile）。  
+2. 钉钉与 Mobile 共用 `hub/`；编排在 `common/`；详见各子目录 README。  
 3. 指向本文档与 `shared/weixin-runtime-protocol.ts`。
 
 ### 4.2 `shared/weixin-runtime-protocol.ts`（稳定契约）
@@ -321,10 +320,10 @@ Phase 1 估时：MessagePort 仅 typing/commit/cancel，**不要**按「复刻 d
 ### 5.2 明确保留（本期）
 
 - `electron/gateway/**` 进程管理（OC 引擎若仍启用）
-- `ChatRuntimeSupervisor`、`electron/channels` 下的 session-facade / 钉钉 Hub
+- `ChatRuntimeSupervisor`、`electron/message-channel/{common,hub}` 下的 session-facade / 钉钉 Hub
 - Claude / Pi / `agent-extensions`
 - EventBus 语义（可仍挂在 `GatewayManager` 类上）
-- `electron/channels/` 物理路径（钉钉迁入 `message-channel` 见 Phase 4）
+- `electron/message-channel/` 物理路径（钉钉 Hub / Mobile 已迁入）
 
 ### 5.3 配置迁移
 
@@ -570,7 +569,7 @@ iLink 的 `context_token` 用于 **单次回复对齐微信侧线程**，不等�
 ### Phase 1 — MVP
 
 - Worker IPC 契约 + WeixinChannelService（`message-channel/weixin/`）。
-- 接现有 `electron/channels` 的 `session-facade`，**仅 Pi**（`engineType` 字段写死 pi）。
+- 接 `message-channel/common/session-facade`，**仅 Pi**（`engineType` 字段写死 pi）。
 - **单 Bot（硬约束）**；catalog + Supervisor 双写。已有绑定则 UI/API 拒绝再次 `start` 登录，除非先 unbind。
 - 跨进程回写按 §4.4.1（typing + commit；无全文草稿快照；不复用钉钉 delivery）。
 - 文本 + typing；凭证新目录 + 旧目录迁移。
@@ -628,9 +627,9 @@ iLink 的 `context_token` 用于 **单次回复对齐微信侧线程**，不等�
 | 引用缓存 / 工具进度气泡 | 未做（可选） |
 | capabilities 驱动 UI 降级 | 未做（可选） |
 
-### Phase 4 — 钉钉目录迁入（微信稳定上线后）
+### Phase 4 — 钉钉目录迁入（**已完成**）
 
-- 机械 PR：`electron/channels/*` → `message-channel/common/`（或 `dingtalk/`）。
+- 见 [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md)：`electron/channels/*` → `message-channel/{common,hub,mobile}`；`api/routes/channel-hub.ts` → `hub/routes.ts`；旧路径已删。
 - 行为零变化；与微信功能迭代拆开。
 
 ### Phase 5 —（可选，另立项）
@@ -693,7 +692,7 @@ iLink 的 `context_token` 用于 **单次回复对齐微信侧线程**，不等�
 
 - 上游说明：[Tencent/openclaw-weixin README.zh_CN](https://github.com/Tencent/openclaw-weixin/blob/main/README.zh_CN.md)
 - 协议：[protocol_zh_CN.md](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol_zh_CN.md)
-- 本仓库：`electron/channels/*`（钉钉 Hub，待迁）、规划中的 `electron/message-channel/weixin/`、`electron/utils/wechat-login.ts`、`electron/services/pi-runtime-service.ts`
+- 本仓库：`electron/message-channel/{common,hub,mobile,weixin}/`、`electron/utils/wechat-login.ts`、`electron/services/pi-runtime-service.ts`
 - 扩展架构：`docs/agent-extension-architecture.md`
 
 ---

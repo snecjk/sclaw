@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, extname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 
 export type SclawMediaPartType = 'text' | 'picture' | 'audio' | 'video' | 'file';
 

@@ -251,7 +251,7 @@ agent:{agentId}:bridge-ai:{appId}:{conversationId}
 
 ##### 硬约束：Gateway 小写归一
 
-```7:8:electron/channels/session-key.ts
+```7:8:electron/message-channel/common/session-key.ts
  * OpenClaw Gateway 会对 sessionKey 做小写归一；peerId 也必须小写，
  * 否则 delivery 监听的 key 与 gateway-event 对不上，钉钉侧收不到回程。
 ```

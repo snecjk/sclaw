@@ -13,7 +13,7 @@
  *
  * All segments are lowercased because the OpenClaw Gateway normalizes session
  * keys to lowercase; a mixed-case key would make delivery listeners miss
- * gateway events (see electron/channels/session-key.ts).
+ * gateway events (see electron/message-channel/common/session-key.ts).
  */
 
 export const BRIDGE_AI_SESSION_CATEGORY = 'bridge-ai';

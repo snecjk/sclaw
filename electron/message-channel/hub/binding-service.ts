@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { getKyselyDatabase } from '../db/connection';
+import { getKyselyDatabase } from '../../db/connection';
 import type {
   ChannelBindStatus,
   ChannelEngineType,
   ChannelType,
-} from '../db/models/tables/channel-connection-table';
-import { loadOrCreateDeviceIdentity } from '../utils/device-identity';
+} from '../../db/models/tables/channel-connection-table';
+import { loadOrCreateDeviceIdentity } from '../../utils/device-identity';
 import { app } from 'electron';
 import path from 'node:path';
 import { resolveSclawHubBaseUrl } from './hub-config';

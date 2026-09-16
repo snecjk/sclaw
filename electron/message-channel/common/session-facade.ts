@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { getAdapter } from '../engines/manager';
-import { rememberSessionEngineType } from '../engines/session-engine';
-import { getEngineSessionRegistryEntry } from '../engines/session-registry';
-import type { AgentEngineType } from '../engines/types';
-import type { GatewayManager } from '../gateway/manager';
-import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
-import { runMainChatSend } from '../services/chat-send-service';
+import { getAdapter } from '../../engines/manager';
+import { rememberSessionEngineType } from '../../engines/session-engine';
+import { getEngineSessionRegistryEntry } from '../../engines/session-registry';
+import type { AgentEngineType } from '../../engines/types';
+import type { GatewayManager } from '../../gateway/manager';
+import { DEFAULT_WORKSPACE_ID } from '../../db/models/domain/session-catalog';
+import { runMainChatSend } from '../../services/chat-send-service';
 import {
   ensureCatalogSessionInDefaultWorkspace,
   getLatestChannelCatalogSession,
   upsertCatalogSession,
-} from '../services/session-catalog-service';
-import { getCatalogSessionRepository } from '../db/repositories/catalog-session-repository';
-import { getChannelConnection } from './binding-service';
+} from '../../services/session-catalog-service';
+import { getCatalogSessionRepository } from '../../db/repositories/catalog-session-repository';
+import { getChannelConnection } from '../hub/binding-service';
 import {
   resolveChannelBaseAgentId,
   resolveChannelIdleTtlMs,
@@ -20,8 +20,8 @@ import {
   shouldForceNewDingTalkSessionForEngine,
 } from './session-lifecycle';
 import { parseChannelSessionKey, type PlatformChannelType } from './session-key';
-import { logger } from '../utils/logger';
-import { getSetting } from '../utils/store';
+import { logger } from '../../utils/logger';
+import { getSetting } from '../../utils/store';
 
 export interface SessionFacadeCreateParams {
   agentId: string;
@@ -156,7 +156,7 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
   engineType: AgentEngineType;
 }> {
   if (channelType === 'wechat') {
-    const { getWeixinBinding } = await import('../message-channel/weixin/binding');
+    const { getWeixinBinding } = await import('../weixin/binding');
     const binding = await getWeixinBinding();
     if (!binding) {
       throw new Error('wechat bot not bound');

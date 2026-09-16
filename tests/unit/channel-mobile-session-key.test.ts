@@ -3,11 +3,11 @@ import {
   buildChannelSessionKey,
   parseChannelSessionKey,
   parseDingTalkSessionKey,
-} from '../../electron/channels/session-key';
+} from '../../electron/message-channel/common/session-key';
 import {
   shouldStartNewChannelSession,
   resolveChannelSessionKey,
-} from '../../electron/channels/session-lifecycle';
+} from '../../electron/message-channel/common/session-lifecycle';
 
 describe('channel session-key', () => {
   it('builds mobile and dingtalk keys with lowercase peer', () => {

@@ -4,8 +4,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { getKyselyDatabase } from '../../db/connection';
-import type { ChannelConnection } from '../../channels/binding-service';
-import { getChannelConnection, getLocalDeviceId } from '../../channels/binding-service';
+import type { ChannelConnection } from '../hub/binding-service';
+import { getChannelConnection, getLocalDeviceId } from '../hub/binding-service';
 import {
   listIndexedAccountIds,
   loadAccount,

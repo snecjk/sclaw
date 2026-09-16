@@ -2,17 +2,20 @@
 
 IM 渠道子系统目录（Host 编排 + 各渠道传输实现）。
 
-## 当前状态
+## 当前结构
 
-| 渠道 | 位置 | 状态 |
-| --- | --- | --- |
-| 微信 | `weixin/` | Phase 1 MVP（Host Worker + iLink transport） |
-| 钉钉 | 实现仍在 `electron/channels/`；本伞下仅 `dingtalk/README.md` 占位 | **待微信渠道稳定上线后再迁入** |
+| 目录 | 职责 |
+| --- | --- |
+| `common/` | 三渠道共用编排：`session-facade` / `session-key` / `session-lifecycle` / 标题 / stream kind |
+| `hub/` | SClaw Hub（钉钉 + Mobile 共用 WS / HTTP / binding / ingress / delivery）+ Host API `routes.ts` |
+| `mobile/` | Mobile 特有：历史列表/详情 RPC（`history-facade`） |
+| `dingtalk/` | 钉钉渠道说明（实现在 `hub/` + `common/`，无独立业务文件） |
+| `weixin/` | 微信 Host Worker + iLink transport |
 
 ## 约定
 
-- 微信与钉钉在编排层汇合：复用 `electron/channels` 的 `session-facade`；微信出站不复用钉钉 `delivery`（typing + commit）。
-- 不要在 `dingtalk/` 于迁入完成前添加可执行业务代码。
+- 钉钉与 Mobile **共用**同一条 Hub WS / refreshToken；传输层在 `hub/`，不要塞进 `dingtalk/`。
+- 微信出站不复用 Hub `delivery`（typing + commit 走 weixin bridge）。
+- Host API：`hub/routes.ts` 处理 `/api/channels/hub/*`（由 `electron/api/server.ts` 注册）。
 - 技术方案：[`docs/微信渠道-Host-Worker技术方案.md`](../../docs/微信渠道-Host-Worker技术方案.md)
-- 微信 Worker 契约：`shared/weixin-runtime-protocol.ts`
-- Phase 0 Spike：`weixin/runtime/spike/README.md`
+- 迁移记录：[`docs/钉钉Hub与Mobile迁入message-channel计划.md`](../../docs/钉钉Hub与Mobile迁入message-channel计划.md)

@@ -1,10 +1,10 @@
-import { getKyselyDatabase } from '../db/connection';
-import { getAdapter } from '../engines/manager';
-import { getEngineSessionRegistryEntry } from '../engines/session-registry';
-import type { GatewayManager } from '../gateway/manager';
-import { logger } from '../utils/logger';
-import { getChannelGatewayManager } from './ingress';
-import { parseChannelSessionKey } from './session-key';
+import { getKyselyDatabase } from '../../db/connection';
+import { getAdapter } from '../../engines/manager';
+import { getEngineSessionRegistryEntry } from '../../engines/session-registry';
+import type { GatewayManager } from '../../gateway/manager';
+import { logger } from '../../utils/logger';
+import { getChannelGatewayManager } from '../hub/ingress';
+import { parseChannelSessionKey } from '../common/session-key';
 
 export interface HistoryListItem {
   sessionKey: string;
@@ -200,7 +200,7 @@ export async function handleHistoryRpc(msg: {
     logger.warn('[HistoryFacade] missing requestId', msg.type);
     return;
   }
-  const client = (await import('./hub-client')).getSclawHubClient();
+  const client = (await import('../hub/hub-client')).getSclawHubClient();
 
   try {
     if (msg.type === 'history.list') {

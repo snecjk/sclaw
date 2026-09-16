@@ -1,9 +1,9 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'node:events';
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 import { resolveSclawHubWsUrl } from './hub-config';
 import { touchSharedHubOnline } from './binding-service';
-import type { StreamContentKind } from './stream-content-kind';
+import type { StreamContentKind } from '../common/stream-content-kind';
 
 /** Hub → Desktop 多模态分片（url 可直接下载） */
 export interface SclawInboundMediaPart {

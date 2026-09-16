@@ -2,11 +2,11 @@ import https from 'node:https';
 import http from 'node:http';
 import { URL } from 'node:url';
 import { app } from 'electron';
-import { getStoToken } from '../utils/auth-store';
-import { logger } from '../utils/logger';
+import { getStoToken } from '../../utils/auth-store';
+import { logger } from '../../utils/logger';
 import { resolveSclawHubBaseUrl } from './hub-config';
 import { getLocalDeviceId } from './binding-service';
-import type { StreamContentKind } from './stream-content-kind';
+import type { StreamContentKind } from '../common/stream-content-kind';
 
 interface HubApiEnvelope<T> {
   success?: boolean;

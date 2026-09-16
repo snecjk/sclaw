@@ -775,7 +775,7 @@ async function initialize(): Promise<void> {
   });
 
   // Channel Hub：已绑定则用 refreshToken 重连 WS，并挂入站执行（失败不阻塞启动）
-  void import('../channels/startup')
+  void import('../message-channel/hub/startup')
     .then(({ maybeConnectSclawHubOnStartup }) => maybeConnectSclawHubOnStartup(gm))
     .catch((error) => {
       logger.warn('[SclawHub] startup import/connect failed:', error);

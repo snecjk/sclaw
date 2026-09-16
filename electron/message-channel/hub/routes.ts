@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { HostApiContext } from '../context';
-import { parseJsonBody, sendJson } from '../route-utils';
+import type { HostApiContext } from '../../api/context';
+import { parseJsonBody, sendJson } from '../../api/route-utils';
 import {
   disableMobileAppBind,
   enableMobileAppBind,
@@ -11,7 +11,7 @@ import {
   updateDingTalkBindingAgent,
   updateMobileBindingAgent,
   upsertDingTalkHubBind,
-} from '../../channels/binding-service';
+} from './binding-service';
 import {
   hubBindStatus,
   hubClaimBind,
@@ -20,11 +20,11 @@ import {
   hubPollBind,
   hubRegisterDesktop,
   hubUnbindRemote,
-} from '../../channels/hub-api';
-import { getSclawHubClient } from '../../channels/hub-client';
-import { resolveSclawHubBaseUrl } from '../../channels/hub-config';
-import { setChannelGatewayManager } from '../../channels/ingress';
-import { wireSclawInboundListener } from '../../channels/startup';
+} from './hub-api';
+import { getSclawHubClient } from './hub-client';
+import { resolveSclawHubBaseUrl } from './hub-config';
+import { setChannelGatewayManager } from './ingress';
+import { wireSclawInboundListener } from './startup';
 import { logger } from '../../utils/logger';
 
 /**

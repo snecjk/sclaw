@@ -15,7 +15,7 @@ vi.mock('@electron/api/route-utils', () => ({
   sendJson: mocks.sendJson,
 }));
 
-vi.mock('@electron/channels/binding-service', () => ({
+vi.mock('@electron/message-channel/hub/binding-service', () => ({
   disableMobileAppBind: mocks.disableMobileAppBind,
   enableMobileAppBind: vi.fn(),
   getChannelConnection: mocks.getChannelConnection,
@@ -27,7 +27,7 @@ vi.mock('@electron/channels/binding-service', () => ({
   upsertDingTalkHubBind: vi.fn(),
 }));
 
-vi.mock('@electron/channels/hub-api', () => ({
+vi.mock('@electron/message-channel/hub/hub-api', () => ({
   hubBindStatus: vi.fn(),
   hubClaimBind: vi.fn(),
   hubCreateBind: vi.fn(),
@@ -37,19 +37,19 @@ vi.mock('@electron/channels/hub-api', () => ({
   hubUnbindRemote: mocks.hubUnbindRemote,
 }));
 
-vi.mock('@electron/channels/hub-client', () => ({
+vi.mock('@electron/message-channel/hub/hub-client', () => ({
   getSclawHubClient: () => ({
     disconnect: mocks.disconnect,
     getStatus: () => ({ connected: true }),
   }),
 }));
 
-vi.mock('@electron/channels/hub-config', () => ({
+vi.mock('@electron/message-channel/hub/hub-config', () => ({
   resolveSclawHubBaseUrl: () => 'https://hub.example.test',
 }));
 
-vi.mock('@electron/channels/ingress', () => ({ setChannelGatewayManager: vi.fn() }));
-vi.mock('@electron/channels/startup', () => ({ wireSclawInboundListener: vi.fn() }));
+vi.mock('@electron/message-channel/hub/ingress', () => ({ setChannelGatewayManager: vi.fn() }));
+vi.mock('@electron/message-channel/hub/startup', () => ({ wireSclawInboundListener: vi.fn() }));
 vi.mock('@electron/utils/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
@@ -64,7 +64,7 @@ describe('channel hub independent bindings', () => {
     mocks.hubDisableChannel.mockImplementation(async () => { order.push('remote'); });
     mocks.disableMobileAppBind.mockImplementation(async () => { order.push('local'); });
     mocks.getChannelConnection.mockResolvedValue({ bindStatus: 'bound' });
-    const { handleChannelHubRoutes } = await import('@electron/api/routes/channel-hub');
+    const { handleChannelHubRoutes } = await import('@electron/message-channel/hub/routes');
 
     const handled = await handleChannelHubRoutes(
       { method: 'POST' } as never,
@@ -82,7 +82,7 @@ describe('channel hub independent bindings', () => {
 
   it('disables dingtalk only and keeps the shared WS for bound mobile', async () => {
     mocks.getChannelConnection.mockResolvedValue({ bindStatus: 'bound' });
-    const { handleChannelHubRoutes } = await import('@electron/api/routes/channel-hub');
+    const { handleChannelHubRoutes } = await import('@electron/message-channel/hub/routes');
 
     await handleChannelHubRoutes(
       { method: 'POST' } as never,
@@ -98,7 +98,7 @@ describe('channel hub independent bindings', () => {
 
   it('does not mutate local mobile state when the Hub disable fails', async () => {
     mocks.hubDisableChannel.mockRejectedValue(new Error('hub unavailable'));
-    const { handleChannelHubRoutes } = await import('@electron/api/routes/channel-hub');
+    const { handleChannelHubRoutes } = await import('@electron/message-channel/hub/routes');
 
     await handleChannelHubRoutes(
       { method: 'POST' } as never,

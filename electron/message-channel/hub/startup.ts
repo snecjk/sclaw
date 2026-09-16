@@ -1,5 +1,5 @@
-import type { GatewayManager } from '../gateway/manager';
-import { logger } from '../utils/logger';
+import type { GatewayManager } from '../../gateway/manager';
+import { logger } from '../../utils/logger';
 import {
   getChannelConnection,
   getLocalDeviceId,
@@ -76,7 +76,7 @@ export function wireSclawInboundListener(): void {
     handleSclawInbound(msg);
   });
   client.on('historyRpc', (msg) => {
-    void import('./history-facade').then(({ handleHistoryRpc }) => {
+    void import('../mobile/history-facade').then(({ handleHistoryRpc }) => {
       void handleHistoryRpc(msg as {
         type: string;
         requestId?: string;
@@ -115,7 +115,7 @@ export async function ensureSclawHubConnected(
     wireSclawBindReplacedListener();
 
     // Phase 1: start Weixin Host Worker when credentials exist (independent of Hub).
-    void import('../message-channel/weixin/service').then(({ getWeixinChannelService }) => {
+    void import('../weixin/service').then(({ getWeixinChannelService }) => {
       const svc = getWeixinChannelService();
       if (gatewayManager) svc.setGatewayManager(gatewayManager);
       return svc.start(gatewayManager ?? null);

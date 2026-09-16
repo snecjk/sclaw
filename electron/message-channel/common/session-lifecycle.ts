@@ -1,4 +1,4 @@
-import { getBaseAgentIdFromProjectAgentId } from '../../shared/project-agent';
+import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
 import { buildChannelSessionKey, type PlatformChannelType } from './session-key';
 
 const DEFAULT_CHANNEL_SESSION_IDLE_HOURS = 24;

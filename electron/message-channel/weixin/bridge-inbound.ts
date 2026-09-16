@@ -6,12 +6,12 @@ import type { GatewayManager } from '../../gateway/manager';
 import {
   ensureChannelSessionTitleFromPrompt,
   getChannelGatewayManager,
-} from '../../channels/ingress';
+} from '../hub/ingress';
 import {
   createOrGetSession,
   sendViaFacade,
-} from '../../channels/session-facade';
-import { isDingTalkNewSessionCommand } from '../../channels/session-lifecycle';
+} from '../common/session-facade';
+import { isDingTalkNewSessionCommand } from '../common/session-lifecycle';
 import { logger } from '../../utils/logger';
 import { getWeixinBinding } from './binding';
 import { attachWeixinOutbound } from './bridge-outbound';

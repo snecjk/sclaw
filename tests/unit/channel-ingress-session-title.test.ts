@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveChannelSessionTitle,
   isBlankOrPlaceholderChannelTitle,
-} from '../../electron/channels/channel-session-title';
+} from '../../electron/message-channel/common/channel-session-title';
 
 describe('channel session title helpers', () => {
   it('trims and collapses whitespace', () => {

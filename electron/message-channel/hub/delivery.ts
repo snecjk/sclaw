@@ -1,11 +1,11 @@
-import type { GatewayManager } from '../gateway/manager';
-import { logger } from '../utils/logger';
+import type { GatewayManager } from '../../gateway/manager';
+import { logger } from '../../utils/logger';
 import { hubReplyStream } from './hub-api';
 import { getSclawHubClient } from './hub-client';
 import {
   resolveStreamContentKind,
   type StreamContentKind,
-} from './stream-content-kind';
+} from '../common/stream-content-kind';
 
 const STATUS_MAX_CHARS = 3500;
 const MIN_PUSH_INTERVAL_MS = 450;

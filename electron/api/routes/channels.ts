@@ -42,9 +42,9 @@ import {
 import { whatsAppLoginManager } from '../../utils/whatsapp-login';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { getChannelConnection } from '../../channels/binding-service';
-import { getSclawHubClient } from '../../channels/hub-client';
-import { ensureSclawHubConnected } from '../../channels/startup';
+import { getChannelConnection } from '../../message-channel/hub/binding-service';
+import { getSclawHubClient } from '../../message-channel/hub/hub-client';
+import { ensureSclawHubConnected } from '../../message-channel/hub/startup';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
 const activeQrLogins = new Map<string, string>();

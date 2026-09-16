@@ -6,7 +6,7 @@ import {
   resolveDingTalkSessionKey,
   shouldForceNewDingTalkSessionForEngine,
   shouldStartNewDingTalkSession,
-} from '../../electron/channels/session-lifecycle';
+} from '../../electron/message-channel/common/session-lifecycle';
 
 describe('DingTalk session lifecycle', () => {
   it('builds a unique timestamped session key', () => {

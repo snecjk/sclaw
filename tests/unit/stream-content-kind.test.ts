@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveStreamContentKind } from '../../electron/channels/stream-content-kind';
+import { resolveStreamContentKind } from '../../electron/message-channel/common/stream-content-kind';
 
 describe('resolveStreamContentKind', () => {
   it('marks finalize as answer', () => {

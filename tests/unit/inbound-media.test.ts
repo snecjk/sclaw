@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeInboundText, resolveMimeType } from '../../electron/channels/inbound-media';
+import { composeInboundText, resolveMimeType } from '../../electron/message-channel/hub/inbound-media';
 
 describe('inbound-media', () => {
   it('composes text + richText + audio recognition', () => {

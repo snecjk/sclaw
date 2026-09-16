@@ -44,7 +44,7 @@ import { handleSessionCatalogRoutes } from './routes/session-catalog';
 import { handleTaskGroupRoutes } from './routes/task-groups';
 import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleDingTalkRoutes } from './routes/dingtalk';
-import { handleChannelHubRoutes } from './routes/channel-hub';
+import { handleChannelHubRoutes } from '../message-channel/hub/routes';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';

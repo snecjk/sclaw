@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
-import { getCatalogSessionRepository } from '../db/repositories/catalog-session-repository';
-import type { GatewayManager } from '../gateway/manager';
-import { upsertCatalogSession } from '../services/session-catalog-service';
-import { logger } from '../utils/logger';
+import { DEFAULT_WORKSPACE_ID } from '../../db/models/domain/session-catalog';
+import { getCatalogSessionRepository } from '../../db/repositories/catalog-session-repository';
+import type { GatewayManager } from '../../gateway/manager';
+import { upsertCatalogSession } from '../../services/session-catalog-service';
+import { logger } from '../../utils/logger';
 import {
   deriveChannelSessionTitle,
   isBlankOrPlaceholderChannelTitle,
-} from './channel-session-title';
+} from '../common/channel-session-title';
 import { getSclawHubClient, type SclawInboundEnvelope } from './hub-client';
 import { attachStreamingDelivery } from './delivery';
 import {
@@ -18,9 +18,9 @@ import {
   createOrGetSession,
   resolveChannelBinding,
   sendViaFacade,
-} from './session-facade';
-import { isDingTalkNewSessionCommand } from './session-lifecycle';
-import type { PlatformChannelType } from './session-key';
+} from '../common/session-facade';
+import { isDingTalkNewSessionCommand } from '../common/session-lifecycle';
+import type { PlatformChannelType } from '../common/session-key';
 
 let gatewayManagerRef: GatewayManager | null = null;
 const peerQueues = new Map<string, Promise<void>>();
