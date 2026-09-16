@@ -1,5 +1,5 @@
 /**
- * WeChat Host API: QR login start/cancel under /api/channels/wechat/*.
+ * WeChat Host API: QR login start/cancel and engine/agent binding under /api/channels/wechat/*.
  */
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
@@ -106,7 +106,6 @@ async function awaitWeChatQrLogin(
       token: result.botToken,
       baseUrl: result.baseUrl,
       userId: result.userId,
-      agentId: 'main',
     });
 
     if (!isActiveQrLogin(loginKey, sessionKey)) {
@@ -159,6 +158,25 @@ export async function handleWeixinChannelRoutes(
       void awaitWeChatQrLogin(ctx, startResult.sessionKey, loginKey);
       void getWeixinChannelService().ensureReady().catch(() => {});
       sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/channels/wechat/binding/agent' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ engineType?: string; agentId?: string }>(req);
+      if (!body.engineType || !body.agentId) {
+        sendJson(res, 400, { success: false, error: 'engineType and agentId required' });
+        return true;
+      }
+      const { updateWeixinBindingAgent } = await import('./binding');
+      const binding = await updateWeixinBindingAgent({
+        engineType: body.engineType,
+        agentId: body.agentId,
+      });
+      sendJson(res, 200, { success: true, binding });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

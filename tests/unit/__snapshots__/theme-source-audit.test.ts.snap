@@ -1039,666 +1039,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::der:text-[#C9CDD4] focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:placeholder:text-[v::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:placeholder:text-[var(--sto-text-t::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:placeholder:text-[var(--sto-text-tertiary)]', ); const l::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::ary)]', ); const labelClasses = 'text-[13px] font-medium text-[#1D2129] dark:text-foreground'; const outlineButtonClasses = cn( 'h-8 rounded-md border-[::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::t-[13px] font-medium text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::m text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); const p::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::dow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); const primaryButtonClasses =::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass = cn( 'rounded-[8px] bor::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass = cn( 'rounded-[8px] border border-[#E5::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::dClass = cn( 'rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function normalizeConfigValues(channelType::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::nded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function normalizeConfigValues(channelType: ChannelType |::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::et-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 dark:bg-black/60" onMouseDown={(event) => { if (event.target === e::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::0 items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="min-w-0"> <h2 className="::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {selectedType ? isExistingCon::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {selectedType && isExistingConfig::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:hover:text-[v::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::'hover:border-[#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg-transparent dark:hover:bg-white/[0.04]',::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg-transparent dark:hover:bg-white/[0.04]', isConfigu::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::isConfigured && 'border-green-500/30 bg-green-500/5 dark:bg-green-500/10', )} >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <ChannelLogo type={type}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::er rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <ChannelLogo type={type} />::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {channelMeta.name}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::m border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(channelMeta.description.re::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="mt-2 text-[12px] font-medium text-[#86909C]/80 dark:text-[var(--sto-text-tertiary)]"> {channelMeta.connec::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::ms-center justify-center rounded-[8px] border border-[#E5E6EB] bg-white dark:bg-background"> <QrCode className="h-28 w-28 text-[#C9C::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::round"> <QrCode className="h-28 w-28 text-[#C9CDD4] dark:text-[var(--sto-icon-tertiary)]" /> </div>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::div> <p className="text-center text-[13px] text-[#86909C] dark:text-muted-foreground"> {t('dialog.scanQR', { name: meta?.nam::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::> <Loader2 className="h-5 w-5 animate-spin text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" /> <span className="ml-2 text-::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::ry)]" /> <span className="ml-2 text-[13px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('dialog.loadingConfig')}</span>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::er-[hsl(var(--link)/0.2)] bg-link-muted px-4 py-3 text-[13px] text-link dark:text-[hsl(var(--link))]"> <CheckCircle className="h-4 w-4 s::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::}</p> <p className="mt-1 text-[12px] text-[#86909C] dark:text-muted-foreground"> {meta ? t(meta.description.repl::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::ist-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {meta?.instructions.map((instructio::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::/> <p className="text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('account.customIdHint')}</p>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::? 'border-green-500/20 bg-green-500/10 text-green-700 dark:text-green-400' : 'border-destructive/20 bg-destructive::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<div className="mt-1 space-y-0.5 text-green-600 dark:text-green-400"> {validationResult.warnings.map((in::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::h > 0 && ( <div className="mt-2 text-yellow-600 dark:text-yellow-500"> <p className="mb-1 text-xs font-m::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::div> )} <Separator className="bg-[#E5E6EB] dark:bg-border" /> <div className="flex flex-col gap-3 pt-1 sm:fl::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::hite text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-tertiary)] dark:hov::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::g-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:hover:text-[v::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::n && ( <p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(field.description)} </p> )::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::vVar && ( <p className="font-mono text-[12px] text-[#86909C]/70 dark:text-[var(--sto-text-tertiary)]"> {t('dialog.envVar', { var: field.::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::coolDarkShadow::rgba(15,23,42::ounded-[12px]', 'border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass =::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::coolDarkShadow::rgba(15,23,42::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 dark:bg-black/60" onMouseDown={(event) => { if::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::| Promise<void>; } const inputClasses = cn( 'h-10 rounded-md border-[#E5E6EB] bg-white text-[13px] text-[#1D2129] shadow-none', 'placeholder:text-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#1D2129::es = cn( 'h-10 rounded-md border-[#E5E6EB] bg-white text-[13px] text-[#1D2129] shadow-none', 'placeholder:text-[#C9CDD4] focus-visible:ring-2 focus::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#C9CDD4::bg-white text-[13px] text-[#1D2129] shadow-none', 'placeholder:text-[#C9CDD4] focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-borde::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#1D2129::ext-tertiary)]', ); const labelClasses = 'text-[13px] font-medium text-[#1D2129] dark:text-foreground'; const outlineButtonClasses = cn( 'h-8 rounded::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::foreground'; const outlineButtonClasses = cn( 'h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none', '::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transpa::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::px-3 text-[13px] font-medium text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::ax-h-[90vh] flex-col overflow-hidden rounded-[12px]', 'border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-bor::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::rgba(15,23,42,0.12)::ounded-[12px]', 'border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass = cn(::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::bg-card', ); const insetCardClass = cn( 'rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function n::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::const insetCardClass = cn( 'rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function normalizeConfi::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::rgba(15,23,42,0.42)::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 dark:bg-black/60" onMouseDown={(event) => { if (even::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::sName="flex shrink-0 items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="min-w-0">::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#1D2129::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {selectedType ? i::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::</h2> <p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {selectedType && isExisting::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::onClick={onClose} className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tert::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::Close} className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:b::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#1D2129::assName="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:h::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::ive flex items-start gap-3 overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-4 text-left transition-colors', 'hove::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#C9CDD4::p-4 text-left transition-colors', 'hover:border-[#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::sition-colors', 'hover:border-[#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg-transparent dark:h::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::0 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40">::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <ChannelLo::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#1D2129::<p className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {channelMeta.name}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#F2F3F5::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foregr::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground"::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(channelMeta.de::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::<p className="mt-2 text-[12px] font-medium text-[#86909C]/80 dark:text-[var(--sto-text-tertiary)]"> {cha::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::" className="h-56 w-56 rounded-[8px] border border-[#E5E6EB] bg-white object-contain" /> ) : (::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::flex h-56 w-56 items-center justify-center rounded-[8px] border border-[#E5E6EB] bg-white dark:bg-background"> <QrCode className="h::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#C9CDD4:::bg-background"> <QrCode className="h-28 w-28 text-[#C9CDD4] dark:text-[var(--sto-icon-tertiary)]" /> </div>::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::</div> <p className="text-center text-[13px] text-[#86909C] dark:text-muted-foreground"> {t('dialog.scanQR', { nam::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::py-10')}> <Loader2 className="h-5 w-5 animate-spin text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" /> <span className::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::on-tertiary)]" /> <span className="ml-2 text-[13px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('dialog.loadingConfig')}</spa::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::hsl(var(--link)/0.2)::<div className="flex items-center gap-2 rounded-[8px] border border-[hsl(var(--link)/0.2)] bg-link-muted px-4 py-3 text-[13px] text-link dark:text-[hsl(var(--lin::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::hsl(var(--link))::(--link)/0.2)] bg-link-muted px-4 py-3 text-[13px] text-link dark:text-[hsl(var(--link))]"> <CheckCircle className="h-4 w-4 shrink-0" />::1",
-    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::Connect')}</p> <p className="mt-1 text-[12px] text-[#86909C] dark:text-muted-foreground"> {meta ? t(meta.desc::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::ssName="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {meta?.instructions.map::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::/> <p className="text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('account.customIdHint')}</p>::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::</div> )} <Separator className="bg-[#E5E6EB] dark:bg-border" /> <div className="flex flex-col gap-3::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::gleSecret} className="h-10 w-10 shrink-0 rounded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::lassName="h-10 w-10 shrink-0 rounded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::unded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#1D2129::6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-terti::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::escription && ( <p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(field.description)}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/ChannelConfigModal.tsx::rawColor::#86909C::{field.envVar && ( <p className="font-mono text-[12px] text-[#86909C]/70 dark:text-[var(--sto-text-tertiary)]"> {t('dialog.envVar'::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]'; const prim::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]'; const primaryButtonClass = 'h-::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::rder border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagati::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::B] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagation()} >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::x items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="flex min-w-0 items-start gap-3">::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img src={dingtalkIcon} alt="" c::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::er rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img src={dingtalkIcon} alt="" className="h-5 w::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {phase === 'done' ? t('hu::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {phase === 'done' ?::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::"> <p className="text-[15px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.dingtalk.bindSuccess')}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {t('hub.dingtalk.bindSuccessHint')}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {alreadyBound ? t('::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.dingtalk.robotNameHint')}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::ems-center gap-3 rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30"> <img src::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::unded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30"> <img src={qrImageUrl(qr::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-center text-[12px] text-[#86909C] dark:text-muted-foreground"> {pollHint} </p>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::-3 rounded-[8px] border border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20"> {busy ? (::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::rder border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20"> {busy ? ( <>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::coolDarkShadow::rgba(15,23,42::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target ==::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::coolDarkShadow::rgba(15,23,42::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) =>::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::Promise<void>; } const outlineButtonClass = 'h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::rgba(15,23,42,0.42)::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target === even::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::tive w-full max-w-[480px] overflow-hidden rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border d::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::rgba(15,23,42,0.12)::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::<div className="flex items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="flex min-w-0::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::0 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img src={dingtalk::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {phase === 'done'::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::/h2> <p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {phase === 'done'::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::" size="icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]"::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::"icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::assName="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={handleDismiss}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::y-center"> <Loader2 className="h-6 w-6 animate-spin text-[#86909C]" /> </div> ) : phase === 'done' ? (::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::xt-center"> <p className="text-[15px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.dingtalk.bindSuccess'::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#4E5969::</p> <p className="text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {t('hub.dingtalk.bindSu::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::<> <p className="text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {alreadyBound::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::</p> <p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.dingtalk.robotNam::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::lassName="flex flex-col items-center gap-3 rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30">::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::x flex-col items-center gap-3 rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30"> <img::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::Name={cn( 'h-56 w-56 rounded-[8px] border border-[#E5E6EB] bg-white p-2', qrExpired && 'opacity-40',::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::/> <p className="text-center text-[12px] text-[#86909C] dark:text-muted-foreground"> {pollHint}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::-center justify-center gap-3 rounded-[8px] border border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20">::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::fy-center gap-3 rounded-[8px] border border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20"> {busy ? (::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::<> <Loader2 className="h-7 w-7 animate-spin text-[#86909C]" /> <p className="text-[12px] text-[#86909C]">{t::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::ext-[#86909C]" /> <p className="text-[12px] text-[#86909C]">{t('hub.dingtalk.waitingScan')}</p> </>::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/DingTalkHubBindModal.tsx::rawColor::#86909C::<> <QrCode className="h-7 w-7 text-[#86909C]" /> <Button className={primaryButtonClass} onCli::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:border-::rder border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagati::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:bg-::B] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagation()} >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.title', {::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::<p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.modal.subtitle', {::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:bg-::pb-5"> <div className="rounded-[10px] bg-[#F7F8FA] px-4 py-4 dark:bg-muted/30"> <p className="mb-3 text-[13px] font-medium text-[::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::> <p className="mb-3 text-[13px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.howToConnect', { default::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::ist-decimal space-y-2.5 pl-4 text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {steps.map((step) => (::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:border-::<div className="rounded-[8px] border border-[#E5E6EB] bg-white p-2 dark:border-border"> <img src={mobileAppQr}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::ify-end gap-2"> <span className="text-[13px] text-[#4E5969] dark:text-muted-foreground"> {t('hub.mobile.modal.enableConnect', {::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::coolDarkShadow::rgba(15,23,42::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target ==::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::coolDarkShadow::rgba(15,23,42::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) =>::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::rgba(15,23,42,0.42)::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target === even::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#E5E6EB::tive w-full max-w-[560px] overflow-hidden rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border d::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::rgba(15,23,42,0.12)::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#1D2129::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.title', {::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#86909C::</h2> <p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.modal.subtit::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#86909C::" size="icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]"::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#F7F8FA::"icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#1D2129::assName="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={onClose}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#F7F8FA::div className="px-5 pb-5"> <div className="rounded-[10px] bg-[#F7F8FA] px-4 py-4 dark:bg-muted/30"> <p className="mb-3 text-[13px::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#1D2129::muted/30"> <p className="mb-3 text-[13px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.howToConnect::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#4E5969::flex-1 list-decimal space-y-2.5 pl-4 text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {steps.map((step) => (::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#E5E6EB::sm:mx-0"> <div className="rounded-[8px] border border-[#E5E6EB] bg-white p-2 dark:border-border"> <img::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/components/channels/MobileAppConfigModal.tsx::rawColor::#4E5969::nter justify-end gap-2"> <span className="text-[13px] text-[#4E5969] dark:text-muted-foreground"> {t('hub.mobile.modal.enable::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
     "key": "src/components/chat/artifact-product-card.tsx::rawColor::#E8EAEF::default: return null; } } /** 产物卡外框（MCP：rounded-xl + border #E8EAEF + bg-card） */ export const artifactProductCardShellClass = 'flex w-fu::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
@@ -6703,40 +6043,700 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-:::bg-[#F7F8FA]', 'focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::pageDarkUtility::dark:text-::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {meta.name} </h3>::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); const::1",
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300" >::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); const inlineSelectMenuClass::1",
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::pageDarkUtility::dark:text-::border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300" > {t('recommendedBadge', {::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::der-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除成组时用 gap-0.5 */ const cha::1",
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" >::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::ite p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除成组时用 gap-0.5 */ const channelIconBtnClas::1",
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::pageDarkUtility::dark:text-::m border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" > {t('pluginBadge')}::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:text-muted-foreground dark:hover:bg-white/[0.08] dark:hover:text-foreground',::1",
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::pageDarkUtility::dark:text-::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(meta.description.replace('channels:'::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::C] shadow-none', 'hover:bg-destructive/10 hover:text-destructive', 'dark:text-muted-foreground', ); function ChannelInlineSelect({ value, options::1",
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::rawColor::#1D2129::> <h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {meta.name} </h3>::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::rawColor::#FFF7E8::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::rawColor::#FF7D00::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::rawColor::#F2F3F5::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foregr::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::rawColor::#86909C::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/AvailableChannelRow.tsx::rawColor::#86909C::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(meta.description.replace::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::der:text-[#C9CDD4] focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:placeholder:text-[v::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focus:bg-white/[0.06]', isSelected &&::1",
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:placeholder:text-[var(--sto-text-t::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::k:focus:bg-white/[0.06]', isSelected && 'bg-[#F7F8FA] dark:bg-white/[0.06]', )} onSelect={() => onChan::1",
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:placeholder:text-[var(--sto-text-tertiary)]', ); const l::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::ary)]', ); const labelClasses = 'text-[13px] font-medium text-[#1D2129] dark:text-foreground'; const outlineButtonClasses = cn( 'h-8 rounded-md border-[::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::t-[13px] font-medium text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::m text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); const p::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::dow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); const primaryButtonClasses =::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass = cn( 'rounded-[8px] bor::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass = cn( 'rounded-[8px] border border-[#E5::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::dClass = cn( 'rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function normalizeConfigValues(channelType::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::nded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function normalizeConfigValues(channelType: ChannelType |::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::et-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 dark:bg-black/60" onMouseDown={(event) => { if (event.target === e::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::0 items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="min-w-0"> <h2 className="::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {selectedType ? isExistingCon::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {selectedType && isExistingConfig::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:hover:text-[v::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::'hover:border-[#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg-transparent dark:hover:bg-white/[0.04]',::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg-transparent dark:hover:bg-white/[0.04]', isConfigu::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::isConfigured && 'border-green-500/30 bg-green-500/5 dark:bg-green-500/10', )} >::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <ChannelLogo type={type}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::er rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <ChannelLogo type={type} />::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {channelMeta.name}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" >::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::m border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" >::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(channelMeta.description.re::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<p className="mt-2 text-[12px] font-medium text-[#86909C]/80 dark:text-[var(--sto-text-tertiary)]"> {channelMeta.connec::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::ms-center justify-center rounded-[8px] border border-[#E5E6EB] bg-white dark:bg-background"> <QrCode className="h-28 w-28 text-[#C9C::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::round"> <QrCode className="h-28 w-28 text-[#C9CDD4] dark:text-[var(--sto-icon-tertiary)]" /> </div>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::div> <p className="text-center text-[13px] text-[#86909C] dark:text-muted-foreground"> {t('dialog.scanQR', { name: meta?.nam::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::> <Loader2 className="h-5 w-5 animate-spin text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" /> <span className="ml-2 text-::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::ry)]" /> <span className="ml-2 text-[13px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('dialog.loadingConfig')}</span>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::er-[hsl(var(--link)/0.2)] bg-link-muted px-4 py-3 text-[13px] text-link dark:text-[hsl(var(--link))]"> <CheckCircle className="h-4 w-4 s::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::}</p> <p className="mt-1 text-[12px] text-[#86909C] dark:text-muted-foreground"> {meta ? t(meta.description.repl::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::ist-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {meta?.instructions.map((instructio::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::/> <p className="text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('account.customIdHint')}</p>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::? 'border-green-500/20 bg-green-500/10 text-green-700 dark:text-green-400' : 'border-destructive/20 bg-destructive::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::<div className="mt-1 space-y-0.5 text-green-600 dark:text-green-400"> {validationResult.warnings.map((in::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::h > 0 && ( <div className="mt-2 text-yellow-600 dark:text-yellow-500"> <p className="mb-1 text-xs font-m::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::div> )} <Separator className="bg-[#E5E6EB] dark:bg-border" /> <div className="flex flex-col gap-3 pt-1 sm:fl::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:border-::hite text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-tertiary)] dark:hov::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:bg-::shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::g-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:hover:text-[v::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::n && ( <p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(field.description)} </p> )::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::pageDarkUtility::dark:text-::vVar && ( <p className="font-mono text-[12px] text-[#86909C]/70 dark:text-[var(--sto-text-tertiary)]"> {t('dialog.envVar', { var: field.::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::coolDarkShadow::rgba(15,23,42::ounded-[12px]', 'border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass =::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::coolDarkShadow::rgba(15,23,42::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 dark:bg-black/60" onMouseDown={(event) => { if::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::| Promise<void>; } const inputClasses = cn( 'h-10 rounded-md border-[#E5E6EB] bg-white text-[13px] text-[#1D2129] shadow-none', 'placeholder:text-::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#1D2129::es = cn( 'h-10 rounded-md border-[#E5E6EB] bg-white text-[13px] text-[#1D2129] shadow-none', 'placeholder:text-[#C9CDD4] focus-visible:ring-2 focus::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#C9CDD4::bg-white text-[13px] text-[#1D2129] shadow-none', 'placeholder:text-[#C9CDD4] focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-borde::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#1D2129::ext-tertiary)]', ); const labelClasses = 'text-[13px] font-medium text-[#1D2129] dark:text-foreground'; const outlineButtonClasses = cn( 'h-8 rounded::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::foreground'; const outlineButtonClasses = cn( 'h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none', '::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transpa::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::px-3 text-[13px] font-medium text-[#1D2129] shadow-none', 'hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::ax-h-[90vh] flex-col overflow-hidden rounded-[12px]', 'border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-bor::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::rgba(15,23,42,0.12)::ounded-[12px]', 'border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); const insetCardClass = cn(::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::bg-card', ); const insetCardClass = cn( 'rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function n::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::const insetCardClass = cn( 'rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA]', 'dark:border-border dark:bg-muted/30', ); function normalizeConfi::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::rgba(15,23,42,0.42)::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4 dark:bg-black/60" onMouseDown={(event) => { if (even::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::sName="flex shrink-0 items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="min-w-0">::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#1D2129::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {selectedType ? i::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::</h2> <p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {selectedType && isExisting::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::onClick={onClose} className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tert::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::Close} className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:b::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#1D2129::assName="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:text-[var(--sto-icon-tertiary)] dark:hover:bg-white/[0.04] dark:h::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::ive flex items-start gap-3 overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-4 text-left transition-colors', 'hove::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#C9CDD4::p-4 text-left transition-colors', 'hover:border-[#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::sition-colors', 'hover:border-[#C9CDD4] hover:bg-[#F7F8FA]', 'dark:border-border dark:bg-transparent dark:h::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::0 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40">::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <ChannelLo::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#1D2129::<p className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {channelMeta.name}::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#F2F3F5::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foregr::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(channelMeta.de::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::<p className="mt-2 text-[12px] font-medium text-[#86909C]/80 dark:text-[var(--sto-text-tertiary)]"> {cha::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::" className="h-56 w-56 rounded-[8px] border border-[#E5E6EB] bg-white object-contain" /> ) : (::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::flex h-56 w-56 items-center justify-center rounded-[8px] border border-[#E5E6EB] bg-white dark:bg-background"> <QrCode className="h::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#C9CDD4:::bg-background"> <QrCode className="h-28 w-28 text-[#C9CDD4] dark:text-[var(--sto-icon-tertiary)]" /> </div>::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::</div> <p className="text-center text-[13px] text-[#86909C] dark:text-muted-foreground"> {t('dialog.scanQR', { nam::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::py-10')}> <Loader2 className="h-5 w-5 animate-spin text-[#86909C] dark:text-[var(--sto-icon-tertiary)]" /> <span className::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::on-tertiary)]" /> <span className="ml-2 text-[13px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('dialog.loadingConfig')}</spa::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::hsl(var(--link)/0.2)::<div className="flex items-center gap-2 rounded-[8px] border border-[hsl(var(--link)/0.2)] bg-link-muted px-4 py-3 text-[13px] text-link dark:text-[hsl(var(--lin::1",
+    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::hsl(var(--link))::(--link)/0.2)] bg-link-muted px-4 py-3 text-[13px] text-link dark:text-[hsl(var(--link))]"> <CheckCircle className="h-4 w-4 shrink-0" />::1",
+    "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::Connect')}</p> <p className="mt-1 text-[12px] text-[#86909C] dark:text-muted-foreground"> {meta ? t(meta.desc::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::ssName="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {meta?.instructions.map::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::/> <p className="text-[12px] text-[#86909C] dark:text-[var(--sto-text-tertiary)]">{t('account.customIdHint')}</p>::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::</div> )} <Separator className="bg-[#E5E6EB] dark:bg-border" /> <div className="flex flex-col gap-3::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#E5E6EB::gleSecret} className="h-10 w-10 shrink-0 rounded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::lassName="h-10 w-10 shrink-0 rounded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#F7F8FA::unded-md border-[#E5E6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#1D2129::6EB] bg-white text-[#86909C] shadow-none hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:border-border dark:bg-transparent dark:text-[var(--sto-icon-terti::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::escription && ( <p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(field.description)}::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelConfigModal.tsx::rawColor::#86909C::{field.envVar && ( <p className="font-mono text-[12px] text-[#86909C]/70 dark:text-[var(--sto-text-tertiary)]"> {t('dialog.envVar'::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelInlineSelect.tsx::pageDarkUtility::dark:text-::-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focus:bg-white/[0.06]', isSelected &&::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelInlineSelect.tsx::pageDarkUtility::dark:bg-::k:focus:bg-white/[0.06]', isSelected && 'bg-[#F7F8FA] dark:bg-white/[0.06]', )} onSelect={() => onChan::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#86909C::—'}</span> <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden strokeWidth={2} /> </button> </DropdownMenu::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#1D2129::center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focu::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#F7F8FA::px-2.5 py-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focus:bg-white/[0.06]', is::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#F7F8FA::round dark:focus:bg-white/[0.06]', isSelected && 'bg-[#F7F8FA] dark:bg-white/[0.06]', )} onSelect={()::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelLogo.tsx::pageDarkUtility::dark:border-::? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ tinted::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelLogo.tsx::pageDarkUtility::dark:bg-::nsparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ tinted ? {::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelLogo.tsx::rawColor::#86909C::= CHANNEL_ICON_RAW[type]; const brand = CHANNEL_BRAND_COLOR[type] ?? '#86909C'; const label = CHANNEL_NAMES[type] || type; const fill = active ?::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelLogo.tsx::rawColor::#C9CDD4::t label = CHANNEL_NAMES[type] || type; const fill = active ? brand : '#C9CDD4'; if (!raw) { return ( <span className={cn('text-[::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelLogo.tsx::rawColor::#E5E6EB::', tinted ? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} styl::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ChannelLogo.tsx::rawColor::#F7F8FA::nted ? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ t::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::pageDarkUtility::dark:text-::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {channelTitle(group.channelType)}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300" >::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::pageDarkUtility::dark:text-::border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300" > {t('recommendedBadge', {::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::pageDarkUtility::dark:text-::v> <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {channelSubtitle} </p>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::rawColor::#1D2129::> <h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {channelTitle(group.channelType::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::rawColor::#FFF7E8::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::rawColor::#FF7D00::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/ConfiguredChannelRow.tsx::rawColor::#86909C::</div> <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {channelSubtitle}::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]'; const prim::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]'; const primaryButtonClass = 'h-::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::rder border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagati::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::B] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagation()} >::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::x items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="flex min-w-0 items-start gap-3">::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img src={dingtalkIcon} alt="" c::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::er rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img src={dingtalkIcon} alt="" className="h-5 w::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {phase === 'done' ? t('hu::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {phase === 'done' ?::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::"> <p className="text-[15px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.dingtalk.bindSuccess')}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {t('hub.dingtalk.bindSuccessHint')}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {alreadyBound ? t('::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.dingtalk.robotNameHint')}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::ems-center gap-3 rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30"> <img src::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::unded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30"> <img src={qrImageUrl(qr::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:text-::<p className="text-center text-[12px] text-[#86909C] dark:text-muted-foreground"> {pollHint} </p>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:border-::-3 rounded-[8px] border border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20"> {busy ? (::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::pageDarkUtility::dark:bg-::rder border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20"> {busy ? ( <>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::coolDarkShadow::rgba(15,23,42::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target ==::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::coolDarkShadow::rgba(15,23,42::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) =>::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::Promise<void>; } const outlineButtonClass = 'h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::rgba(15,23,42,0.42)::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target === even::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::tive w-full max-w-[480px] overflow-hidden rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border d::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::rgba(15,23,42,0.12)::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::<div className="flex items-start justify-between gap-3 border-b border-[#E5E6EB] px-5 py-4 dark:border-border"> <div className="flex min-w-0::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::0 w-10 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40"> <img src={dingtalk::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {phase === 'done'::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::/h2> <p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {phase === 'done'::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::" size="icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::"icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::assName="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={handleDismiss}::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::y-center"> <Loader2 className="h-6 w-6 animate-spin text-[#86909C]" /> </div> ) : phase === 'done' ? (::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#1D2129::xt-center"> <p className="text-[15px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.dingtalk.bindSuccess'::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#4E5969::</p> <p className="text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {t('hub.dingtalk.bindSu::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::<> <p className="text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {alreadyBound::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::</p> <p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.dingtalk.robotNam::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::lassName="flex flex-col items-center gap-3 rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30">::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::x flex-col items-center gap-3 rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] p-4 dark:border-border dark:bg-muted/30"> <img::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::Name={cn( 'h-56 w-56 rounded-[8px] border border-[#E5E6EB] bg-white p-2', qrExpired && 'opacity-40',::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::/> <p className="text-center text-[12px] text-[#86909C] dark:text-muted-foreground"> {pollHint}::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#E5E6EB::-center justify-center gap-3 rounded-[8px] border border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20">::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#F7F8FA::fy-center gap-3 rounded-[8px] border border-dashed border-[#E5E6EB] bg-[#F7F8FA] p-6 dark:border-border dark:bg-muted/20"> {busy ? (::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::<> <Loader2 className="h-7 w-7 animate-spin text-[#86909C]" /> <p className="text-[12px] text-[#86909C]">{t::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::ext-[#86909C]" /> <p className="text-[12px] text-[#86909C]">{t('hub.dingtalk.waitingScan')}</p> </>::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/DingTalkHubBindModal.tsx::rawColor::#86909C::<> <QrCode className="h-7 w-7 text-[#86909C]" /> <Button className={primaryButtonClass} onCli::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/helpers.ts::rawColor::#C9CDD4::low-500 animate-pulse', error: 'bg-destructive', disconnected: 'bg-[#C9CDD4]', }; export function tintChannelSvg(raw: string, color: string): stri::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
     "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<h1 className="text-[20px] font-bold leading-tight text-[#1D2129] dark:text-foreground"> {t('title')} </h1> <p::1",
@@ -6779,127 +6779,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]';::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]'; return (::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::: 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {t('hub.mobile.title')}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.cardDesc', {::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::( <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400"> {t('hub.mobile.hubOfflineHint')}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold tracking-tight text-[#1D2129] dark:text-foreground"> {t('supportedChannels')} </h2>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {group.channelType ==::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300" >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {channelSubtitle}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::3",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"::2",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::4",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"::3",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"::3",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {meta.name}::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300" >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300" > {t('::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::ext-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::m border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground" >::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(meta.description.replace('::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::5",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"::4",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]" onClick={open::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
@@ -6931,86 +6811,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ active && brand::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::nsparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ active && brand ? {::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::coolDarkShadow::rgba(15,23,42::0 rounded-[8px] border border-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除::1",
-    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#0089FF::const CHANNEL_BRAND_COLOR: Record<ChannelType, string> = { dingtalk: '#0089FF', wechat: '#07C160', }; /** 移动端 App 品牌色（小龙虾橙） */ const MOBILE_APP_BR::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#07C160::OLOR: Record<ChannelType, string> = { dingtalk: '#0089FF', wechat: '#07C160', }; /** 移动端 App 品牌色（小龙虾橙） */ const MOBILE_APP_BRAND_COLOR = '#FF6A00'::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#FF6A00::'#07C160', }; /** 移动端 App 品牌色（小龙虾橙） */ const MOBILE_APP_BRAND_COLOR = '#FF6A00'; const CHANNEL_ICON_RAW: Record<ChannelType, string> = { wechat: we::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::8 w-full items-center justify-between gap-1.5 rounded-md border border-[#E5E6EB] bg-white px-2.5 text-left text-[12px] font-medium text-[#1D2129]', '::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::order-[#E5E6EB] bg-white px-2.5 text-left text-[12px] font-medium text-[#1D2129]', 'shadow-none outline-none transition-colors hover:bg-[#F7F8FA]',::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::ext-[#1D2129]', 'shadow-none outline-none transition-colors hover:bg-[#F7F8FA]', 'focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::const inlineSelectMenuClass = cn( 'z-50 rounded-[8px] border border-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::rgba(15,23,42,0.12)::0 rounded-[8px] border border-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除成组时用 g::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::*/ const channelIconBtnClass = cn( 'h-8 w-8 shrink-0 rounded-md text-[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:tex::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F2F3F5::'h-8 w-8 shrink-0 rounded-md text-[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:text-muted-foreground dark:hover:bg-whi::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::unded-md text-[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:text-muted-foreground dark:hover:bg-white/[0.08] dark:hover:::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::st channelDeleteIconBtnClass = cn( 'h-8 w-8 shrink-0 rounded-md text-[#86909C] shadow-none', 'hover:bg-destructive/10 hover:text-destructive', 'd::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::—'}</span> <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden strokeWidth={2} /> </button> </DropdownMenu::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focu::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::px-2.5 py-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focus:bg-white/[0.06]', is::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::round dark:focus:bg-white/[0.06]', isSelected && 'bg-[#F7F8FA] dark:bg-white/[0.06]', )} onSelect={()::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#C9CDD4::: status === 'error' ? 'bg-destructive' : 'bg-[#C9CDD4]', ); } export function Channels() { const { t } = useTranslation(::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
     "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::"> <h1 className="text-[20px] font-bold leading-tight text-[#1D2129] dark:text-foreground"> {t('title')} </h1>::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
@@ -7035,123 +6835,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::onst outlineBtnClass = 'h-8 shrink-0 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40',::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {t('hub.mobile.title')}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::> <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.ca::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
     "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::<h2 className="text-[16px] font-semibold tracking-tight text-[#1D2129] dark:text-foreground"> {t('supportedChannels')}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {group.ch::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#FFF7E8::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#FF7D00::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::<p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {chan::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::className="h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::className="h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::3",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::3",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::className="h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover::3",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::4",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::4",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {meta.name}::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#FFF7E8::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#FF7D00::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#FFF7E8] text-[#FF7D00] shadow-none dark:bg-orange-500/15 dark:text-orange-300"::2",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F2F3F5::className="rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foregr::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::rounded px-1.5 py-0 text-[10px] font-medium border-0 bg-[#F2F3F5] text-[#86909C] shadow-none dark:bg-white/[0.08] dark:text-muted-foreground"::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::<p className="line-clamp-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t(meta.descripti::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::outline" className="h-8 shrink-0 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::5",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::5",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
@@ -7187,19 +6871,263 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::rawColor::#86909C::= CHANNEL_ICON_RAW[type]; const brand = CHANNEL_BRAND_COLOR[type] ?? '#86909C'; const label = CHANNEL_NAMES[type] || type; const fill = active ?::1",
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::pageDarkUtility::dark:border-::? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ mob::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::pageDarkUtility::dark:bg-::rent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ mobileEnabled::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::pageDarkUtility::dark:text-::<h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {t('hub.mobile.title')} </h3>::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::pageDarkUtility::dark:text-::/h3> <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.cardDesc', {::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::pageDarkUtility::dark:text-::Connected ? ( <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400"> {t('hub.mobile.hubOfflineHint')} <::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::rawColor::#E5E6EB::leEnabled ? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )}::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::rawColor::#C9CDD4::t label = CHANNEL_NAMES[type] || type; const fill = active ? brand : '#C9CDD4'; if (!raw) { return ( <span className={cn('text-[::1",
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::rawColor::#F7F8FA::? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::active && brand ? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} styl::1",
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::rawColor::#1D2129::w-0"> <h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {t('hub.mobile.title')} <::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::rawColor::#F7F8FA::rand ? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ a::1",
+    "key": "src/pages/Channels/MobileAppChannelRow.tsx::rawColor::#86909C::</h3> <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.cardDesc', {::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:border-::rder border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagati::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:bg-::B] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event.stopPropagation()} >::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.title', {::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::<p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.modal.subtitle', {::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:bg-::pb-5"> <div className="rounded-[10px] bg-[#F7F8FA] px-4 py-4 dark:bg-muted/30"> <p className="mb-3 text-[13px] font-medium text-[::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::> <p className="mb-3 text-[13px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.howToConnect', { default::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::ist-decimal space-y-2.5 pl-4 text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {steps.map((step) => (::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:border-::<div className="rounded-[8px] border border-[#E5E6EB] bg-white p-2 dark:border-border"> <img src={mobileAppQr}::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::pageDarkUtility::dark:text-::ify-end gap-2"> <span className="text-[13px] text-[#4E5969] dark:text-muted-foreground"> {t('hub.mobile.modal.enableConnect', {::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::coolDarkShadow::rgba(15,23,42::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target ==::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::coolDarkShadow::rgba(15,23,42::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) =>::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::rgba(15,23,42,0.42)::className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4" onMouseDown={(event) => { if (event.target === even::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#E5E6EB::tive w-full max-w-[560px] overflow-hidden rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border d::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::rgba(15,23,42,0.12)::den rounded-[12px] border border-[#E5E6EB] bg-white shadow-[0_12px_40px_rgba(15,23,42,0.12)] dark:border-border dark:bg-card" onMouseDown={(event) => event::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#1D2129::<h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.title', {::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#86909C::</h2> <p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground"> {t('hub.mobile.modal.subtit::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#86909C::" size="icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]"::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#F7F8FA::"icon" className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#1D2129::assName="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]" onClick={onClose}::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#F7F8FA::div className="px-5 pb-5"> <div className="rounded-[10px] bg-[#F7F8FA] px-4 py-4 dark:bg-muted/30"> <p className="mb-3 text-[13px::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#1D2129::muted/30"> <p className="mb-3 text-[13px] font-medium text-[#1D2129] dark:text-foreground"> {t('hub.mobile.modal.howToConnect::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#4E5969::flex-1 list-decimal space-y-2.5 pl-4 text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground"> {steps.map((step) => (::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#E5E6EB::sm:mx-0"> <div className="rounded-[8px] border border-[#E5E6EB] bg-white p-2 dark:border-border"> <img::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/MobileAppConfigModal.tsx::rawColor::#4E5969::nter justify-end gap-2"> <span className="text-[13px] text-[#4E5969] dark:text-muted-foreground"> {t('hub.mobile.modal.enable::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:border-:::bg-[#F7F8FA]', 'focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:bg-::focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); export::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:text-::focus-visible:ring-ring/30', 'dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]', ); export const inlineSelectMen::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:border-::der-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除成组时用 gap-0.5 */ export co::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:bg-::ite p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除成组时用 gap-0.5 */ export const channelIcon::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:text-::[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:text-muted-foreground dark:hover:bg-white/[0.08] dark:hover:text-foreground',::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:text-::C] shadow-none', 'hover:bg-destructive/10 hover:text-destructive', 'dark:text-muted-foreground', ); export const channelOutlineBtnClass = 'h-8 shri::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:border-::3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]'; export co::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]'; export const channelBindOutline::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:border-::3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.0::2",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:bg-::medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]';::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::pageDarkUtility::dark:text-::] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]';::1",
+    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::coolDarkShadow::rgba(15,23,42::0 rounded-[8px] border border-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除::1",
+    "reason": "Migration debt: cool blue-black shadow must move to a neutral semantic shadow in Task 7.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#0089FF::const CHANNEL_BRAND_COLOR: Record<ChannelType, string> = { dingtalk: '#0089FF', wechat: '#07C160', }; /** 移动端 App 品牌色（小龙虾橙） */ export const MOBILE::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#07C160::OLOR: Record<ChannelType, string> = { dingtalk: '#0089FF', wechat: '#07C160', }; /** 移动端 App 品牌色（小龙虾橙） */ export const MOBILE_APP_BRAND_COLOR = '#::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#FF6A00::0', }; /** 移动端 App 品牌色（小龙虾橙） */ export const MOBILE_APP_BRAND_COLOR = '#FF6A00'; export const inlineSelectTriggerClass = cn( 'flex h-8 w-full items::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#E5E6EB::8 w-full items-center justify-between gap-1.5 rounded-md border border-[#E5E6EB] bg-white px-2.5 text-left text-[12px] font-medium text-[#1D2129]', '::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#1D2129::order-[#E5E6EB] bg-white px-2.5 text-left text-[12px] font-medium text-[#1D2129]', 'shadow-none outline-none transition-colors hover:bg-[#F7F8FA]',::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#F7F8FA::ext-[#1D2129]', 'shadow-none outline-none transition-colors hover:bg-[#F7F8FA]', 'focus-visible:ring-2 focus-visible:ring-ring/30', 'dark:border-::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#E5E6EB::const inlineSelectMenuClass = cn( 'z-50 rounded-[8px] border border-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::rgba(15,23,42,0.12)::0 rounded-[8px] border border-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]', 'dark:border-border dark:bg-card', ); /** 频道行图标按钮：中性悬停底，与删除成组时用 g::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#86909C::rt const channelIconBtnClass = cn( 'h-8 w-8 shrink-0 rounded-md text-[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:tex::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#F2F3F5::'h-8 w-8 shrink-0 rounded-md text-[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:text-muted-foreground dark:hover:bg-whi::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#1D2129::unded-md text-[#86909C] shadow-none', 'hover:bg-[#F2F3F5] hover:text-[#1D2129]', 'dark:text-muted-foreground dark:hover:bg-white/[0.08] dark:hover:::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#86909C::st channelDeleteIconBtnClass = cn( 'h-8 w-8 shrink-0 rounded-md text-[#86909C] shadow-none', 'hover:bg-destructive/10 hover:text-destructive', 'd::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#E5E6EB::xport const channelOutlineBtnClass = 'h-8 shrink-0 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#F7F8FA::white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#E5E6EB::'; export const channelBindOutlineBtnClass = 'h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover::1",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#1D2129::rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent::2",
+    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
+  },
+  {
+    "key": "src/pages/Channels/styles.ts::rawColor::#F7F8FA::white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover::2",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

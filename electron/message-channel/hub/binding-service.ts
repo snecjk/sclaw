@@ -106,6 +106,33 @@ export async function getChannelConnection(
 }
 
 /**
+ * Single-slot channels (e.g. WeChat) store a real provider accountId, not `default`.
+ * Look up by channel_type only: prefer bound, then newest updated_at.
+ * WeChat-only today — mobile uses `getChannelConnection('mobile')` instead.
+ */
+export async function findChannelConnectionByType(
+  channelType: ChannelType,
+): Promise<ChannelConnection | null> {
+  const db = getKyselyDatabase();
+  const dbType = toDbChannelType(channelType);
+  const rows = await db
+    .selectFrom('channel_connections')
+    .selectAll()
+    .where('channel_type', '=', dbType)
+    .execute();
+  if (rows.length === 0) return null;
+
+  const mapped = rows.map((row) => mapRow(row as unknown as Record<string, unknown>));
+  mapped.sort((left, right) => {
+    const boundRank = (row: ChannelConnection) => (row.bindStatus === 'bound' ? 0 : 1);
+    const byBound = boundRank(left) - boundRank(right);
+    if (byBound !== 0) return byBound;
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
+  return mapped[0] ?? null;
+}
+
+/**
  * 后绑覆盖：只更新身份/凭证相关字段；engine/agent 仅在首次为空时写入默认值。
  */
 export async function upsertDingTalkHubBind(input: {

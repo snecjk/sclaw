@@ -55,6 +55,7 @@ export interface ChannelAccountView {
   status: 'connected' | 'connecting' | 'disconnected' | 'error';
   isDefault: boolean;
   agentId?: string;
+  engineType?: string;
 }
 
 export interface ChannelAccountsView {
@@ -182,6 +183,7 @@ export async function mergeWeixinHostChannel(
           status,
           isDefault: true,
           agentId: binding?.agentId || 'main',
+          engineType: binding?.engineType || 'pi',
         },
       ],
     };

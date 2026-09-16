@@ -18,5 +18,6 @@ IM 渠道子系统目录（Host 编排 + 各渠道传输实现）。
 - 钉钉与 Mobile **共用**同一条 Hub WS / refreshToken；传输层在 `hub/`，不要塞进 `dingtalk/`。
 - 微信出站不复用 Hub `delivery`（typing + commit 走 weixin bridge）。
 - Host API：`hub/routes.ts` → `/api/channels/hub/*`；`weixin/routes.ts` → `/api/channels/wechat/*`；`host/list.ts` 供 `electron/api/routes/channels.ts` 列表聚合（均由 `electron/api/server.ts` 注册）。
+- 是否新开对话（空闲 TTL / 换引擎 / 指令）：[`common/session-new-flow.md`](./common/session-new-flow.md)
 - 技术方案：[`docs/微信渠道-Host-Worker技术方案.md`](../../docs/微信渠道-Host-Worker技术方案.md)
 - 迁移记录：[`docs/钉钉Hub与Mobile迁入message-channel计划.md`](../../docs/钉钉Hub与Mobile迁入message-channel计划.md)

@@ -1,6 +1,6 @@
 # Weixin message channel
 
-Host Worker + iLink transport for WeChat ClawBot (Pi-only, single Bot).
+Host Worker + iLink transport for WeChat ClawBot (single Bot; Claude Agent / SAgent switchable).
 
 ## Layout
 

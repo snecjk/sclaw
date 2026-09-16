@@ -4,8 +4,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { getKyselyDatabase } from '../../db/connection';
+import { parseAgentEngineType, type AgentEngineType } from '../../../shared/agent-engine';
 import type { ChannelConnection } from '../hub/binding-service';
-import { getChannelConnection, getLocalDeviceId } from '../hub/binding-service';
+import { findChannelConnectionByType, getLocalDeviceId } from '../hub/binding-service';
 import {
   listIndexedAccountIds,
   loadAccount,
@@ -14,16 +15,27 @@ import {
 import { migrateLegacyCredentials } from './runtime/transport/migrate-credentials';
 import { resolveWeixinStateDir } from './runtime/transport/state-dir';
 
+const DEFAULT_WEIXIN_ENGINE: AgentEngineType = 'pi';
+
 export type WeixinBinding = {
   channelType: 'wechat';
   accountId: string;
   agentId: string;
-  engineType: 'pi';
+  engineType: AgentEngineType;
   enabled: boolean;
 };
 
+export function normalizeWeixinEngineType(value: unknown): AgentEngineType {
+  return parseAgentEngineType(value) ?? DEFAULT_WEIXIN_ENGINE;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** WeChat stores the real bot accountId (not `default`); look up the single slot by type. */
+async function getWeixinConnectionRow(): Promise<ChannelConnection | null> {
+  return findChannelConnectionByType('wechat');
 }
 
 export function ensureWeixinCredentialsMigrated(): void {
@@ -42,7 +54,7 @@ export function getBoundWeixinAccountId(): string | null {
 }
 
 export async function getWeixinBinding(): Promise<WeixinBinding | null> {
-  const conn = await getChannelConnection('wechat');
+  const conn = await getWeixinConnectionRow();
   if (!conn || conn.bindStatus !== 'bound') {
     const primary = resolvePrimaryAccount();
     if (!primary) return null;
@@ -50,7 +62,7 @@ export async function getWeixinBinding(): Promise<WeixinBinding | null> {
       channelType: 'wechat',
       accountId: primary.accountId,
       agentId: 'main',
-      engineType: 'pi',
+      engineType: DEFAULT_WEIXIN_ENGINE,
       enabled: true,
     };
   }
@@ -58,7 +70,7 @@ export async function getWeixinBinding(): Promise<WeixinBinding | null> {
     channelType: 'wechat',
     accountId: conn.accountId,
     agentId: conn.agentId || 'main',
-    engineType: 'pi',
+    engineType: normalizeWeixinEngineType(conn.engineType),
     enabled: conn.enabled,
   };
 }
@@ -70,6 +82,7 @@ export async function getWeixinBinding(): Promise<WeixinBinding | null> {
 export async function upsertWeixinBinding(input: {
   accountId: string;
   agentId?: string;
+  engineType?: AgentEngineType;
   token?: string;
   baseUrl?: string;
   userId?: string;
@@ -103,8 +116,9 @@ export async function upsertWeixinBinding(input: {
   const db = getKyselyDatabase();
   const now = nowIso();
   const deviceId = await getLocalDeviceId();
-  const agentId = (input.agentId || 'main').trim() || 'main';
-  const existing = await getChannelConnection('wechat');
+  const existing = await getWeixinConnectionRow();
+  const agentId = (input.agentId?.trim() || existing?.agentId || 'main').trim() || 'main';
+  const engineType = normalizeWeixinEngineType(input.engineType ?? existing?.engineType);
 
   if (!existing) {
     await db
@@ -123,7 +137,7 @@ export async function upsertWeixinBinding(input: {
         refresh_token: null,
         credential_token: input.token?.trim() ?? null,
         endpoint_base_url: input.baseUrl ?? null,
-        engine_type: 'pi',
+        engine_type: engineType,
         agent_id: agentId,
         extras_json: JSON.stringify({ stateDir: resolveWeixinStateDir() }),
         created_at: now,
@@ -143,7 +157,7 @@ export async function upsertWeixinBinding(input: {
         bound_at: now,
         credential_token: input.token?.trim() ?? existing.credentialToken,
         endpoint_base_url: input.baseUrl ?? existing.endpointBaseUrl,
-        engine_type: 'pi',
+        engine_type: engineType,
         agent_id: agentId,
         enabled: 1,
         updated_at: now,
@@ -157,8 +171,37 @@ export async function upsertWeixinBinding(input: {
   return binding;
 }
 
+export async function updateWeixinBindingAgent(input: {
+  engineType: string;
+  agentId: string;
+}): Promise<WeixinBinding> {
+  const engineType = normalizeWeixinEngineType(input.engineType);
+  const agentId = input.agentId.trim() || 'main';
+  const existing = await getWeixinConnectionRow();
+  if (!existing || existing.bindStatus !== 'bound') {
+    const accountId = getBoundWeixinAccountId();
+    if (!accountId) throw new Error('WeChat channel not bound');
+    return upsertWeixinBinding({ accountId, agentId, engineType });
+  }
+
+  const db = getKyselyDatabase();
+  await db
+    .updateTable('channel_connections')
+    .set({
+      engine_type: engineType,
+      agent_id: agentId,
+      updated_at: nowIso(),
+    })
+    .where('id', '=', existing.id)
+    .execute();
+
+  const binding = await getWeixinBinding();
+  if (!binding) throw new Error('Failed to update WeChat agent binding');
+  return binding;
+}
+
 export async function unbindWeixinBot(): Promise<void> {
-  const existing = await getChannelConnection('wechat');
+  const existing = await getWeixinConnectionRow();
   const accountId = existing?.accountId || getBoundWeixinAccountId();
   if (existing) {
     const db = getKyselyDatabase();
@@ -180,5 +223,5 @@ export async function unbindWeixinBot(): Promise<void> {
 }
 
 export async function getWeixinChannelConnection(): Promise<ChannelConnection | null> {
-  return getChannelConnection('wechat');
+  return getWeixinConnectionRow();
 }

@@ -1,5 +1,5 @@
 /**
- * Wire inbound → session-facade (Pi-only) → Weixin typing/commit outbound.
+ * Wire inbound → session-facade (bound engine) → Weixin typing/commit outbound.
  */
 
 import type { GatewayManager } from '../../gateway/manager';
@@ -124,7 +124,7 @@ function handleWeixinInbound(
         agentId: binding.agentId,
         channelType: 'wechat',
         peerId,
-        engineType: 'pi',
+        engineType: binding.engineType,
         forceNew,
       });
 

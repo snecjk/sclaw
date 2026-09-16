@@ -163,7 +163,7 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
     }
     return {
       agentId: resolveChannelBaseAgentId(binding.agentId),
-      engineType: 'pi',
+      engineType: binding.engineType,
     };
   }
   const conn = await getChannelConnection(channelType);
@@ -172,7 +172,9 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
   }
   return {
     agentId: resolveChannelBaseAgentId(conn.agentId),
-    engineType: conn.engineType === 'openclaw' ? 'openclaw' : 'claude',
+    engineType: conn.engineType === 'openclaw' || conn.engineType === 'pi'
+      ? conn.engineType
+      : 'claude',
   };
 }
 

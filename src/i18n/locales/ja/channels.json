@@ -240,6 +240,10 @@
             "footerQrHint": "ワンクリックでダウンロード、仕事をポケットに",
             "footerConnectHint": "同じアカウントでスマホにログインして接続",
             "footerMoreChannels": "クリックして他のチャンネルを紐づける"
+        },
+        "wechat": {
+            "engineLabel": "エンジン",
+            "noAgentsForEngine": "このエンジンには Agent がありません。先に作成してください"
         }
     },
     "viewDocs": "ドキュメントを表示"

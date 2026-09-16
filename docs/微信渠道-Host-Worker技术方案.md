@@ -1,7 +1,7 @@
 # 微信渠道 Host Worker 技术方案
 
 > 状态：**Phase 3 媒体已落地最小闭环**（Phase 0/1/2 已于 2026-09-15 通过；引用缓存与工具进度气泡仍可选）
-> 范围：下线 OpenClaw 微信/企微/QQ 等 OC 渠道插件路径；在 `electron/message-channel/weixin` 新建基于 iLink Bot 协议的微信渠道 Worker；**微信路径固定 Pi**（`engineType` 字段保留，不实现 claude）。  
+> 范围：下线 OpenClaw 微信/企微/QQ 等 OC 渠道插件路径；在 `electron/message-channel/weixin` 新建基于 iLink Bot 协议的微信渠道 Worker；**微信可选 Claude Agent / SAgent**（`engineType` 写入绑定并走 session-facade）。  
 > 非目标（本方案不包含）：删除整个 OpenClaw 引擎与 Gateway 进程；Claude 迁入 utilityProcess。  
 > 延后：无（钉钉 Hub / Mobile 已迁入 `message-channel/`，见 [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md)）。
 > 渠道产品面清理（第三方 IM + 钉钉 OC 旁路）：见 [`非钉钉微信Mobile以外渠道清理计划.md`](./非钉钉微信Mobile以外渠道清理计划.md)。
@@ -22,7 +22,7 @@
 ### 1.2 目标
 
 1. **删除** OpenClaw 相关渠道插件集成（微信、企微、QQ 等，本方案明确不保留）。
-2. **新建** 微信渠道：`utilityProcess` Worker 承载 iLink 传输层；主进程复用渠道 Session 门面；**产品默认仅绑定 Pi**（UI 锁定，见 §2）。
+2. **新建** 微信渠道：`utilityProcess` Worker 承载 iLink 传输层；主进程复用渠道 Session 门面；**默认绑定 SAgent（Pi）**，UI 可切换 Claude Agent / SAgent。
 3. 传输以 `openclaw-weixin` 为参考改造；**不作为 OC Gateway 插件加载**。理想态：本地等价替换 plugin-sdk 值导入后，运行时可不依赖 `openclaw` peer。**R1 退路例外**：可 npm 依赖传输包，此时须保留 `openclaw` peer（见 §4.3 / §10）。
 4. 架构上 **隔离微信服务端协议变化**，避免协议抖动穿透到引擎与 UI。
 
@@ -31,7 +31,7 @@
 | 标准 | 说明 |
 | --- | --- |
 | 功能 | 扫码登录（**仅 1 个微信 Bot**）、文本收发、typing；基础媒体分阶段 |
-| 引擎 | **UI 固定 Pi**；`engineType` **仅保留字段**，不实现 claude 分支、不保证可用；不做 `STO_WEIXIN_ENGINE_UNLOCK` |
+| 引擎 | **UI 可切换 Claude Agent / SAgent**；`engineType` 写入绑定并走 session-facade；新建默认 `'pi'` |
 | 进程 | 长轮询与 CDN 加解密在 Worker；主进程不跑 iLink 热循环 |
 | 可演进 | 更换/升级 iLink 协议实现时，不改 `session-facade` / Supervisor / 前端契约 |
 | 侧栏可见 | 微信渠道会话写入 SQLite `catalog_sessions`（`session_type=channel`）；正文走与页面对话同链的 runtime/引擎持久化 |
@@ -53,7 +53,7 @@
 | OC 引擎/Gateway | **本期保留** | EventBus / 默认引擎切换另立项；避免双线手术 |
 | HTTP 网关 | 不上 | 桌面单消费者；HTTP 只增延迟 |
 | 上游源码 | vendor 进 `weixin/runtime/vendor/`，自研进 `transport/` | 见 §4.3。**禁止**作 OC Gateway 插件加载。理想态不 npm、不依赖 openclaw peer。**R1 退路**：npm 传输包 + 禁用 plugin，**须同时保留 openclaw peer**（见 §10） |
-| 微信渠道引擎 | **UI 固定 Pi**；绑定模型保留 `engineType` 字段（默认 `'pi'`），**不实现 claude 执行路径** | 避免死分支腐烂；日后若要 Claude 另开专项 |
+| 微信渠道引擎 | **UI 可切换 Claude Agent / SAgent**；绑定模型 `engineType` 默认 `'pi'`，入站按绑定引擎执行 | 与钉钉/Mobile 同一套 session-facade |
 | Channels 入口 | **下线所有非钉钉的旧入口**；微信仅保留新 Host Worker 入口 | 去掉企微/QQ/旧 OC 微信等 |
 | 微信账号数 | **固定仅 1 个 Bot**；已登录则禁止再扫码绑定第二个；不做多账号 monitor / session 维度 | 产品拍板；降低隔离与产品复杂度 |
 | 空闲拆会话 | **复用全局** `channelSessionIdleEnabled` / `channelSessionIdleHours` | 与钉钉同一套，不为微信单开设置项 |
@@ -93,18 +93,17 @@ UI 扫码 → weixin/host-login（Host）→ 凭证写入 ~/.stoclaw/weixin/（l
 │  Main: WeixinChannelService                                           │
 │  · 生命周期（fork/restart/健康检查）                                    │
 │  · Wire → InboundEnvelope 映射                                        │
-│  · 调用 session-facade / sendViaFacade（微信路径固定 engineType=pi）   │
+│  · 调用 session-facade / sendViaFacade（按绑定 engineType）            │
 │  · EventBus → 侧栏流式（Supervisor）；Worker 仅收 typing + commit       │
 │  · Host API：/api/channels/wechat/*                                   │
 └────────────────────────────┬────────────────────────────────────────┘
                              │
-          session-facade → PiRuntimeService（微信）
-          （facade 仍支持 Claude，供钉钉等链路使用；与微信无关）
+          session-facade → Claude / Pi / OpenClaw（按绑定 engineType）
                              │
                     ChatRuntimeSupervisor → UI（既有）
 ```
 
-说明：上图微信路径 **仅 Pi**；侧栏正文 **不经** Worker 流式投递。`session-facade` 保留 claude 能力是给钉钉等其它渠道，勿与「微信仅 Pi」决策混淆。
+说明：上图微信路径按绑定 `engineType`（默认 SAgent/Pi，可切 Claude Agent）走 `session-facade`；侧栏正文 **不经** Worker 流式投递。
 
 钉钉 Hub / Mobile **已迁入** `message-channel/{hub,common,mobile}`（见 [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md)）。微信 Host 桥调用同一套 facade，在 **编排层汇合**；出站仍不复用 Hub `delivery`。
 
@@ -248,7 +247,7 @@ Spike 若只走 **薄传输**（`api` + 自研 monitor/send，不搬 `process-me
 | 入站排队 | 按 `peerId` 串行队列（单 Bot；对齐 `ingress` 的 `enqueuePeer`） |
 | 会话 | `createOrGetSession({ channelType: 'wechat', peerId, engineType, agentId })` |
 | 发送 | `sendViaFacade` / `runMainChatSend`（与页面对话同链） |
-| 引擎 | 写入 `engineType: 'pi'`（字段保留）；**不实现** claude 分支。UI 锁定 Pi |
+| 引擎 | 写入绑定 `engineType`（默认 `'pi'`）；UI 可切换 Claude Agent / SAgent |
 | 回写 | MVP：主进程 `outbound.typing`（~3s）+ 终态 `outbound.commit`；**不**投递全文草稿快照（见 §4.4.1）；**不**走钉钉 `delivery` |
 
 `channelType` 统一使用 UI/产品侧 `wechat`（删除对 OC 内部名 `openclaw-weixin` 的依赖；迁移期可读旧配置并改写）。
@@ -295,7 +294,7 @@ Phase 1 估时：MessagePort 仅 typing/commit/cancel，**不要**按「复刻 d
 
 微信路径要求：
 
-- 入站执行 **仅 Pi**（`engineType: 'pi'`）；流式事件仍进入现有 EventBus（今天的 `GatewayManager`）。
+- 入站执行按绑定 `engineType`（Claude Agent / SAgent）；流式事件仍进入现有 EventBus（今天的 `GatewayManager`）。
 - `WeixinChannelService` 订阅方式与 `delivery.ts` 一致，**不**直接依赖 OC WS RPC。
 - 后续抽 `RuntimeEventBus` 时，微信桥只改注入类型，不改协议。
 
@@ -463,7 +462,7 @@ interface ILinkTransport {
   channelType: 'wechat';
   accountId: string;          // ilink bot id
   agentId: string;            // base agent
-  engineType: 'pi';            // 字段保留；MVP 不实现其它引擎值
+  engineType: AgentEngineType; // 默认 'pi'；UI 可切换 claude / pi / openclaw
   enabled: boolean;
 }
 ```
@@ -521,7 +520,7 @@ interface ILinkTransport {
 | 同一微信账号 + 同一 peer，且未超空闲 TTL | **复用** 最近一条渠道 `sessionKey`（上下文连续） |
 | 超过空闲 TTL（**复用全局** channel 空闲设置，与钉钉相同；默认约 24h） | **新建** sessionKey，上下文清空 |
 | 用户发送「新对话 / 新会话 / 清空上下文 / `/new` / `/reset`」等（现有 `NEW_SESSION_COMMANDS`） | **强制新建** |
-| 渠道绑定改选引擎（claude ↔ pi） | **强制新建**（策略 C）。**MVP 不触发**：微信不实现 claude 分支；本行保留为未来若开放 claude 时的策略 |
+| 渠道绑定改选引擎（claude ↔ pi） | **强制新建**（策略 C） |
 | 不同 peer | **天然隔离**，互不共享上下文 |
 | 试图登录第二个微信 Bot | **拒绝**；提示先解绑当前账号 |
 
@@ -534,7 +533,7 @@ iLink 的 `context_token` 用于 **单次回复对齐微信侧线程**，不等�
 替代 OC `session.dmScope`：
 
 - 默认：`per-peer`（单 Bot 下按对端隔离）  
-- 换引擎：facade 强制新 sessionKey（**当前微信路径不触发**；见 §7.4）  
+- 换引擎：facade 强制新 sessionKey（策略 C）  
 - 与桌面普通 chat：**不自动合并、不自动双向同步**（§7.3）  
 - **禁止**同时登录多个微信 Bot
 
@@ -570,7 +569,7 @@ iLink 的 `context_token` 用于 **单次回复对齐微信侧线程**，不等�
 ### Phase 1 — MVP
 
 - Worker IPC 契约 + WeixinChannelService（`message-channel/weixin/`）。
-- 接 `message-channel/common/session-facade`，**仅 Pi**（`engineType` 字段写死 pi）。
+- 接 `message-channel/common/session-facade`，按绑定 `engineType` 执行（默认 `'pi'`）。
 - **单 Bot（硬约束）**；catalog + Supervisor 双写。已有绑定则 UI/API 拒绝再次 `start` 登录，除非先 unbind。
 - 跨进程回写按 §4.4.1（typing + commit；无全文草稿快照；不复用钉钉 delivery）。
 - 文本 + typing；凭证新目录 + 旧目录迁移。
@@ -671,7 +670,7 @@ iLink 的 `context_token` 用于 **单次回复对齐微信侧线程**，不等�
 
 ### 已决策
 
-1. **引擎**：UI **固定 Pi**；`engineType` **仅保留字段**，不实现 claude、不做 unlock 开关。  
+1. **引擎**：UI **可切换 Claude Agent / SAgent**；`engineType` 写入绑定并走 session-facade，新建默认 `'pi'`。  
 2. **Channels 入口**：下线 **所有非钉钉** 的旧渠道入口；微信只保留新 Host Worker 入口。  
 3. 钉钉目录：本期仅 `message-channel/dingtalk/README.md` 占位；微信上线后再迁。  
 4. 消息进 catalog + 主链 transcript，侧栏可见；与桌面普通会话默认不同步。  

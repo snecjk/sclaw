@@ -241,6 +241,10 @@
             "footerQrHint": "Download once — take your workspace with you",
             "footerConnectHint": "Connect the app with the same account on your phone",
             "footerMoreChannels": "Click to bind more channels"
+        },
+        "wechat": {
+            "engineLabel": "Engine",
+            "noAgentsForEngine": "No Agents for this engine. Create one first."
         }
     },
     "viewDocs": "View Documentation"

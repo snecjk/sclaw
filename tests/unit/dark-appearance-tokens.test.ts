@@ -118,7 +118,7 @@ const quickInputPickerSource = readFileSync(
   'utf8',
 );
 const channelConfigModalSource = readFileSync(
-  resolve(process.cwd(), 'src/components/channels/ChannelConfigModal.tsx'),
+  resolve(process.cwd(), 'src/pages/Channels/ChannelConfigModal.tsx'),
   'utf8',
 );
 const appSource = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');

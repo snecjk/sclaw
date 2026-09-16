@@ -241,6 +241,10 @@
             "footerQrHint": "一键下载，把工作台装进口袋",
             "footerConnectHint": "连接 app，确保同账号登录手机",
             "footerMoreChannels": "点击绑定更多机器人助理(钉钉、微信)"
+        },
+        "wechat": {
+            "engineLabel": "执行引擎",
+            "noAgentsForEngine": "该引擎下暂无 Agent，请先创建后再切换"
         }
     },
     "viewDocs": "查看文档"

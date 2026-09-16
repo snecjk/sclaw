@@ -195,4 +195,60 @@ describe('Channels page status refresh', () => {
 
     expect(screen.queryByLabelText('account.customIdLabel')).not.toBeInTheDocument();
   });
+
+  it('lets WeChat switch between Claude Agent and SAgent', async () => {
+    subscribeHostEventMock.mockImplementation(() => vi.fn());
+    hostApiFetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/channels/accounts') {
+        return {
+          success: true,
+          channels: [
+            {
+              channelType: 'wechat',
+              defaultAccountId: 'wx-bot-im-bot',
+              status: 'connected',
+              accounts: [
+                {
+                  accountId: 'wx-bot-im-bot',
+                  name: 'WeChat ClawBot',
+                  configured: true,
+                  status: 'connected',
+                  isDefault: true,
+                  agentId: 'sagent-1',
+                  engineType: 'pi',
+                },
+              ],
+            },
+          ],
+        };
+      }
+
+      if (path === '/api/agents') {
+        return {
+          success: true,
+          agents: [
+            { id: 'sagent-1', name: 'SAgent One', engineType: 'pi' },
+            { id: 'main', name: 'Main', engineType: 'claude' },
+          ],
+        };
+      }
+
+      if (path.startsWith('/api/channels/config/')) {
+        return { success: true, values: {} };
+      }
+
+      throw new Error(`Unexpected host API path: ${path}`);
+    });
+
+    render(<Channels />);
+
+    await waitFor(() => {
+      expect(screen.getByText('微信')).toBeInTheDocument();
+    });
+
+    const engineSelect = screen.getByLabelText('hub.wechat.engineLabel');
+    expect(engineSelect).not.toBeDisabled();
+    expect(engineSelect).toHaveTextContent('pi');
+    expect(screen.getByLabelText('account.bindAgentLabel')).toHaveTextContent('SAgent One');
+  });
 });
