@@ -446,7 +446,6 @@ export function DesignerNodeTypeConfig({ node, workflow, onChange }: DesignerNod
           <Select value={readConfigString(config, 'target', 'business_system')} onChange={(e) => patch({ target: e.target.value })}>
             {actionType === 'send_message' ? (
               <>
-                <option value="wecom">企业微信</option>
                 <option value="email">邮件通知</option>
                 <option value="business_system">业务系统消息</option>
               </>

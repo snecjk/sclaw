@@ -46,7 +46,7 @@ async function readOpenClawJson(): Promise<Record<string, unknown>> {
   return JSON.parse(content) as Record<string, unknown>;
 }
 
-describe('channel credential normalization and duplicate checks', () => {
+describe('saveChannelConfig', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.resetModules();
@@ -54,53 +54,30 @@ describe('channel credential normalization and duplicate checks', () => {
     await rm(testUserData, { recursive: true, force: true });
   });
 
-  it('assertNoDuplicateCredential detects duplicates with different whitespace', async () => {
+  it('persists string fields without OC-specific transforms or credential dedupe', async () => {
     const { saveChannelConfig } = await import('@electron/utils/channel-config');
 
-    await saveChannelConfig('qqbot', { appId: 'bot-123', appSecret: 'secret-a' }, 'agent-a');
-
+    await saveChannelConfig(
+      'dingtalk',
+      { clientId: 'ding-123', clientSecret: 'secret-a' },
+      'agent-a',
+    );
     await expect(
-      saveChannelConfig('qqbot', { appId: '  bot-123  ', appSecret: 'secret-b' }, 'agent-b'),
-    ).rejects.toThrow('already bound to another agent');
-  });
-
-  it('assertNoDuplicateCredential does NOT detect duplicates with different case', async () => {
-    // Case-sensitive credentials (like tokens) should NOT be normalized to lowercase
-    // to avoid false positives where different tokens become the same after lowercasing
-    const { saveChannelConfig } = await import('@electron/utils/channel-config');
-
-    await saveChannelConfig('qqbot', { appId: 'Bot-ABC', appSecret: 'secret-a' }, 'agent-a');
-
-    // Should NOT throw - different case is considered a different credential
-    await expect(
-      saveChannelConfig('qqbot', { appId: 'bot-abc', appSecret: 'secret-b' }, 'agent-b'),
+      saveChannelConfig(
+        'dingtalk',
+        { clientId: '  ding-123  ', clientSecret: 'secret-b' },
+        'agent-b',
+      ),
     ).resolves.not.toThrow();
-  });
-
-  it('normalizes credential values when saving (trim only, preserve case)', async () => {
-    const { saveChannelConfig } = await import('@electron/utils/channel-config');
-
-    await saveChannelConfig('qqbot', { appId: '  BoT-XyZ  ', appSecret: 'secret' }, 'agent-a');
 
     const config = await readOpenClawJson();
-    const channels = config.channels as Record<string, { accounts: Record<string, { appId?: string }> }>;
-    // Should trim whitespace but preserve original case
-    expect(channels.qqbot.accounts['agent-a'].appId).toBe('BoT-XyZ');
-  });
-
-  it('emits warning logs when credential normalization (trim) occurs', async () => {
-    const { saveChannelConfig } = await import('@electron/utils/channel-config');
-
-    await saveChannelConfig('qqbot', { appId: '  BoT-Log  ', appSecret: 'secret' }, 'agent-a');
-
-    expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'Normalized channel credential value for duplicate check',
-      expect.objectContaining({ channelType: 'qqbot', accountId: 'agent-a', key: 'appId' }),
-    );
-    expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'Normalizing channel credential value before save',
-      expect.objectContaining({ channelType: 'qqbot', accountId: 'agent-a', key: 'appId' }),
-    );
+    const channels = config.channels as Record<string, {
+      clientId?: string;
+      accounts: Record<string, { clientId?: string }>;
+    }>;
+    expect(channels.dingtalk.accounts['agent-a'].clientId).toBe('ding-123');
+    expect(channels.dingtalk.accounts['agent-b'].clientId).toBe('  ding-123  ');
+    expect(config.plugins).toBeUndefined();
   });
 });
 
@@ -109,19 +86,19 @@ describe('parseDoctorValidationOutput', () => {
     const { parseDoctorValidationOutput } = await import('@electron/utils/channel-config');
 
     const out = parseDoctorValidationOutput(
-      'qqbot',
-      'qqbot error: token invalid\nqqbot warning: fallback enabled\n',
+      'dingtalk',
+      'dingtalk error: token invalid\ndingtalk warning: fallback enabled\n',
     );
 
     expect(out.undetermined).toBe(false);
-    expect(out.errors).toEqual(['qqbot error: token invalid']);
-    expect(out.warnings).toEqual(['qqbot warning: fallback enabled']);
+    expect(out.errors).toEqual(['dingtalk error: token invalid']);
+    expect(out.warnings).toEqual(['dingtalk warning: fallback enabled']);
   });
 
   it('falls back with hint when output has no channel signal', async () => {
     const { parseDoctorValidationOutput } = await import('@electron/utils/channel-config');
 
-    const out = parseDoctorValidationOutput('qqbot', 'all good, no channel details');
+    const out = parseDoctorValidationOutput('dingtalk', 'all good, no channel details');
 
     expect(out.undetermined).toBe(true);
     expect(out.errors).toEqual([]);
@@ -131,76 +108,11 @@ describe('parseDoctorValidationOutput', () => {
   it('falls back with hint when output is empty', async () => {
     const { parseDoctorValidationOutput } = await import('@electron/utils/channel-config');
 
-    const out = parseDoctorValidationOutput('qqbot', '   ');
+    const out = parseDoctorValidationOutput('dingtalk', '   ');
 
     expect(out.undetermined).toBe(true);
     expect(out.errors).toEqual([]);
     expect(out.warnings.some((w: string) => w.includes('falling back to local channel config checks'))).toBe(true);
-  });
-});
-
-describe('WeCom plugin configuration', () => {
-  beforeEach(async () => {
-    vi.resetAllMocks();
-    vi.resetModules();
-    await rm(testHome, { recursive: true, force: true });
-    await rm(testUserData, { recursive: true, force: true });
-  });
-
-  it('sets plugins.entries.wecom.enabled when saving wecom config', async () => {
-    const { saveChannelConfig } = await import('@electron/utils/channel-config');
-
-    await saveChannelConfig('wecom', { botId: 'test-bot', secret: 'test-secret' }, 'agent-a');
-
-    const config = await readOpenClawJson();
-    const plugins = config.plugins as { allow: string[], entries: Record<string, { enabled?: boolean }> };
-    
-    expect(plugins.allow).toContain('wecom');
-    expect(plugins.entries['wecom'].enabled).toBe(true);
-  });
-});
-
-describe('DingTalk card configuration defaults', () => {
-  beforeEach(async () => {
-    vi.resetAllMocks();
-    vi.resetModules();
-    await rm(testHome, { recursive: true, force: true });
-    await rm(testUserData, { recursive: true, force: true });
-  });
-
-  it('enables card mode and streaming when a card template id is provided', async () => {
-    const { saveChannelConfig } = await import('@electron/utils/channel-config');
-
-    await saveChannelConfig(
-      'dingtalk',
-      {
-        clientId: 'ding-app',
-        clientSecret: 'secret',
-        cardTemplateId: 'tpl_123',
-      },
-      'default',
-    );
-
-    const config = await readOpenClawJson();
-    const channels = config.channels as Record<string, {
-      messageType?: string;
-      cardRealTimeStream?: boolean;
-      cardTemplateKey?: string;
-      accounts: Record<string, {
-        messageType?: string;
-        cardRealTimeStream?: boolean;
-        cardTemplateKey?: string;
-        cardTemplateId?: string;
-      }>;
-    }>;
-
-    expect(channels.dingtalk.messageType).toBe('card');
-    expect(channels.dingtalk.cardRealTimeStream).toBe(true);
-    expect(channels.dingtalk.cardTemplateKey).toBe('content');
-    expect(channels.dingtalk.accounts.default.cardTemplateId).toBe('tpl_123');
-    expect(channels.dingtalk.accounts.default.messageType).toBe('card');
-    expect(channels.dingtalk.accounts.default.cardRealTimeStream).toBe(true);
-    expect(channels.dingtalk.accounts.default.cardTemplateKey).toBe('content');
   });
 });
 

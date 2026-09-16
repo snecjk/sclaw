@@ -13,6 +13,12 @@ import { mkdtemp, writeFile, readFile, rm, access } from 'fs/promises';
 import { constants } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import {
+  DINGTALK_OC_CONFIG_RETIRED_MESSAGE,
+  CHANNEL_CONFIG_RETIRED_MESSAGE,
+  getChannelConfigSaveRejection,
+  stripRetiredChannelsFromOpenClawConfig,
+} from '../../shared/retired-openclaw-channels';
 
 let tempDir: string;
 let configPath: string;
@@ -121,6 +127,11 @@ async function sanitizeConfig(filePath: string): Promise<boolean> {
       config.tools = tools;
       modified = true;
     }
+  }
+
+  // Mirror: strip retired IM channels / OC plugin wiring (shared with production).
+  if (stripRetiredChannelsFromOpenClawConfig(config)) {
+    modified = true;
   }
 
   if (modified) {
@@ -271,11 +282,27 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     expect(modified).toBe(false);
   });
 
-  it('preserves all other top-level config sections', async () => {
+  it('strips retired channels and OC plugins while preserving other sections', async () => {
     await writeConfig({
       skills: { enabled: true, entries: {} },
-      channels: { discord: { token: 'abc', enabled: true } },
-      plugins: { entries: { whatsapp: { enabled: true } } },
+      channels: {
+        discord: { token: 'abc', enabled: true },
+        telegram: { botToken: 'tg' },
+        dingtalk: { clientId: 'oc-ding' },
+        'openclaw-weixin': { enabled: true },
+      },
+      plugins: {
+        allow: ['whatsapp', 'dingtalk', 'sto-dingtalk-send-guard', 'wecom'],
+        entries: {
+          whatsapp: { enabled: true },
+          dingtalk: { enabled: true },
+          'sto-dingtalk-send-guard': { enabled: true, config: {} },
+        },
+      },
+      bindings: [
+        { agentId: 'main', match: { channel: 'telegram' } },
+        { agentId: 'main', match: { channel: 'openclaw-weixin' } },
+      ],
       gateway: { mode: 'local', auth: { token: 'xyz' } },
       agents: { defaults: { model: { primary: 'gpt-4' } } },
       models: { providers: { openai: { baseUrl: 'https://api.openai.com' } } },
@@ -285,11 +312,17 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     expect(modified).toBe(true);
 
     const result = await readConfig();
-    // skills.enabled removed
     expect(result.skills).not.toHaveProperty('enabled');
-    // All other sections unchanged
-    expect(result.channels).toEqual({ discord: { token: 'abc', enabled: true } });
-    expect(result.plugins).toEqual({ entries: { whatsapp: { enabled: true } } });
+    expect(result.channels).toEqual({ 'openclaw-weixin': { enabled: true } });
+    expect(result.plugins).toEqual({
+      allow: ['sto-dingtalk-send-guard'],
+      entries: {
+        'sto-dingtalk-send-guard': { enabled: true, config: {} },
+      },
+    });
+    expect(result.bindings).toEqual([
+      { agentId: 'main', match: { channel: 'openclaw-weixin' } },
+    ]);
     expect(result.gateway).toEqual({ mode: 'local', auth: { token: 'xyz' } });
     expect(result.agents).toEqual({ defaults: { model: { primary: 'gpt-4' } } });
   });
@@ -359,7 +392,7 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
             '/another/missing/plugin/dir',
           ],
         },
-        entries: { whatsapp: { enabled: true } },
+        entries: { 'sto-workflow-tool': { enabled: true } },
       },
       gateway: { mode: 'local' },
     });
@@ -371,8 +404,8 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
     const plugins = result.plugins as Record<string, unknown>;
     const load = plugins.load as Record<string, unknown>;
     expect(load.paths).toEqual([]);
-    // Other plugin config is preserved
-    expect(plugins.entries).toEqual({ whatsapp: { enabled: true } });
+    // Non-retired plugin config is preserved
+    expect(plugins.entries).toEqual({ 'sto-workflow-tool': { enabled: true } });
     // Other top-level sections untouched
     expect(result.gateway).toEqual({ mode: 'local' });
   });
@@ -507,5 +540,27 @@ describe('sanitizeOpenClawConfig (blocklist approach)', () => {
 
     const modified = await sanitizeConfig(configPath);
     expect(modified).toBe(false);
+  });
+});
+
+describe('getChannelConfigSaveRejection', () => {
+  it('allows wechat aliases', () => {
+    expect(getChannelConfigSaveRejection('wechat')).toBeNull();
+    expect(getChannelConfigSaveRejection('openclaw-weixin')).toBeNull();
+  });
+
+  it('rejects dingtalk OC save with Hub guidance', () => {
+    expect(getChannelConfigSaveRejection('dingtalk')).toEqual({
+      error: DINGTALK_OC_CONFIG_RETIRED_MESSAGE,
+    });
+  });
+
+  it('rejects third-party channels', () => {
+    expect(getChannelConfigSaveRejection('telegram')).toEqual({
+      error: CHANNEL_CONFIG_RETIRED_MESSAGE,
+    });
+    expect(getChannelConfigSaveRejection('whatsapp')).toEqual({
+      error: CHANNEL_CONFIG_RETIRED_MESSAGE,
+    });
   });
 });

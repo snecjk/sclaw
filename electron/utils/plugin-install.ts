@@ -139,9 +139,7 @@ function toErrorDiagnostic(error: unknown): { code?: string; name?: string; mess
 // Some npm packages ship with an openclaw.plugin.json whose "id" field
 // doesn't match the ID the plugin code actually exports.  After copying we
 // patch both the manifest AND the compiled JS so the Gateway accepts them.
-const MANIFEST_ID_FIXES: Record<string, string> = {
-  'wecom-openclaw-plugin': 'wecom',
-};
+const MANIFEST_ID_FIXES: Record<string, string> = {};
 
 /**
  * After a plugin has been copied to ~/.stoclaw/openclaw/extensions/<dir>, fix any
@@ -1334,10 +1332,6 @@ export function buildCandidateSources(pluginDirName: string): string[] {
 
 // ── Per-channel plugin helpers ───────────────────────────────────────────────
 
-export function ensureDingTalkPluginInstalled(): { installed: boolean; warning?: string } {
-  return ensurePluginInstalled('dingtalk', buildCandidateSources('dingtalk'), 'DingTalk');
-}
-
 export function ensureWeComPluginInstalled(): { installed: boolean; warning?: string } {
   return { installed: false, warning: 'WeCom channel has been retired' };
 }
@@ -1456,7 +1450,6 @@ export function ensureStoDingTalkSendGuardPluginInstalled(): { installed: boolea
  * All bundled plugins, in the same order as after-pack.cjs BUNDLED_PLUGINS.
  */
 const ALL_BUNDLED_PLUGINS = [
-  // { fn: ensureDingTalkPluginInstalled, label: 'DingTalk' },
   // Phase 2: wecom / qqbot / openclaw-weixin OC channel plugins retired.
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },

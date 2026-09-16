@@ -34,13 +34,8 @@ import {
 import { buildQrChannelEventName, usesPluginManagedQrAccounts } from '@/lib/channel-alias';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import telegramIcon from '@/assets/channels/telegram.svg';
-import discordIcon from '@/assets/channels/discord.svg';
-import whatsappIcon from '@/assets/channels/whatsapp.svg';
 import wechatIcon from '@/assets/channels/wechat.svg';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg';
-import wecomIcon from '@/assets/channels/wecom.svg';
-import qqIcon from '@/assets/channels/qq.svg';
 
 interface ChannelConfigModalProps {
   initialSelectedType?: ChannelType | null;
@@ -281,16 +276,6 @@ export function ChannelConfigModal({
         toast.success(translateRef.current('toast.wechatAutoBoundMain'));
       }
       try {
-        if (channelType === 'whatsapp') {
-          const saveResult = await hostApiFetch<{ success?: boolean; error?: string }>('/api/channels/config', {
-            method: 'POST',
-            body: JSON.stringify({ channelType: 'whatsapp', config: { enabled: true }, accountId: resolvedAccountId }),
-          });
-          if (!saveResult?.success) {
-            throw new Error(saveResult?.error || 'Failed to save WhatsApp config');
-          }
-        }
-
         try {
           await finishSaveRef.current(channelType);
         } catch (postSaveError) {
@@ -357,8 +342,6 @@ export function ChannelConfigModal({
       const warnings = result.warnings || [];
       if (result.valid && result.details) {
         const details = result.details;
-        if (details.botUsername) warnings.push(`Bot: @${details.botUsername}`);
-        if (details.guildName) warnings.push(`Server: ${details.guildName}`);
         if (details.channelName) warnings.push(`Channel: #${details.channelName}`);
       }
 
@@ -433,8 +416,6 @@ export function ChannelConfigModal({
         const warnings = validationResponse.warnings || [];
         if (validationResponse.details) {
           const details = validationResponse.details;
-          if (details.botUsername) warnings.push(`Bot: @${details.botUsername}`);
-          if (details.guildName) warnings.push(`Server: ${details.guildName}`);
           if (details.channelName) warnings.push(`Channel: #${details.channelName}`);
         }
 
@@ -819,20 +800,10 @@ interface ConfigFieldProps {
 
 function ChannelLogo({ type }: { type: ChannelType }) {
   switch (type) {
-    case 'telegram':
-      return <img src={telegramIcon} alt="Telegram" className="w-[22px] h-[22px] dark:invert" />;
-    case 'discord':
-      return <img src={discordIcon} alt="Discord" className="w-[22px] h-[22px] dark:invert" />;
-    case 'whatsapp':
-      return <img src={whatsappIcon} alt="WhatsApp" className="w-[22px] h-[22px] dark:invert" />;
     case 'wechat':
       return <img src={wechatIcon} alt="WeChat" className="w-[22px] h-[22px] dark:invert" />;
     case 'dingtalk':
       return <img src={dingtalkIcon} alt="DingTalk" className="w-[22px] h-[22px] dark:invert" />;
-    case 'wecom':
-      return <img src={wecomIcon} alt="WeCom" className="w-[22px] h-[22px] dark:invert" />;
-    case 'qqbot':
-      return <img src={qqIcon} alt="QQ" className="w-[22px] h-[22px] dark:invert" />;
     default:
       return <span className="text-[22px]">{CHANNEL_ICONS[type] || '💬'}</span>;
   }

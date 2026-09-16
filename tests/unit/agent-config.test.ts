@@ -310,18 +310,18 @@ describe('agent config lifecycle', () => {
       },
       channels: {
         dingtalk: { enabled: true },
-        telegram: { enabled: true },
+        wechat: { enabled: true },
       },
     });
 
     const { assignChannelAccountToAgent, listAgentsSnapshot } = await import('@electron/utils/agent-config');
 
     await assignChannelAccountToAgent('main', 'dingtalk', 'default');
-    await assignChannelAccountToAgent('main', 'telegram', 'default');
+    await assignChannelAccountToAgent('main', 'wechat', 'default');
 
     const snapshot = await listAgentsSnapshot();
     expect(snapshot.channelAccountOwners['dingtalk:default']).toBe('main');
-    expect(snapshot.channelAccountOwners['telegram:default']).toBe('main');
+    expect(snapshot.channelAccountOwners['wechat:default']).toBe('main');
   });
 
   it('replaces previous account binding for the same agent and channel', async () => {
@@ -389,19 +389,19 @@ describe('agent config lifecycle', () => {
       },
       channels: {
         dingtalk: { enabled: true },
-        telegram: { enabled: true },
+        wechat: { enabled: true },
       },
     });
 
     const { assignChannelAccountToAgent, clearChannelBinding, listAgentsSnapshot } = await import('@electron/utils/agent-config');
 
     await assignChannelAccountToAgent('main', 'dingtalk', 'default');
-    await assignChannelAccountToAgent('main', 'telegram', 'default');
+    await assignChannelAccountToAgent('main', 'wechat', 'default');
     await clearChannelBinding('dingtalk', 'default');
 
     const snapshot = await listAgentsSnapshot();
     expect(snapshot.channelAccountOwners['dingtalk:default']).toBeUndefined();
-    expect(snapshot.channelAccountOwners['telegram:default']).toBe('main');
+    expect(snapshot.channelAccountOwners['wechat:default']).toBe('main');
   });
 
   it('atomically saves WeChat channel config and default main binding', async () => {

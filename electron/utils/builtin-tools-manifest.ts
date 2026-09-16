@@ -27,7 +27,7 @@ export function parseStoBuiltinToolsManifest(raw: string): StoBuiltinToolsManife
 
 /**
  * H1：manifest 只覆盖其中登记的插件。
- * - 未出现在 manifest 的（WeCom 等）保持硬编码列表，读失败也不丢。
+ * - 未出现在 manifest 的插件保持硬编码 fallback 列表，读失败也不丢。
  * - manifest.enabled === false 的从安装列表剔除。
  */
 export function filterPluginSpecsByManifest<T extends { dirName: string }>(

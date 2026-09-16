@@ -30,7 +30,7 @@
 | `session_type` | 会话类型 | `TEXT` | 否 | `'chat'` | `chat` / `cron` / `scheduled_task` / `claude_task` / `app` / `channel` / `workflow` |
 | `task_id` | 任务 ID | `TEXT` | 是 | `NULL` | cron / scheduled / claude 定时任务 ID |
 | `app_id` | 应用 ID | `TEXT` | 是 | `NULL` | 应用广场应用 ID |
-| `channel_type` | 频道类型 | `TEXT` | 是 | `NULL` | 微信、钉钉、Telegram 等频道类型 |
+| `channel_type` | 频道类型 | `TEXT` | 是 | `NULL` | 微信、钉钉、Mobile 等频道类型 |
 | `channel_id` | 频道 ID | `TEXT` | 是 | `NULL` | 频道账号/群 ID |
 | `title` | 会话标题 | `TEXT` | 是 | `NULL` | 侧栏显示名；空则回退引擎侧标题 |
 | `pin_rank` | 置顶序号 | `INTEGER` | 是 | `NULL` | 项目内置顶排序，越小越靠前 |
@@ -116,7 +116,8 @@
 ### `channel_type` — 频道类型
 
 - **含义**：标识会话来自或发往哪个消息频道类型。
-- **常见值**：`wechat`、`dingtalk`、`telegram`、`discord`、`whatsapp`、`qqbot`、`wecom`、`signal`、`imessage`、`matrix`、`line`、`msteams`、`googlechat`、`mattermost` 等。
+- **常见值（产品面）**：`wechat`、`dingtalk`、`mobile` / `sto-mobile`。
+- **历史库**：旧会话行可能仍有 `telegram` / `discord` / `whatsapp` / `wecom` / `qqbot` 等值；侧栏对未知类型不展示徽章，**不做 DB migration**。
 - **可空**：非频道会话为 `NULL`。
 - **写入时机**：**不会**从 `session_key` 推断，必须由频道消息创建会话的入口显式写入。
 
@@ -125,7 +126,7 @@
 - **含义**：频道内的具体账号、群 ID 或机器人 ID。
 - **可空**：非频道会话为 `NULL`。
 - **写入时机**：与 `channel_type` 一起由业务代码显式传入。
-- **示例**：钉钉群 ID、微信账号 ID、Telegram Chat ID。
+- **示例**：钉钉群 ID、微信账号 ID、Mobile peer ID。
 
 ### `title` — 会话标题
 

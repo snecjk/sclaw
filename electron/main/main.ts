@@ -599,7 +599,6 @@ async function initialize(): Promise<void> {
     { createTray },
     { deviceOAuthManager },
     { browserOAuthManager },
-    { whatsAppLoginManager },
     { syncAllProviderAuthToRuntime },
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
@@ -623,7 +622,6 @@ async function initialize(): Promise<void> {
     import('./tray'),
     import('../utils/device-oauth'),
     import('../utils/browser-oauth'),
-    import('../utils/whatsapp-login'),
     import('../services/providers/provider-runtime-sync'),
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
@@ -931,18 +929,6 @@ async function initialize(): Promise<void> {
 
   browserOAuthManager.on('oauth:error', (error) => {
     heb.emit('oauth:error', error);
-  });
-
-  whatsAppLoginManager.on('qr', (data) => {
-    heb.emit('channel:whatsapp-qr', data);
-  });
-
-  whatsAppLoginManager.on('success', (data) => {
-    heb.emit('channel:whatsapp-success', data);
-  });
-
-  whatsAppLoginManager.on('error', (error) => {
-    heb.emit('channel:whatsapp-error', error);
   });
 
   // Install bundled plugins before Gateway so the first agent run uses the latest mirror.

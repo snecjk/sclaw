@@ -34,7 +34,7 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 - **pnpm version**: The exact pnpm version is pinned via `packageManager` in `package.json`. Use `corepack enable && corepack prepare` to activate the correct version before installing.
 - **Electron on headless Linux**: The dbus errors (`Failed to connect to the bus`) are expected and harmless in a headless/cloud environment. The app still runs fine with `$DISPLAY` set (e.g., `:1` via Xvfb/VNC).
 - **`pnpm run lint` race condition**: If `pnpm run uv:download` was recently run, ESLint may fail with `ENOENT: no such file or directory, scandir '/workspace/temp_uv_extract'` because the temp directory was created and removed during download. Simply re-run lint after the download script finishes.
-- **Build scripts warning**: `pnpm install` may warn about ignored build scripts for `@discordjs/opus` and `koffi`. These are optional messaging-channel dependencies and the warnings are safe to ignore.
+- **Build scripts warning**: `pnpm install` may warn about ignored build scripts for `koffi`. This is safe to ignore. `@discordjs/opus` / baileys / `@tencent-weixin/openclaw-weixin` npm 已从根依赖切除，**勿加回**。
 - **`pnpm run init`**: This is a convenience script that runs `pnpm install` followed by `pnpm run uv:download`. Either run `pnpm run init` or run the two steps separately.
 - **Gateway startup**: When running `pnpm dev`, the OpenClaw Gateway process starts automatically on port 18789. It takes ~10-30 seconds to become ready. Gateway readiness is not required for UI development—the app functions without it (shows "connecting" state).
 - **No database**: The app uses `electron-store` (JSON files) and OS keychain. No database setup is needed.
@@ -57,7 +57,7 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 
 以下工程化操作**禁止由 AI 自动执行**，无论用户如何要求，仅允许向用户说明操作步骤并引导手动执行：
 
-- **禁止修改 `package.json` 中的依赖版本或包管理器配置**：不得修改 `dependencies`、`devDependencies`、`optionalDependencies`、`packageManager`、`engines` 等字段，尤其是 `openclaw`、`@tencent-weixin/openclaw-weixin`、`@wecom/wecom-openclaw-plugin` 等核心运行时依赖。
+- **禁止修改 `package.json` 中的依赖版本或包管理器配置**：不得修改 `dependencies`、`devDependencies`、`optionalDependencies`、`packageManager`、`engines` 等字段，尤其是 `openclaw` 等核心运行时依赖。`@tencent-weixin/openclaw-weixin` npm、企微 `@wecom/wecom-openclaw-plugin` 已下线，**不要**加回。
 - **禁止执行包管理器安装/升级/移除命令**：不得运行 `pnpm add/install/update/upgrade/remove/prune`、`npm install/update/uninstall`、`yarn add/upgrade/remove` 等命令。
 - **禁止修改 lockfile**：不得修改 `pnpm-lock.yaml`、`package-lock.json`、`yarn.lock`。
 - **禁止修改构建/打包配置**：不得修改 `electron-builder.config.js`、`electron-builder.yml`、`vite.config.ts`、`vitest.config.ts`、`pnpm-workspace.yaml`、`.npmrc` 等工程配置文件。

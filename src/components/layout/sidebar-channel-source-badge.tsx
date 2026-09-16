@@ -2,26 +2,20 @@
 import { useTranslation } from 'react-i18next';
 import dingIcon from '@/assets/icons/ding.svg';
 import wechatIcon from '@/assets/icons/wechat.svg';
-import wecomIcon from '@/assets/icons/wecom.svg';
 import appIcon from '@/assets/icons/app.svg';
-import qqIcon from '@/assets/icons/qq.svg';
 import { cn } from '@/lib/utils';
 import type { SidebarChannelSource } from '@/lib/session-channel-source';
 
 const LABEL_KEY: Record<SidebarChannelSource, string> = {
   dingtalk: 'sidebar.channelSource.dingtalk',
   wechat: 'sidebar.channelSource.wechat',
-  wecom: 'sidebar.channelSource.wecom',
   app: 'sidebar.channelSource.app',
-  qq: 'sidebar.channelSource.qq',
 };
 
 const SOURCE_ICON: Record<SidebarChannelSource, string> = {
   dingtalk: dingIcon,
   wechat: wechatIcon,
-  wecom: wecomIcon,
   app: appIcon,
-  qq: qqIcon,
 };
 
 export function SidebarChannelSourceBadge({

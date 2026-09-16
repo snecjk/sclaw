@@ -7,7 +7,6 @@ settings:
 overrides:
   isbinaryfile: ^5.0.0
   https-proxy-agent: 7.0.6
-  libsignal: https://github.com/whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7
 
 importers:
 
@@ -206,9 +205,6 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.10
         version: 3.14.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@tencent-weixin/openclaw-weixin':
-        specifier: 2.4.4
-        version: 2.4.4(openclaw@2026.3.22(@cfworker/json-schema@4.1.1)(@napi-rs/canvas@0.1.100))
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
@@ -2430,12 +2426,6 @@ packages:
 
   '@telegraf/types@7.1.0':
     resolution: {integrity: sha512-kGevOIbpMcIlCDeorKGpwZmdH7kHbqlk/Yj6dEpJMKEQw5lk0KVQY0OLXaCswy8GqlIVLd5625OB+rAntP9xVw==}
-
-  '@tencent-weixin/openclaw-weixin@2.4.4':
-    resolution: {integrity: sha512-tb4Ix+6JPLEGlWz90wBWc5MYojISvYWReCeXjCwGCryi0RxVHCZa6ncCHT0xINNrYTOQbpAEN0U+i7UHVTk9XQ==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      openclaw: '>=2026.3.22'
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -8996,12 +8986,6 @@ snapshots:
 
   '@telegraf/types@7.1.0':
     optional: true
-
-  '@tencent-weixin/openclaw-weixin@2.4.4(openclaw@2026.3.22(@cfworker/json-schema@4.1.1)(@napi-rs/canvas@0.1.100))':
-    dependencies:
-      openclaw: 2026.3.22(@cfworker/json-schema@4.1.1)(@napi-rs/canvas@0.1.100)
-      qrcode-terminal: 0.12.0
-      zod: 4.4.3
 
   '@testing-library/dom@10.4.1':
     dependencies:

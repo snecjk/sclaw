@@ -157,10 +157,14 @@ describe('plugin installer diagnostics', () => {
 
   it('returns source-missing warning when bundled mirror cannot be found', async () => {
     const { ensurePluginInstalled } = await import('@electron/utils/plugin-install');
-    const result = ensurePluginInstalled('wecom', ['/bundle/wecom'], 'WeCom');
+    const result = ensurePluginInstalled(
+      'sto-scheduled-task-tool',
+      ['/bundle/sto-scheduled-task-tool'],
+      'STO Scheduled Task Tool',
+    );
 
     expect(result.installed).toBe(false);
-    expect(result.warning).toContain('Bundled WeCom plugin mirror not found');
+    expect(result.warning).toContain('Bundled STO Scheduled Task Tool plugin mirror not found');
     expect(mockLoggerWarn).not.toHaveBeenCalled();
   });
 
@@ -168,12 +172,12 @@ describe('plugin installer diagnostics', () => {
     setPlatform('win32');
     mockHomedir.mockReturnValue('C:\\Users\\test');
 
-    const sourceDir = 'C:\\Program Files\\StoClaw\\resources\\openclaw-plugins\\wecom';
-    const sourceManifestSuffix = 'openclaw-plugins\\wecom\\openclaw.plugin.json';
+    const sourceDir = 'C:\\Program Files\\StoClaw\\resources\\openclaw-plugins\\sto-scheduled-task-tool';
+    const sourceManifestSuffix = 'openclaw-plugins\\sto-scheduled-task-tool\\openclaw.plugin.json';
 
     mockExistsSync.mockImplementation((input: string) => String(input).includes(sourceManifestSuffix));
     mockReadFileSync.mockImplementation((input: string) => {
-      if (String(input).includes('openclaw-plugins\\wecom\\package.json')) {
+      if (String(input).includes('openclaw-plugins\\sto-scheduled-task-tool\\package.json')) {
         return JSON.stringify({ version: '1.2.3' });
       }
       return '{}';
@@ -185,11 +189,11 @@ describe('plugin installer diagnostics', () => {
     });
 
     const { ensurePluginInstalled } = await import('@electron/utils/plugin-install');
-    const result = ensurePluginInstalled('wecom', [sourceDir], 'WeCom');
+    const result = ensurePluginInstalled('sto-scheduled-task-tool', [sourceDir], 'STO Scheduled Task Tool');
 
     expect(result).toEqual({
       installed: false,
-      warning: 'Failed to install bundled WeCom plugin mirror',
+      warning: 'Failed to install bundled STO Scheduled Task Tool plugin mirror',
     });
 
     expect(mockCpSync).toHaveBeenCalledTimes(2);
@@ -198,10 +202,10 @@ describe('plugin installer diagnostics', () => {
     expect(firstTargetPath.startsWith('\\\\?\\')).toBe(true);
 
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      '[plugin] Bundled mirror install failed for WeCom',
+      '[plugin] Bundled mirror install failed for STO Scheduled Task Tool',
       expect.objectContaining({
-        pluginDirName: 'wecom',
-        pluginLabel: 'WeCom',
+        pluginDirName: 'sto-scheduled-task-tool',
+        pluginLabel: 'STO Scheduled Task Tool',
         sourceDir,
         platform: 'win32',
         attempts: [
@@ -216,12 +220,12 @@ describe('plugin installer diagnostics', () => {
     setPlatform('win32');
     mockHomedir.mockReturnValue('C:\\Users\\test');
 
-    const sourceDir = 'C:\\Program Files\\StoClaw\\resources\\openclaw-plugins\\wecom';
-    const sourceManifestSuffix = 'openclaw-plugins\\wecom\\openclaw.plugin.json';
+    const sourceDir = 'C:\\Program Files\\StoClaw\\resources\\openclaw-plugins\\sto-scheduled-task-tool';
+    const sourceManifestSuffix = 'openclaw-plugins\\sto-scheduled-task-tool\\openclaw.plugin.json';
 
     mockExistsSync.mockImplementation((input: string) => String(input).includes(sourceManifestSuffix));
     mockReadFileSync.mockImplementation((input: string) => {
-      if (String(input).includes('openclaw-plugins\\wecom\\package.json')) {
+      if (String(input).includes('openclaw-plugins\\sto-scheduled-task-tool\\package.json')) {
         return JSON.stringify({ version: '1.2.3' });
       }
       return '{}';
@@ -233,16 +237,16 @@ describe('plugin installer diagnostics', () => {
     });
 
     const { ensurePluginInstalled } = await import('@electron/utils/plugin-install');
-    const result = ensurePluginInstalled('wecom', [sourceDir], 'WeCom');
+    const result = ensurePluginInstalled('sto-scheduled-task-tool', [sourceDir], 'STO Scheduled Task Tool');
 
     expect(result.installed).toBe(false);
-    expect(result.warning).toBe('Failed to install bundled WeCom plugin mirror');
+    expect(result.warning).toBe('Failed to install bundled STO Scheduled Task Tool plugin mirror');
 
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      '[plugin] Bundled mirror install failed for WeCom',
+      '[plugin] Bundled mirror install failed for STO Scheduled Task Tool',
       expect.objectContaining({
         sourceDir,
-        targetDir: '/home/test/.stoclaw/openclaw/extensions/wecom',
+        targetDir: '/home/test/.stoclaw/openclaw/extensions/sto-scheduled-task-tool',
         platform: 'win32',
         attempts: [
           expect.objectContaining({ attempt: 1, code: 'EPERM' }),

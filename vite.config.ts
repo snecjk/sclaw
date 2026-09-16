@@ -260,6 +260,11 @@ export default defineConfig(({ mode }) => {
       // @tanstack/react-virtual 等包若解析到嵌套 react，会触发 useReducer null 崩溃。
       dedupe: ['react', 'react-dom'],
     },
+    // Root crawler otherwise follows demos/*.html (importmap-only apps) and
+    // aborts ALL dependency pre-bundling when @sto/claw-bridge-sdk is unresolved.
+    optimizeDeps: {
+      entries: ['index.html'],
+    },
     server: {
       port: 5173,
     },

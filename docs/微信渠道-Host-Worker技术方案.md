@@ -4,6 +4,7 @@
 > 范围：下线 OpenClaw 微信/企微/QQ 等 OC 渠道插件路径；在 `electron/message-channel/weixin` 新建基于 iLink Bot 协议的微信渠道 Worker；**微信路径固定 Pi**（`engineType` 字段保留，不实现 claude）。  
 > 非目标（本方案不包含）：删除整个 OpenClaw 引擎与 Gateway 进程；Claude 迁入 utilityProcess。  
 > 延后：无（钉钉 Hub / Mobile 已迁入 `message-channel/`，见 [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md)）。
+> 渠道产品面清理（第三方 IM + 钉钉 OC 旁路）：见 [`非钉钉微信Mobile以外渠道清理计划.md`](./非钉钉微信Mobile以外渠道清理计划.md)。
 >
 > Phase 0 报告：`electron/message-channel/weixin/runtime/spike/phase0-report.json`
 

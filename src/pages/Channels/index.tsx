@@ -36,37 +36,22 @@ import { useAuthStore } from '@/stores/auth';
 import type { AgentEngineType } from '../../../shared/agent-engine';
 import { isProjectAgentId } from '../../../shared/project-agent';
 
-import telegramIcon from '@/assets/channels/telegram.svg?raw';
-import discordIcon from '@/assets/channels/discord.svg?raw';
-import whatsappIcon from '@/assets/channels/whatsapp.svg?raw';
 import wechatIcon from '@/assets/channels/wechat.svg?raw';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg?raw';
-import wecomIcon from '@/assets/channels/wecom.svg?raw';
-import qqIcon from '@/assets/channels/qq.svg?raw';
 import sclawAppLogo from '@/assets/logo.png';
 
 /** 各频道品牌色：绑定成功后图标点亮用 */
-const CHANNEL_BRAND_COLOR: Partial<Record<ChannelType, string>> = {
+const CHANNEL_BRAND_COLOR: Record<ChannelType, string> = {
   dingtalk: '#0089FF',
   wechat: '#07C160',
-  wecom: '#2B7BD6',
-  qqbot: '#12B7F5',
-  telegram: '#2AABEE',
-  discord: '#5865F2',
-  whatsapp: '#25D366',
 };
 
 /** 移动端 App 品牌色（小龙虾橙） */
 const MOBILE_APP_BRAND_COLOR = '#FF6A00';
 
-const CHANNEL_ICON_RAW: Partial<Record<ChannelType, string>> = {
-  telegram: telegramIcon,
-  discord: discordIcon,
-  whatsapp: whatsappIcon,
+const CHANNEL_ICON_RAW: Record<ChannelType, string> = {
   wechat: wechatIcon,
   dingtalk: dingtalkIcon,
-  wecom: wecomIcon,
-  qqbot: qqIcon,
 };
 
 function tintChannelSvg(raw: string, color: string): string {
@@ -462,7 +447,6 @@ export function Channels() {
   const channelListItems = useMemo((): ChannelListItem[] => {
     const order: ChannelType[] = ['dingtalk', 'wechat'];
     const items: ChannelListItem[] = [];
-    const used = new Set<string>();
 
     const findGroup = (type: ChannelType): ChannelGroupItem | undefined => {
       if (type === 'wechat') {
@@ -477,24 +461,9 @@ export function Channels() {
       const group = findGroup(type);
       if (group) {
         items.push({ kind: 'configured', group, recommended: type === 'dingtalk' });
-        used.add(group.channelType);
       } else {
         items.push({ kind: 'available', type, recommended: type === 'dingtalk' });
       }
-    }
-
-    for (const group of channelGroups) {
-      if (used.has(group.channelType)) continue;
-      if (
-        group.channelType === 'wechat'
-        || group.channelType === 'openclaw-weixin'
-        || group.channelType === 'dingtalk'
-        || group.channelType === 'wecom'
-        || group.channelType === 'qqbot'
-      ) {
-        continue;
-      }
-      items.push({ kind: 'configured', group });
     }
 
     return items;

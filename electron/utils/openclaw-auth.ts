@@ -28,6 +28,7 @@ import { PORTS } from './config';
 import { resolveStoBaseUrl } from './sto-domain';
 import { getOpenClawConfigDir } from './paths';
 import { RETIRED_PLUGIN_IDS } from '../../shared/retired-skills';
+import { stripRetiredChannelsFromOpenClawConfig } from '../../shared/retired-openclaw-channels';
 import { isBrowserAutomationEnabled } from '../../shared/browser-automation/feature-flag';
 import {
   buildStoBrowserAutomationPluginConfig,
@@ -35,6 +36,8 @@ import {
   buildStoOpenClawPluginConfigs,
   sanitizeStoBrowserAutomationPluginConfig,
 } from '../../shared/openclaw-plugin-config';
+import { safeRemoveDir } from './fs-retry';
+import { logger } from './logger';
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
@@ -1346,42 +1349,20 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
         pluginsObj.allow = [];
       }
 
-      // ── wecom-openclaw-plugin → wecom migration ────────────────
-      const LEGACY_WECOM_ID = 'wecom-openclaw-plugin';
-      const NEW_WECOM_ID = 'wecom';
-      if (Array.isArray(pluginsObj.allow)) {
-        const allowArr = pluginsObj.allow as string[];
-        const legacyIdx = allowArr.indexOf(LEGACY_WECOM_ID);
-        if (legacyIdx !== -1) {
-          if (!allowArr.includes(NEW_WECOM_ID)) {
-            allowArr[legacyIdx] = NEW_WECOM_ID;
-          } else {
-            allowArr.splice(legacyIdx, 1);
-          }
-          
-          modified = true;
-        }
-      }
-      if (pEntries?.[LEGACY_WECOM_ID]) {
-        if (!pEntries[NEW_WECOM_ID]) {
-          pEntries[NEW_WECOM_ID] = pEntries[LEGACY_WECOM_ID];
-        }
-        delete pEntries[LEGACY_WECOM_ID];
-        
-        modified = true;
-      }
-
       if (ensureDingTalkSendGuardPluginConfig(pluginsObj)) {
         modified = true;
       }
     }
 
+    // ── retired IM channels (OC plugins; Hub / WeChat Host kept) ──
+    // Allow only openclaw-weixin (+ wechat alias). Strip OC dingtalk + third-party.
+    if (stripRetiredChannelsFromOpenClawConfig(config)) {
+      modified = true;
+    }
+
     // ── channels default-account migration ─────────────────────────
-    // Most OpenClaw channel plugins read the default account's credentials
-    // from the top level of `channels.<type>` (e.g. channels.dingtalk.clientId),
-    // but StoClaw historically stored them only under `channels.<type>.accounts.default`.
-    // Mirror the default account credentials at the top level so plugins can
-    // discover them.
+    // Mirror accounts.default → top-level for remaining allowed channels only
+    // (today: WeChat Host storage keys).
     const channelsObj = config.channels as Record<string, Record<string, unknown>> | undefined;
     if (channelsObj && typeof channelsObj === 'object') {
       for (const [_channelType, section] of Object.entries(channelsObj)) {
@@ -1399,16 +1380,36 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
         }
         if (mirrored) {
           modified = true;
-          
         }
       }
     }
 
     if (modified) {
       await writeOpenClawJson(config);
-      
     }
+
+    // Best-effort: drop OC dingtalk extension + WhatsApp credentials leftovers.
+    await removeRetiredChannelDirsBestEffort();
   });
+}
+
+async function removeRetiredChannelDirsBestEffort(): Promise<void> {
+  const configDir = getOpenClawConfigDir();
+  const targets: Array<{ path: string; label: string }> = [
+    { path: join(configDir, 'extensions', 'dingtalk'), label: 'OC dingtalk extension' },
+    { path: join(configDir, 'credentials', 'whatsapp'), label: 'whatsapp credentials' },
+  ];
+  for (const target of targets) {
+    if (!(await fileExists(target.path))) continue;
+    try {
+      await safeRemoveDir(target.path, { label: target.label });
+    } catch (error) {
+      logger.warn(
+        `[sanitize] could not remove ${target.label} (${target.path}); config strip still applies.`,
+        error,
+      );
+    }
+  }
 }
 
 const DINGTALK_SEND_GUARD_PLUGIN_ID = 'sto-dingtalk-send-guard';

@@ -31,9 +31,6 @@ vi.mock('@electron/utils/logger', () => ({
 describe('syncProxyConfigToOpenClaw', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('preserves existing telegram proxy on startup-style sync when proxy is disabled', async () => {
     readOpenClawConfigMock.mockResolvedValue({
       channels: {
         telegram: {
@@ -42,7 +39,9 @@ describe('syncProxyConfigToOpenClaw', () => {
         },
       },
     });
+  });
 
+  it('is a no-op after retired OC channel proxy sync removal', async () => {
     const { syncProxyConfigToOpenClaw } = await import('@electron/utils/openclaw-proxy');
 
     await syncProxyConfigToOpenClaw({
@@ -54,36 +53,25 @@ describe('syncProxyConfigToOpenClaw', () => {
       proxyBypassRules: '',
     });
 
+    expect(readOpenClawConfigMock).not.toHaveBeenCalled();
     expect(writeOpenClawConfigMock).not.toHaveBeenCalled();
   });
 
-  it('clears telegram proxy when explicitly requested while proxy is disabled', async () => {
-    readOpenClawConfigMock.mockResolvedValue({
-      channels: {
-        telegram: {
-          botToken: 'token',
-          proxy: 'socks5://127.0.0.1:7891',
-        },
-      },
-    });
-
+  it('does not clear legacy telegram proxy even when preserveExistingWhenDisabled is false', async () => {
     const { syncProxyConfigToOpenClaw } = await import('@electron/utils/openclaw-proxy');
 
-    await syncProxyConfigToOpenClaw({
-      proxyEnabled: false,
-      proxyServer: '',
-      proxyHttpServer: '',
-      proxyHttpsServer: '',
-      proxyAllServer: '',
-      proxyBypassRules: '',
-    }, {
-      preserveExistingWhenDisabled: false,
-    });
+    await syncProxyConfigToOpenClaw(
+      {
+        proxyEnabled: false,
+        proxyServer: '',
+        proxyHttpServer: '',
+        proxyHttpsServer: '',
+        proxyAllServer: '',
+        proxyBypassRules: '',
+      },
+      { preserveExistingWhenDisabled: false },
+    );
 
-    expect(writeOpenClawConfigMock).toHaveBeenCalledTimes(1);
-    const updatedConfig = writeOpenClawConfigMock.mock.calls[0][0] as {
-      channels: { telegram: Record<string, unknown> };
-    };
-    expect(updatedConfig.channels.telegram.proxy).toBeUndefined();
+    expect(writeOpenClawConfigMock).not.toHaveBeenCalled();
   });
 });

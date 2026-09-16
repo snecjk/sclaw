@@ -42,11 +42,9 @@ import {
   validateChannelCredentials,
 } from '../utils/channel-config';
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
-import {
-  ensureDingTalkPluginInstalled,
-} from '../utils/plugin-install';
 import { updateSkillConfig, getSkillConfig, getAllSkillConfigs } from '../utils/skill-config';
-import { whatsAppLoginManager } from '../utils/whatsapp-login';
+import { getChannelConfigSaveRejection } from '../../shared/retired-openclaw-channels';
+import { toOpenClawChannelType } from '../utils/channel-alias';
 import { getProviderConfig } from '../utils/provider-registry';
 import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
@@ -155,9 +153,6 @@ export function registerIpcHandlers(
 
   // Window control handlers (for custom title bar on Windows/Linux)
   registerWindowHandlers();
-
-  // WhatsApp handlers
-  registerWhatsAppHandlers(mainWindow);
 
   // Device OAuth handlers (Code Plan)
   registerDeviceOAuthHandlers(mainWindow);
@@ -1345,11 +1340,6 @@ function registerGatewayHandlers(
  * For checking package status and channel configuration
  */
 function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
-  // Plugin-based channels require a full Gateway process restart to properly
-  // initialize / tear-down plugin connections.  SIGUSR1 in-process reload is
-  // not sufficient for channel plugins (see restartGatewayForAgentDeletion).
-  const forceRestartChannels = new Set(['dingtalk', 'whatsapp']);
-
   const scheduleGatewayChannelRestart = (reason: string): void => {
     if (gatewayManager.getStatus().state !== 'stopped') {
       logger.info(`Scheduling Gateway restart after ${reason}`);
@@ -1364,11 +1354,7 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
       logger.info(`Gateway is stopped; skip immediate refresh after ${reason}`);
       return;
     }
-    if (forceRestartChannels.has(channelType)) {
-      logger.info(`Scheduling Gateway restart after ${reason}`);
-      gatewayManager.debouncedRestart();
-      return;
-    }
+    void channelType;
     logger.info(`Scheduling Gateway reload after ${reason}`);
     gatewayManager.debouncedReload();
   };
@@ -1433,26 +1419,11 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
   ipcMain.handle('channel:saveConfig', async (_, channelType: string, config: Record<string, unknown>) => {
     try {
       logger.info('channel:saveConfig', { channelType, keys: Object.keys(config || {}) });
-      if (channelType === 'dingtalk') {
-        const installResult = await ensureDingTalkPluginInstalled();
-        if (!installResult.installed) {
-          return {
-            success: false,
-            error: installResult.warning || 'DingTalk plugin install failed',
-          };
-        }
-        await saveChannelConfig(channelType, config);
-        scheduleGatewayChannelSaveRefresh(channelType, `channel:saveConfig (${channelType})`);
-        return {
-          success: true,
-          pluginInstalled: installResult.installed,
-          warning: installResult.warning,
-        };
-      }
-      if (channelType === 'wecom' || channelType === 'qqbot') {
+      const saveRejection = getChannelConfigSaveRejection(toOpenClawChannelType(channelType));
+      if (saveRejection) {
         return {
           success: false,
-          error: '该渠道已下线，请使用钉钉或微信。',
+          error: saveRejection.error,
         };
       }
       await saveChannelConfig(channelType, config);
@@ -1540,58 +1511,6 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     } catch (error) {
       console.error('Failed to validate channel credentials:', error);
       return { success: false, valid: false, errors: [String(error)], warnings: [] };
-    }
-  });
-}
-
-/**
- * WhatsApp Login Handlers
- */
-function registerWhatsAppHandlers(mainWindow: BrowserWindow): void {
-  // Request WhatsApp QR code
-  ipcMain.handle('channel:requestWhatsAppQr', async (_, accountId: string) => {
-    try {
-      logger.info('channel:requestWhatsAppQr', { accountId });
-      await whatsAppLoginManager.start(accountId);
-      return { success: true };
-    } catch (error) {
-      logger.error('channel:requestWhatsAppQr failed', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // Cancel WhatsApp login
-  ipcMain.handle('channel:cancelWhatsAppQr', async () => {
-    try {
-      await whatsAppLoginManager.stop();
-      return { success: true };
-    } catch (error) {
-      logger.error('channel:cancelWhatsAppQr failed', error);
-      return { success: false, error: String(error) };
-    }
-  });
-
-  // Check WhatsApp status (is it active?)
-  // ipcMain.handle('channel:checkWhatsAppStatus', ...)
-
-  // Forward events to renderer
-  whatsAppLoginManager.on('qr', (data) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('channel:whatsapp-qr', data);
-    }
-  });
-
-  whatsAppLoginManager.on('success', (data) => {
-    if (!mainWindow.isDestroyed()) {
-      logger.info('whatsapp:login-success', data);
-      mainWindow.webContents.send('channel:whatsapp-success', data);
-    }
-  });
-
-  whatsAppLoginManager.on('error', (error) => {
-    if (!mainWindow.isDestroyed()) {
-      logger.error('whatsapp:login-error', error);
-      mainWindow.webContents.send('channel:whatsapp-error', error);
     }
   });
 }

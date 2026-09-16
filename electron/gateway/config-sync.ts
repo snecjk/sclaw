@@ -65,10 +65,8 @@ export interface GatewayLaunchContext {
 
 // ── Auto-upgrade bundled plugins on startup ──────────────────────
 
-/** Phase 2: only DingTalk remains as an OC channel plugin; WeChat is Host Worker. */
-const CHANNEL_PLUGIN_MAP: Record<string, { dirName: string; npmName: string }> = {
-  dingtalk: { dirName: 'dingtalk', npmName: '@soimy/dingtalk' },
-};
+/** Phase 2: OC channel plugins retired; Hub / Host Worker own messaging channels. */
+const CHANNEL_PLUGIN_MAP: Record<string, { dirName: string; npmName: string }> = {};
 
 function _readPluginVersion(pkgJsonPath: string): string | null {
   try {

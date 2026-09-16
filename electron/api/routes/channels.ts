@@ -19,9 +19,6 @@ import {
   listAgentsSnapshot,
 } from '../../utils/agent-config';
 import {
-  ensureDingTalkPluginInstalled,
-} from '../../utils/plugin-install';
-import {
   computeChannelRuntimeStatus,
   pickChannelRuntimeStatus,
   type ChannelRuntimeAccountSnapshot,
@@ -33,13 +30,13 @@ import {
   toOpenClawChannelType,
   toUiChannelType,
 } from '../../utils/channel-alias';
+import { getChannelConfigSaveRejection } from '../../../shared/retired-openclaw-channels';
 import {
   cancelWeChatLoginSession,
   saveWeChatAccountState,
   startWeChatLoginSession,
   waitForWeChatLoginSession,
 } from '../../utils/wechat-login';
-import { whatsAppLoginManager } from '../../utils/whatsapp-login';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getChannelConnection } from '../../message-channel/hub/binding-service';
@@ -174,14 +171,6 @@ function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): voi
   void reason;
 }
 
-// Plugin-based channels require a full Gateway process restart to properly
-// initialize / tear-down plugin connections.  SIGUSR1 in-process reload is
-// not sufficient for channel plugins (see restartGatewayForAgentDeletion).
-const FORCE_RESTART_CHANNELS = new Set(['dingtalk', 'whatsapp']);
-
-/** Coalesce rapid plugin-channel saves with OpenClaw's own config-driven restart. */
-const PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS = 4000;
-
 type ChannelGatewayRefreshKind = 'config' | 'binding';
 
 function scheduleGatewayChannelSaveRefresh(
@@ -190,16 +179,8 @@ function scheduleGatewayChannelSaveRefresh(
   reason: string,
   kind: ChannelGatewayRefreshKind = 'config',
 ): void {
-  const storedChannelType = resolveStoredChannelType(channelType);
+  void channelType;
   if (ctx.gatewayManager.getStatus().state === 'stopped') {
-    return;
-  }
-
-  // Plugin channels (WeChat, WhatsApp, etc.) must fully restart to pick up binding
-  // changes — SIGUSR1 in-process reload does not reinitialize plugin connections.
-  if (kind === 'binding' && FORCE_RESTART_CHANNELS.has(storedChannelType)) {
-    ctx.gatewayManager.debouncedRestart(PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS);
-    void reason;
     return;
   }
 
@@ -209,11 +190,6 @@ function scheduleGatewayChannelSaveRefresh(
     return;
   }
 
-  if (FORCE_RESTART_CHANNELS.has(storedChannelType)) {
-    ctx.gatewayManager.debouncedRestart(PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS);
-    void reason;
-    return;
-  }
   ctx.gatewayManager.debouncedReload();
   void reason;
 }
@@ -578,27 +554,6 @@ export async function handleChannelRoutes(
     return true;
   }
 
-  if (url.pathname === '/api/channels/whatsapp/start' && req.method === 'POST') {
-    try {
-      const body = await parseJsonBody<{ accountId: string }>(req);
-      await whatsAppLoginManager.start(body.accountId);
-      sendJson(res, 200, { success: true });
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/channels/whatsapp/cancel' && req.method === 'POST') {
-    try {
-      await whatsAppLoginManager.stop();
-      sendJson(res, 200, { success: true });
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
   if (url.pathname === '/api/channels/wechat/start' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ accountId?: string }>(req);
@@ -651,24 +606,13 @@ export async function handleChannelRoutes(
     try {
       const body = await parseJsonBody<{ channelType: string; config: Record<string, unknown>; accountId?: string }>(req);
       const storedChannelType = resolveStoredChannelType(body.channelType);
-      if (storedChannelType === 'wecom' || storedChannelType === 'qqbot') {
+      const saveRejection = getChannelConfigSaveRejection(storedChannelType);
+      if (saveRejection) {
         sendJson(res, 410, {
           success: false,
-          error: '该渠道已下线，请使用钉钉或微信。',
+          error: saveRejection.error,
         });
         return true;
-      }
-      if (storedChannelType === 'dingtalk') {
-        const installResult = await ensureDingTalkPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 503, {
-            success: false,
-            fallback: 'dws',
-            error: installResult.warning
-              || '钉钉 OpenClaw 通道插件当前未启用（需 OpenClaw >= 2026.3.28）。请改用 dws：在设置页安装并登录 dws，在聊天输入 @ 选择钉钉收件人，由 Agent 调用 dws 发送。',
-          });
-          return true;
-        }
       }
       if (storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE) {
         // Phase 1: WeChat uses Host Worker — skip OC plugin install.

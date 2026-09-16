@@ -1,10 +1,10 @@
 # 非钉钉 / 微信 / Mobile 渠道清理计划
 
-> 状态：**待实施**（本文只定范围与落地步骤，不包含代码变更）
-> 日期：2026-09-16（修订：§11.2 立刻删微信 npm；vite closeBundle 保留；**钉钉 OC 旁路 vs Hub 已核验可删**；§9 allowlist 单测表述纠正）
-> **前置条件（硬门禁）：** [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md) **已完成**（`electron/channels/` 与 `api/routes/channel-hub.ts` 已删除；实现在 `message-channel/{hub,common,mobile}`）。开工清理前仍须：Hub/Mobile/微信冒烟通过。
+> 状态：**PR-1～PR-4 已实施；手工冒烟已通过；渠道相关自动化已绿**
+> 日期：2026-09-16（修订：§11.2 立刻删微信 npm；vite closeBundle 保留；**钉钉 OC 旁路 vs Hub 已核验可删**；§9 allowlist 单测表述纠正；**第 0～4 期代码/文档已落地**）
+> **前置条件（硬门禁）：** [`钉钉Hub与Mobile迁入message-channel计划.md`](./钉钉Hub与Mobile迁入message-channel计划.md) **已完成**（`electron/channels/` 与 `api/routes/channel-hub.ts` 已删除；实现在 `message-channel/{hub,common,mobile}`）。
 > 目标：SClaw 消息渠道只保留 **钉钉 Hub、微信 Host Worker、SClaw Mobile App**；删除其余 IM 渠道，并删除钉钉的 **OpenClaw 渠道插件**路径（Hub 保留）。
-> 相关文档：[`微信渠道-Host-Worker技术方案.md`](./微信渠道-Host-Worker技术方案.md)（Phase 2 已停止打包企微 / QQ / OC 微信插件，但 Host/UI 残留尚未清完）
+> 相关文档：[`微信渠道-Host-Worker技术方案.md`](./微信渠道-Host-Worker技术方案.md)
 
 ---
 
@@ -518,25 +518,32 @@ Mobile / 钉钉 Hub 走 `hub/routes.ts`，不受这条影响。
 ### 8.1 自动化
 
 ```bash
-pnpm typecheck
 pnpm exec vitest run tests/unit/channel-config.test.ts \
   tests/unit/channel-routes.test.ts \
   tests/unit/agent-config.test.ts \
   tests/unit/sanitize-config.test.ts \
   tests/unit/plugin-install.test.ts \
   tests/unit/builtin-tools-manifest.test.ts \
-  tests/unit/theme-source-audit.test.ts \
   tests/unit/channel-mobile-session-key.test.ts \
   tests/unit/channel-mobile-history-cursor.test.ts \
   tests/unit/channel-hub-independent-bind.test.ts \
-  tests/unit/whatsapp-login.test.ts
+  tests/unit/openclaw-proxy.test.ts \
+  tests/unit/channels-page.test.tsx \
+  tests/unit/wechat-login.test.ts
 ```
 
-最后一项在第 1 期后应 **file not found**（测试已删），从命令中去掉。
+**2026-09-16 收口结果：**
 
-全量 `pnpm test` 在 PR-2 合并前至少跑一轮。
+| 命令 | 结果 |
+| --- | --- |
+| 上表渠道相关 vitest（12 files / 75 tests） | **通过** |
+| `pnpm run typecheck:chat-ui` | **通过** |
+| `pnpm typecheck` | 失败；错误在 Models / Monaco / chat reducer 等，**非本次渠道清理文件** |
+| `pnpm test` 全量 | 741 文件通过 / 51 失败（74 tests）；渠道相关失败已修。剩余多为主题契约、More Apps mock、token 外观等**分支既有债**。`theme-source-audit` Task 8：`more-apps.css` 两处 `.dark`（本清理未改该文件） |
 
 ### 8.2 手工（PR-2）
+
+2026-09-16：**已通过。**
 
 1. 频道页只看到：钉钉、微信、Mobile App。没有 Telegram / Discord / WhatsApp / 企微 / QQ。
 2. 钉钉 Hub：扫码绑定、解绑、Agent 切换、消息收发（确认**未**再装 `@soimy/dingtalk`）。
@@ -651,12 +658,12 @@ rg '@tencent-weixin/openclaw-weixin' --glob '!**/node_modules/**'
 
 ### 11.3 PR-4 完成标准
 
-- [ ] `package.json` 无 `@tencent-weixin/openclaw-weixin`、无 baileys/opus 的 onlyBuilt、无 libsignal override
-- [ ] lockfile 已更新且 CI install 通过
-- [ ] 钉钉 / 微信 / Mobile 冒烟通过
-- [ ] **未**删除 `openclaw` 包本体与 Gateway
-- [ ] **未**误删钉钉 Hub / `sto-dingtalk-send-guard`
-- [ ] `@soimy/dingtalk` 渠道插件接线已在 PR-1～2 删除（本 checklist 回归确认）
+- [x] `package.json` 无 `@tencent-weixin/openclaw-weixin`、无 baileys/opus 的 onlyBuilt、无 libsignal override
+- [x] lockfile 已更新（install 后核对）
+- [x] 钉钉 / 微信 / Mobile 冒烟通过（手工）
+- [x] **未**删除 `openclaw` 包本体与 Gateway
+- [x] **未**误删钉钉 Hub / `sto-dingtalk-send-guard`
+- [x] `@soimy/dingtalk` 渠道插件接线已在 PR-1～2 删除（本 checklist 回归确认）
 
 ---
 

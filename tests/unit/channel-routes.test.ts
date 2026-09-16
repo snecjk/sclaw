@@ -31,22 +31,11 @@ vi.mock('@electron/utils/agent-config', () => ({
   listAgentsSnapshot: (...args: unknown[]) => listAgentsSnapshotMock(...args),
 }));
 
-vi.mock('@electron/utils/plugin-install', () => ({
-  ensureDingTalkPluginInstalled: vi.fn(),
-}));
-
 vi.mock('@electron/utils/wechat-login', () => ({
   cancelWeChatLoginSession: vi.fn(),
   saveWeChatAccountState: vi.fn(),
   startWeChatLoginSession: vi.fn(),
   waitForWeChatLoginSession: vi.fn(),
-}));
-
-vi.mock('@electron/utils/whatsapp-login', () => ({
-  whatsAppLoginManager: {
-    start: vi.fn(),
-    stop: vi.fn(),
-  },
 }));
 
 vi.mock('@electron/api/route-utils', () => ({
@@ -157,16 +146,16 @@ describe('handleChannelRoutes', () => {
   });
 
   it('keeps channel connected when one account is healthy and another errors', async () => {
-    listConfiguredChannelsMock.mockResolvedValue(['telegram']);
+    listConfiguredChannelsMock.mockResolvedValue(['dingtalk']);
     listConfiguredChannelAccountsMock.mockResolvedValue({
-      telegram: {
+      dingtalk: {
         defaultAccountId: 'default',
-        accountIds: ['default', 'telegram-b'],
+        accountIds: ['default', 'dingtalk-b'],
       },
     });
     readOpenClawConfigMock.mockResolvedValue({
       channels: {
-        telegram: {
+        dingtalk: {
           defaultAccount: 'default',
         },
       },
@@ -174,12 +163,12 @@ describe('handleChannelRoutes', () => {
 
     const rpc = vi.fn().mockResolvedValue({
       channels: {
-        telegram: {
+        dingtalk: {
           configured: true,
         },
       },
       channelAccounts: {
-        telegram: [
+        dingtalk: [
           {
             accountId: 'default',
             configured: true,
@@ -188,7 +177,7 @@ describe('handleChannelRoutes', () => {
             linked: false,
           },
           {
-            accountId: 'telegram-b',
+            accountId: 'dingtalk-b',
             configured: true,
             connected: false,
             running: false,
@@ -198,7 +187,7 @@ describe('handleChannelRoutes', () => {
         ],
       },
       channelDefaultAccountId: {
-        telegram: 'default',
+        dingtalk: 'default',
       },
     });
 
@@ -224,11 +213,11 @@ describe('handleChannelRoutes', () => {
         success: true,
         channels: [
           expect.objectContaining({
-            channelType: 'telegram',
+            channelType: 'dingtalk',
             status: 'connected',
             accounts: expect.arrayContaining([
               expect.objectContaining({ accountId: 'default', status: 'connected' }),
-              expect.objectContaining({ accountId: 'telegram-b', status: 'error' }),
+              expect.objectContaining({ accountId: 'dingtalk-b', status: 'error' }),
             ]),
           }),
         ],
@@ -332,7 +321,7 @@ describe('handleChannelRoutes', () => {
 
   it('reloads gateway in-place when binding a non-plugin channel account', async () => {
     parseJsonBodyMock.mockResolvedValue({
-      channelType: 'telegram',
+      channelType: 'dingtalk',
       accountId: 'default',
       agentId: 'main',
     });

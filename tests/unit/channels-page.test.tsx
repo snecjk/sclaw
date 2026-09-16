@@ -29,12 +29,19 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('sonner', () => ({
-  toast: {
-    success: vi.fn(),
-    error: vi.fn(),
-    warning: vi.fn(),
-  },
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: (selector: (state: { user: null }) => unknown) => selector({ user: null }),
+}));
+
+vi.mock('@/stores/agent-engine-policy', () => ({
+  getAgentEnginePolicyOptionLabel: (engine: { code: string }) => engine.code,
+  useAgentEnginePolicyStore: (selector: (state: {
+    engines: Array<{ code: string }>;
+    fetchPolicy: () => Promise<void>;
+  }) => unknown) => selector({
+    engines: [{ code: 'openclaw' }, { code: 'claude' }, { code: 'pi' }],
+    fetchPolicy: async () => undefined,
+  }),
 }));
 
 describe('Channels page status refresh', () => {
@@ -69,6 +76,10 @@ describe('Channels page status refresh', () => {
           success: true,
           agents: [],
         };
+      }
+
+      if (path.startsWith('/api/channels/config/')) {
+        return { success: true, values: {} };
       }
 
       throw new Error(`Unexpected host API path: ${path}`);
@@ -163,16 +174,20 @@ describe('Channels page status refresh', () => {
         return { success: true };
       }
 
+      if (path.startsWith('/api/channels/config/')) {
+        return { success: true, values: {} };
+      }
+
       throw new Error(`Unexpected host API path: ${path}`);
     });
 
     render(<Channels />);
 
     await waitFor(() => {
-      expect(screen.getByText('WeChat')).toBeInTheDocument();
+      expect(screen.getByText('微信')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'account.add' }));
+    fireEvent.click(screen.getByRole('button', { name: 'account.edit' }));
 
     await waitFor(() => {
       expect(screen.getByText('dialog.configureTitle')).toBeInTheDocument();
