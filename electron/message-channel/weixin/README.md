@@ -6,6 +6,7 @@ Host Worker + iLink transport for WeChat ClawBot (Pi-only, single Bot).
 
 ```
 weixin/
+  host-login.ts / routes.ts                         # Host 扫码 + /api/channels/wechat/*
   service.ts / bridge-*.ts / binding.ts / types.ts   # Host
   runtime/
     worker-entry.ts / fork-options.ts
@@ -14,6 +15,8 @@ weixin/
     spike/         # Phase 0 R1/R4 gate
     vendor/        # upstream snapshot (MIT)
 ```
+
+Accounts list merge (Hub + Weixin overlays): `../host/list.ts`.
 
 ## State directory
 

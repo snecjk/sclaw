@@ -31,11 +31,43 @@ vi.mock('@electron/utils/agent-config', () => ({
   listAgentsSnapshot: (...args: unknown[]) => listAgentsSnapshotMock(...args),
 }));
 
-vi.mock('@electron/utils/wechat-login', () => ({
+vi.mock('@electron/message-channel/weixin/host-login', () => ({
   cancelWeChatLoginSession: vi.fn(),
   saveWeChatAccountState: vi.fn(),
   startWeChatLoginSession: vi.fn(),
   waitForWeChatLoginSession: vi.fn(),
+}));
+
+vi.mock('@electron/message-channel/hub/binding-service', () => ({
+  getChannelConnection: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('@electron/message-channel/hub/hub-client', () => ({
+  getSclawHubClient: vi.fn(() => ({
+    getStatus: () => ({ connected: false, state: 'idle' }),
+  })),
+}));
+
+vi.mock('@electron/message-channel/hub/startup', () => ({
+  ensureSclawHubConnected: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@electron/message-channel/weixin/binding', () => ({
+  getWeixinBinding: vi.fn().mockResolvedValue(null),
+  getBoundWeixinAccountId: vi.fn().mockReturnValue(null),
+  unbindWeixinBot: vi.fn(),
+}));
+
+vi.mock('@electron/message-channel/weixin/service', () => ({
+  getWeixinChannelService: vi.fn(() => ({
+    isMonitorRunning: () => false,
+    isReady: () => false,
+    setGatewayManager: vi.fn(),
+    applyLoginSuccess: vi.fn(),
+    ensureReady: vi.fn().mockResolvedValue(undefined),
+    stopMonitor: vi.fn(),
+    sendCommand: vi.fn(),
+  })),
 }));
 
 vi.mock('@electron/api/route-utils', () => ({

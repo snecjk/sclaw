@@ -80,7 +80,7 @@
 | 位置 | 说明 |
 | --- | --- |
 | `electron/message-channel/weixin/**` | Host Worker + iLink transport |
-| `electron/utils/wechat-login.ts` | Host 扫码 |
+| `electron/message-channel/weixin/host-login.ts` | Host 扫码 |
 | `electron/utils/channel-alias.ts` | `wechat` ↔ `openclaw-weixin` |
 | `shared/weixin-runtime-protocol.ts` | Worker 契约 |
 | `src/assets/channels/wechat.svg`、`src/assets/icons/wechat.svg` | 品牌图标 |
@@ -484,7 +484,7 @@ Mobile / 钉钉 Hub 走 `hub/routes.ts`，不受这条影响。
 - `electron/message-channel/hub/**`、`common/**`、`mobile/**`（钉钉 Hub + Mobile，含 `hub/routes.ts`）
 - `electron/api/server.ts` 对 `handleChannelHubRoutes` 的注册（只允许改 import 路径，不改语义）
 - `electron/message-channel/weixin/**`
-- `electron/utils/wechat-login.ts`
+- `electron/message-channel/weixin/host-login.ts`
 - `src/components/channels/DingTalkHubBindModal.tsx`
 - `src/components/channels/MobileAppConfigModal.tsx`
 - `sto-dingtalk-send-guard` / `ensureStoDingTalkSendGuardPluginInstalled`
@@ -529,7 +529,7 @@ pnpm exec vitest run tests/unit/channel-config.test.ts \
   tests/unit/channel-hub-independent-bind.test.ts \
   tests/unit/openclaw-proxy.test.ts \
   tests/unit/channels-page.test.tsx \
-  tests/unit/wechat-login.test.ts
+  tests/unit/weixin-host-login.test.ts
 ```
 
 **2026-09-16 收口结果：**

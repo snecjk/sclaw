@@ -45,6 +45,7 @@ import { handleTaskGroupRoutes } from './routes/task-groups';
 import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleDingTalkRoutes } from './routes/dingtalk';
 import { handleChannelHubRoutes } from '../message-channel/hub/routes';
+import { handleWeixinChannelRoutes } from '../message-channel/weixin/routes';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
@@ -90,6 +91,7 @@ const routeHandlers: RouteHandler[] = [
   handleSubscriptionRoutes,
   handleAgentRoutes,
   handleChannelHubRoutes,
+  handleWeixinChannelRoutes,
   handleChannelRoutes,
   handleSkillRoutes,
   handleSkillPlazaRoutes,

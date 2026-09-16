@@ -42,7 +42,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-describe('wechat login utility', () => {
+describe('weixin host-login', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.resetModules();
@@ -78,7 +78,7 @@ describe('wechat login utility', () => {
       saveWeChatAccountState,
       startWeChatLoginSession,
       waitForWeChatLoginSession,
-    } = await import('@electron/utils/wechat-login');
+    } = await import('@electron/message-channel/weixin/host-login');
 
     const startResult = await startWeChatLoginSession({});
     expect(startResult.qrcodeUrl).toMatch(/^data:image\/png;base64,/);

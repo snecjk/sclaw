@@ -4,8 +4,8 @@ import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { deflateSync } from 'node:zlib';
-import { normalizeOpenClawAccountId } from './channel-alias';
-import { getOpenClawResolvedDir, getOpenClawConfigDir, getStoClawHomeDir } from './paths';
+import { normalizeOpenClawAccountId } from '../../utils/channel-alias';
+import { getOpenClawResolvedDir, getOpenClawConfigDir, getStoClawHomeDir } from '../../utils/paths';
 
 export const DEFAULT_WECHAT_BASE_URL = 'https://ilinkai.weixin.qq.com';
 const DEFAULT_ILINK_BOT_TYPE = '3';

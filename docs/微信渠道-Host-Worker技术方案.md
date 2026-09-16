@@ -15,7 +15,7 @@
 ### 1.1 背景
 
 - 当前微信依赖 `@tencent-weixin/openclaw-weixin`，以 **OpenClaw Gateway 渠道插件** 形式运行。
-- 登录扫码已在 Host 侧（`electron/utils/wechat-login.ts`），消息收发仍在 OC 子进程。
+- 登录扫码已在 Host 侧（`electron/message-channel/weixin/host-login.ts`），消息收发仍在 OC 子进程。
 - Claude 在主进程、Pi 在 `utilityProcess`；跨引擎事件经 `GatewayManager`（EventEmitter）进入 `ChatRuntimeSupervisor`。
 - 钉钉已存在 Host 编排路径：`ingress` → `session-facade` → Claude/Pi → `delivery`。
 
@@ -68,7 +68,7 @@
 ### 3.1 现状（微信）
 
 ```
-UI 扫码 → wechat-login（Host）→ 凭证写入 ~/.stoclaw/openclaw/openclaw-weixin/
+UI 扫码 → weixin/host-login（Host）→ 凭证写入 ~/.stoclaw/weixin/（legacy: openclaw/openclaw-weixin/）
                                       ↓
                          OC Gateway 加载 openclaw-weixin 插件
                                       ↓
@@ -282,7 +282,7 @@ Phase 1 估时：MessagePort 仅 typing/commit/cancel，**不要**按「复刻 d
 
 ### 4.5 登录与凭证
 
-- 扫码可保留在主进程（现有 `wechat-login.ts`），成功后：
+- 扫码可保留在主进程（现有 `weixin/host-login.ts`），成功后：
   1. 写入 **新目录**（例如 `~/.stoclaw/channels/weixin/`）
   2. `account.upsert` 通知 Worker
 - 去掉对 `getOpenClawResolvedDir()` / `qrcode-terminal` 从 OC 包解析的依赖；改为自有依赖或轻量 QR 生成。
@@ -693,7 +693,7 @@ iLink 的 `context_token` 用于 **单次回复对齐微信侧线程**，不等�
 
 - 上游说明：[Tencent/openclaw-weixin README.zh_CN](https://github.com/Tencent/openclaw-weixin/blob/main/README.zh_CN.md)
 - 协议：[protocol_zh_CN.md](https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol_zh_CN.md)
-- 本仓库：`electron/message-channel/{common,hub,mobile,weixin}/`、`electron/utils/wechat-login.ts`、`electron/services/pi-runtime-service.ts`
+- 本仓库：`electron/message-channel/{common,hub,host,mobile,weixin}/`（含 `weixin/host-login.ts`）、`electron/services/pi-runtime-service.ts`
 - 扩展架构：`docs/agent-extension-architecture.md`
 
 ---
