@@ -53,14 +53,14 @@ const macArtworkImageStyle = {
 } satisfies CSSProperties;
 
 const ssoEnvironmentTriggerClass = cn(
-  'flex h-full w-full items-center justify-between gap-2 rounded-xl border border-[#E5E6EB] bg-white px-3 text-left text-[13px] text-[#1D2129]',
-  'shadow-none outline-none transition-colors hover:bg-[#F7F8FA]',
+  'flex h-full w-full items-center justify-between gap-2 rounded-xl border border-[#E5E6EB] bg-white/70 px-3 text-left text-[13px] text-[#1D2129]',
+  'shadow-none outline-none backdrop-blur transition-colors hover:bg-white/90',
   'focus-visible:ring-2 focus-visible:ring-[#1D2129]/10',
   'disabled:cursor-not-allowed disabled:opacity-70',
 );
 
 const ssoEnvironmentMenuClass = cn(
-  'z-50 rounded-xl border border-[#E5E6EB] bg-white p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]',
+  'z-50 rounded-xl border border-[#E5E6EB] bg-white/80 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)] backdrop-blur',
 );
 
 function SsoEnvironmentDropdown({
