@@ -50,6 +50,30 @@
     <div id="splash-screen">
       <img class="splash-artwork" src="/src/assets/auth/loading.svg" alt="SClaw 正在加载" />
     </div>
+    <script>
+      // 以 SVG 真正加载完成的时刻作为 0% 起点，确保走满后才切页。
+      const splashArtwork = document.querySelector('.splash-artwork');
+      const markSplashStarted = () => {
+        if (window.__SCLAW_SPLASH_STARTED_AT__) return;
+        window.__SCLAW_SPLASH_STARTED_AT__ = Date.now();
+        window.dispatchEvent(new Event('sclaw-splash-started'));
+      };
+      // Electron 会缓存 <img> 内的 SVG 动画时间轴，Ctrl+R 后直接复用会停在 100%。
+      // 每次文档加载都换一个仅用于本次启动的 URL，强制 SVG 时间轴从 0 重建。
+      const splashUrl = new URL(splashArtwork.src);
+      splashUrl.searchParams.set(
+        'splash-run',
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
+      const expectedSplashUrl = splashUrl.href;
+      const handleSplashLoad = () => {
+        if (splashArtwork.src !== expectedSplashUrl) return;
+        splashArtwork.removeEventListener('load', handleSplashLoad);
+        markSplashStarted();
+      };
+      splashArtwork.addEventListener('load', handleSplashLoad);
+      splashArtwork.src = expectedSplashUrl;
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
