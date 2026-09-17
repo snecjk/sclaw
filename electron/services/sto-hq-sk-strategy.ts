@@ -17,6 +17,7 @@ import {
   fetchHqTokenQuotaTiersViaMemoryCenter,
   StoHqMemoryApiError,
 } from './sto-hq-memory-api-service';
+import { fetchGatewayModels } from './sto-gateway-models-service';
 import {
   getHqInferenceProductCode,
   hasHqInferenceProductCodeCached,
@@ -110,12 +111,59 @@ export class HqSkStrategy implements StoSkStrategy {
         return null;
       }
 
+      // 并行获取网关模型详情（不阻塞模型 ID 返回）
+      void this.storeModelDetails(ensured.models);
+
       logger.info(`[hq-sk] Models from memory-center: ${ensured.models.length} items`);
       return ensured.models;
     } catch (err) {
       const message = err instanceof StoHqMemoryApiError ? err.message : String(err);
       logger.warn(`[hq-sk] getUserModels via memory-center failed: ${message}`);
       return null;
+    }
+  }
+
+  /** 获取网关模型详情并写入 ProviderAccount.metadata.customModelDetails */
+  private async storeModelDetails(modelIds: string[]): Promise<void> {
+    try {
+      const details = await fetchGatewayModels();
+      if (details.length === 0) {
+        logger.info('[hq-sk] fetchGatewayModels returned empty, skip storing details');
+        return;
+      }
+
+      const modelDetailsMap: Record<string, { inputContent?: string; maxContextWindow?: string; category?: string; ability?: string }> = {};
+      for (const d of details) {
+        if (d.model) {
+          modelDetailsMap[d.model] = {
+            inputContent: d.inputContent,
+            maxContextWindow: d.maxContextWindow,
+            category: d.category,
+            ability: d.ability,
+          };
+        }
+      }
+
+      // 写入 ProviderAccount metadata
+      const { getProviderService } = await import('./providers/provider-service');
+      const { listProviderAccounts } = await import('./providers/provider-store');
+      const { STO_CANONICAL_ACCOUNT_ID } = await import('./providers/sto-placeholder-utils');
+
+      const accounts = await listProviderAccounts();
+      const stoAccount = accounts.find((a) => a.id === STO_CANONICAL_ACCOUNT_ID);
+      if (stoAccount) {
+        const providerService = getProviderService();
+        await providerService.updateAccount(STO_CANONICAL_ACCOUNT_ID, {
+          metadata: {
+            ...stoAccount.metadata,
+            customModelDetails: modelDetailsMap,
+          },
+        });
+        logger.info(`[hq-sk] Stored ${Object.keys(modelDetailsMap).length} model details in metadata`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn(`[hq-sk] storeModelDetails failed: ${message}`);
     }
   }
 

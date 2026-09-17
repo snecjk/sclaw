@@ -129,6 +129,19 @@ function serializeError(error: unknown): SerializedPiError {
   return { message: String(error) };
 }
 
+/**
+ * PI SDK may return percent=null even when tokens and contextWindow are
+ * available (e.g. after compaction). Compute a fallback percentage so the UI
+ * never shows "--%" when we have enough data.
+ */
+function computeFallbackPercent(
+  tokens: number | null | undefined,
+  contextWindow: number | null | undefined,
+): number | null {
+  if (tokens == null || contextWindow == null || contextWindow <= 0) return null;
+  return Math.round((tokens / contextWindow) * 10_000) / 100;
+}
+
 function isRetryExhaustedNetworkError(message: string): boolean {
   const lower = message.toLowerCase();
   return lower.includes('request timed out')
@@ -296,6 +309,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
     foundBuiltin: Boolean(model),
   });
   if (!model && config.model.baseUrl) {
+    const resolvedContextWindow = config.model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW;
     modelRuntime.registerProvider(providerId, {
       baseUrl: config.model.baseUrl,
       apiKey: config.model.apiKey || 'sclaw-runtime-key',
@@ -307,7 +321,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
         reasoning: false,
         input: ['text', 'image'],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW,
+        contextWindow: resolvedContextWindow,
         maxTokens: DEFAULT_MODEL_MAX_TOKENS,
         compat: getPiModelCompat(config.model.apiProtocol),
       }],
@@ -319,6 +333,7 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
       model: config.model.model,
       baseUrl: config.model.baseUrl,
       apiProtocol: config.model.apiProtocol ?? 'openai-completions',
+      contextWindow: resolvedContextWindow,
     });
   }
   if (config.model.apiKey) {
@@ -433,17 +448,28 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
           entry.terminalAssistantError = undefined;
           emit(config.sessionKey, { type: 'message.final', sessionKey: config.sessionKey, runId, message });
           const contextUsage = entry.session.getContextUsage();
+          const resolvedContextWindow = contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null;
+          const resolvedPercent = contextUsage?.percent ?? computeFallbackPercent(contextUsage?.tokens, resolvedContextWindow);
           emit(config.sessionKey, {
             type: 'context.usage.updated',
             sessionKey: config.sessionKey,
             runId,
             usage: {
               tokens: contextUsage?.tokens ?? null,
-              contextWindow: contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null,
-              percent: contextUsage?.percent ?? null,
-              accuracy: contextUsage?.percent == null ? 'unknown' : 'exact',
+              contextWindow: resolvedContextWindow,
+              percent: resolvedPercent,
+              accuracy: resolvedPercent != null ? 'exact' : 'unknown',
               updatedAt: Date.now(),
             },
+          });
+          logPiCore('event.context-usage', {
+            sessionKey: config.sessionKey,
+            runId,
+            model: config.model.model,
+            contextTokens: contextUsage?.tokens ?? null,
+            contextWindow: resolvedContextWindow,
+            contextPercent: resolvedPercent,
+            compactionTriggered: false,
           });
           entry.streamingAssistant = undefined;
         } else if (message.role === 'toolResult') {
@@ -463,11 +489,15 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
           startedAt: Date.now(),
           reason: event.reason,
         };
+        const compactionStartUsage = entry.session.getContextUsage();
         logPiCore('event.compaction-start', {
           sessionKey: config.sessionKey,
           runId,
           attemptId: activeCompaction.attemptId,
           reason: event.reason,
+          contextTokens: compactionStartUsage?.tokens ?? null,
+          contextWindow: entry.session.model?.contextWindow ?? null,
+          contextPercent: compactionStartUsage?.percent ?? null,
         });
         emit(config.sessionKey, {
           type: 'context.compaction.started',
@@ -517,18 +547,24 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
           aborted: event.aborted,
           willRetry: event.willRetry,
           durationMs,
+          tokensBefore: event.result?.tokensBefore ?? null,
+          tokensAfter: event.result?.estimatedTokensAfter ?? null,
+          contextWindow: entry.session.model?.contextWindow ?? null,
+          contextPercentAfter: resolvedPercent,
         });
         activeCompaction = null;
         const contextUsage = entry.session.getContextUsage();
+        const resolvedContextWindow = contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null;
+        const resolvedPercent = contextUsage?.percent ?? computeFallbackPercent(contextUsage?.tokens, resolvedContextWindow);
         emit(config.sessionKey, {
           type: 'context.usage.updated',
           sessionKey: config.sessionKey,
           runId,
           usage: {
             tokens: contextUsage?.tokens ?? null,
-            contextWindow: contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null,
-            percent: contextUsage?.percent ?? null,
-            accuracy: contextUsage?.percent == null ? 'unknown' : 'exact',
+            contextWindow: resolvedContextWindow,
+            percent: resolvedPercent,
+            accuracy: resolvedPercent != null ? 'exact' : 'unknown',
             updatedAt: Date.now(),
           },
         });
@@ -822,6 +858,14 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       const attemptId = randomUUID();
       const startedAt = Date.now();
       const before = entry.session.getContextUsage();
+      logPiCore('event.compaction-start', {
+        sessionKey: config.sessionKey,
+        attemptId,
+        reason: 'manual',
+        contextTokens: before?.tokens ?? null,
+        contextWindow: entry.session.model?.contextWindow ?? null,
+        contextPercent: before?.percent ?? null,
+      });
       emit(config.sessionKey, {
         type: 'context.compaction.started',
         sessionKey: config.sessionKey,
@@ -832,19 +876,25 @@ async function handle(request: PiWorkerRequest): Promise<void> {
       try {
         const result = await entry.session.compact();
         const after = entry.session.getContextUsage();
+        // PI SDK may return null tokens after compaction; fall back to
+        // estimatedTokensAfter from the compact() result so the UI can show
+        // a meaningful percentage instead of "--%".
+        const resolvedTokens = after?.tokens ?? result.estimatedTokensAfter ?? null;
+        const resolvedContextWindow = after?.contextWindow ?? entry.session.model?.contextWindow ?? null;
+        const resolvedPercent = after?.percent ?? computeFallbackPercent(resolvedTokens, resolvedContextWindow);
         emit(config.sessionKey, {
           type: 'context.compaction.completed',
           sessionKey: config.sessionKey,
           attemptId,
           reason: 'manual',
           tokensBefore: result.tokensBefore,
-          tokensAfter: after?.tokens ?? undefined,
+          tokensAfter: resolvedTokens ?? undefined,
           durationMs: Date.now() - startedAt,
         });
         const usage: PiContextUsageResult = {
-          tokens: after?.tokens ?? null,
-          contextWindow: after?.contextWindow ?? entry.session.model?.contextWindow ?? null,
-          percent: after?.percent ?? null,
+          tokens: resolvedTokens,
+          contextWindow: resolvedContextWindow,
+          percent: resolvedPercent,
         };
         emit(config.sessionKey, {
           type: 'context.usage.updated',
@@ -855,8 +905,29 @@ async function handle(request: PiWorkerRequest): Promise<void> {
             updatedAt: Date.now(),
           },
         });
+        logPiCore('event.compaction-end', {
+          sessionKey: config.sessionKey,
+          attemptId,
+          reason: 'manual',
+          success: true,
+          durationMs: Date.now() - startedAt,
+          tokensBefore: result.tokensBefore ?? null,
+          tokensAfter: resolvedTokens ?? null,
+          contextWindow: resolvedContextWindow,
+          contextPercentAfter: resolvedPercent,
+        });
         respond(request.requestId, true, { compacted: true, usage });
       } catch (error) {
+        const durationMs = Date.now() - startedAt;
+        logPiCore('event.compaction-end', {
+          sessionKey: config.sessionKey,
+          attemptId,
+          reason: 'manual',
+          success: false,
+          durationMs,
+          error: serializeError(error).message,
+          contextWindow: entry.session.model?.contextWindow ?? null,
+        });
         emit(config.sessionKey, {
           type: 'context.compaction.failed',
           sessionKey: config.sessionKey,
@@ -864,7 +935,7 @@ async function handle(request: PiWorkerRequest): Promise<void> {
           reason: 'manual',
           willRetry: false,
           errorMessage: serializeError(error).message,
-          durationMs: Date.now() - startedAt,
+          durationMs,
         });
         throw error;
       }

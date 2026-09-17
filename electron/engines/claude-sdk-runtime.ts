@@ -125,19 +125,44 @@ export async function withClaudeConfigDirEnv<T>(
   return next;
 }
 
+/**
+ * Parse the gateway model's maxContextWindow (stored as string) into a number.
+ * Returns null if the value is missing or invalid.
+ */
+function resolveGatewayContextWindow(
+  customModelDetails: Record<string, { maxContextWindow?: string }> | undefined,
+  modelId: string,
+): number | null {
+  if (!customModelDetails) return null;
+  const detail = customModelDetails[modelId];
+  if (!detail?.maxContextWindow) return null;
+  const parsed = Number(detail.maxContextWindow);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 async function buildClaudeEnvForAccount(
   accountId: string,
-  account?: ProviderAccount | null,
+  options?: {
+    account?: ProviderAccount | null;
+    modelId?: string;
+  },
 ): Promise<NodeJS.ProcessEnv> {
+  const account = options?.account ?? await getProviderAccount(accountId);
+
+  // Resolve real contextWindow from gateway model metadata; fall back to shared default.
+  const resolvedContextWindow = resolveGatewayContextWindow(
+    account?.metadata?.customModelDetails,
+    options?.modelId ?? '',
+  ) ?? DEFAULT_MODEL_CONTEXT_WINDOW;
+
   let base: NodeJS.ProcessEnv = {
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
     CLAUDE_CODE_STREAM_CLOSE_TIMEOUT:
       process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT || '300000',
-    // Claude Code falls back to 200K for unrecognized Anthropic-compatible
-    // models. Keep its context accounting and auto-compaction threshold aligned
-    // with the shared runtime default until provider model metadata is wired in.
-    CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(DEFAULT_MODEL_CONTEXT_WINDOW),
+    // Use the gateway model's real maxContextWindow when available;
+    // otherwise fall back to the shared runtime default (256,000).
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(resolvedContextWindow),
   };
   // Connector CLIs: only inject PATH when the connector is connected (Gateway parity).
   if (isBinaryAllowedByConnectors('dws')) {
@@ -171,6 +196,7 @@ async function buildClaudeEnvForAccount(
     accountId,
     provider: resolvedAccount.vendorId,
     baseUrl: resolvedAccount.baseUrl ?? '(default)',
+    contextWindow: resolvedContextWindow,
   });
   return base;
 }
@@ -223,7 +249,7 @@ export async function prepareClaudeRuntime(input: {
   const account = await getProviderAccount(selection.accountId);
   return {
     configDir: getClaudeConfigDir(),
-    env: await buildClaudeEnvForAccount(selection.accountId, account),
+    env: await buildClaudeEnvForAccount(selection.accountId, { account, modelId: selection.model }),
     pathToClaudeCodeExecutable: getBundledClaudeExecutablePath(),
     selection,
   };
