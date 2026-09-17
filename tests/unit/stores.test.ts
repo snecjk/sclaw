@@ -21,7 +21,7 @@ describe('Settings Store', () => {
       startMinimized: false,
       launchAtStartup: false,
       personalizedMemoryEnabled: false,
-      skillDiscoveryEnabled: true,
+      skillDiscoveryEnabled: false,
       updateChannel: 'stable',
     });
   });
@@ -31,6 +31,7 @@ describe('Settings Store', () => {
     expect(state.theme).toBe('dark');
     expect(state.sidebarCollapsed).toBe(false);
     expect(state.gatewayAutoStart).toBe(true);
+    expect(state.skillDiscoveryEnabled).toBe(false);
   });
   
   it('should update theme', () => {
@@ -174,9 +175,9 @@ describe('Settings Store', () => {
     });
 
     const { setSkillDiscoveryEnabled } = useSettingsStore.getState();
-    await setSkillDiscoveryEnabled(false);
+    await setSkillDiscoveryEnabled(true);
 
-    expect(useSettingsStore.getState().skillDiscoveryEnabled).toBe(false);
+    expect(useSettingsStore.getState().skillDiscoveryEnabled).toBe(true);
     expect(invoke).toHaveBeenCalledWith(
       'hostapi:fetch',
       expect.objectContaining({

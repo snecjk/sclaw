@@ -97,7 +97,7 @@ const defaultSettings = {
   startMinimized: false,
   launchAtStartup: false,
   personalizedMemoryEnabled: false,
-  skillDiscoveryEnabled: true,
+  skillDiscoveryEnabled: false,
   preventSystemSleep: false,
   // Telemetry disabled by default for faster cold starts
   // Users can enable it in Settings > Advanced

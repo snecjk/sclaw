@@ -141,7 +141,7 @@ function createDefaultSettings(): AppSettings {
     selectedBundles: ['productivity', 'developer'],
     enabledSkills: [],
     disabledSkills: [],
-    skillDiscoveryEnabled: true,
+    skillDiscoveryEnabled: false,
 
     // DingTalk dws
     dingTalkDwsEnabled: true,
