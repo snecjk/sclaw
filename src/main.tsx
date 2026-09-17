@@ -35,19 +35,25 @@ if (hashPath === '/float-icon') {
   if (splash) splash.classList.add('hidden');
 }
 
-// Track when splash was first shown
-const splashStartTime = Date.now();
-const MIN_SPLASH_DISPLAY_MS = 800; // Minimum time to show splash screen
+// 与 loading.svg 的单次进度动画保持一致：每次启动从 0 开始，走满后才切入应用。
+const SPLASH_PROGRESS_DURATION_MS = 2400;
+type SplashWindow = Window & { __SCLAW_SPLASH_STARTED_AT__?: number };
 
-// Hide splash screen with minimum display time
+// React 就绪后，等进度动画完成再隐藏 splash。
 function hideSplashScreen() {
   const splash = document.getElementById('splash-screen');
   if (!splash) return;
+
+  const splashStartTime = (window as SplashWindow).__SCLAW_SPLASH_STARTED_AT__;
+  if (!splashStartTime) {
+    window.addEventListener('sclaw-splash-started', hideSplashScreen, { once: true });
+    return;
+  }
   
   const elapsed = Date.now() - splashStartTime;
-  const remainingTime = Math.max(0, MIN_SPLASH_DISPLAY_MS - elapsed);
+  const remainingTime = Math.max(0, SPLASH_PROGRESS_DURATION_MS - elapsed);
   
-  // Wait for minimum display time before hiding
+  // 不让页面提前跳转，避免进度条尚未走满。
   setTimeout(() => {
     splash.classList.add('fade-out');
     setTimeout(() => {

@@ -10,11 +10,11 @@
       html, body {
         margin: 0;
         padding: 0;
-        background: #ededed;
+        background: #fff;
         color-scheme: light;
         min-height: 100vh;
       }
-      
+
       /* Splash screen styles - shown immediately before React loads */
       #splash-screen {
         position: fixed;
@@ -22,11 +22,8 @@
         left: 0;
         width: 100vw;
         height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: #ededed;
+        overflow: hidden;
+        background: #fff;
         z-index: 9999;
         transition: opacity 0.3s ease-out;
       }
@@ -34,60 +31,13 @@
         opacity: 0;
         pointer-events: none;
       }
-      .splash-logo {
-        width: 80px;
-        height: 80px;
-        margin-bottom: 24px;
-        animation: pulse 2s ease-in-out infinite;
-      }
-      .splash-text {
-        color: #4e5969;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 14px;
-        letter-spacing: 0.5px;
-      }
-      .splash-spinner {
-        margin-top: 24px;
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(29, 33, 41, 0.1);
-        border-top-color: rgba(167, 139, 250, 0.7);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-      .splash-progress {
-        margin-top: 16px;
-        color: #86909c;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 12px;
-        min-height: 18px;
-        text-align: center;
-      }
-      @media (prefers-color-scheme: dark) {
-        html, body {
-          background: #0d0d0d;
-          color-scheme: dark;
-        }
-        #splash-screen {
-          background: #0d0d0d;
-        }
-        .splash-text {
-          color: rgba(255, 255, 255, 0.7);
-        }
-        .splash-progress {
-          color: rgba(255, 255, 255, 0.5);
-        }
-        .splash-spinner {
-          border-color: rgba(255, 255, 255, 0.1);
-          border-top-color: #ff6f00;
-        }
-      }
-      @keyframes pulse {
-        0%, 100% { opacity: 0.8; transform: scale(1); }
-        50% { opacity: 1; transform: scale(1.05); }
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
+      .splash-artwork {
+        position: absolute;
+        left: 0;
+        top: -7.1429%;
+        width: 100%;
+        height: 107.1429%;
+        object-fit: fill;
       }
       /* Hide splash when React takes over */
       #splash-screen.hidden {
@@ -98,27 +48,33 @@
   <body>
     <!-- Splash screen shown instantly while app loads -->
     <div id="splash-screen">
-      <svg class="splash-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="50" cy="50" r="45" stroke="rgba(167, 139, 250, 0.6)" stroke-width="4" fill="rgba(255, 255, 255, 0.05)"/>
-        <path d="M30 50 L45 65 L70 35" stroke="rgba(167, 139, 250, 0.8)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <div class="splash-text">SClaw</div>
-      <div class="splash-spinner"></div>
-      <div id="splash-progress" class="splash-progress"></div>
+      <img class="splash-artwork" src="/src/assets/auth/loading.svg" alt="SClaw 正在加载" />
     </div>
+    <script>
+      // 以 SVG 真正加载完成的时刻作为 0% 起点，确保走满后才切页。
+      const splashArtwork = document.querySelector('.splash-artwork');
+      const markSplashStarted = () => {
+        if (window.__SCLAW_SPLASH_STARTED_AT__) return;
+        window.__SCLAW_SPLASH_STARTED_AT__ = Date.now();
+        window.dispatchEvent(new Event('sclaw-splash-started'));
+      };
+      // Electron 会缓存 <img> 内的 SVG 动画时间轴，Ctrl+R 后直接复用会停在 100%。
+      // 每次文档加载都换一个仅用于本次启动的 URL，强制 SVG 时间轴从 0 重建。
+      const splashUrl = new URL(splashArtwork.src);
+      splashUrl.searchParams.set(
+        'splash-run',
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
+      const expectedSplashUrl = splashUrl.href;
+      const handleSplashLoad = () => {
+        if (splashArtwork.src !== expectedSplashUrl) return;
+        splashArtwork.removeEventListener('load', handleSplashLoad);
+        markSplashStarted();
+      };
+      splashArtwork.addEventListener('load', handleSplashLoad);
+      splashArtwork.src = expectedSplashUrl;
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Listen for startup progress updates from main process (before React loads)
-      // This provides immediate feedback during the critical first-launch period
-      if (window.electron && window.electron.ipcRenderer) {
-        window.electron.ipcRenderer.on('startup-progress', (event, message) => {
-          const progressEl = document.getElementById('splash-progress');
-          if (progressEl) {
-            progressEl.textContent = message || '';
-          }
-        });
-      }
-    </script>
   </body>
 </html>
