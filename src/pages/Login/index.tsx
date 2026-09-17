@@ -6,13 +6,13 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown } from 'lucide-react';
 import { TitleBar } from '@/components/layout/TitleBar';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
 import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { hostApiFetch } from '@/lib/host-api';
@@ -51,75 +51,6 @@ const macArtworkImageStyle = {
   top: `${-(MAC_ARTWORK_CROP_TOP / MAC_ARTWORK_CONTENT_HEIGHT) * 100}%`,
   height: `${(900 / MAC_ARTWORK_CONTENT_HEIGHT) * 100}%`,
 } satisfies CSSProperties;
-
-const ssoEnvironmentTriggerClass = cn(
-  'flex h-full w-full items-center justify-between gap-2 rounded-xl border border-[#E5E6EB] bg-white/70 px-3 text-left text-[13px] text-[#1D2129]',
-  'shadow-none outline-none backdrop-blur transition-colors hover:bg-white/90',
-  'focus-visible:ring-2 focus-visible:ring-[#1D2129]/10',
-  'disabled:cursor-not-allowed disabled:opacity-70',
-);
-
-const ssoEnvironmentMenuClass = cn(
-  'z-50 rounded-xl border border-[#E5E6EB] bg-white/80 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)] backdrop-blur',
-);
-
-function SsoEnvironmentDropdown({
-  value,
-  options,
-  onChange,
-  disabled,
-  getLabel,
-}: {
-  value: SsoEnvironment;
-  options: SsoEnvironment[];
-  onChange: (value: SsoEnvironment) => void;
-  disabled?: boolean;
-  getLabel: (value: SsoEnvironment) => string;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={disabled}>
-        <button
-          id="sto-sso-env"
-          type="button"
-          className={ssoEnvironmentTriggerClass}
-          disabled={disabled}
-          aria-label="SSO 环境"
-        >
-          <span className="min-w-0 flex-1 truncate">{getLabel(value)}</span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-[#86909C]" aria-hidden strokeWidth={1.8} />
-        </button>
-      </DropdownMenuTrigger>
-      {!disabled ? (
-        <DropdownMenuContent
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          avoidCollisions={false}
-          className={cn(ssoEnvironmentMenuClass, 'w-[var(--radix-dropdown-menu-trigger-width)]')}
-        >
-          {options.map((option) => {
-            const selected = option === value;
-            return (
-              <DropdownMenuItem
-                key={option}
-                className={cn(
-                  'flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[13px] text-[#1D2129]',
-                  'focus:bg-[#F7F8FA]',
-                  selected && 'bg-[#F7F8FA]',
-                )}
-                onSelect={() => onChange(option)}
-              >
-                <span className="min-w-0 truncate">{getLabel(option)}</span>
-                {selected ? <Check className="h-4 w-4 shrink-0 text-[#1D2129]" /> : null}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      ) : null}
-    </DropdownMenu>
-  );
-}
 
 export function Login() {
   const { t } = useTranslation(['auth']);
@@ -221,14 +152,55 @@ export function Login() {
       </div>
 
       {isLocalDevelopment && !showDeniedArtwork && (
-        <div className="no-drag absolute left-[38.194%] top-[45.8%] z-10 h-[4.167%] min-h-9 w-[22.222%]">
-          <SsoEnvironmentDropdown
-            value={ssoEnvironment}
-            options={DEV_SSO_ENV_OPTIONS}
-            onChange={(environment) => void setSsoEnvironment(environment)}
-            disabled={isLoggingIn}
-            getLabel={(environment) => t(`auth:environment.${environment}`)}
-          />
+        <div className="no-drag absolute bottom-[2.8%] left-1/2 z-30 w-[280px] max-w-[calc(100vw-32px)] -translate-x-1/2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild disabled={isLoggingIn}>
+              <Button
+                id="sto-sso-env"
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="SSO 环境"
+                disabled={isLoggingIn}
+                className="h-9 w-full justify-between rounded-full border border-white/40 !bg-white/[0.14] px-4 text-[12px] font-medium !text-[#4E5969] shadow-[0_6px_20px_rgba(29,33,41,0.035),inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-xl hover:border-white/60 hover:!bg-white/[0.24] focus-visible:!bg-white/[0.28]"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#86909C]/70" aria-hidden />
+                  <span className="shrink-0 text-[#86909C]">开发环境</span>
+                  <span className="text-[#C9CDD4]" aria-hidden>·</span>
+                  <span className="truncate text-[#4E5969]">
+                    {t(`auth:environment.${ssoEnvironment}`)}
+                  </span>
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            {!isLoggingIn ? (
+              <DropdownMenuContent
+                side="top"
+                align="start"
+                sideOffset={6}
+                avoidCollisions={false}
+                className="w-[var(--radix-dropdown-menu-trigger-width)]"
+              >
+                {DEV_SSO_ENV_OPTIONS.map((environment) => {
+                  const selected = environment === ssoEnvironment;
+                  return (
+                    <DropdownMenuItem
+                      key={environment}
+                      className={selected ? 'font-medium' : undefined}
+                      onSelect={() => void setSsoEnvironment(environment)}
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {t(`auth:environment.${environment}`)}
+                      </span>
+                      {selected ? <Check className="h-4 w-4 shrink-0" aria-hidden /> : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            ) : null}
+          </DropdownMenu>
         </div>
       )}
 
