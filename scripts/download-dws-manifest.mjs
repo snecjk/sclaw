@@ -23,7 +23,7 @@ import {
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const OUTPUT_PATH = path.join(ROOT_DIR, 'resources', 'dws', 'manifest.json');
-const DEFAULT_VERSION = process.env.DWS_VERSION || '1.0.54';
+const DEFAULT_VERSION = process.env.DWS_VERSION || '1.0.60';
 
 async function defaultFetch(url, init = {}) {
   const controller = new AbortController();
