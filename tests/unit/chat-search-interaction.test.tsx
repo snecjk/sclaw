@@ -56,6 +56,7 @@ describe('ChatSearchBar Header interaction', () => {
 
     expect(document.activeElement).toBe(input);
     expect(input.closest('.no-drag')).not.toBeNull();
+    expect(input).toHaveClass('sto-control--search-input');
 
     fireEvent.change(input, { target: { value: '天气' } });
     expect(onChange).toHaveBeenCalledWith('天气');
