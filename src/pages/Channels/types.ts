@@ -53,4 +53,5 @@ export type MobileBindingState = {
   agentId: string | null;
   wsConnected: boolean;
   canConnectWs: boolean;
+  replaceHint?: 'other_device' | 'unbound' | null;
 } | null;

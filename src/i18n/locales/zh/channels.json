@@ -219,6 +219,8 @@
             "enabledHint": "已开启，手机「本地」页可连到本机",
             "disabledHint": "关闭时 App 无法路由到本机；打开后请保持 StoClaw 在线",
             "hubOfflineHint": "已开启，Hub 未连接时手机暂不可达",
+            "replacedByOtherDevice": "已在其它设备绑定，请重新绑定",
+            "replacedUnbound": "已解绑，请重新绑定",
             "needDingTalkWs": "通道中枢未连接，请确认已登录且网络正常",
             "wsOnline": "Hub 在线",
             "wsOffline": "Hub 离线",

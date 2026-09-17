@@ -44,6 +44,7 @@ async function getWeixinConnectionRow(): Promise<ChannelConnection | null> {
 }
 
 export function ensureWeixinCredentialsMigrated(): void {
+  // Permanent no-op: migrateLegacyCredentials no longer copies legacy OpenClaw creds.
   migrateLegacyCredentials({ overwrite: false });
 }
 
@@ -64,6 +65,9 @@ export async function getWeixinBinding(): Promise<WeixinBinding | null> {
     return null;
   }
   if (!conn) {
+    // First-bind window only: QR wrote credential files before the DB row landed.
+    // Epoch reset deletes both files and DB → this branch does not resurrect after reset.
+    // Do not reintroduce legacy OpenClaw credential migration here.
     const primary = resolvePrimaryAccount();
     if (!primary) return null;
     return {

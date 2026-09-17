@@ -1,5 +1,8 @@
 /**
  * WeixinChannelService — Host: fork worker, IPC, lifecycle, single-Bot API.
+ *
+ * Startup (段 A): fail → disposeChild → immediate retry, max 2 attempts (no backoff).
+ * Post-ready crash (段 B): if still bound → exponential backoff 1s/4s/16s… max 5 attempts.
  */
 
 import { EventEmitter } from 'node:events';
@@ -12,15 +15,20 @@ import type { WeixinWireCommand, WeixinWireEvent } from '../../../shared/weixin-
 import {
   ensureWeixinCredentialsMigrated,
   getBoundWeixinAccountId,
-  hasWeixinBotBound,
+  getWeixinBinding,
   upsertWeixinBinding,
 } from './binding';
 import { handleWeixinWireEvent } from './bridge-inbound';
+import { WEIXIN_PEER_ERROR_TEXT } from './peer-copy';
 import { buildWeixinUtilityForkOptions } from './runtime/fork-options';
 import { resolvePrimaryAccount } from './runtime/transport/account-store';
 import { resolveWeixinStateDir } from './runtime/transport/state-dir';
 
 const READY_TIMEOUT_MS = 15_000;
+const INITIAL_START_ATTEMPTS = 2;
+const POST_READY_MAX_RESTARTS = 5;
+/** Backoff delays for post-ready crash recovery: 1s, 4s, 16s, 64s, 256s */
+const POST_READY_BACKOFF_MS = [1_000, 4_000, 16_000, 64_000, 256_000] as const;
 
 type WeixinServiceEvents = {
   event: [WeixinWireEvent];
@@ -33,6 +41,10 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
   private startPromise: Promise<void> | null = null;
   private gatewayManager: GatewayManager | null = null;
   private monitorStarted = false;
+  /** Intentional shutdown — skip post-ready auto-restart. */
+  private shuttingDown = false;
+  private postReadyRestartCount = 0;
+  private postReadyRestartTimer: ReturnType<typeof setTimeout> | null = null;
 
   setGatewayManager(gm: GatewayManager | null): void {
     this.gatewayManager = gm;
@@ -44,10 +56,6 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
 
   isMonitorRunning(): boolean {
     return this.isReady() && this.monitorStarted;
-  }
-
-  hasBoundBot(): boolean {
-    return hasWeixinBotBound();
   }
 
   getBoundAccountId(): string | null {
@@ -69,16 +77,20 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
   async ensureReady(): Promise<void> {
     if (this.state === 'ready' && this.child) return;
     if (this.startPromise) return this.startPromise;
-    this.startPromise = this.startChild();
+    this.shuttingDown = false;
+    this.startPromise = this.startChildWithInitialRetry();
     try {
       await this.startPromise;
+      // Per-cluster budget: a successful ready handshake resets the post-ready restart count.
+      this.postReadyRestartCount = 0;
     } finally {
       this.startPromise = null;
     }
   }
 
   /**
-   * Start worker, copy credentials if needed, and start monitor when a bot is bound.
+   * Start worker and start monitor when a bot is bound.
+   * Legacy credential migration is a permanent no-op.
    */
   async start(gatewayManager?: GatewayManager | null): Promise<void> {
     if (gatewayManager) this.gatewayManager = gatewayManager;
@@ -137,19 +149,98 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    this.clearPostReadyRestartTimer();
     try {
       this.sendCommand({ type: 'runtime.stop' });
     } catch {
       // ignore
     }
+    this.disposeChild();
+  }
+
+  /** Fixed peer-facing error copy — never forward String(error) to the chat. */
+  static peerErrorText(): string {
+    return WEIXIN_PEER_ERROR_TEXT;
+  }
+
+  /**
+   * Kill child if any, clear handle, set state=stopped.
+   * Used on timeout / failed / fork error / intentional shutdown.
+   */
+  disposeChild(): void {
     try {
       this.child?.kill();
     } catch {
-      // ignore
+      // best effort
     }
     this.child = null;
     this.state = 'stopped';
     this.monitorStarted = false;
+  }
+
+  private clearPostReadyRestartTimer(): void {
+    if (this.postReadyRestartTimer) {
+      clearTimeout(this.postReadyRestartTimer);
+      this.postReadyRestartTimer = null;
+    }
+  }
+
+  /** 段 A: max 2 immediate retries, no backoff (inspired by Pi, not a copy). */
+  private async startChildWithInitialRetry(): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= INITIAL_START_ATTEMPTS; attempt += 1) {
+      try {
+        await this.startChild();
+        return;
+      } catch (error) {
+        lastError = error;
+        logger.warn('[weixin] worker start failed', { attempt, error: String(error) });
+        this.disposeChild();
+      }
+    }
+    this.state = 'failed';
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private schedulePostReadyRestart(): void {
+    if (this.shuttingDown) return;
+    if (this.postReadyRestartCount >= POST_READY_MAX_RESTARTS) {
+      logger.warn('[weixin] post-ready restart limit reached; leaving disconnected', {
+        attempts: this.postReadyRestartCount,
+      });
+      this.state = 'failed';
+      return;
+    }
+    const delay = POST_READY_BACKOFF_MS[
+      Math.min(this.postReadyRestartCount, POST_READY_BACKOFF_MS.length - 1)
+    ];
+    this.postReadyRestartCount += 1;
+    logger.info('[weixin] scheduling post-ready restart', {
+      attempt: this.postReadyRestartCount,
+      delayMs: delay,
+    });
+    this.clearPostReadyRestartTimer();
+    this.postReadyRestartTimer = setTimeout(() => {
+      this.postReadyRestartTimer = null;
+      void this.tryPostReadyRestart();
+    }, delay);
+  }
+
+  private async tryPostReadyRestart(): Promise<void> {
+    if (this.shuttingDown) return;
+    try {
+      const binding = await getWeixinBinding();
+      if (!binding) {
+        logger.info('[weixin] skip post-ready restart: unbound');
+        this.state = 'stopped';
+        return;
+      }
+      await this.start(this.gatewayManager);
+    } catch (error) {
+      logger.warn('[weixin] post-ready restart failed', error);
+      this.schedulePostReadyRestart();
+    }
   }
 
   private workerEntryPath(): string {
@@ -184,12 +275,14 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
           }),
         );
       } catch (error) {
+        this.disposeChild();
         this.state = 'failed';
         reject(error instanceof Error ? error : new Error(String(error)));
         return;
       }
       this.child = child;
       let settled = false;
+      let becameReady = false;
       const readyTimer = setTimeout(
         () => finish(new Error(`Weixin worker ready timed out after ${READY_TIMEOUT_MS}ms`)),
         READY_TIMEOUT_MS,
@@ -198,13 +291,18 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
         if (settled) return;
         settled = true;
         clearTimeout(readyTimer);
-        if (error) reject(error);
-        else resolve();
+        if (error) {
+          this.disposeChild();
+          reject(error);
+        } else {
+          resolve();
+        }
       };
 
       child.on('message', (message: WeixinWireEvent) => {
         if (message?.type === 'runtime.ready') {
           this.state = 'ready';
+          becameReady = true;
           logger.info('[weixin] worker ready');
           finish();
           return;
@@ -219,10 +317,17 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
       child.on('error', (error) => finish(new Error(String(error))));
       child.on('exit', (code) => {
         this.child = null;
-        this.state = 'failed';
         this.monitorStarted = false;
         this.emit('exit', { code });
-        if (!settled) finish(new Error(`Weixin worker exited before ready with code ${code}`));
+        if (!settled) {
+          finish(new Error(`Weixin worker exited before ready with code ${code}`));
+          return;
+        }
+        // 段 B: crashed after ready
+        this.state = 'failed';
+        if (becameReady && !this.shuttingDown) {
+          this.schedulePostReadyRestart();
+        }
       });
       child.stdout?.on('data', (data) => {
         const output = String(data).trim();
@@ -241,4 +346,9 @@ let singleton: WeixinChannelService | null = null;
 export function getWeixinChannelService(): WeixinChannelService {
   singleton ??= new WeixinChannelService();
   return singleton;
+}
+
+/** Test helper — reset singleton between unit tests. */
+export function __resetWeixinChannelServiceForTests(): void {
+  singleton = null;
 }

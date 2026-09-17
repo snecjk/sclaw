@@ -218,6 +218,8 @@
             "enabledHint": "ON — スマホ「ローカル」から本機に接続できます",
             "disabledHint": "OFF のとき App は本機に届きません。ON 後は StoClaw をオンラインに保ってください",
             "hubOfflineHint": "ON — Hub 未接続のためスマホはまだ届きません",
+            "replacedByOtherDevice": "別の端末で紐づけ済みです。再バインドしてください",
+            "replacedUnbound": "紐づけが解除されました。再バインドしてください",
             "needDingTalkWs": "チャネル中枢に未接続です。ログインとネットワークを確認してください",
             "wsOnline": "Hub オンライン",
             "wsOffline": "Hub オフライン",

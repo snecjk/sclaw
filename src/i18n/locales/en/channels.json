@@ -219,6 +219,8 @@
             "enabledHint": "On — App “Local” can reach this desktop",
             "disabledHint": "When off, the App cannot route here. Keep StoClaw online after enabling.",
             "hubOfflineHint": "On — Hub offline, App cannot reach this desktop yet",
+            "replacedByOtherDevice": "Bound on another device — please rebind",
+            "replacedUnbound": "Unbound — please rebind",
             "needDingTalkWs": "Channel hub is offline. Check login and network.",
             "wsOnline": "Hub online",
             "wsOffline": "Hub offline",

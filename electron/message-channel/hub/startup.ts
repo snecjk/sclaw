@@ -1,11 +1,13 @@
 import type { GatewayManager } from '../../gateway/manager';
 import { logger } from '../../utils/logger';
+import { maybeResetChannelRuntimeEpoch } from '../common/channel-runtime-epoch';
 import {
   getChannelConnection,
   getLocalDeviceId,
   ensureFixedChannelBindings,
   resolveSharedHubRefreshToken,
   revokeDingTalkHubBind,
+  disableMobileAppBind,
   syncSharedHubRefreshToken,
   type ChannelConnection,
 } from './binding-service';
@@ -44,12 +46,13 @@ async function notifyRendererBindReplaced(reason: string): Promise<void> {
 }
 
 /**
- * 本机绑定已被 Hub 侧换走/解绑：停 WS、清本地 bound、通知 UI。
+ * 本机绑定已被 Hub 侧换走/解绑：停 WS、清本地钉钉 + Mobile（共享 token）、通知 UI。
  */
 export async function handleDingTalkBindReplaced(reason = 'bound_on_another_device'): Promise<void> {
   try {
     getSclawHubClient().disconnectPermanently();
     await revokeDingTalkHubBind();
+    await disableMobileAppBind();
     logger.info(`[SclawHub] local bind revoked reason=${reason}`);
     await notifyRendererBindReplaced(reason);
   } catch (error) {
@@ -114,7 +117,7 @@ function wireSclawBindReplacedListener(): void {
 }
 
 /**
- * 轻量探测（微信侧可能触发一次凭证迁移写盘）。不含可 connect 的最终 refreshToken。
+ * 轻量探测。微信以 DB bound + 新目录凭证（getWeixinBinding）为准；不含可 connect 的最终 refreshToken。
  */
 export async function probeChannelRuntimeNeeds(): Promise<ChannelRuntimePlan> {
   const [dingtalkRow, mobileRow] = await Promise.all([
@@ -135,8 +138,8 @@ export async function probeChannelRuntimeNeeds(): Promise<ChannelRuntimePlan> {
 
   let shouldStartWorker = false;
   try {
-    const { hasWeixinBotBound } = await import('../weixin/binding');
-    shouldStartWorker = hasWeixinBotBound();
+    const { getWeixinBinding } = await import('../weixin/binding');
+    shouldStartWorker = (await getWeixinBinding()) != null;
   } catch (error) {
     logger.warn('[ChannelRuntime] weixin probe failed', error);
   }
@@ -207,6 +210,12 @@ export async function ensureChannelRuntimesReady(
     }
     wireSclawInboundListener();
     wireSclawBindReplacedListener();
+
+    try {
+      await maybeResetChannelRuntimeEpoch();
+    } catch (error) {
+      logger.warn('[ChannelRuntime] channel bind epoch reset failed', error);
+    }
 
     // Normalize bound rows to pi+main before probe/skip — must not hang on connect/start.
     try {

@@ -56,11 +56,19 @@ export function MobileAppChannelRow({
             {t('hub.mobile.title')}
           </h3>
           <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground">
-            {t('hub.mobile.cardDesc', {
-              defaultValue: '通过移动端操作本地 agent',
-            })}
+            {mobileBinding?.replaceHint === 'other_device'
+              ? t('hub.mobile.replacedByOtherDevice', {
+                  defaultValue: '已在其它设备绑定，请重新绑定',
+                })
+              : mobileBinding?.replaceHint === 'unbound'
+                ? t('hub.mobile.replacedUnbound', {
+                    defaultValue: '已解绑，请重新绑定',
+                  })
+                : t('hub.mobile.cardDesc', {
+                    defaultValue: '通过移动端操作本地 agent',
+                  })}
           </p>
-          {mobileEnabled && !mobileBinding?.wsConnected ? (
+          {mobileEnabled && !mobileBinding?.wsConnected && !mobileBinding?.replaceHint ? (
             <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
               {t('hub.mobile.hubOfflineHint')}
             </p>

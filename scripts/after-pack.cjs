@@ -1260,13 +1260,52 @@ exports.validateAsarNativeUnpack = validateAsarNativeUnpack;
 exports.ensureTargetSharpPackages = ensureTargetSharpPackages;
 exports.ensureTargetClaudeSdkPackage = ensureTargetClaudeSdkPackage;
 exports.restampWinAsarIntegrity = restampWinAsarIntegrity;
+exports.validateWeixinRuntimeBundle = validateWeixinRuntimeBundle;
+
+/** Allowed files in dist-electron/weixin-runtime (no vendor/spike/tests). */
+const WEIXIN_RUNTIME_ALLOWED = new Set(['worker-entry.js', 'package.json']);
+
+function validateWeixinRuntimeBundle(runtimeDir) {
+  if (!existsSync(runtimeDir)) {
+    return { ok: false, error: `missing weixin-runtime dir: ${runtimeDir}`, files: [] };
+  }
+  const entries = readdirSync(runtimeDir);
+  const forbidden = entries.filter((name) => {
+    if (WEIXIN_RUNTIME_ALLOWED.has(name)) return false;
+    // Ignore source maps next to the entry if present.
+    if (name === 'worker-entry.js.map') return false;
+    return true;
+  });
+  if (forbidden.length > 0) {
+    return {
+      ok: false,
+      error: `weixin-runtime contains forbidden entries: ${forbidden.join(', ')}`,
+      files: entries,
+    };
+  }
+  for (const required of WEIXIN_RUNTIME_ALLOWED) {
+    if (!entries.includes(required)) {
+      return {
+        ok: false,
+        error: `weixin-runtime missing required file: ${required}`,
+        files: entries,
+      };
+    }
+  }
+  return { ok: true, files: entries };
+}
 
 exports.default = async function afterPack(context) {
   const appOutDir = context.appOutDir;
   const platform = context.electronPlatformName; // 'win32' | 'darwin' | 'linux'
   const arch = resolveArch(context.arch);
 
-  
+  const weixinRuntimeDir = join(__dirname, '..', 'dist-electron', 'weixin-runtime');
+  const weixinCheck = validateWeixinRuntimeBundle(weixinRuntimeDir);
+  if (!weixinCheck.ok) {
+    throw new Error(`[after-pack] ${weixinCheck.error}`);
+  }
+  console.log('[after-pack] weixin-runtime whitelist ok:', weixinCheck.files.join(', '));
 
   let resourcesDir;
   if (platform === 'darwin') {

@@ -1,6 +1,6 @@
 # Weixin spike
 
-本地联调脚本（见 `docs/微信渠道-Host-Worker技术方案.md`）。
+本地联调脚本（开发专用，**不进安装包**；见 `docs/微信渠道-Host-Worker技术方案.md`）。
 
 ## Run
 
@@ -28,4 +28,4 @@ SPIKE_SEND=1 SPIKE_MIN_OBSERVE_MS=0 SPIKE_MIN_ROUNDS=2 \
 
 仅通过 `transport/client-v1` 使用 vendor `api`（及本地 shim），不要从 spike 直接拉取 plugin 入口相关模块。
 
-产出：`phase0-report.json`。
+产出：运行时写 `phase0-report.json`（已从仓库移除；本地跑脚本会再生成，勿提交）。

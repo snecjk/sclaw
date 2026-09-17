@@ -15,6 +15,7 @@ import { isDingTalkNewSessionCommand } from '../common/session-lifecycle';
 import { logger } from '../../utils/logger';
 import { getWeixinBinding } from './binding';
 import { attachWeixinOutbound } from './bridge-outbound';
+import { WEIXIN_PEER_ERROR_TEXT } from './peer-copy';
 import type { WeixinChannelService } from './service';
 import type { WeixinInboundPart, WeixinWireEvent } from '../../../shared/weixin-runtime-protocol';
 
@@ -169,7 +170,7 @@ function handleWeixinInbound(
       weixinService.sendCommand({
         type: 'outbound.commit',
         peerId,
-        text: `处理失败：${String(error)}`,
+        text: WEIXIN_PEER_ERROR_TEXT,
         contextToken: event.contextToken,
         clientRequestId: `error:${peerId}:${Date.now()}`,
       });

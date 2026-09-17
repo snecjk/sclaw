@@ -390,7 +390,7 @@ export async function syncSharedHubRefreshToken(input: {
   }
 }
 
-/** 关闭「App 绑定」：revoked mobile 行；不改 dingtalk。 */
+/** 关闭「App 绑定」：revoked mobile 行并显式清 refresh_token；不改 dingtalk。 */
 export async function disableMobileAppBind(): Promise<void> {
   const existing = await getChannelConnection('mobile');
   if (!existing) return;
@@ -400,6 +400,7 @@ export async function disableMobileAppBind(): Promise<void> {
     .set({
       bind_status: 'revoked',
       enabled: 0,
+      refresh_token: null,
       updated_at: nowIso(),
     })
     .where('id', '=', existing.id)

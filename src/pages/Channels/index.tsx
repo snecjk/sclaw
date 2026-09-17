@@ -154,6 +154,8 @@ export function Channels() {
         agentId: 'main',
         wsConnected: Boolean(mobileStatusRes?.ws?.connected),
         canConnectWs: Boolean(mobileStatusRes?.canConnectWs),
+        // Hub is device-level: DingTalk replace also invalidates Mobile.
+        replaceHint,
       });
     } catch (fetchError: unknown) {
       setError(String(fetchError));

@@ -10,6 +10,7 @@ import type { GatewayManager } from '../../gateway/manager';
 import type { NormalizedEngineEvent } from '../../gateway/normalized-engine-event';
 import { logger } from '../../utils/logger';
 import { extractOutboundMediaFromAnswer } from './extract-outbound-media';
+import { WEIXIN_PEER_ERROR_TEXT } from './peer-copy';
 import type { WeixinChannelService } from './service';
 
 const TYPING_INTERVAL_MS = 3_000;
@@ -171,7 +172,11 @@ export function attachWeixinOutbound(input: {
       return;
     }
     if (engineEvent?.type === 'turn.failed') {
-      lastAnswer = lastAnswer.trim() || engineEvent.errorMessage || '处理失败';
+      logger.warn('[WeixinOutbound] turn.failed', {
+        sessionKey,
+        errorMessage: engineEvent.errorMessage,
+      });
+      lastAnswer = lastAnswer.trim() || WEIXIN_PEER_ERROR_TEXT;
       scheduleCommit();
       return;
     }
@@ -201,8 +206,12 @@ export function attachWeixinOutbound(input: {
       || payload.state === 'error'
       || payload.state === 'aborted'
     ) {
-      if (payload.state === 'error' && payload.errorMessage) {
-        lastAnswer = lastAnswer.trim() || `处理失败：${payload.errorMessage}`;
+      if (payload.state === 'error') {
+        logger.warn('[WeixinOutbound] chat message error', {
+          sessionKey,
+          errorMessage: payload.errorMessage,
+        });
+        lastAnswer = lastAnswer.trim() || WEIXIN_PEER_ERROR_TEXT;
       }
       scheduleCommit();
     }
@@ -233,7 +242,8 @@ export function attachWeixinOutbound(input: {
       return;
     }
     if (phase === 'error') {
-      scheduleCommit(lastAnswer.trim() || '处理失败');
+      logger.warn('[WeixinOutbound] notification phase=error', { sessionKey });
+      scheduleCommit(lastAnswer.trim() || WEIXIN_PEER_ERROR_TEXT);
     }
   };
 

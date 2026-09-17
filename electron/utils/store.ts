@@ -85,6 +85,12 @@ export interface AppSettings {
   // Storage
   storageReminderEnabled: boolean;
   storageReminderLastShownLocalDate: string | null;
+
+  /**
+   * Channel bind epoch. When the persisted value differs from CHANNEL_BIND_EPOCH,
+   * startup runs a one-shot destructive rebind reset (credentials + channel catalog).
+   */
+  channelBindEpoch: string | null;
 }
 
 /**
@@ -154,6 +160,8 @@ function createDefaultSettings(): AppSettings {
 
     storageReminderEnabled: true,
     storageReminderLastShownLocalDate: null,
+
+    channelBindEpoch: null,
   };
 }
 

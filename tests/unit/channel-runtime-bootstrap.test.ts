@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   resolveSharedHubRefreshToken: vi.fn(),
   syncSharedHubRefreshToken: vi.fn(),
   revokeDingTalkHubBind: vi.fn(),
+  disableMobileAppBind: vi.fn(),
   getLocalDeviceId: vi.fn().mockResolvedValue('device-1'),
   ensureFixedChannelBindings: vi.fn().mockResolvedValue({ normalized: 0 }),
   hubBindStatus: vi.fn(),
@@ -12,10 +13,11 @@ const mocks = vi.hoisted(() => ({
   connect: vi.fn().mockResolvedValue(undefined),
   disconnect: vi.fn(),
   getStatus: vi.fn().mockReturnValue({ state: 'idle', connected: false }),
-  hasWeixinBotBound: vi.fn().mockReturnValue(false),
+  getWeixinBinding: vi.fn().mockResolvedValue(null),
   weixinStart: vi.fn().mockResolvedValue(undefined),
   setGatewayManager: vi.fn(),
   resolveSclawHubBaseUrl: vi.fn().mockReturnValue('https://hub.example'),
+  maybeResetChannelRuntimeEpoch: vi.fn().mockResolvedValue({ reset: false, previousEpoch: null }),
 }));
 
 vi.mock('@electron/message-channel/hub/binding-service', () => ({
@@ -23,6 +25,7 @@ vi.mock('@electron/message-channel/hub/binding-service', () => ({
   resolveSharedHubRefreshToken: mocks.resolveSharedHubRefreshToken,
   syncSharedHubRefreshToken: mocks.syncSharedHubRefreshToken,
   revokeDingTalkHubBind: mocks.revokeDingTalkHubBind,
+  disableMobileAppBind: mocks.disableMobileAppBind,
   getLocalDeviceId: mocks.getLocalDeviceId,
   ensureFixedChannelBindings: mocks.ensureFixedChannelBindings,
 }));
@@ -51,8 +54,13 @@ vi.mock('@electron/message-channel/hub/ingress', () => ({
   setChannelGatewayManager: vi.fn(),
 }));
 
+vi.mock('@electron/message-channel/common/channel-runtime-epoch', () => ({
+  maybeResetChannelRuntimeEpoch: mocks.maybeResetChannelRuntimeEpoch,
+  CHANNEL_BIND_EPOCH: '2026.09-host-weixin',
+}));
+
 vi.mock('@electron/message-channel/weixin/binding', () => ({
-  hasWeixinBotBound: mocks.hasWeixinBotBound,
+  getWeixinBinding: mocks.getWeixinBinding,
 }));
 
 vi.mock('@electron/message-channel/weixin/service', () => ({
@@ -66,11 +74,12 @@ describe('channel runtime bootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveSclawHubBaseUrl.mockReturnValue('https://hub.example');
-    mocks.hasWeixinBotBound.mockReturnValue(false);
+    mocks.getWeixinBinding.mockResolvedValue(null);
     mocks.getStatus.mockReturnValue({ state: 'idle', connected: false });
     mocks.hubSyncChannels.mockResolvedValue({ refreshToken: null });
     mocks.connect.mockResolvedValue(undefined);
     mocks.weixinStart.mockResolvedValue(undefined);
+    mocks.maybeResetChannelRuntimeEpoch.mockResolvedValue({ reset: false, previousEpoch: null });
   });
 
   it('probe: mobile-only bound+token → shouldAttempt true', async () => {
@@ -115,6 +124,24 @@ describe('channel runtime bootstrap', () => {
     expect(plan.hub.shouldAttempt).toBe(false);
   });
 
+  it('probe: uses getWeixinBinding (not file-only hasWeixinBotBound)', async () => {
+    mocks.getChannelConnection.mockResolvedValue(null);
+    mocks.getWeixinBinding.mockResolvedValue({
+      channelType: 'wechat',
+      accountId: 'bot-1',
+      agentId: 'main',
+      engineType: 'pi',
+      enabled: true,
+    });
+
+    const { probeChannelRuntimeNeeds } = await import(
+      '@electron/message-channel/hub/startup'
+    );
+    const plan = await probeChannelRuntimeNeeds();
+    expect(plan.weixin.shouldStartWorker).toBe(true);
+    expect(mocks.getWeixinBinding).toHaveBeenCalled();
+  });
+
   it('ensure: skips weixin fork when no credentials; connects hub after sync when token present', async () => {
     mocks.getChannelConnection.mockImplementation(async (type: string) => {
       if (type === 'dingtalk') {
@@ -135,13 +162,20 @@ describe('channel runtime bootstrap', () => {
     );
     await ensureChannelRuntimesReady(null);
 
+    expect(mocks.maybeResetChannelRuntimeEpoch).toHaveBeenCalled();
     expect(mocks.weixinStart).not.toHaveBeenCalled();
     expect(mocks.connect).toHaveBeenCalledWith('dt-tok');
   });
 
-  it('ensure: starts weixin when credentials exist; skips hub without usable token', async () => {
+  it('ensure: starts weixin when binding exists; skips hub without usable token', async () => {
     mocks.getChannelConnection.mockResolvedValue(null);
-    mocks.hasWeixinBotBound.mockReturnValue(true);
+    mocks.getWeixinBinding.mockResolvedValue({
+      channelType: 'wechat',
+      accountId: 'bot-1',
+      agentId: 'main',
+      engineType: 'pi',
+      enabled: true,
+    });
     mocks.resolveSharedHubRefreshToken.mockResolvedValue(null);
 
     const { ensureChannelRuntimesReady } = await import(
@@ -156,7 +190,7 @@ describe('channel runtime bootstrap', () => {
     expect(mocks.connect).not.toHaveBeenCalled();
   });
 
-  it('ensure: after remote unbound does not connect', async () => {
+  it('ensure: after remote unbound does not connect and disables mobile', async () => {
     mocks.getChannelConnection.mockImplementation(async (type: string) => {
       if (type === 'dingtalk') {
         return {
@@ -177,5 +211,7 @@ describe('channel runtime bootstrap', () => {
     await ensureChannelRuntimesReady(null);
 
     expect(mocks.connect).not.toHaveBeenCalled();
+    expect(mocks.revokeDingTalkHubBind).toHaveBeenCalled();
+    expect(mocks.disableMobileAppBind).toHaveBeenCalled();
   });
 });
