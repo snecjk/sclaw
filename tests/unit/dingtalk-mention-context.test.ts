@@ -70,6 +70,16 @@ describe('dingtalk mention context', () => {
     expect(message).toContain('不要回头追问');
     expect(message).toContain('dws chat message list-direct --user <userId>');
     expect(message).toContain('普通会话当前不要求等待发送间隔');
+    for (const token of [
+      'common_red1_color',
+      'common_blue1_color',
+      'common_green1_color',
+      'common_yellow1_color',
+      'common_orange1_color',
+      'common_gray1_color',
+    ]) {
+      expect(message).toContain(token);
+    }
     expect(message).not.toContain('每 20 秒');
   });
 

@@ -388,4 +388,30 @@ describe('resolveDingTalkSendStaticProblem', () => {
       ),
     ).toBeNull();
   });
+
+  it('allows DingTalk colorTokenV2 font markup', () => {
+    expect(
+      resolveDingTalkSendStaticProblem(
+        'dws chat message send --user xxx --text "<font colorTokenV2=common_blue1_color>蓝色</font> 正文"',
+      ),
+    ).toBeNull();
+  });
+
+  it('blocks general or malformed font markup', () => {
+    expect(
+      resolveDingTalkSendStaticProblem(
+        `dws chat message send --user xxx --text '<font color="#FF0000">红色</font>'`,
+      ),
+    ).toContain('colorTokenV2');
+    expect(
+      resolveDingTalkSendStaticProblem(
+        `dws chat message send --user xxx --text '<font colorTokenV2="common_red1_color">红色</font>'`,
+      ),
+    ).toContain('带引号');
+    expect(
+      resolveDingTalkSendStaticProblem(
+        'dws chat message send --user xxx --text "<font colorTokenV2=common_red1_color>红色"',
+      ),
+    ).toContain('成对');
+  });
 });

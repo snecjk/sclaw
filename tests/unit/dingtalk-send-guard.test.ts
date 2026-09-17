@@ -8,6 +8,7 @@ import {
   isSuccessfulDwsChatMessageSendResult,
   rememberPendingDingTalkSend,
   resolveDwsChatMessageSendFileProtocolInText,
+  resolveDwsChatMessageSendFontProblem,
   resolveDwsChatMessageSendHeredocOrLostHeadingProblem,
   resolveDwsChatMessageSendTextFormatProblem,
   resetDingTalkSendRateLimitForTests,
@@ -265,6 +266,24 @@ describe('evaluateDingTalkSendGuard', () => {
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(true);
     expect(resolveDwsChatMessageSendTextFormatProblem(params.command)).toBeNull();
+  });
+
+  it('allows DingTalk colorTokenV2 markup', () => {
+    const command =
+      'dws chat message send --user u1 --title "消息" --text "<font colorTokenV2=common_green1_color>绿色</font> 正文" --format json';
+    expect(resolveDwsChatMessageSendFontProblem(command)).toBeNull();
+    expect(evaluateDingTalkSendGuard({ toolName: 'exec', params: { command } }).allowed).toBe(true);
+  });
+
+  it('blocks unsupported or unbalanced font markup, including dry runs', () => {
+    const unsupported =
+      `dws chat message send --user u1 --title "消息" --text '<font style="color:red">红色</font>' --dry-run --format json`;
+    expect(resolveDwsChatMessageSendFontProblem(unsupported)).toContain('colorTokenV2');
+    expect(evaluateDingTalkSendGuard({ toolName: 'exec', params: { command: unsupported } }).allowed).toBe(false);
+
+    const unbalanced =
+      'dws chat message send --user u1 --title "消息" --text "<font colorTokenV2=common_red1_color>红色" --format json';
+    expect(resolveDwsChatMessageSendFontProblem(unbalanced)).toContain('成对');
   });
 
   it('blocks shell heredoc --text payloads', () => {

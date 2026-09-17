@@ -3,6 +3,7 @@ import { DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON } from './shared/dingtalk-
 import {
   buildDwsChatMessageSendAgentCommandExample,
   dwsChatMessageSendTextContainsLocalArtifactPath,
+  resolveDingTalkColorTokenV2MarkupProblem,
 } from './shared/dingtalk-send/dws-send-text.js';
 
 const DWS_CHAT_MESSAGE_SEND = /dws\s+chat\s+message\s+send\b/i;
@@ -138,6 +139,11 @@ export function resolveDwsChatMessageSendTextFormatProblem(commandText: string):
     '请重试：直接调用 `dws chat message send ... --text "正文\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json`；',
     'SClaw 会在执行前把 `\\n` 转为真实换行（Windows OpenClaw exec 走 PowerShell，并优先改写为直接 dws 调用）。',
   ].join('');
+}
+
+export function resolveDwsChatMessageSendFontProblem(commandText: string): string | null {
+  if (!containsDwsChatMessageSend(commandText)) return null;
+  return resolveDingTalkColorTokenV2MarkupProblem(commandText);
 }
 
 /**
@@ -336,6 +342,14 @@ export function evaluateDingTalkSendGuard(input: {
     return {
       allowed: false,
       reason: heredocOrHeadingProblem,
+    };
+  }
+
+  const fontProblem = resolveDwsChatMessageSendFontProblem(commandText);
+  if (fontProblem) {
+    return {
+      allowed: false,
+      reason: fontProblem,
     };
   }
 

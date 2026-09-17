@@ -5,6 +5,43 @@
  */
 import { ensureDingTalkAgentSendDisclaimerFormat } from '../dingtalk-prompts/dingtalk-disclaimer';
 
+const DINGTALK_COLOR_TOKEN_V2_OPEN_TAG =
+  /^<font\s+colorTokenV2=common_[a-z][a-z0-9]*_color>$/i;
+const DINGTALK_FONT_TAG = /<\/?font\b[^>]*>/gi;
+
+/**
+ * Validate DingTalk's colorTokenV2 extension without allowing general HTML.
+ *
+ * DingTalk requires an unquoted `common_*_color` token. Keep the accepted
+ * grammar deliberately narrow: no arbitrary color/style attributes, no extra
+ * attributes, and balanced tags only.
+ */
+export function resolveDingTalkColorTokenV2MarkupProblem(text: string): string | null {
+  if (!/<\/?font\b/i.test(text)) return null;
+
+  const tags = text.match(DINGTALK_FONT_TAG) ?? [];
+  let depth = 0;
+  for (const tag of tags) {
+    if (/^<\/font>$/i.test(tag)) {
+      depth -= 1;
+      if (depth < 0) break;
+      continue;
+    }
+    if (!DINGTALK_COLOR_TOKEN_V2_OPEN_TAG.test(tag)) {
+      return [
+        '钉钉发送正文仅允许颜色标签 `<font colorTokenV2=common_red1_color>文字</font>`；',
+        '禁止使用 `color`、`style`、带引号的 token、额外属性或其他 `<font>` HTML。',
+      ].join('');
+    }
+    depth += 1;
+  }
+
+  if (tags.length === 0 || depth !== 0) {
+    return '钉钉颜色标签必须成对且完整，例如 `<font colorTokenV2=common_red1_color>文字</font>`。';
+  }
+  return null;
+}
+
 /**
  * Normalize `dws chat message send --text` payloads.
  * Models often copy JSON.stringify output into shell commands; bash does not
