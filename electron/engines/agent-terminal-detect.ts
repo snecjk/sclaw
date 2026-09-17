@@ -2,10 +2,13 @@
  * Agent 终态检测谓词（engine-agnostic）。渠道卡片推送（`delivery.ts`）与
  * legacy delivery 路径使用；定时任务终态已改由 ChatRuntimeSupervisor canonical event 驱动。
  *
- * 终态语义与 `gateway/normalized-engine-event.ts` 对齐——真终态只认 agent
- * notification（或同源的 chat `done`/`error`/`aborted`），**绝不在 `final`
- * 片段收尾**：双引擎口播 / tool 片段都会带 `final`，在此收尾会截口播或误
- * 「无回复内容」。
+ * 终态语义与 `gateway/normalized-engine-event.ts` 对齐——真终态认：
+ * - agent notification（Claude phase=completed / OpenClaw lifecycle end|error）
+ * - 同源 chat `done` / `error` / `aborted`
+ * - Pi：`turn.completed` → legacy chat `state=completed`（映射为 terminal/done）
+ *
+ * **绝不在 `final` 片段收尾**：双引擎口播 / tool 片段都会带 `final`，在此收尾会
+ * 截口播或误「无回复内容」。
  */
 import type { AgentEngineType } from './types';
 
@@ -95,6 +98,7 @@ export type ChatMessageClassification =
  *
  * - `delta`/`final`：assistant 片段——累积正文；`final` 也只是片段（绝不在
  *   此收尾），caller 自行区分是否需要为 `final` 打日志。
+ * - `completed`：Pi `turn.completed` 的 legacy 映射 → 终态（非错，state 归一为 `done`）。
  * - `done`：OpenClaw lifecycle 后偶发（与 agent end 同源终态）→ 终态（非错）。
  * - `error`/`aborted`：终态（isError=true）。
  * - `started`：仅占位。
@@ -122,6 +126,8 @@ export function classifyChatMessage(
       const parts = extractAssistantParts(record.message);
       return { kind: 'fragment', state, answer: parts.answer, status: parts.status };
     }
+    // Pi: turn.completed → state=completed；与 done 同属非错终态
+    case 'completed':
     case 'done':
       return { kind: 'terminal', state: 'done', isError: false };
     case 'error':
