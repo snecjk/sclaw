@@ -39,27 +39,41 @@
         height: 107.1429%;
         object-fit: fill;
       }
+      /* 画布(1440x900, 裁顶 60px)到窗口是 object-fill 非等比缩放,
+         进度条用设计稿像素定位 + 反向 scale 抵消拉伸, 与画中轨道逐像素重合。
+         画中轨道: x 578-861 / y 494-497(约 4px)。 */
       .splash-progress-track {
         position: absolute;
-        left: 40.139%;
-        top: 51.667%;
-        width: 19.653%;
+        left: 0;
+        top: 0;
+        width: 283px;
         height: 4px;
-        overflow: hidden;
-        border-radius: 999px;
         background: #e5e6eb;
+        border-radius: 999px;
+        overflow: hidden;
+        transform-origin: 0 0;
+        transform: translate(calc(578 * 100vw / 1440), calc(434 * 100vh / 840))
+                   scale(calc(100vw / 1440), calc(100vh / 840));
       }
+      /* 深色填充条: 初始一小段持续来回滑动(动效), 主进程阶段事件推高后停止滑动 */
       .splash-progress-bar {
-        width: 8%;
+        position: absolute;
+        left: 0;
+        top: 0;
         height: 100%;
+        width: 28px;
         border-radius: 999px;
         background: #1d2129;
-        animation: splash-progress-warmup 6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-        transition: width 0.45s ease-out;
+        transition: width 0.5s ease-out;
+        animation: splash-slide 1.6s ease-in-out infinite;
       }
-      @keyframes splash-progress-warmup {
-        from { width: 8%; }
-        to { width: 72%; }
+      .splash-progress-bar.settled {
+        animation: none;
+        width: 8%;
+      }
+      @keyframes splash-slide {
+        0%, 100% { transform: translateX(0); }
+        50%      { transform: translateX(255px); } /* 283 - 28 = 255, 在轨道内来回扫 */
       }
       /* Hide splash when React takes over */
       #splash-screen.hidden {
@@ -89,10 +103,10 @@
         window.electron.ipcRenderer.on('startup-progress', (_event, message) => {
           const progressBar = document.getElementById('splash-progress-bar');
           if (!progressBar) return;
-          const trackWidth = progressBar.parentElement?.clientWidth || 1;
-          const currentProgress = (progressBar.getBoundingClientRect().width / trackWidth) * 100;
+          // 收到真实阶段后停止滑动, 转为按百分比增长的进度条
+          progressBar.classList.add('settled');
           const nextProgress = stageProgress[message] || 12;
-          progressBar.style.animation = 'none';
+          const currentProgress = parseFloat(progressBar.style.width) || 8;
           progressBar.style.width = `${Math.max(currentProgress, nextProgress)}%`;
         });
       }

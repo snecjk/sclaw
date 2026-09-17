@@ -53,8 +53,8 @@ const macArtworkImageStyle = {
 } satisfies CSSProperties;
 
 const ssoEnvironmentTriggerClass = cn(
-  'flex h-full items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] text-[#4E5969]',
-  'shadow-none outline-none transition-colors hover:bg-[#F2F3F5] hover:text-[#1D2129]',
+  'flex h-full w-full items-center justify-between gap-2 rounded-xl border border-[#E5E6EB] bg-white px-3 text-left text-[13px] text-[#1D2129]',
+  'shadow-none outline-none transition-colors hover:bg-[#F7F8FA]',
   'focus-visible:ring-2 focus-visible:ring-[#1D2129]/10',
   'disabled:cursor-not-allowed disabled:opacity-70',
 );
@@ -86,17 +86,17 @@ function SsoEnvironmentDropdown({
           disabled={disabled}
           aria-label="SSO 环境"
         >
-          <span className="truncate">{getLabel(value)}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden strokeWidth={1.8} />
+          <span className="min-w-0 flex-1 truncate">{getLabel(value)}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-[#86909C]" aria-hidden strokeWidth={1.8} />
         </button>
       </DropdownMenuTrigger>
       {!disabled ? (
         <DropdownMenuContent
-          side="top"
-          align="center"
+          side="bottom"
+          align="start"
           sideOffset={6}
           avoidCollisions={false}
-          className={ssoEnvironmentMenuClass}
+          className={cn(ssoEnvironmentMenuClass, 'w-[var(--radix-dropdown-menu-trigger-width)]')}
         >
           {options.map((option) => {
             const selected = option === value;
@@ -221,17 +221,14 @@ export function Login() {
       </div>
 
       {isLocalDevelopment && !showDeniedArtwork && (
-        <div className="no-drag absolute bottom-[7%] left-1/2 z-10 -translate-x-1/2">
-          <div className="flex items-center gap-1 rounded-full border border-[#E5E6EB] bg-white/90 py-0.5 pl-3 pr-1 text-[13px] text-[#4E5969] shadow-sm backdrop-blur">
-            <span className="shrink-0 text-[#86909C]">{t('auth:environment.label')}</span>
-            <SsoEnvironmentDropdown
-              value={ssoEnvironment}
-              options={DEV_SSO_ENV_OPTIONS}
-              onChange={(environment) => void setSsoEnvironment(environment)}
-              disabled={isLoggingIn}
-              getLabel={(environment) => t(`auth:environment.${environment}`)}
-            />
-          </div>
+        <div className="no-drag absolute left-[38.194%] top-[45.8%] z-10 h-[4.167%] min-h-9 w-[22.222%]">
+          <SsoEnvironmentDropdown
+            value={ssoEnvironment}
+            options={DEV_SSO_ENV_OPTIONS}
+            onChange={(environment) => void setSsoEnvironment(environment)}
+            disabled={isLoggingIn}
+            getLabel={(environment) => t(`auth:environment.${environment}`)}
+          />
         </div>
       )}
 
