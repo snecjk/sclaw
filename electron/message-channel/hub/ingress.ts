@@ -221,7 +221,7 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
         });
       });
 
-      const detach = attachStreamingDelivery({
+      const { detach, finished } = attachStreamingDelivery({
         gatewayManager: gm,
         sessionKey: handle.sessionKey,
         chatUid,
@@ -230,6 +230,8 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
 
       try {
         await sendViaFacade(gm, handle, prompt, media);
+        // 等到 done / 错误收尾 / timeout，再放行同 peer/session 下一轮，避免僵尸 listener 串台
+        await finished;
       } catch (error) {
         detach();
         throw error;

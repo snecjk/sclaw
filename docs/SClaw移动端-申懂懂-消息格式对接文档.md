@@ -30,7 +30,7 @@ SClaw Desktop ── WebSocket delta/done（HTTP 兜底）──► Channel Hub 
 2. App 开新对话时不传 `sessionKey`；Desktop 创建会话后在 `delta`/`done` 中返回 `sessionKey`。
 3. App 续聊时必须原样回传最近一次 Desktop 返回的 `sessionKey`。
 4. `delta.content` 是“当前完整快照”，不是字符增量；App 必须覆盖当前内容，禁止直接拼接。
-5. `done.content` 是本轮最终完整正文；收到后结束加载态。
+5. `done.content` 是本轮最终完整正文；收到后结束加载态。Desktop 在 Pi 引擎下会把 `turn.completed` / legacy `state=completed` 映射为对本 `chatUid` 的 `done`（与钉钉卡片收尾同一套投递逻辑）；App 仍只依赖 `done`/`finalize=true` 结束 loading，不必感知引擎差异。
 6. `chatUid` 是单次问答的关联 ID；同一轮所有 `delta`/`done` 都使用同一个 `chatUid`。
 7. Desktop 当前没有基于 `chatUid` 的入站去重。Hub/App 重试同一问题时必须避免重复投递，否则可能触发两次 Agent 执行。
 
@@ -331,6 +331,8 @@ Desktop 对非终态推送做了约 450ms 的最小间隔节流，App 不应依�
 3. 结束该 `chatUid` 的 loading、typing 或 streaming 状态。
 4. 允许用户继续发送下一轮。
 
+Desktop 保证：Agent 正常结束、失败、中断或超过投递超时后，都会对该 `chatUid` 发出 `done`；同会话下一轮入站会等本轮 `done` 后再开始，避免历史气泡被新流覆盖。
+
 ### 5.3 回复字段
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -563,6 +565,9 @@ function onDesktopFrame(frame: DesktopReplyFrame) {
 - [ ] 连续 `delta` 在 App 中覆盖显示，不出现重复拼接文字。
 - [ ] `think` 切换到 `answer` 时，过程文案被正文覆盖。
 - [ ] 同一 `chatUid` 的 WS `done` 与 HTTP 备份只生成一条最终消息。
+- [ ] 同 session 连续 3 轮不同问题：旧气泡内容不随新流刷新；每轮收到 `done` 后 loading 结束。
+- [ ] 钉钉手机同 peer 连续 3 轮：仅最新卡片流式；历史卡内容不变且已定稿（无转圈）。
+- [ ] Desktop 日志每轮有 `[SclawDelivery] attached` 与对应 `ws reply finalize=true`（或 `agent terminal` / Pi `completed`）。
 - [ ] 图片、语音识别文本、视频和文件 URL 可被 Desktop 下载。
 - [ ] 会话列表分页、会话详情向前分页正常。
 - [ ] 无效 `sessionKey` 后 App 能接受并保存 Desktop 返回的新 key。
