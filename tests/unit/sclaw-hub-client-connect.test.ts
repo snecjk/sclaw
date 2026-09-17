@@ -39,10 +39,10 @@ class MockWebSocket extends EventEmitter {
 }
 
 vi.mock('ws', () => ({ default: MockWebSocket }));
-vi.mock('@electron/channels/hub-config', () => ({
+vi.mock('@electron/message-channel/hub/hub-config', () => ({
   resolveSclawHubWsUrl: (token: string) => `wss://hub.example.test/ws/sclaw?refreshToken=${token}`,
 }));
-vi.mock('@electron/channels/binding-service', () => ({ touchSharedHubOnline: vi.fn() }));
+vi.mock('@electron/message-channel/hub/binding-service', () => ({ touchSharedHubOnline: vi.fn() }));
 vi.mock('@electron/utils/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
@@ -53,7 +53,7 @@ describe('SclawHubClient connection concurrency', () => {
   });
 
   it('shares one connecting socket for concurrent calls with the same token', async () => {
-    const { SclawHubClient } = await import('@electron/channels/hub-client');
+    const { SclawHubClient } = await import('@electron/message-channel/hub/hub-client');
     const client = new SclawHubClient();
 
     const first = client.connect('same-token');
@@ -66,7 +66,7 @@ describe('SclawHubClient connection concurrency', () => {
   });
 
   it('keeps the old error listener while replacing a connecting socket', async () => {
-    const { SclawHubClient } = await import('@electron/channels/hub-client');
+    const { SclawHubClient } = await import('@electron/message-channel/hub/hub-client');
     const client = new SclawHubClient();
 
     const oldAttempt = client.connect('old-token').catch((error: Error) => error);

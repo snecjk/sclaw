@@ -3,8 +3,6 @@
   "version": "2026.9.15-GA.2",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@discordjs/opus",
-      "@whiskeysockets/baileys",
       "better-sqlite3",
       "electron",
       "esbuild",
@@ -14,8 +12,7 @@
     ],
     "overrides": {
       "isbinaryfile": "^5.0.0",
-      "https-proxy-agent": "7.0.6",
-      "libsignal": "https://github.com/whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7"
+      "https-proxy-agent": "7.0.6"
     },
     "supportedArchitectures": {
       "os": [
@@ -154,9 +151,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.15",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@sliverp/qqbot": "^1.6.1",
     "@tanstack/react-virtual": "^3.14.10",
-    "@tencent-weixin/openclaw-weixin": "2.4.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.3.0",
@@ -166,7 +161,6 @@
     "@typescript-eslint/eslint-plugin": "^8.56.0",
     "@typescript-eslint/parser": "^8.56.0",
     "@vitejs/plugin-react": "^5.1.4",
-    "@wecom/wecom-openclaw-plugin": "^2026.3.20",
     "autoprefixer": "^10.4.24",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

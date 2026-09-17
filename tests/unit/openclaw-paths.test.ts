@@ -116,11 +116,11 @@ describe('OpenClaw packaged paths (ASAR)', () => {
   it('includes openclaw-plugins.asar in bundled plugin candidates', async () => {
     mockExistsSync.mockReturnValue(false);
     const { getBundledPluginSourceCandidates } = await import('@electron/utils/paths');
-    expect(getBundledPluginSourceCandidates('openclaw-weixin')).toEqual([
-      join(RESOURCES, 'openclaw-plugins.asar', 'openclaw-weixin'),
-      join(RESOURCES, 'openclaw-plugins.asar.unpacked', 'openclaw-weixin'),
-      join(RESOURCES, 'openclaw-plugins', 'openclaw-weixin'),
-      join(RESOURCES, 'app.asar.unpacked', 'openclaw-plugins', 'openclaw-weixin'),
+    expect(getBundledPluginSourceCandidates('sto-workflow-tool')).toEqual([
+      join(RESOURCES, 'openclaw-plugins.asar', 'sto-workflow-tool'),
+      join(RESOURCES, 'openclaw-plugins.asar.unpacked', 'sto-workflow-tool'),
+      join(RESOURCES, 'openclaw-plugins', 'sto-workflow-tool'),
+      join(RESOURCES, 'app.asar.unpacked', 'openclaw-plugins', 'sto-workflow-tool'),
     ]);
   });
 });

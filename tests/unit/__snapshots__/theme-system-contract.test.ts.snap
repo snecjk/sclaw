@@ -6,6 +6,10 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
 {
   "darkSelectors": [
     {
+      "file": "src/components/more-apps/more-apps.css",
+      "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
+    },
+    {
       "file": "src/pages/LearningCenter/LearningCenterPage.css",
       "reason": "Migration debt: page-owned dark selectors move to shared tokens or recipes in Tasks 7-8.",
     },
@@ -16,15 +20,31 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
   ],
   "darkUtilities": [
     {
-      "file": "src/components/channels/ChannelConfigModal.tsx",
+      "file": "src/components/app-dev/AppDevPageTypeBadge.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
-      "file": "src/components/channels/DingTalkHubBindModal.tsx",
+      "file": "src/components/app-dev/DeployRecordDetail.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
-      "file": "src/components/channels/MobileAppConfigModal.tsx",
+      "file": "src/components/app-dev/DeployResourceList.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/app-dev/StoAppCommitDialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/app-dev/StoAppDeployControl.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/app-dev/StoAppDeployDialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/app-dev/StoAppMenuPublishDialog.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
@@ -116,6 +136,22 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
+      "file": "src/components/more-apps/AppPlazaDevAppPane.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/more-apps/DevAppCard.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/more-apps/ExternalServiceManagerDialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/components/more-apps/TemplateProjectUploadDialog.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
       "file": "src/components/quick-input/QuickInputCreateModal.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
@@ -176,6 +212,10 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
+      "file": "src/components/storage/StorageReminderBanner.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
       "file": "src/components/ui/badge.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
@@ -196,11 +236,55 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
+      "file": "src/pages/AppDev/AppDevWorkbench.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/AvailableChannelRow.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/ChannelConfigModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/ChannelInlineSelect.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/ChannelLogo.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/ConfiguredChannelRow.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/DingTalkHubBindModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
       "file": "src/pages/Channels/index.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
+      "file": "src/pages/Channels/MobileAppChannelRow.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Channels/MobileAppConfigModal.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/ChatInput.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
       "file": "src/pages/Chat/ChatPreviewPanel.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Chat/context-usage/ContextUsageControl.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
@@ -225,6 +309,22 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
     },
     {
       "file": "src/pages/DataCenter/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/reports/ReportDateRangePicker.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/reports/ReportFilterSelect.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/reports/ReportHistoryPage.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/DataCenter/reports/ReportListPage.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {
@@ -265,6 +365,10 @@ exports[`theme system contract > keeps ordinary CSS and TSX free of local dark p
     },
     {
       "file": "src/pages/Settings/index.tsx",
+      "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
+    },
+    {
+      "file": "src/pages/Settings/StorageSettings.tsx",
       "reason": "Migration debt: color-bearing dark utilities move to shared recipes in Tasks 6-8.",
     },
     {

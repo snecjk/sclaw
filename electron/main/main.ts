@@ -599,7 +599,6 @@ async function initialize(): Promise<void> {
     { createTray },
     { deviceOAuthManager },
     { browserOAuthManager },
-    { whatsAppLoginManager },
     { syncAllProviderAuthToRuntime },
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
@@ -623,7 +622,6 @@ async function initialize(): Promise<void> {
     import('./tray'),
     import('../utils/device-oauth'),
     import('../utils/browser-oauth'),
-    import('../utils/whatsapp-login'),
     import('../services/providers/provider-runtime-sync'),
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
@@ -775,7 +773,7 @@ async function initialize(): Promise<void> {
   });
 
   // Channel Hub：已绑定则用 refreshToken 重连 WS，并挂入站执行（失败不阻塞启动）
-  void import('../channels/startup')
+  void import('../message-channel/hub/startup')
     .then(({ maybeConnectSclawHubOnStartup }) => maybeConnectSclawHubOnStartup(gm))
     .catch((error) => {
       logger.warn('[SclawHub] startup import/connect failed:', error);
@@ -931,18 +929,6 @@ async function initialize(): Promise<void> {
 
   browserOAuthManager.on('oauth:error', (error) => {
     heb.emit('oauth:error', error);
-  });
-
-  whatsAppLoginManager.on('qr', (data) => {
-    heb.emit('channel:whatsapp-qr', data);
-  });
-
-  whatsAppLoginManager.on('success', (data) => {
-    heb.emit('channel:whatsapp-success', data);
-  });
-
-  whatsAppLoginManager.on('error', (error) => {
-    heb.emit('channel:whatsapp-error', error);
   });
 
   // Install bundled plugins before Gateway so the first agent run uses the latest mirror.

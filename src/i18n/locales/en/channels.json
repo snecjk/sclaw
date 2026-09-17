@@ -32,10 +32,8 @@
     "pluginBadge": "Plugin",
     "recommendedBadge": "Recommended",
     "toast": {
-        "whatsappConnected": "WhatsApp connected successfully",
-        "whatsappFailed": "WhatsApp connection failed: {{error}}",
         "qrConnected": "{{name}} connected successfully",
-        "wechatAutoBoundMain": "Automatically bound to Main Agent. You can change this on the Channels page.",
+        "wechatAutoBoundMain": "Bound successfully",
         "qrFailed": "{{name}} connection failed: {{error}}",
         "channelSaved": "Channel {{name}} saved",
         "channelConnecting": "Connecting to {{name}}...",
@@ -45,12 +43,17 @@
         "bindingUpdated": "Account binding updated",
         "defaultUpdated": "Default account updated",
         "accountDeleted": "Account deleted",
-        "channelDeleted": "Channel deleted"
+        "channelDeleted": "Channel deleted",
+        "unbindSuccess": "Unbound successfully"
     },
     "account": {
         "add": "Add Account",
         "edit": "Edit",
         "bind": "Bind",
+        "scanBind": "Scan to bind",
+        "unbind": "Unbind",
+        "unbinding": "Unbinding…",
+        "unbindConfirm": "Unbind this channel?",
         "delete": "Delete Account",
         "deleteChannel": "Delete channel",
         "deleteConfirm": "Are you sure you want to delete this account?",
@@ -114,74 +117,14 @@
         "envVar": "Environment Variable: {{var}}"
     },
     "meta": {
-        "telegram": {
-            "description": "Connect Telegram using a bot token from @BotFather",
-            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/TjiGwxsMWi7hpDkDAQBc0ydMnEf#MEkKdqXP1orZU2x4SrFcdUHgnl1",
-            "fields": {
-                "botToken": {
-                    "label": "Bot Token",
-                    "placeholder": "123456:ABC-DEF..."
-                },
-                "allowedUsers": {
-                    "label": "Allowed User IDs",
-                    "placeholder": "e.g. 123456789, 987654321",
-                    "description": "Comma separated list of User IDs allowed to use the bot. Required for security."
-                }
-            },
-            "instructions": [
-                "Open Telegram and search for @BotFather",
-                "Send /newbot and follow the instructions",
-                "Copy the bot token provided",
-                "Paste the token below",
-                "Get your User ID from @userinfobot and paste it below"
-            ]
-        },
-        "discord": {
-            "description": "Connect Discord using a bot token from Developer Portal",
-            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/BkOywJYCAiYRN9k4KTTceKPMnxg#QS6LdxnA2oNtfcxtFc8cgabnnNd",
-            "fields": {
-                "token": {
-                    "label": "Bot Token",
-                    "placeholder": "Your Discord bot token"
-                },
-                "guildId": {
-                    "label": "Guild/Server ID",
-                    "placeholder": "e.g., 123456789012345678",
-                    "description": "Limit bot to a specific server. Right-click server → Copy Server ID."
-                },
-                "channelId": {
-                    "label": "Channel ID (optional)",
-                    "placeholder": "e.g., 123456789012345678",
-                    "description": "Limit bot to a specific channel. Right-click channel → Copy Channel ID."
-                }
-            },
-            "instructions": [
-                "Go to Discord Developer Portal → Applications → New Application",
-                "In Bot section: Add Bot, then copy the Bot Token",
-                "Enable Message Content Intent + Server Members Intent in Bot → Privileged Gateway Intents",
-                "In OAuth2 → URL Generator: select \"bot\" + \"applications.commands\", add message permissions",
-                "Invite the bot to your server using the generated URL",
-                "Paste the bot token below"
-            ]
-        },
-        "whatsapp": {
-            "description": "Connect WhatsApp by scanning a QR code (no phone number required)",
-            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/ES7fwUfH8iGl8FkHYfFcyWB3n4d#doxcnUElomBZLi0NnKLUzn6zLbd",
-            "instructions": [
-                "Open WhatsApp on your phone",
-                "Go to Settings > Linked Devices > Link a Device",
-                "Scan the QR code shown below",
-                "The system will automatically identify your phone number"
-            ]
-        },
         "wechat": {
             "description": "Connect personal WeChat with Tencent's official OpenClaw plugin by scanning a QR code",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GHYZwuPCriF0gWkXwkFcJ9zon3b",
             "instructions": [
-                "Click Generate QR Code to install and enable the official WeChat plugin inside OpenClaw",
+                "Click Generate QR Code to start the local WeChat channel (Host Worker)",
                 "Scan the QR code below with WeChat and confirm the connection on your phone",
-                "After linking succeeds, a new WeChat ClawBot chat will appear in WeChat automatically",
-                "You can repeat the QR flow later to add another WeChat account or reconnect an existing one"
+                "After linking succeeds, a WeChat ClawBot chat will appear in WeChat",
+                "Only one WeChat bot is supported per machine; scanning again replaces the current binding (use this to reconnect after switching devices)"
             ]
         },
         "dingtalk": {
@@ -224,171 +167,6 @@
                 "Scan with DingTalk and confirm on the mobile H5 page",
                 "After binding, this device connects to Hub; pick Claude or OpenClaw Agent",
                 "No local DingTalk AK/SK required"
-            ]
-        },
-        "signal": {
-            "description": "Connect Signal using signal-cli",
-            "docsUrl": "https://docs.openclaw.ai/channels/signal",
-            "fields": {
-                "phoneNumber": {
-                    "label": "Phone Number",
-                    "placeholder": "+1234567890"
-                }
-            },
-            "instructions": [
-                "Install signal-cli on your system",
-                "Register or link your phone number",
-                "Enter your phone number below"
-            ]
-        },
-        "wecom": {
-            "description": "Connect WeCom Bot via plugin",
-            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/JTGnwoV0RixKPtkr4w7c7gpAnDc",
-            "fields": {
-                "botId": {
-                    "label": "Bot ID",
-                    "placeholder": "ww_xxxxxx"
-                },
-                "secret": {
-                    "label": "App Secret",
-                    "placeholder": "Your WeCom Bot secret"
-                }
-            },
-            "instructions": [
-                "Create an application in WeCom Admin Console to get configuration info",
-                "Ensure receive message server config is enabled",
-                "Enter your Bot ID (or Corp ID) and Secret to establish connection"
-            ]
-        },
-        "imessage": {
-            "description": "Connect iMessage via BlueBubbles (macOS)",
-            "docsUrl": "https://docs.openclaw.ai/channels/bluebubbles",
-            "fields": {
-                "serverUrl": {
-                    "label": "BlueBubbles Server URL",
-                    "placeholder": "http://localhost:1234"
-                },
-                "password": {
-                    "label": "Server Password",
-                    "placeholder": "Your server password"
-                }
-            },
-            "instructions": [
-                "Install BlueBubbles server on your Mac",
-                "Note the server URL and password",
-                "Enter the connection details below"
-            ]
-        },
-        "matrix": {
-            "description": "Connect to Matrix protocol",
-            "docsUrl": "https://docs.openclaw.ai/channels/matrix",
-            "fields": {
-                "homeserver": {
-                    "label": "Homeserver URL",
-                    "placeholder": "https://matrix.org"
-                },
-                "accessToken": {
-                    "label": "Access Token",
-                    "placeholder": "Your access token"
-                }
-            },
-            "instructions": [
-                "Create a Matrix account or use existing",
-                "Get an access token from your client",
-                "Enter the homeserver and token below"
-            ]
-        },
-        "line": {
-            "description": "Connect LINE Messaging API",
-            "docsUrl": "https://docs.openclaw.ai/channels/line",
-            "fields": {
-                "channelAccessToken": {
-                    "label": "Channel Access Token",
-                    "placeholder": "Your LINE channel access token"
-                },
-                "channelSecret": {
-                    "label": "Channel Secret",
-                    "placeholder": "Your LINE channel secret"
-                }
-            },
-            "instructions": [
-                "Go to LINE Developers Console",
-                "Create a Messaging API channel",
-                "Get Channel Access Token and Secret"
-            ]
-        },
-        "msteams": {
-            "description": "Connect Microsoft Teams via Bot Framework",
-            "docsUrl": "https://docs.openclaw.ai/channels/msteams",
-            "fields": {
-                "appId": {
-                    "label": "App ID",
-                    "placeholder": "Your Microsoft App ID"
-                },
-                "appPassword": {
-                    "label": "App Password",
-                    "placeholder": "Your Microsoft App Password"
-                }
-            },
-            "instructions": [
-                "Go to Azure Portal",
-                "Register a new Bot application",
-                "Get App ID and create a password",
-                "Configure Teams channel"
-            ]
-        },
-        "googlechat": {
-            "description": "Connect Google Chat via webhook",
-            "docsUrl": "https://docs.openclaw.ai/channels/googlechat",
-            "fields": {
-                "serviceAccountKey": {
-                    "label": "Service Account JSON Path",
-                    "placeholder": "/path/to/service-account.json"
-                }
-            },
-            "instructions": [
-                "Create a Google Cloud project",
-                "Enable Google Chat API",
-                "Create a service account",
-                "Download the JSON key file"
-            ]
-        },
-        "mattermost": {
-            "description": "Connect Mattermost via Bot API",
-            "docsUrl": "https://docs.openclaw.ai/channels/mattermost",
-            "fields": {
-                "serverUrl": {
-                    "label": "Server URL",
-                    "placeholder": "https://your-mattermost.com"
-                },
-                "botToken": {
-                    "label": "Bot Access Token",
-                    "placeholder": "Your bot access token"
-                }
-            },
-            "instructions": [
-                "Go to Mattermost Integrations",
-                "Create a new Bot Account",
-                "Copy the access token"
-            ]
-        },
-        "qqbot": {
-            "description": "Connect QQ Bot via @sliverp/qqbot plugin",
-            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/KPIJwlyiGiupMrkiS9ice39Zn2c",
-            "fields": {
-                "appId": {
-                    "label": "App ID",
-                    "placeholder": "Your QQ Bot App ID"
-                },
-                "clientSecret": {
-                    "label": "Client Secret",
-                    "placeholder": "Your QQ Bot Client Secret"
-                }
-            },
-            "instructions": [
-                "Register an app at QQ Bot Open Platform",
-                "Get App ID and Client Secret",
-                "Fill in your credentials below"
             ]
         }
     },
@@ -441,6 +219,8 @@
             "enabledHint": "On — App “Local” can reach this desktop",
             "disabledHint": "When off, the App cannot route here. Keep StoClaw online after enabling.",
             "hubOfflineHint": "On — Hub offline, App cannot reach this desktop yet",
+            "replacedByOtherDevice": "Bound on another device — please rebind",
+            "replacedUnbound": "Unbound — please rebind",
             "needDingTalkWs": "Channel hub is offline. Check login and network.",
             "wsOnline": "Hub online",
             "wsOffline": "Hub offline",
@@ -468,6 +248,10 @@
             "footerQrHint": "Download once — take your workspace with you",
             "footerConnectHint": "Connect the app with the same account on your phone",
             "footerMoreChannels": "Click to bind more channels"
+        },
+        "wechat": {
+            "engineLabel": "Engine",
+            "noAgentsForEngine": "No Agents for this engine. Create one first."
         }
     },
     "viewDocs": "View Documentation"

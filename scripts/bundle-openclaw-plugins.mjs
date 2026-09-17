@@ -103,9 +103,7 @@ function resolveLocalPluginSourceDir(localDir) {
 
 const PLUGINS = [
   // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
-  // { type: 'npm', npmName: '@wecom/wecom-openclaw-plugin', pluginId: 'wecom' },
-  // { type: 'npm', npmName: '@sliverp/qqbot', pluginId: 'qqbot' },
-  { type: 'npm', npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
+  // Phase 2: wecom / qqbot / openclaw-weixin OC channel plugins retired (WeChat = Host Worker).
   { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
   { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
   { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },

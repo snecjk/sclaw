@@ -6,8 +6,8 @@ import {
 
 describe('sto-builtin-tools manifest (H1)', () => {
   const fallback = [
-    { dirName: 'wecom', label: 'WeCom' },
     { dirName: 'sto-scheduled-task-tool', label: 'Scheduled' },
+    { dirName: 'sto-workflow-tool', label: 'Workflow' },
     { dirName: 'sto-browser-automation', label: 'BA' },
     { dirName: 'sto-browser-bridge', label: 'Bridge' },
   ];
@@ -26,7 +26,7 @@ describe('sto-builtin-tools manifest (H1)', () => {
     }));
     const filtered = filterPluginSpecsByManifest(fallback, manifest);
     expect(filtered.map((item) => item.dirName)).toEqual([
-      'wecom',
+      'sto-workflow-tool',
       'sto-browser-automation',
       'sto-browser-bridge',
     ]);

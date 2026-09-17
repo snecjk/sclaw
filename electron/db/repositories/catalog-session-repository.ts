@@ -5,7 +5,10 @@ import type {
   ListCatalogSessionsOptions,
   UpsertCatalogSessionInput,
 } from '../models/dto/session-catalog.dto';
-import { inferSessionCatalogMeta } from '../../../shared/session-type';
+import {
+  inferSessionCatalogMeta,
+  type CatalogSessionType,
+} from '../../../shared/session-type';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -275,6 +278,24 @@ export class CatalogSessionRepository {
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
     return Number(result.numUpdatedRows ?? 0n) > 0;
+  }
+
+  /** Soft-delete all non-deleted catalog rows of a given session_type (any workspace). */
+  async softDeleteBySessionType(sessionType: CatalogSessionType, actor?: string | null): Promise<number> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const result = await db
+      .updateTable('catalog_sessions')
+      .set({
+        deleted_at: timestamp,
+        updated_at: timestamp,
+        updated_by: actor ?? null,
+        version: sql<number>`version + 1`,
+      })
+      .where('session_type', '=', sessionType)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0n);
   }
 }
 

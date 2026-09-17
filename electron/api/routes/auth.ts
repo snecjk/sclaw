@@ -27,8 +27,8 @@ import {
   switchAccountViaMemoryCenter,
 } from '../../services/account-switch-service';
 import { resolveAuthMode } from '../../services/sto-auth-mode';
-import { getSclawHubClient } from '../../channels/hub-client';
-import { ensureSclawHubConnected } from '../../channels/startup';
+import { getSclawHubClient } from '../../message-channel/hub/hub-client';
+import { ensureSclawHubConnected } from '../../message-channel/hub/startup';
 
 const ssoLoginManager = new SsoLoginManager();
 

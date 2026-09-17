@@ -122,7 +122,6 @@ node_modules/.pnpm/
 **跳过的包**:
 - `typescript` - 开发依赖
 - `@playwright/test` - 测试依赖
-- `@discordjs/opus` - Electron ABI 不兼容
 
 ---
 
@@ -134,18 +133,18 @@ node_modules/.pnpm/
 
 **打包的插件**:
 
-| npm 包名 | 插件 ID |
-|----------|---------|
-| @soimy/dingtalk | dingtalk |
-| @wecom/wecom-openclaw-plugin | wecom |
-| @sliverp/qqbot | qqbot |
-| @tencent-weixin/openclaw-weixin | openclaw-weixin |
+| 来源 | 插件 ID |
+|------|---------|
+| local `sto-plugin/openclaw/sto-dingtalk-send-guard` | `sto-dingtalk-send-guard`（发送守卫，**不是** OC 渠道插件） |
+| 其它 local sto-* 工具插件 | 见脚本 `PLUGINS` 列表 |
+
+**已下线、勿加回的 OC 渠道插件**：`@soimy/dingtalk`、`@wecom/wecom-openclaw-plugin`、`@sliverp/qqbot`、`@tencent-weixin/openclaw-weixin`（微信走 Host Worker，见清理计划）。
 
 **处理逻辑**:
-1. 从 node_modules 解析插件真实路径
+1. 从 local / node_modules 解析插件真实路径
 2. BFS 收集传递依赖
 3. 复制到 `build/openclaw-plugins/{pluginId}/`
-4. 修补插件 ID 不匹配问题（如 wecom）
+4. 修补历史插件 ID 不匹配（遗留逻辑；渠道插件已停打包）
 
 ---
 
@@ -348,8 +347,7 @@ release/
         ├── openclaw/
         │   └── node_modules/
         ├── openclaw-plugins/
-        │   ├── dingtalk/
-        │   ├── wecom/
+        │   ├── sto-dingtalk-send-guard/
         │   └── ...
         └── resources/
             └── preinstalled-skills/
@@ -420,7 +418,6 @@ pnpm 虚拟存储路径可能超过 260 字符限制。解决方案：
 
 ### 7.2 原生模块 ABI 兼容性
 
-- `@discordjs/opus` 跳过打包（Electron ABI 不兼容）
 - 运行时原生模块由 bundled Node.js 运行
 
 ### 7.3 构建脚本竞争条件
@@ -429,7 +426,7 @@ pnpm 虚拟存储路径可能超过 260 字符限制。解决方案：
 
 ### 7.4 可选依赖警告
 
-`@discordjs/opus` 和 `koffi` 的构建脚本警告可安全忽略。
+`koffi` 的构建脚本警告可安全忽略。
 
 ---
 

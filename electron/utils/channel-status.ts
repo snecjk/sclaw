@@ -67,7 +67,7 @@ export function isChannelRuntimeConnected(
     return true;
   }
 
-  // OpenClaw integrations such as WeCom may stay "running" without ever
+  // Some OpenClaw integrations may stay "running" without ever
   // setting a durable connected=true flag. Treat healthy running as connected.
   return account.running === true && !hasChannelRuntimeError(account);
 }

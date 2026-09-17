@@ -1,12 +1,13 @@
+/**
+ * Channel Host API thin shell: OC config CRUD + accounts list (delegates merge to message-channel/host).
+ * WeChat QR login lives in message-channel/weixin/routes.ts.
+ */
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   deleteChannelAccountConfig,
   deleteChannelConfig,
-  cleanupDanglingWeChatPluginState,
   getChannelFormValues,
-  listConfiguredChannelAccounts,
   listConfiguredChannels,
-  readOpenClawConfig,
   saveChannelConfig,
   setChannelDefaultAccount,
   setChannelEnabled,
@@ -18,149 +19,20 @@ import {
   clearAllBindingsForChannel,
   clearChannelBinding,
   listAgentsSnapshot,
-  saveWeChatChannelWithBinding,
 } from '../../utils/agent-config';
-import {
-  ensureDingTalkPluginInstalled,
-  ensureQQBotPluginInstalled,
-  ensureWeChatPluginInstalled,
-  ensureWeComPluginInstalled,
-} from '../../utils/plugin-install';
-import {
-  computeChannelRuntimeStatus,
-  pickChannelRuntimeStatus,
-  type ChannelRuntimeAccountSnapshot,
-} from '../../utils/channel-status';
 import {
   OPENCLAW_WECHAT_CHANNEL_TYPE,
   UI_WECHAT_CHANNEL_TYPE,
-  buildQrChannelEventName,
   toOpenClawChannelType,
   toUiChannelType,
 } from '../../utils/channel-alias';
-import {
-  cancelWeChatLoginSession,
-  saveWeChatAccountState,
-  startWeChatLoginSession,
-  waitForWeChatLoginSession,
-} from '../../utils/wechat-login';
-import { whatsAppLoginManager } from '../../utils/whatsapp-login';
+import { getChannelConfigSaveRejection } from '../../../shared/retired-openclaw-channels';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { getChannelConnection } from '../../channels/binding-service';
-import { getSclawHubClient } from '../../channels/hub-client';
-import { ensureSclawHubConnected } from '../../channels/startup';
-
-const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
-const activeQrLogins = new Map<string, string>();
-
-interface WebLoginStartResult {
-  qrcodeUrl?: string;
-  message?: string;
-  sessionKey?: string;
-}
+import { listMergedChannelAccounts } from '../../message-channel/host/list';
 
 function resolveStoredChannelType(channelType: string): string {
   return toOpenClawChannelType(channelType);
-}
-
-function buildQrLoginKey(channelType: string, accountId?: string): string {
-  return `${toUiChannelType(channelType)}:${accountId?.trim() || '__new__'}`;
-}
-
-function setActiveQrLogin(channelType: string, sessionKey: string, accountId?: string): string {
-  const loginKey = buildQrLoginKey(channelType, accountId);
-  activeQrLogins.set(loginKey, sessionKey);
-  return loginKey;
-}
-
-function isActiveQrLogin(loginKey: string, sessionKey: string): boolean {
-  return activeQrLogins.get(loginKey) === sessionKey;
-}
-
-function clearActiveQrLogin(channelType: string, accountId?: string): void {
-  activeQrLogins.delete(buildQrLoginKey(channelType, accountId));
-}
-
-function emitChannelEvent(
-  ctx: HostApiContext,
-  channelType: string,
-  event: 'qr' | 'success' | 'error',
-  payload: unknown,
-): void {
-  const eventName = buildQrChannelEventName(channelType, event);
-  ctx.eventBus.emit(eventName, payload);
-  if (ctx.mainWindow && !ctx.mainWindow.isDestroyed()) {
-    ctx.mainWindow.webContents.send(eventName, payload);
-  }
-}
-
-async function startWeChatQrLogin(ctx: HostApiContext, accountId?: string): Promise<WebLoginStartResult> {
-  void ctx;
-  return await startWeChatLoginSession({
-    ...(accountId ? { accountId } : {}),
-    force: true,
-  });
-}
-
-async function awaitWeChatQrLogin(
-  ctx: HostApiContext,
-  sessionKey: string,
-  loginKey: string,
-): Promise<void> {
-  try {
-    const result = await waitForWeChatLoginSession({
-      sessionKey,
-      timeoutMs: WECHAT_QR_TIMEOUT_MS,
-      onQrRefresh: async ({ qrcodeUrl }) => {
-        if (!isActiveQrLogin(loginKey, sessionKey)) {
-          return;
-        }
-        emitChannelEvent(ctx, UI_WECHAT_CHANNEL_TYPE, 'qr', {
-          qr: qrcodeUrl,
-          raw: qrcodeUrl,
-          sessionKey,
-        });
-      },
-    });
-
-    if (!isActiveQrLogin(loginKey, sessionKey)) {
-      return;
-    }
-
-    if (!result.connected || !result.accountId || !result.botToken) {
-      emitChannelEvent(ctx, UI_WECHAT_CHANNEL_TYPE, 'error', result.message || 'WeChat login did not complete');
-      return;
-    }
-
-    const normalizedAccountId = await saveWeChatAccountState(result.accountId, {
-      token: result.botToken,
-      baseUrl: result.baseUrl,
-      userId: result.userId,
-    });
-    await saveWeChatChannelWithBinding(normalizedAccountId, 'main');
-    scheduleGatewayChannelSaveRefresh(ctx, OPENCLAW_WECHAT_CHANNEL_TYPE, `wechat:loginSuccess:${normalizedAccountId}`);
-
-    if (!isActiveQrLogin(loginKey, sessionKey)) {
-      return;
-    }
-
-    emitChannelEvent(ctx, UI_WECHAT_CHANNEL_TYPE, 'success', {
-      accountId: normalizedAccountId,
-      rawAccountId: result.accountId,
-      message: result.message,
-    });
-  } catch (error) {
-    if (!isActiveQrLogin(loginKey, sessionKey)) {
-      return;
-    }
-    emitChannelEvent(ctx, UI_WECHAT_CHANNEL_TYPE, 'error', String(error));
-  } finally {
-    if (isActiveQrLogin(loginKey, sessionKey)) {
-      activeQrLogins.delete(loginKey);
-    }
-    await cancelWeChatLoginSession(sessionKey);
-  }
 }
 
 function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): void {
@@ -171,14 +43,6 @@ function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): voi
   void reason;
 }
 
-// Plugin-based channels require a full Gateway process restart to properly
-// initialize / tear-down plugin connections.  SIGUSR1 in-process reload is
-// not sufficient for channel plugins (see restartGatewayForAgentDeletion).
-const FORCE_RESTART_CHANNELS = new Set(['dingtalk', 'wecom', 'whatsapp', 'qqbot', OPENCLAW_WECHAT_CHANNEL_TYPE]);
-
-/** Coalesce rapid plugin-channel saves with OpenClaw's own config-driven restart. */
-const PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS = 4000;
-
 type ChannelGatewayRefreshKind = 'config' | 'binding';
 
 function scheduleGatewayChannelSaveRefresh(
@@ -187,16 +51,8 @@ function scheduleGatewayChannelSaveRefresh(
   reason: string,
   kind: ChannelGatewayRefreshKind = 'config',
 ): void {
-  const storedChannelType = resolveStoredChannelType(channelType);
+  void channelType;
   if (ctx.gatewayManager.getStatus().state === 'stopped') {
-    return;
-  }
-
-  // Plugin channels (WeChat, WhatsApp, etc.) must fully restart to pick up binding
-  // changes — SIGUSR1 in-process reload does not reinitialize plugin connections.
-  if (kind === 'binding' && FORCE_RESTART_CHANNELS.has(storedChannelType)) {
-    ctx.gatewayManager.debouncedRestart(PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS);
-    void reason;
     return;
   }
 
@@ -206,11 +62,6 @@ function scheduleGatewayChannelSaveRefresh(
     return;
   }
 
-  if (FORCE_RESTART_CHANNELS.has(storedChannelType)) {
-    ctx.gatewayManager.debouncedRestart(PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS);
-    void reason;
-    return;
-  }
   ctx.gatewayManager.debouncedReload();
   void reason;
 }
@@ -273,178 +124,6 @@ async function ensureScopedChannelBinding(channelType: string, accountId?: strin
   }
 }
 
-interface GatewayChannelStatusPayload {
-  channelOrder?: string[];
-  channels?: Record<string, unknown>;
-  channelAccounts?: Record<string, Array<{
-    accountId?: string;
-    configured?: boolean;
-    connected?: boolean;
-    running?: boolean;
-    lastError?: string;
-    name?: string;
-    linked?: boolean;
-    lastConnectedAt?: number | null;
-    lastInboundAt?: number | null;
-    lastOutboundAt?: number | null;
-    lastProbeAt?: number | null;
-    probe?: {
-      ok?: boolean;
-    } | null;
-  }>>;
-  channelDefaultAccountId?: Record<string, string>;
-}
-
-interface ChannelAccountView {
-  accountId: string;
-  name: string;
-  configured: boolean;
-  connected: boolean;
-  running: boolean;
-  linked: boolean;
-  lastError?: string;
-  status: 'connected' | 'connecting' | 'disconnected' | 'error';
-  isDefault: boolean;
-  agentId?: string;
-}
-
-interface ChannelAccountsView {
-  channelType: string;
-  defaultAccountId: string;
-  status: 'connected' | 'connecting' | 'disconnected' | 'error';
-  accounts: ChannelAccountView[];
-}
-
-async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAccountsView[]> {
-  const [configuredChannels, configuredAccounts, openClawConfig, initialAgentsSnapshot] = await Promise.all([
-    listConfiguredChannels(),
-    listConfiguredChannelAccounts(),
-    readOpenClawConfig(),
-    listAgentsSnapshot(),
-  ]);
-
-  let gatewayStatus: GatewayChannelStatusPayload | null;
-  try {
-    gatewayStatus = await ctx.gatewayManager.rpc<GatewayChannelStatusPayload>('channels.status', { probe: true });
-  } catch {
-    gatewayStatus = null;
-  }
-
-  const channelTypes = new Set<string>([
-    ...configuredChannels,
-    ...Object.keys(configuredAccounts),
-    ...Object.keys(gatewayStatus?.channelAccounts || {}),
-  ]);
-
-  let agentsSnapshot = initialAgentsSnapshot;
-  const channels: ChannelAccountsView[] = [];
-  for (const rawChannelType of channelTypes) {
-    const uiChannelType = toUiChannelType(rawChannelType);
-    const channelAccountsFromConfig = configuredAccounts[rawChannelType]?.accountIds ?? [];
-    const hasLocalConfig = configuredChannels.includes(rawChannelType) || Boolean(configuredAccounts[rawChannelType]);
-    const channelSection = openClawConfig.channels?.[rawChannelType];
-    const channelSummary =
-      (gatewayStatus?.channels?.[rawChannelType] as { error?: string; lastError?: string } | undefined) ?? undefined;
-    const sortedConfigAccountIds = [...channelAccountsFromConfig].sort((left, right) => {
-      if (left === 'default') return -1;
-      if (right === 'default') return 1;
-      return left.localeCompare(right);
-    });
-    const fallbackDefault =
-      typeof channelSection?.defaultAccount === 'string' && channelSection.defaultAccount.trim()
-        ? channelSection.defaultAccount
-        : (sortedConfigAccountIds[0] || 'default');
-    const defaultAccountId = configuredAccounts[rawChannelType]?.defaultAccountId
-      ?? gatewayStatus?.channelDefaultAccountId?.[rawChannelType]
-      ?? fallbackDefault;
-    const runtimeAccounts = gatewayStatus?.channelAccounts?.[rawChannelType] ?? [];
-    const hasRuntimeConfigured = runtimeAccounts.some((account) => account.configured === true);
-    if (!hasLocalConfig && !hasRuntimeConfigured) {
-      continue;
-    }
-    const runtimeAccountIds = runtimeAccounts
-      .map((account) => account.accountId)
-      .filter((accountId): accountId is string => typeof accountId === 'string' && accountId.trim().length > 0);
-    const accountIds = Array.from(new Set([...channelAccountsFromConfig, ...runtimeAccountIds, defaultAccountId]));
-
-    const accounts: ChannelAccountView[] = accountIds.map((accountId) => {
-      const runtime = runtimeAccounts.find((item) => item.accountId === accountId);
-      const runtimeSnapshot: ChannelRuntimeAccountSnapshot = runtime ?? {};
-      const status = computeChannelRuntimeStatus(runtimeSnapshot);
-      return {
-        accountId,
-        name: runtime?.name || accountId,
-        configured: channelAccountsFromConfig.includes(accountId) || runtime?.configured === true,
-        connected: runtime?.connected === true,
-        running: runtime?.running === true,
-        linked: runtime?.linked === true,
-        lastError: typeof runtime?.lastError === 'string' ? runtime.lastError : undefined,
-        status,
-        isDefault: accountId === defaultAccountId,
-        agentId: agentsSnapshot.channelAccountOwners[`${rawChannelType}:${accountId}`],
-      };
-    }).sort((left, right) => {
-      if (left.accountId === defaultAccountId) return -1;
-      if (right.accountId === defaultAccountId) return 1;
-      return left.accountId.localeCompare(right.accountId);
-    });
-
-    channels.push({
-      channelType: uiChannelType,
-      defaultAccountId,
-      status: pickChannelRuntimeStatus(runtimeAccounts, channelSummary),
-      accounts,
-    });
-  }
-
-  return channels.sort((left, right) => left.channelType.localeCompare(right.channelType));
-}
-
-async function mergeHubDingTalkChannel(
-  channels: ChannelAccountsView[],
-): Promise<ChannelAccountsView[]> {
-  try {
-    const hubConn = await getChannelConnection('dingtalk');
-    if (!hubConn || hubConn.bindStatus !== 'bound') {
-      return channels;
-    }
-    // 已绑定但 WS 掉线时（如退出登录后），打开频道列表时兜底重连
-    await ensureSclawHubConnected();
-    const ws = getSclawHubClient().getStatus();
-    const status: ChannelAccountsView['status'] = ws.connected
-      ? 'connected'
-      : ws.state === 'connecting'
-        ? 'connecting'
-        : 'disconnected';
-    const hubView: ChannelAccountsView = {
-      channelType: 'dingtalk',
-      defaultAccountId: 'default',
-      status,
-      accounts: [
-        {
-          accountId: 'default',
-          name: hubConn.externalUserId
-            ? `钉钉 Hub（${hubConn.externalUserId}）`
-            : '钉钉 Hub',
-          configured: true,
-          connected: ws.connected,
-          running: ws.connected,
-          linked: true,
-          status,
-          isDefault: true,
-          agentId: hubConn.agentId || undefined,
-        },
-      ],
-    };
-    const withoutOcDingTalk = channels.filter((item) => item.channelType !== 'dingtalk');
-    return [...withoutOcDingTalk, hubView].sort((left, right) =>
-      left.channelType.localeCompare(right.channelType),
-    );
-  } catch {
-    return channels;
-  }
-}
-
 export async function handleChannelRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -459,7 +138,7 @@ export async function handleChannelRoutes(
 
   if (url.pathname === '/api/channels/accounts' && req.method === 'GET') {
     try {
-      const channels = await mergeHubDingTalkChannel(await buildChannelAccountsView(ctx));
+      const channels = await listMergedChannelAccounts(ctx);
       sendJson(res, 200, { success: true, channels });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -523,111 +202,17 @@ export async function handleChannelRoutes(
     return true;
   }
 
-  if (url.pathname === '/api/channels/whatsapp/start' && req.method === 'POST') {
-    try {
-      const body = await parseJsonBody<{ accountId: string }>(req);
-      await whatsAppLoginManager.start(body.accountId);
-      sendJson(res, 200, { success: true });
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/channels/whatsapp/cancel' && req.method === 'POST') {
-    try {
-      await whatsAppLoginManager.stop();
-      sendJson(res, 200, { success: true });
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/channels/wechat/start' && req.method === 'POST') {
-    try {
-      const body = await parseJsonBody<{ accountId?: string }>(req);
-      const requestedAccountId = body.accountId?.trim() || undefined;
-
-      const installResult = await ensureWeChatPluginInstalled();
-      if (!installResult.installed) {
-        sendJson(res, 500, { success: false, error: installResult.warning || 'WeChat plugin install failed' });
-        return true;
-      }
-
-      await cleanupDanglingWeChatPluginState();
-      const startResult = await startWeChatQrLogin(ctx, requestedAccountId);
-      if (!startResult.qrcodeUrl || !startResult.sessionKey) {
-        throw new Error(startResult.message || 'Failed to generate WeChat QR code');
-      }
-
-      const loginKey = setActiveQrLogin(UI_WECHAT_CHANNEL_TYPE, startResult.sessionKey, requestedAccountId);
-      emitChannelEvent(ctx, UI_WECHAT_CHANNEL_TYPE, 'qr', {
-        qr: startResult.qrcodeUrl,
-        raw: startResult.qrcodeUrl,
-        sessionKey: startResult.sessionKey,
-      });
-      void awaitWeChatQrLogin(ctx, startResult.sessionKey, loginKey);
-      sendJson(res, 200, { success: true });
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/channels/wechat/cancel' && req.method === 'POST') {
-    try {
-      const body = await parseJsonBody<{ accountId?: string }>(req);
-      const accountId = body.accountId?.trim() || undefined;
-      const loginKey = buildQrLoginKey(UI_WECHAT_CHANNEL_TYPE, accountId);
-      const sessionKey = activeQrLogins.get(loginKey);
-      clearActiveQrLogin(UI_WECHAT_CHANNEL_TYPE, accountId);
-      if (sessionKey) {
-        await cancelWeChatLoginSession(sessionKey);
-      }
-      sendJson(res, 200, { success: true });
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
   if (url.pathname === '/api/channels/config' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ channelType: string; config: Record<string, unknown>; accountId?: string }>(req);
       const storedChannelType = resolveStoredChannelType(body.channelType);
-      if (storedChannelType === 'dingtalk') {
-        const installResult = await ensureDingTalkPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 503, {
-            success: false,
-            fallback: 'dws',
-            error: installResult.warning
-              || '钉钉 OpenClaw 通道插件当前未启用（需 OpenClaw >= 2026.3.28）。请改用 dws：在设置页安装并登录 dws，在聊天输入 @ 选择钉钉收件人，由 Agent 调用 dws 发送。',
-          });
-          return true;
-        }
-      }
-      if (storedChannelType === 'wecom') {
-        const installResult = await ensureWeComPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'WeCom plugin install failed' });
-          return true;
-        }
-      }
-      if (storedChannelType === 'qqbot') {
-        const installResult = await ensureQQBotPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'QQ Bot plugin install failed' });
-          return true;
-        }
-      }
-      if (storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE) {
-        const installResult = await ensureWeChatPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'WeChat plugin install failed' });
-          return true;
-        }
+      const saveRejection = getChannelConfigSaveRejection(storedChannelType);
+      if (saveRejection) {
+        sendJson(res, 410, {
+          success: false,
+          error: saveRejection.error,
+        });
+        return true;
       }
       const existingValues = await getChannelFormValues(body.channelType, body.accountId);
       if (isSameConfigValues(existingValues, body.config)) {
@@ -676,6 +261,27 @@ export async function handleChannelRoutes(
       const channelType = decodeURIComponent(url.pathname.slice('/api/channels/config/'.length));
       const accountId = url.searchParams.get('accountId') || undefined;
       const storedChannelType = resolveStoredChannelType(channelType);
+      const isWeixinHost =
+        toUiChannelType(channelType) === UI_WECHAT_CHANNEL_TYPE
+        || storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE;
+
+      // Host Weixin 不依赖 OC Gateway：只停 Worker / 清凭证，禁止 deleteConfig → restart
+      if (isWeixinHost) {
+        const removeId =
+          accountId?.trim()
+          || (await import('../../message-channel/weixin/binding')).getBoundWeixinAccountId()
+          || 'default';
+        const { unbindWeixinBot } = await import('../../message-channel/weixin/binding');
+        const { getWeixinChannelService } = await import('../../message-channel/weixin/service');
+        const weixin = getWeixinChannelService();
+        await weixin.stopMonitor();
+        weixin.sendCommand({ type: 'account.remove', accountId: removeId });
+        await unbindWeixinBot();
+        await weixin.shutdown();
+        sendJson(res, 200, { success: true });
+        return true;
+      }
+
       if (accountId) {
         await deleteChannelAccountConfig(channelType, accountId);
         await clearChannelBinding(storedChannelType, accountId);

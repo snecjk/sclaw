@@ -139,9 +139,7 @@ function toErrorDiagnostic(error: unknown): { code?: string; name?: string; mess
 // Some npm packages ship with an openclaw.plugin.json whose "id" field
 // doesn't match the ID the plugin code actually exports.  After copying we
 // patch both the manifest AND the compiled JS so the Gateway accepts them.
-const MANIFEST_ID_FIXES: Record<string, string> = {
-  'wecom-openclaw-plugin': 'wecom',
-};
+const MANIFEST_ID_FIXES: Record<string, string> = {};
 
 /**
  * After a plugin has been copied to ~/.stoclaw/openclaw/extensions/<dir>, fix any
@@ -252,11 +250,9 @@ function patchPluginEntryIds(targetDir: string): void {
 
 // ── Plugin npm name mapping ──────────────────────────────────────────────────
 
+/** Phase 2: OC channel npm plugins removed (WeChat = Host Worker; wecom/qqbot retired). */
 const PLUGIN_NPM_NAMES: Record<string, string> = {
   // dingtalk: '@soimy/dingtalk',
-  // wecom: '@wecom/wecom-openclaw-plugin',
-  // qqbot: '@sliverp/qqbot',
-  'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
 };
 
 /** npm channel plugins copied to ~/.stoclaw; need openclaw peer + bundled runtime deps. */
@@ -1336,20 +1332,17 @@ export function buildCandidateSources(pluginDirName: string): string[] {
 
 // ── Per-channel plugin helpers ───────────────────────────────────────────────
 
-export function ensureDingTalkPluginInstalled(): { installed: boolean; warning?: string } {
-  return ensurePluginInstalled('dingtalk', buildCandidateSources('dingtalk'), 'DingTalk');
-}
-
 export function ensureWeComPluginInstalled(): { installed: boolean; warning?: string } {
-  return ensurePluginInstalled('wecom', buildCandidateSources('wecom'), 'WeCom');
+  return { installed: false, warning: 'WeCom channel has been retired' };
 }
 
 export function ensureQQBotPluginInstalled(): { installed: boolean; warning?: string } {
-  return ensurePluginInstalled('qqbot', buildCandidateSources('qqbot'), 'QQ Bot');
+  return { installed: false, warning: 'QQ Bot channel has been retired' };
 }
 
+/** @deprecated Phase 2: WeChat uses Host Worker — do not install OC openclaw-weixin. */
 export function ensureWeChatPluginInstalled(): { installed: boolean; warning?: string } {
-  return ensurePluginInstalled('openclaw-weixin', buildCandidateSources('openclaw-weixin'), 'WeChat');
+  return { installed: false, warning: 'WeChat uses Host Worker; OC openclaw-weixin plugin is not installed' };
 }
 
 export function ensureStoDynamicRoutePluginInstalled(): { installed: boolean; warning?: string } {
@@ -1457,10 +1450,7 @@ export function ensureStoDingTalkSendGuardPluginInstalled(): { installed: boolea
  * All bundled plugins, in the same order as after-pack.cjs BUNDLED_PLUGINS.
  */
 const ALL_BUNDLED_PLUGINS = [
-  // { fn: ensureDingTalkPluginInstalled, label: 'DingTalk' },
-  { fn: ensureWeComPluginInstalled, label: 'WeCom' },
-  { fn: ensureQQBotPluginInstalled, label: 'QQ Bot' },
-  { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
+  // Phase 2: wecom / qqbot / openclaw-weixin OC channel plugins retired.
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
   { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
@@ -1600,9 +1590,7 @@ export async function ensureAllBundledPluginsInstalled(): Promise<void> {
 export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
   const fallbackPluginSpecs = [
     // { dirName: 'dingtalk', label: 'DingTalk' },
-    { dirName: 'wecom', label: 'WeCom' },
-    { dirName: 'qqbot', label: 'QQ Bot' },
-    { dirName: 'openclaw-weixin', label: 'WeChat' },
+    // Phase 2: wecom / qqbot / openclaw-weixin OC channel plugins retired.
     { dirName: 'sto-dynamic-agent-route', label: 'STO Runtime Context' },
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },

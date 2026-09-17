@@ -231,7 +231,7 @@ describe('api-client', () => {
       data: {
         status: 200,
         ok: true,
-        json: { channels: [{ id: 'telegram-default' }] },
+        json: { channels: [{ id: 'dingtalk-default' }] },
       },
     });
 
@@ -242,7 +242,7 @@ describe('api-client', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.result.channels[0].id).toBe('telegram-default');
+    expect(result.result.channels[0].id).toBe('dingtalk-default');
   });
 
   it('rejects invalid config.patch params before gateway:httpProxy call', async () => {

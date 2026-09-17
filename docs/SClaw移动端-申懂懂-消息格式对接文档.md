@@ -579,14 +579,14 @@ function onDesktopFrame(frame: DesktopReplyFrame) {
 
 ## 11. Desktop 代码依据
 
-- 绑定与共享凭证：`electron/channels/binding-service.ts`
-- Hub HTTP API：`electron/channels/hub-api.ts`
-- WebSocket 包解析、心跳与重连：`electron/channels/hub-client.ts`
-- 启动连接和历史 RPC 挂载：`electron/channels/startup.ts`
-- Mobile 入站处理：`electron/channels/ingress.ts`
-- 多模态下载和 prompt 组装：`electron/channels/inbound-media.ts`
-- Session 创建与续聊：`electron/channels/session-facade.ts`
-- Session key 结构：`electron/channels/session-key.ts`
-- 流式回程：`electron/channels/delivery.ts`
-- 历史列表与详情：`electron/channels/history-facade.ts`
-- Desktop Host API 路由：`electron/api/routes/channel-hub.ts`
+- 绑定与共享凭证：`electron/message-channel/hub/binding-service.ts`
+- Hub HTTP API：`electron/message-channel/hub/hub-api.ts`
+- WebSocket 包解析、心跳与重连：`electron/message-channel/hub/hub-client.ts`
+- 启动连接和历史 RPC 挂载：`electron/message-channel/hub/startup.ts`
+- Mobile 入站处理：`electron/message-channel/hub/ingress.ts`
+- 多模态下载和 prompt 组装：`electron/message-channel/hub/inbound-media.ts`
+- Session 创建与续聊：`electron/message-channel/common/session-facade.ts`
+- Session key 结构：`electron/message-channel/common/session-key.ts`
+- 流式回程：`electron/message-channel/hub/delivery.ts`
+- 历史列表与详情：`electron/message-channel/mobile/history-facade.ts`
+- Desktop Host API 路由：`electron/message-channel/hub/routes.ts`

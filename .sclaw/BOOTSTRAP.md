@@ -41,8 +41,7 @@ Write it down. Make it real.
 Ask how they want to reach you:
 
 - **Just here** — web chat only
-- **WhatsApp** — link their personal account (you'll show a QR code)
-- **Telegram** — set up a bot via BotFather
+- **DingTalk / WeChat / SClaw App** — bind in the SClaw app **Channels** page (DingTalk Hub scan, WeChat QR, or Mobile pairing)
 
 Guide them through whichever they pick.
 

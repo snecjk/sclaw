@@ -31,25 +31,46 @@ vi.mock('@electron/utils/agent-config', () => ({
   listAgentsSnapshot: (...args: unknown[]) => listAgentsSnapshotMock(...args),
 }));
 
-vi.mock('@electron/utils/plugin-install', () => ({
-  ensureDingTalkPluginInstalled: vi.fn(),
-  ensureQQBotPluginInstalled: vi.fn(),
-  ensureWeChatPluginInstalled: vi.fn(),
-  ensureWeComPluginInstalled: vi.fn(),
-}));
-
-vi.mock('@electron/utils/wechat-login', () => ({
+vi.mock('@electron/message-channel/weixin/host-login', () => ({
   cancelWeChatLoginSession: vi.fn(),
   saveWeChatAccountState: vi.fn(),
   startWeChatLoginSession: vi.fn(),
   waitForWeChatLoginSession: vi.fn(),
 }));
 
-vi.mock('@electron/utils/whatsapp-login', () => ({
-  whatsAppLoginManager: {
-    start: vi.fn(),
-    stop: vi.fn(),
-  },
+vi.mock('@electron/message-channel/hub/binding-service', () => ({
+  getChannelConnection: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('@electron/message-channel/hub/hub-client', () => ({
+  getSclawHubClient: vi.fn(() => ({
+    getStatus: () => ({ connected: false, state: 'idle' }),
+  })),
+}));
+
+vi.mock('@electron/message-channel/hub/startup', () => ({
+  ensureSclawHubConnected: vi.fn().mockResolvedValue(undefined),
+}));
+
+const weixinServiceMock = vi.hoisted(() => ({
+  isMonitorRunning: () => false,
+  isReady: () => false,
+  setGatewayManager: vi.fn(),
+  applyLoginSuccess: vi.fn(),
+  ensureReady: vi.fn().mockResolvedValue(undefined),
+  stopMonitor: vi.fn().mockResolvedValue(undefined),
+  sendCommand: vi.fn(),
+  shutdown: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@electron/message-channel/weixin/binding', () => ({
+  getWeixinBinding: vi.fn().mockResolvedValue(null),
+  getBoundWeixinAccountId: vi.fn().mockReturnValue(null),
+  unbindWeixinBot: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@electron/message-channel/weixin/service', () => ({
+  getWeixinChannelService: vi.fn(() => weixinServiceMock),
 }));
 
 vi.mock('@electron/api/route-utils', () => ({
@@ -160,16 +181,16 @@ describe('handleChannelRoutes', () => {
   });
 
   it('keeps channel connected when one account is healthy and another errors', async () => {
-    listConfiguredChannelsMock.mockResolvedValue(['telegram']);
+    listConfiguredChannelsMock.mockResolvedValue(['dingtalk']);
     listConfiguredChannelAccountsMock.mockResolvedValue({
-      telegram: {
+      dingtalk: {
         defaultAccountId: 'default',
-        accountIds: ['default', 'telegram-b'],
+        accountIds: ['default', 'dingtalk-b'],
       },
     });
     readOpenClawConfigMock.mockResolvedValue({
       channels: {
-        telegram: {
+        dingtalk: {
           defaultAccount: 'default',
         },
       },
@@ -177,12 +198,12 @@ describe('handleChannelRoutes', () => {
 
     const rpc = vi.fn().mockResolvedValue({
       channels: {
-        telegram: {
+        dingtalk: {
           configured: true,
         },
       },
       channelAccounts: {
-        telegram: [
+        dingtalk: [
           {
             accountId: 'default',
             configured: true,
@@ -191,7 +212,7 @@ describe('handleChannelRoutes', () => {
             linked: false,
           },
           {
-            accountId: 'telegram-b',
+            accountId: 'dingtalk-b',
             configured: true,
             connected: false,
             running: false,
@@ -201,7 +222,7 @@ describe('handleChannelRoutes', () => {
         ],
       },
       channelDefaultAccountId: {
-        telegram: 'default',
+        dingtalk: 'default',
       },
     });
 
@@ -227,11 +248,11 @@ describe('handleChannelRoutes', () => {
         success: true,
         channels: [
           expect.objectContaining({
-            channelType: 'telegram',
+            channelType: 'dingtalk',
             status: 'connected',
             accounts: expect.arrayContaining([
               expect.objectContaining({ accountId: 'default', status: 'connected' }),
-              expect.objectContaining({ accountId: 'telegram-b', status: 'error' }),
+              expect.objectContaining({ accountId: 'dingtalk-b', status: 'error' }),
             ]),
           }),
         ],
@@ -239,7 +260,7 @@ describe('handleChannelRoutes', () => {
     );
   });
 
-  it('restarts gateway when binding a plugin-managed WeChat account', async () => {
+  it('reloads gateway when binding a Host-Worker WeChat account (no plugin restart)', async () => {
     parseJsonBodyMock.mockResolvedValue({
       channelType: 'wechat',
       accountId: 'bot-im-bot',
@@ -269,8 +290,8 @@ describe('handleChannelRoutes', () => {
       'openclaw-weixin',
       'bot-im-bot',
     );
-    expect(debouncedRestart).toHaveBeenCalledWith(4000);
-    expect(debouncedReload).not.toHaveBeenCalled();
+    expect(debouncedReload).toHaveBeenCalled();
+    expect(debouncedRestart).not.toHaveBeenCalled();
   });
 
   it('does not auto-bind WeChat accounts when listing channel accounts', async () => {
@@ -335,7 +356,7 @@ describe('handleChannelRoutes', () => {
 
   it('reloads gateway in-place when binding a non-plugin channel account', async () => {
     parseJsonBodyMock.mockResolvedValue({
-      channelType: 'telegram',
+      channelType: 'dingtalk',
       accountId: 'default',
       agentId: 'main',
     });
@@ -359,6 +380,39 @@ describe('handleChannelRoutes', () => {
 
     expect(handled).toBe(true);
     expect(debouncedReload).toHaveBeenCalled();
+    expect(debouncedRestart).not.toHaveBeenCalled();
+  });
+
+  it('shuts down Weixin worker when deleting wechat channel config', async () => {
+    const { getBoundWeixinAccountId, unbindWeixinBot } = await import(
+      '@electron/message-channel/weixin/binding'
+    );
+    vi.mocked(getBoundWeixinAccountId).mockReturnValue('wx-bot-1');
+    const debouncedRestart = vi.fn();
+
+    const { handleChannelRoutes } = await import('@electron/api/routes/channels');
+    const handled = await handleChannelRoutes(
+      { method: 'DELETE' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/channels/config/wechat'),
+      {
+        gatewayManager: {
+          getStatus: () => ({ state: 'running' }),
+          debouncedReload: vi.fn(),
+          debouncedRestart,
+        },
+      } as never,
+    );
+
+    expect(handled).toBe(true);
+    expect(weixinServiceMock.stopMonitor).toHaveBeenCalled();
+    expect(weixinServiceMock.sendCommand).toHaveBeenCalledWith({
+      type: 'account.remove',
+      accountId: 'wx-bot-1',
+    });
+    expect(unbindWeixinBot).toHaveBeenCalled();
+    expect(weixinServiceMock.shutdown).toHaveBeenCalled();
+    // Host Weixin unbind must not restart OC gateway
     expect(debouncedRestart).not.toHaveBeenCalled();
   });
 });

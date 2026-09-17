@@ -335,9 +335,8 @@ const openclawPath = process.resourcesPath + '/openclaw';
 - [ ] 所有预装技能正常加载
 - [ ] 消息平台插件正常工作
   - [ ] DingTalk
-  - [ ] WeCom
-  - [ ] QQ
   - [ ] WeChat
+  - [ ] SClaw Mobile App
 - [ ] AI Provider 正常调用
   - [ ] OpenAI
   - [ ] Anthropic
