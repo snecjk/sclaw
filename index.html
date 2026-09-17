@@ -31,13 +31,30 @@
         opacity: 0;
         pointer-events: none;
       }
+      .splash-artwork-stage {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: max(100vw, 160vh);
+        height: max(100vh, 62.5vw);
+        transform: translate(-50%, -50%);
+      }
       .splash-artwork {
         position: absolute;
-        left: 0;
-        top: -7.1429%;
+        inset: 0;
         width: 100%;
-        height: 107.1429%;
+        height: 100%;
         object-fit: fill;
+      }
+      .splash-mascot {
+        position: absolute;
+        left: 46.527778%;
+        top: 32.444444%;
+        width: 6.944444%;
+        height: 11.111111%;
+        object-fit: contain;
+        pointer-events: none;
+        user-select: none;
       }
       /* Hide splash when React takes over */
       #splash-screen.hidden {
@@ -48,11 +65,15 @@
   <body>
     <!-- Splash screen shown instantly while app loads -->
     <div id="splash-screen">
-      <img class="splash-artwork" src="/src/assets/auth/loading.svg" alt="SClaw 正在加载" />
+      <div class="splash-artwork-stage">
+        <img class="splash-artwork" src="/src/assets/auth/loading.svg" alt="SClaw 正在加载" />
+        <img class="splash-mascot" src="/src/assets/auth/loading-mascot.gif" alt="" aria-hidden="true" />
+      </div>
     </div>
     <script>
       // 以 SVG 真正加载完成的时刻作为 0% 起点，确保走满后才切页。
       const splashArtwork = document.querySelector('.splash-artwork');
+      const splashMascot = document.querySelector('.splash-mascot');
       const markSplashStarted = () => {
         if (window.__SCLAW_SPLASH_STARTED_AT__) return;
         window.__SCLAW_SPLASH_STARTED_AT__ = Date.now();
@@ -66,6 +87,8 @@
         `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       );
       const expectedSplashUrl = splashUrl.href;
+      const mascotUrl = new URL(splashMascot.src);
+      mascotUrl.searchParams.set('splash-run', splashUrl.searchParams.get('splash-run'));
       const handleSplashLoad = () => {
         if (splashArtwork.src !== expectedSplashUrl) return;
         splashArtwork.removeEventListener('load', handleSplashLoad);
@@ -73,6 +96,7 @@
       };
       splashArtwork.addEventListener('load', handleSplashLoad);
       splashArtwork.src = expectedSplashUrl;
+      splashMascot.src = mascotUrl.href;
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

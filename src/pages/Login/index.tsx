@@ -6,6 +6,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown } from 'lucide-react';
 import { TitleBar } from '@/components/layout/TitleBar';
+import { useThemeAppearance } from '@/components/theme/appearance-context';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -17,8 +18,11 @@ import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { hostApiFetch } from '@/lib/host-api';
 import loginBeforeArtwork from '@/assets/auth/login-before.svg';
+import loginBeforeDarkArtwork from '@/assets/auth/login-before-dark.svg';
 import loginAfterArtwork from '@/assets/auth/login-after.svg';
+import loginAfterDarkArtwork from '@/assets/auth/login-after-dark.svg';
 import registrationPendingArtwork from '@/assets/auth/registration-pending.svg';
+import registrationPendingDarkArtwork from '@/assets/auth/registration-pending-dark.svg';
 
 const envConfig = getCurrentEnvConfig();
 const isLocalDevelopment = import.meta.env.DEV && envConfig.isDevelopment;
@@ -45,15 +49,15 @@ const artworkButtonClass = [
   'disabled:cursor-wait',
 ].join(' ');
 
-const MAC_ARTWORK_CROP_TOP = 60;
-const MAC_ARTWORK_CONTENT_HEIGHT = 900 - MAC_ARTWORK_CROP_TOP;
-const macArtworkImageStyle = {
-  top: `${-(MAC_ARTWORK_CROP_TOP / MAC_ARTWORK_CONTENT_HEIGHT) * 100}%`,
-  height: `${(900 / MAC_ARTWORK_CONTENT_HEIGHT) * 100}%`,
+// 1440x900 设计稿按原始 8:5 比例 cover 窗口，只裁切超出边缘，不拉伸内容。
+const artworkStageStyle = {
+  width: 'max(100vw, 160vh)',
+  height: 'max(100vh, 62.5vw)',
 } satisfies CSSProperties;
 
 export function Login() {
   const { t } = useTranslation(['auth']);
+  const appearance = useThemeAppearance();
   const isLoggingIn = useAuthStore((s) => s.isLoggingIn);
   const error = useAuthStore((s) => s.error);
   const accessDenied = useAuthStore((s) => s.accessDenied);
@@ -125,10 +129,10 @@ export function Login() {
   const openingPending = accessDenied && openingStatus?.status === 'REGISTERED';
   const showDeniedArtwork = accessDenied && !openingEnabled;
   const artwork = openingPending
-    ? registrationPendingArtwork
+    ? (appearance === 'dark' ? registrationPendingDarkArtwork : registrationPendingArtwork)
     : showDeniedArtwork
-      ? loginAfterArtwork
-      : loginBeforeArtwork;
+      ? (appearance === 'dark' ? loginAfterDarkArtwork : loginAfterArtwork)
+      : (appearance === 'dark' ? loginBeforeDarkArtwork : loginBeforeArtwork);
   const artworkAlt = openingPending
     ? '报名成功，审核中'
     : showDeniedArtwork
@@ -136,15 +140,50 @@ export function Login() {
       : 'SClaw 登录';
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-white">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <main className="relative h-screen w-screen overflow-hidden bg-white dark:bg-[#111318]">
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        style={artworkStageStyle}
+      >
         <img
           src={artwork}
           alt={artworkAlt}
-          className="absolute left-0 w-full select-none object-fill"
-          style={macArtworkImageStyle}
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill"
           draggable={false}
         />
+
+        {showDeniedArtwork && !openingPending ? (
+          <button
+            type="button"
+            aria-label="去报名开通"
+            title="去报名开通"
+            className={`${artworkButtonClass} left-[38.194%] top-[49.778%] h-[5.556%] w-[22.222%]`}
+            disabled={statusLoading || registering}
+            onClick={() => void registerOpening()}
+          >
+            去报名开通
+          </button>
+        ) : !showDeniedArtwork ? (
+          <button
+            type="button"
+            aria-label="点击登录"
+            title="点击登录"
+            className={`${artworkButtonClass} left-[38.194%] top-[53.333%] h-[5.556%] w-[22.222%]`}
+            disabled={isLoggingIn}
+            onClick={handleLogin}
+          >
+            点击登录
+          </button>
+        ) : null}
+
+        {(openingError || (error && error !== 'SSO_LOGIN_CANCELLED' && !accessDenied)) && (
+          <p
+            role="alert"
+            className="absolute left-1/2 top-[63.6%] z-10 max-w-[44%] -translate-x-1/2 rounded bg-white/90 px-3 py-1 text-center text-xs text-red-600"
+          >
+            {openingError || error}
+          </p>
+        )}
       </div>
 
       <div className="absolute inset-x-0 top-0 z-20 opacity-0 transition-opacity hover:opacity-100 focus-within:opacity-100">
@@ -162,13 +201,13 @@ export function Login() {
                 size="sm"
                 aria-label="SSO 环境"
                 disabled={isLoggingIn}
-                className="h-9 w-full justify-between rounded-full border border-white/40 !bg-white/[0.14] px-4 text-[12px] font-medium !text-[#4E5969] shadow-[0_6px_20px_rgba(29,33,41,0.035),inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-xl hover:border-white/60 hover:!bg-white/[0.24] focus-visible:!bg-white/[0.28]"
+                className="h-9 w-full justify-between rounded-full border border-white/40 !bg-white/[0.14] px-4 text-[12px] font-medium !text-[#4E5969] shadow-[0_6px_20px_rgba(29,33,41,0.035),inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-xl hover:border-white/60 hover:!bg-white/[0.24] focus-visible:!bg-white/[0.28] dark:border-white/10 dark:!bg-white/[0.06] dark:!text-[#C9CDD4] dark:shadow-[0_8px_24px_rgba(0,0,0,0.18)] dark:hover:border-white/20 dark:hover:!bg-white/[0.10]"
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#86909C]/70" aria-hidden />
-                  <span className="shrink-0 text-[#86909C]">开发环境</span>
-                  <span className="text-[#C9CDD4]" aria-hidden>·</span>
-                  <span className="truncate text-[#4E5969]">
+                  <span className="shrink-0 text-[#86909C] dark:text-[#AEB8C4]">开发环境</span>
+                  <span className="text-[#C9CDD4] dark:text-[#4E5969]" aria-hidden>·</span>
+                  <span className="truncate text-[#4E5969] dark:text-[#C9CDD4]">
                     {t(`auth:environment.${ssoEnvironment}`)}
                   </span>
                 </span>
@@ -204,38 +243,6 @@ export function Login() {
         </div>
       )}
 
-      {showDeniedArtwork && !openingPending ? (
-        <button
-          type="button"
-          aria-label="去报名开通"
-          title="去报名开通"
-          className={`${artworkButtonClass} left-[38.194%] top-[46.190%] h-[5.952%] w-[22.222%]`}
-          disabled={statusLoading || registering}
-          onClick={() => void registerOpening()}
-        >
-          去报名开通
-        </button>
-      ) : !showDeniedArtwork ? (
-        <button
-          type="button"
-          aria-label="点击登录"
-          title="点击登录"
-          className={`${artworkButtonClass} left-[38.194%] top-[50%] h-[5.952%] w-[22.222%]`}
-          disabled={isLoggingIn}
-          onClick={handleLogin}
-        >
-          点击登录
-        </button>
-      ) : null}
-
-      {(openingError || (error && error !== 'SSO_LOGIN_CANCELLED' && !accessDenied)) && (
-        <p
-          role="alert"
-          className="absolute left-1/2 top-[61%] z-10 max-w-[44%] -translate-x-1/2 rounded bg-white/90 px-3 py-1 text-center text-xs text-red-600"
-        >
-          {openingError || error}
-        </p>
-      )}
     </main>
   );
 }
