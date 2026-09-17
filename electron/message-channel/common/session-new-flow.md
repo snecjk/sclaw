@@ -1,6 +1,6 @@
 # 渠道会话：是否新开对话
 
-> 判定在 Electron **主进程** `message-channel/common` 完成，**不是** OpenClaw Gateway。  
+> 判定在 Electron **主进程** `message-channel/common` 完成。  
 > Gateway / Claude / Pi 只消费已经定好的 `sessionKey`。
 
 相关代码：
@@ -138,7 +138,7 @@ getSetting('channelSessionIdleHours')  // 默认 24，钳制 1–168
 ## 4. 之后才交给引擎
 
 `sendViaFacade` → 按 `engineType` 选 adapter → `runMainChatSend`。  
-此时才进入 Claude / Pi 执行路径；它们**不参与**「要不要新开」的决策。渠道侧不再走 OpenClaw 引擎。
+此时才进入 Claude / Pi 执行路径；它们**不参与**「要不要新开」的决策。
 
 ---
 

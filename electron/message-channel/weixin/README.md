@@ -1,6 +1,6 @@
 # Weixin message channel
 
-Host Worker + iLink transport for WeChat ClawBot (single Bot; Claude Agent / SAgent switchable).
+Host Worker + iLink：微信 ClawBot（单 Bot；运行时固定 SAgent `pi` + Main Agent `main`）。
 
 ## Layout
 
@@ -10,9 +10,9 @@ weixin/
   service.ts / bridge-*.ts / binding.ts / types.ts   # Host
   runtime/
     worker-entry.ts / fork-options.ts
-    transport/     # thin iLink client
+    transport/     # iLink client
     adapter/       # Wire normalize/encode
-    spike/         # Phase 0 R1/R4 gate
+    spike/         # 本地联调脚本
     vendor/        # upstream snapshot (MIT)
 ```
 
@@ -20,8 +20,8 @@ Accounts list merge (Hub + Weixin overlays): `../host/list.ts`.
 
 ## State directory
 
-- New: `~/.stoclaw/weixin/`
-- Legacy (migrate from): `~/.stoclaw/openclaw/openclaw-weixin/`
+- 当前：`~/.stoclaw/weixin/`
+- 兼容旧路径（启动时按需拷贝）：`~/.stoclaw/openclaw/openclaw-weixin/`
 
 ## Docs
 

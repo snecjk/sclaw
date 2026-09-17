@@ -1,6 +1,6 @@
 /**
- * Copy legacy OpenClaw weixin credentials into the new StoClaw weixin state dir.
- * Does not delete the source (safe for Phase 0 / rollback).
+ * Copy older weixin credentials into the StoClaw weixin state dir when present.
+ * Does not delete the source.
  */
 
 import fs from "node:fs";

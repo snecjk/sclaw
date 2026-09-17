@@ -13,7 +13,7 @@ const ACTIVE_LOGIN_TTL_MS = 5 * 60_000;
 const QR_POLL_TIMEOUT_MS = 35_000;
 const MAX_QR_REFRESH_COUNT = 3;
 const OPENCLAW_DIR = getOpenClawConfigDir();
-/** New Host-Worker credential root (Phase 1). Legacy OC path is migrated on start. */
+/** WeChat credential root under StoClaw home. */
 const WECHAT_STATE_DIR = join(getStoClawHomeDir(), 'weixin');
 const WECHAT_ACCOUNT_INDEX_FILE = join(WECHAT_STATE_DIR, 'accounts.json');
 const WECHAT_ACCOUNTS_DIR = join(WECHAT_STATE_DIR, 'accounts');

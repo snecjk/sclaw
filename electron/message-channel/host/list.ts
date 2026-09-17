@@ -149,15 +149,13 @@ export async function buildChannelAccountsView(ctx: HostApiContext): Promise<Cha
   return channels.sort((left, right) => left.channelType.localeCompare(right.channelType));
 }
 
-/** Merge Host-Worker WeChat account into the channels list (independent of OC plugin). */
+/** Merge Host-Worker WeChat account into the channels list. */
 export async function mergeWeixinHostChannel(
   channels: ChannelAccountsView[],
 ): Promise<ChannelAccountsView[]> {
   try {
     const { getWeixinBinding } = await import('../weixin/binding');
     const { getWeixinChannelService } = await import('../weixin/service');
-    // Prefer getWeixinBinding only — do not OR getBoundWeixinAccountId(), which
-    // ignores revoked DB rows and would keep showing「解除绑定」after unbind.
     const binding = await getWeixinBinding();
     const accountId = binding?.accountId;
     if (!accountId) return channels;

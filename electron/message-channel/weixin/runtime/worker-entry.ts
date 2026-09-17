@@ -1,6 +1,6 @@
 /**
  * Weixin Worker entry — utilityProcess isolated iLink transport.
- * Thin path only: api + monitor + normalize/encode. No OC plugin lifecycle.
+ * Uses api + monitor + normalize/encode.
  */
 
 import type { WeixinWireCommand, WeixinWireEvent } from '../../../../shared/weixin-runtime-protocol';

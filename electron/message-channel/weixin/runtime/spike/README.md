@@ -1,34 +1,31 @@
-# Phase 0 Spike
+# Weixin spike
 
-Feasibility gate for Weixin Host-Worker (see `docs/微信渠道-Host-Worker技术方案.md` §8).
+本地联调脚本（见 `docs/微信渠道-Host-Worker技术方案.md`）。
 
 ## Run
 
-Smoke (fast; does **not** meet R4 10-minute window):
+Smoke（短观察窗口）:
 
 ```bash
 SPIKE_MIN_OBSERVE_MS=0 SPIKE_MIN_ROUNDS=5 SPIKE_LONG_POLL_MS=8000 \
   npx tsx electron/message-channel/weixin/runtime/spike/phase0-r1-r4.ts
 ```
 
-Full R4 (≥5 successful `getUpdates`, observe ≥10 minutes):
+完整观察（≥5 次成功 `getUpdates`，观察 ≥10 分钟）:
 
 ```bash
 npx tsx electron/message-channel/weixin/runtime/spike/phase0-r1-r4.ts
 ```
 
-Optional one-shot `sendMessage` (uses migrated context token):
+可选单次 `sendMessage`:
 
 ```bash
 SPIKE_SEND=1 SPIKE_MIN_OBSERVE_MS=0 SPIKE_MIN_ROUNDS=2 \
   npx tsx electron/message-channel/weixin/runtime/spike/phase0-r1-r4.ts
 ```
 
-## Thin-path constraint
+## 约束
 
-Spike must **not** import `process-message` / `outbound-hooks` / `pairing` consumers / `channel.ts` plugin entry.
-Only `transport/client-v1` → vendor `api` (+ local shims for former plugin-sdk value imports).
+仅通过 `transport/client-v1` 使用 vendor `api`（及本地 shim），不要从 spike 直接拉取 plugin 入口相关模块。
 
-## Report
-
-Writes `phase0-report.json` next to this README.
+产出：`phase0-report.json`。

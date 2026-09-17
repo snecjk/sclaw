@@ -1,5 +1,5 @@
 /**
- * Weixin Worker transport state directory (independent of OpenClaw).
+ * Weixin Worker transport state directory.
  *
  * Default: ~/.stoclaw/weixin
  * Override: STOCLAW_WEIXIN_STATE_DIR
@@ -14,7 +14,7 @@ export function resolveWeixinStateDir(): string {
   return path.join(os.homedir(), ".stoclaw", "weixin");
 }
 
-/** Legacy OpenClaw-hosted weixin state (StoClaw install). */
+/** Older weixin state path under ~/.stoclaw/openclaw/openclaw-weixin. */
 export function resolveLegacyOpenClawWeixinStateDir(): string {
   return path.join(os.homedir(), ".stoclaw", "openclaw", "openclaw-weixin");
 }

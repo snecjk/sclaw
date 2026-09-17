@@ -214,9 +214,6 @@ export async function handleChannelRoutes(
         });
         return true;
       }
-      if (storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE) {
-        // Phase 1: WeChat uses Host Worker — skip OC plugin install.
-      }
       const existingValues = await getChannelFormValues(body.channelType, body.accountId);
       if (isSameConfigValues(existingValues, body.config)) {
         await ensureScopedChannelBinding(body.channelType, body.accountId);

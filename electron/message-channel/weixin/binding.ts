@@ -60,12 +60,10 @@ export function getBoundWeixinAccountId(): string | null {
 
 export async function getWeixinBinding(): Promise<WeixinBinding | null> {
   const conn = await getWeixinConnectionRow();
-  // Explicitly unbound/revoked: do not resurrect from leftover credential files.
   if (conn && conn.bindStatus !== 'bound') {
     return null;
   }
   if (!conn) {
-    // Migration / first-bind window: credential files may exist before DB row.
     const primary = resolvePrimaryAccount();
     if (!primary) return null;
     return {
@@ -76,8 +74,6 @@ export async function getWeixinBinding(): Promise<WeixinBinding | null> {
       enabled: true,
     };
   }
-  // Product turn: inbound/list consumers that need bound engine get fixed pi+main.
-  // DB may still lag until ensureFixedChannelBindings; do not write here.
   return {
     channelType: 'wechat',
     accountId: conn.accountId,
@@ -129,7 +125,6 @@ export async function upsertWeixinBinding(input: {
   const now = nowIso();
   const deviceId = await getLocalDeviceId();
   const existing = await getWeixinConnectionRow();
-  // Product turn: always persist fixed SAgent + Main.
   const agentId = 'main';
   const engineType = DEFAULT_WEIXIN_ENGINE;
 
@@ -188,7 +183,6 @@ export async function updateWeixinBindingAgent(_input: {
   engineType: string;
   agentId: string;
 }): Promise<WeixinBinding> {
-  // Product turn: clamp to fixed SAgent + Main regardless of request body.
   const engineType = DEFAULT_WEIXIN_ENGINE;
   const agentId = 'main';
   const existing = await getWeixinConnectionRow();

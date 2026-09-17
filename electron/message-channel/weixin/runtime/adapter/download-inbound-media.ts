@@ -1,6 +1,5 @@
 /**
  * Download/decrypt inbound Weixin media into the Host Worker state dir.
- * Thin path: pic-decrypt + fs write (no OC media store / quote-store).
  */
 
 import fs from 'node:fs/promises';

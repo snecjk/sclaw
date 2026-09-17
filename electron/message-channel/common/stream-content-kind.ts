@@ -1,9 +1,8 @@
 /**
  * Stream reply content semantics for Hub → App.
  * `type` remains delta/done (frame lifecycle); this tags what `content` means.
- *
- * Phase A: process placeholder → think; answer body → answer.
- * Missing field on wire MUST be treated as answer (backward compatible).
+ * process placeholder → think; answer body → answer.
+ * Missing field on wire is treated as answer.
  */
 export type StreamContentKind = 'think' | 'tool' | 'answer';
 

@@ -31,7 +31,6 @@ export interface SessionFacadeCreateParams {
   channelType: PlatformChannelType;
   accountId?: string;
   peerId: string;
-  /** 渠道运行时仅 claude | pi；openclaw 会被忽略并回落到固定绑定 */
   engineType?: ChannelRuntimeEngine | 'openclaw';
   forceNew?: boolean;
   /** App 续聊：有值则优先复用；无效则策略 B 静默新建 */
@@ -90,8 +89,7 @@ async function reuseRequestedSession(input: {
 }
 
 /**
- * Channel Session 桥：createOrGet → getAdapter（仅 claude | pi）→ 页面对话同链。
- * 不再兼容 openclaw 引擎执行路径。
+ * Channel Session 桥：createOrGet → getAdapter（claude | pi）→ 页面对话同链。
  */
 export async function createOrGetSession(
   params: SessionFacadeCreateParams,
@@ -117,7 +115,6 @@ export async function createOrGetSession(
     if (usable) {
       if (channelType === 'mobile') {
         const registered = await getEngineSessionRegistryEntry(usable);
-        // openclaw / 未知 / 与绑定不一致 → 不可续聊
         const engineOk = isChannelRuntimeEngine(registered?.engineType)
           ? registered.engineType === engineType
           : false;
@@ -185,8 +182,7 @@ export async function createOrGetSession(
       && registeredEngineType === null
       && (channelType === 'dingtalk' || channelType === 'wechat')
     ) {
-      // 策略 C 盲区：registry 缺失仍复用旧 key 并挂 pi → 同一聊天 AI 失忆（产品接受）
-      logger.warn('[SessionFacade] strategy-C blind spot: reuse key with missing registry', {
+      logger.warn('[SessionFacade] reuse key with missing registry', {
         sessionKey: latestSession.sessionKey,
         channelType,
         boundEngineType: engineType,
@@ -235,7 +231,6 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
   agentId: string;
   engineType: ChannelRuntimeEngine;
 }> {
-  // Product turn: inbound always uses fixed SAgent + Main (no DB write).
   if (channelType === 'wechat') {
     const { getWeixinBinding } = await import('../weixin/binding');
     const binding = await getWeixinBinding();
@@ -253,7 +248,6 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
   }
   return {
     agentId: FIXED_CHANNEL_BINDING.agentId,
-    // Dead after constant return; keep pi as defensive fallback if structure changes.
     engineType: FIXED_CHANNEL_BINDING.engineType,
   };
 }

@@ -124,14 +124,13 @@ export async function getMobileHistory(input: {
   }
 
   const registry = await getEngineSessionRegistryEntry(sessionKey);
-  // Channel 运行时不再兼容 openclaw 引擎：历史只走 claude | pi。
   let engineType: 'claude' | 'pi' = 'pi';
   if (registry?.engineType === 'claude') {
     engineType = 'claude';
   } else if (registry?.engineType === 'pi') {
     engineType = 'pi';
   } else if (registry?.engineType === 'openclaw') {
-    logger.warn('[HistoryFacade] openclaw session history no longer supported; using pi adapter', {
+    logger.warn('[HistoryFacade] unsupported registry engineType=openclaw; using pi adapter', {
       sessionKey,
     });
     engineType = 'pi';

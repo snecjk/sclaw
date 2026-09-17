@@ -78,7 +78,7 @@ export class WeixinChannelService extends EventEmitter<WeixinServiceEvents> {
   }
 
   /**
-   * Start worker + migrate credentials + start monitor if a bot is bound.
+   * Start worker, copy credentials if needed, and start monitor when a bot is bound.
    */
   async start(gatewayManager?: GatewayManager | null): Promise<void> {
     if (gatewayManager) this.gatewayManager = gatewayManager;

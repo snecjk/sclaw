@@ -1,5 +1,5 @@
 /**
- * Phase 0 Spike — R1 (thin transport without OC Gateway plugin) + R4 (credential migration).
+ * Weixin spike — transport smoke + credential copy check.
  *
  * Usage:
  *   npx tsx electron/message-channel/weixin/runtime/spike/phase0-r1-r4.ts
@@ -116,7 +116,7 @@ async function main(): Promise<void> {
       mvpScope: "typing + commit (+ cancel); no outbound.sendText draft snapshot",
       draftSnapshotTested: false,
       notes: [
-        "Phase 0 does not exercise MessagePort draft snapshots.",
+        "Spike does not exercise MessagePort draft snapshots.",
         "Optional GENERATING probe is out of MVP; not run in this spike.",
       ],
     },

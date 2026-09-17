@@ -1,8 +1,5 @@
 /**
- * iLink client v1 — thin re-export of vendor API (no Gateway plugin lifecycle).
- *
- * Thin-path constraint: do NOT import process-message / outbound-hooks / pairing
- * consumers / channel.ts from here. Only api (+ types used by api).
+ * iLink client v1 — re-export of vendor API used by the Worker transport.
  */
 
 export {

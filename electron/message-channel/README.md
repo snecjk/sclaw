@@ -22,10 +22,10 @@ IM 渠道子系统（Host 编排 + 各渠道传输）。
 3. **Hub**：`shouldAttempt` = 有 Hub baseUrl，且（Mobile `bound+enabled+token` **或** 钉钉 `bound+token`）。否则不进 Hub。
 4. **sync** 钉钉远程绑定（可能 revoke 本机钉钉 token）。
 5. **sync 之后**再 `resolveSharedHubRefreshToken` → 有 token 才 `hub.connect`。  
-   `replaced` / `unbound` → 不 connect（与旧行为一致）。
+   `replaced` / `unbound` → 不 connect。
 
 硬约束：禁止用 sync 前缓存的 token 去 connect。  
-收紧：`revoked` 行残留 token **不算**可用（不再 fallback 误连）。
+收紧：`revoked` 行残留 token 不算可用。
 
 列表 API **只读** WS/`isReady` 状态，不跑完整 ensure。
 
@@ -45,7 +45,7 @@ IM 渠道子系统（Host 编排 + 各渠道传输）。
 | --- | --- |
 | 解绑钉钉 | revoke 钉钉行；若 Mobile 未 bound → `disconnect` WS；否则保持 |
 | 关 Mobile | revoke/disable Mobile 行；若钉钉未 bound → `disconnect`；否则保持 |
-| 解绑微信 | 清凭证 / stop monitor / **`shutdown()` 销毁 Worker**；**不** restart OC Gateway |
+| 解绑微信 | 清凭证 / stop monitor / **`shutdown()` 销毁 Worker** |
 | 远程抢绑钉钉 | `disconnectPermanently` + 清本机钉钉 bound |
 
 归属在 `hub/routes` / 换绑处理，不在 ensure 里重复。

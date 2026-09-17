@@ -1,6 +1,5 @@
 /**
- * Thin account credential store for Weixin iLink (Phase 0+).
- * No OpenClaw Gateway / plugin lifecycle.
+ * Account credential store for Weixin iLink.
  */
 
 import fs from "node:fs";

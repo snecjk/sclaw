@@ -3,7 +3,7 @@
 频道设置页（`src/pages/Channels`）：移动端、钉钉、微信的展示与操作入口。
 
 后端实现见 [`electron/message-channel/README.md`](../../../electron/message-channel/README.md)。  
-固定引擎 / 扫码操作改造方案见 [`docs/频道行固定引擎与扫码操作方案.md`](../../../docs/频道行固定引擎与扫码操作方案.md)。
+引擎与扫码约定见 [`docs/频道行固定引擎与扫码操作方案.md`](../../../docs/频道行固定引擎与扫码操作方案.md)。
 
 ---
 
@@ -17,9 +17,9 @@
 | 标题旁圆点 | **运行时连接**（WS / Worker 是否在跑） | `/api/channels/accounts` 合并视图里的 `group.status` |
 | Logo 是否高亮 | 渠道是否视为「已配置可用」 | 钉钉看 `bindStatus`；微信看是否有 account |
 
-微信绑定判定以 [`getWeixinBinding`](../../../electron/message-channel/weixin/binding.ts) 为准：`bind_status === 'bound'` 才视为已绑定；DB 已 `revoked` 时**不再**用本地凭证文件「复活」列表行。列表合并 [`mergeWeixinHostChannel`](../../../electron/message-channel/host/list.ts) 也不得再 `OR getBoundWeixinAccountId()`。
+微信绑定判定以 [`getWeixinBinding`](../../../electron/message-channel/weixin/binding.ts) 为准：仅 `bind_status === 'bound'` 视为已绑定；`revoked` 时不以本地凭证文件当作仍绑定。列表合并走 [`mergeWeixinHostChannel`](../../../electron/message-channel/host/list.ts)。
 
-频道页**不展示**「网关未运行」黄条，刷新也不因 gateway 禁用：钉钉 Hub / 微信 Host Worker / Mobile 不依赖 OC Gateway。微信解绑只走 Host 路径，不 `debouncedRestart` 网关。
+频道页不展示「网关未运行」黄条，刷新也不因 gateway 禁用。微信解绑走 Host 路径。
 
 ```mermaid
 flowchart TD
@@ -132,7 +132,7 @@ Logo 高亮：`Boolean(weChatAccount)`。
 
 | | 钉钉 | 微信 | 移动端 |
 | --- | --- | --- | --- |
-| 绑定判定 | DB `bind_status === 'bound'` | DB `bind_status === 'bound'`（无行时才可回落本地凭证）；`revoked` 不复活 | DB `bind_status === 'bound'` |
+| 绑定判定 | DB `bind_status === 'bound'` | DB `bind_status === 'bound'`（无行时可回落本地凭证）；`revoked` 视为未绑定 | DB `bind_status === 'bound'` |
 | 远程校验 | 会问 Hub 是否仍绑本机 | 无 | 无（与钉钉共用设备凭证） |
 | 副标题 | 「已绑定」等状态文案 | bot `accountId` | 产品说明文案 |
 | 圆点 / 在线 | Hub WebSocket | Worker ready + monitor | 行内 WS offline 提示（非同款圆点） |

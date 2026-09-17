@@ -1,6 +1,5 @@
 /**
- * Thin outbound media: local file → CDN upload → sendMessage IMAGE/VIDEO/FILE.
- * Does not import vendor send-media / quote-store (OC plugin path).
+ * Outbound media: local file → CDN upload → sendMessage IMAGE/VIDEO/FILE.
  */
 
 import path from 'node:path';

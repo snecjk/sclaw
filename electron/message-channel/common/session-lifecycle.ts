@@ -1,7 +1,7 @@
 import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
 import { buildChannelSessionKey, type PlatformChannelType } from './session-key';
 
-/** Channel 入站/续聊运行时引擎（不再包含 openclaw） */
+/** Channel 入站/续聊运行时引擎：claude | pi */
 export type ChannelRuntimeEngine = 'claude' | 'pi';
 
 const DEFAULT_CHANNEL_SESSION_IDLE_HOURS = 24;
@@ -99,9 +99,8 @@ export function shouldStartNewDingTalkSession(input: {
 }
 
 /**
- * 策略 C：改选脑后不得复用旧 sessionKey，也不得用新引擎改写旧 registry。
- * 仅当 registry 已登记引擎且与当前 Binding 不一致时强制新建。
- * openclaw 登记行一律视为不兼容（渠道侧不再跑 openclaw 引擎）→ forceNew。
+ * 策略 C：registry 已登记引擎且与当前 Binding 不一致时强制新建。
+ * registry 为 openclaw 时一律 forceNew。
  */
 export function shouldForceNewDingTalkSessionForEngine(input: {
   forceNew?: boolean;

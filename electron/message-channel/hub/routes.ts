@@ -28,7 +28,7 @@ import { wireSclawInboundListener } from './startup';
 import { logger } from '../../utils/logger';
 
 /**
- * Host API：钉钉 Channel Hub 绑定 / 连接（不写 openclaw.json）。
+ * Host API：钉钉 Channel Hub 绑定 / 连接。
  */
 export async function handleChannelHubRoutes(
   req: IncomingMessage,

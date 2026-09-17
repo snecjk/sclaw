@@ -98,7 +98,6 @@ async function awaitWeChatQrLogin(
       baseUrl: result.baseUrl,
       userId: result.userId,
     });
-    // Phase 1: Host Worker owns transport — do NOT enable OC openclaw-weixin plugin.
     const { getWeixinChannelService } = await import('./service');
     getWeixinChannelService().setGatewayManager(ctx.gatewayManager);
     await getWeixinChannelService().applyLoginSuccess({
@@ -143,7 +142,6 @@ export async function handleWeixinChannelRoutes(
 
       const { getWeixinChannelService } = await import('./service');
       // Single-Bot: allow re-scan to refresh/replace the local slot.
-      // Phase 1: Host Worker path — do NOT install OC WeChat plugin.
       const startResult = await startWeChatQrLogin(requestedAccountId);
       if (!startResult.qrcodeUrl || !startResult.sessionKey) {
         throw new Error(startResult.message || 'Failed to generate WeChat QR code');

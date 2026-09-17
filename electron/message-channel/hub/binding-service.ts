@@ -18,7 +18,7 @@ import { resolveSclawHubBaseUrl } from './hub-config';
 export const MOBILE_DB_CHANNEL_TYPE = 'sto-mobile';
 export const MOBILE_LOGICAL_CHANNEL_TYPE = 'mobile';
 
-/** Channel rows are fixed to SAgent + Main Agent (product turn). */
+/** Channel rows use SAgent + Main Agent. */
 export const FIXED_CHANNEL_BINDING = {
   engineType: 'pi',
   agentId: 'main',
@@ -263,7 +263,6 @@ export async function updateDingTalkBindingAgent(_input: {
   const existing = await getChannelConnection('dingtalk');
   if (!existing) throw new Error('DingTalk channel not bound');
   const db = getKyselyDatabase();
-  // Product turn: clamp to fixed SAgent + Main regardless of request body.
   await db
     .updateTable('channel_connections')
     .set({
@@ -416,7 +415,6 @@ export async function updateMobileBindingAgent(_input: {
     throw new Error('Mobile channel not bound');
   }
   const db = getKyselyDatabase();
-  // Product turn: clamp to fixed SAgent + Main regardless of request body.
   await db
     .updateTable('channel_connections')
     .set({
@@ -433,7 +431,7 @@ export async function updateMobileBindingAgent(_input: {
 
 /**
  * Idempotent startup normalization: bound channel rows → pi + main.
- * Must query both `sto-mobile` and legacy `mobile`. Do not call from inbound read path.
+ * Queries both `sto-mobile` and `mobile` channel_type values.
  */
 export async function ensureFixedChannelBindings(): Promise<{ normalized: number }> {
   const db = getKyselyDatabase();
