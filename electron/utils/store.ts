@@ -66,6 +66,8 @@ export interface AppSettings {
   disabledSkills: string[];
   /** Route a bounded Skill set per turn. When false, engines load every enabled installed Skill. */
   skillDiscoveryEnabled: boolean;
+  /** Set after the one-shot migration that changes Skill discovery to default-off. */
+  _skillDiscoveryDefaultOffMigrationV1?: boolean;
 
   // DingTalk dws
   dingTalkDwsEnabled: boolean;
@@ -174,6 +176,12 @@ async function getSettingsStore() {
       store.set('autoDownloadUpdate', true);
       store.set('_updatePrefsMigrationV1', true);
     }
+    // Existing installs may have persisted the previous default (true). Apply the
+    // new default once, then preserve any choice the user makes afterwards.
+    if (!store.has('_skillDiscoveryDefaultOffMigrationV1')) {
+      store.set('skillDiscoveryEnabled', false);
+      store.set('_skillDiscoveryDefaultOffMigrationV1', true);
+    }
     if (!store.has('browserAutomationLevel')) {
       store.set('browserAutomationLevel', 'dom');
     }
@@ -220,8 +228,12 @@ export async function setSetting<K extends keyof AppSettings>(
  */
 export async function getAllSettings(): Promise<AppSettings> {
   const store = await getSettingsStore();
-  const all = { ...store.store } as AppSettings & { _updatePrefsMigrationV1?: boolean };
+  const all = { ...store.store } as AppSettings & {
+    _updatePrefsMigrationV1?: boolean;
+    _skillDiscoveryDefaultOffMigrationV1?: boolean;
+  };
   delete all._updatePrefsMigrationV1;
+  delete all._skillDiscoveryDefaultOffMigrationV1;
   return all;
 }
 
