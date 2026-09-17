@@ -5,14 +5,31 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SClaw</title>
+    <script>
+      // React 启动前先恢复上次使用的外观，避免暗色模式冷启动闪白。
+      (() => {
+        let preference = 'system';
+        try {
+          const persisted = JSON.parse(localStorage.getItem('stoclaw-settings') || 'null');
+          preference = persisted?.state?.theme || 'system';
+        } catch { /* 损坏的本地设置按系统主题降级 */ }
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const dark = preference === 'dark' || (preference === 'system' && systemDark);
+        document.documentElement.dataset.splashTheme = dark ? 'dark' : 'light';
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      })();
+    </script>
     <style>
       /* Critical: Set background immediately to match the native window */
       html, body {
         margin: 0;
         padding: 0;
         background: #fff;
-        color-scheme: light;
         min-height: 100vh;
+      }
+      html[data-splash-theme='dark'],
+      html[data-splash-theme='dark'] body {
+        background: #111318;
       }
 
       /* Splash screen styles - shown immediately before React loads */
@@ -26,6 +43,9 @@
         background: #fff;
         z-index: 9999;
         transition: opacity 0.3s ease-out;
+      }
+      html[data-splash-theme='dark'] #splash-screen {
+        background: #111318;
       }
       #splash-screen.fade-out {
         opacity: 0;
@@ -66,13 +86,18 @@
     <!-- Splash screen shown instantly while app loads -->
     <div id="splash-screen">
       <div class="splash-artwork-stage">
-        <img class="splash-artwork" src="/src/assets/auth/loading.svg" alt="SClaw 正在加载" />
+        <img class="splash-artwork splash-artwork-light" src="/src/assets/auth/loading.svg" alt="SClaw 正在加载" />
+        <img class="splash-artwork splash-artwork-dark" src="/src/assets/auth/loading-dark.svg" alt="SClaw 正在加载" />
         <img class="splash-mascot" src="/src/assets/auth/loading-mascot.gif" alt="" aria-hidden="true" />
       </div>
     </div>
     <script>
       // 以 SVG 真正加载完成的时刻作为 0% 起点，确保走满后才切页。
-      const splashArtwork = document.querySelector('.splash-artwork');
+      const splashDark = document.documentElement.dataset.splashTheme === 'dark';
+      const splashArtwork = document.querySelector(
+        splashDark ? '.splash-artwork-dark' : '.splash-artwork-light',
+      );
+      document.querySelector(splashDark ? '.splash-artwork-light' : '.splash-artwork-dark')?.remove();
       const splashMascot = document.querySelector('.splash-mascot');
       const markSplashStarted = () => {
         if (window.__SCLAW_SPLASH_STARTED_AT__) return;
