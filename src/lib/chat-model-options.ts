@@ -274,6 +274,8 @@ export interface ChatModelOption {
   subLabel: string;
   /** true = STO 内置等 */
   isBuiltin: boolean;
+  /** 输入内容类型标签（如 ["文本", "图片"]），来自网关 /openapi/models 接口 */
+  inputContent?: string[];
 }
 
 export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatModelOption[] {
@@ -283,10 +285,15 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
     const subLabel = account.label || vendor?.name || account.vendorId;
     const isBuiltin = account.vendorId === 'sto';
     const customModels = account.metadata?.customModels as string[] | undefined;
+    const modelDetails = account.metadata?.customModelDetails as Record<string, { inputContent?: string }> | undefined;
     if (customModels && customModels.length > 0) {
       for (const rawModelId of customModels) {
         if (HIDDEN_PROVIDER_IDS.has(rawModelId)) continue;
         const normalizedId = normalizeModelIdForChat(rawModelId);
+        const detail = modelDetails?.[rawModelId];
+        const inputContent = detail?.inputContent
+          ? detail.inputContent.split(/[,，、]/).map((s) => s.trim()).filter(Boolean)
+          : undefined;
         options.push({
           key: `${account.id}::${rawModelId}`,
           modelId: rawModelId,
@@ -295,6 +302,7 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
           displayName: normalizedId,
           subLabel,
           isBuiltin,
+          inputContent,
         });
       }
     } else if (account.model) {

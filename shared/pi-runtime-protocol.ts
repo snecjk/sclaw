@@ -20,6 +20,8 @@ export interface PiModelConfig {
   baseUrl?: string;
   apiProtocol?: 'openai-completions' | 'openai-responses' | 'anthropic-messages';
   headers?: Record<string, string>;
+  /** Real context window from gateway model metadata; falls back to DEFAULT_MODEL_CONTEXT_WINDOW. */
+  contextWindow?: number;
 }
 
 export interface PiSessionConfig {

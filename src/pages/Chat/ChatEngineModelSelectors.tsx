@@ -916,19 +916,74 @@ function useChatModelSelection() {
   };
 
   const modelSelectDisabled = (currentEngineType === 'openclaw' && !isGatewayRunning) || sending || modelOptions.length === 0;
-  const selectorModelOptions: SelectorMenuOption<string>[] = modelOptions.map((option) => ({
-    key: option.key,
-    value: option.modelId,
-    label: option.displayName,
-    decoration: option.isBuiltin ? undefined : (
+
+  /** 按标签内容分配不同颜色，增强视觉区分度 */
+  const getInputTagColor = (tag: string): string => {
+    switch (tag) {
+      case '图片':
+        return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400';
+      case '视频':
+        return 'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400';
+      case '音频':
+        return 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400';
+      case '文件':
+        return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+      case '代码':
+        return 'bg-cyan-50 text-cyan-600 dark:bg-cyan-950 dark:text-cyan-400';
+      default:
+        return 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400';
+    }
+  };
+
+  const selectorModelOptions: SelectorMenuOption<string>[] = modelOptions.map((option) => {
+    // 过滤掉"文本"标签（所有模型都支持文本，无需显示）
+    const visibleTags = option.inputContent?.filter((t) => t !== '文本') ?? [];
+    const inputTags = visibleTags.length
+      ? visibleTags.slice(0, 3).map((tag) => (
+          <span
+            key={tag}
+            className={cn(
+              'shrink-0 rounded px-1 py-0.5 text-[9px] font-medium leading-none',
+              getInputTagColor(tag),
+            )}
+          >
+            {tag}
+          </span>
+        ))
+      : null;
+    const overflowTag = visibleTags.length > 3
+      ? (
+          <span
+            className={cn(
+              'shrink-0 rounded px-1 py-0.5 text-[9px] font-medium leading-none',
+              'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+            )}
+          >
+            +{visibleTags.length - 3}
+          </span>
+        )
+      : null;
+    const customTag = !option.isBuiltin ? (
       <span className={cn(
         'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
         'bg-[var(--sto-model-custom-tag-background)] text-[var(--sto-model-custom-tag-foreground)]',
       )}>
         {t('toolbar.modelTagCustom')}
       </span>
-    ),
-  }));
+    ) : null;
+    return {
+      key: option.key,
+      value: option.modelId,
+      label: option.displayName,
+      decoration: (inputTags || customTag) ? (
+        <span className="flex shrink-0 items-center gap-1">
+          {inputTags}
+          {overflowTag}
+          {customTag}
+        </span>
+      ) : undefined,
+    };
+  });
   const defaultModelOptionKey = modelOptions.find((option) => (
     option.accountId === defaultAccountId
     && catalogModelIdsMatch(workspaceDefaultRawModelId, option.modelId)
@@ -1247,6 +1302,7 @@ export function ChatEngineModelPicker({
                     >
                       {option.label}
                     </button>
+                    {option.decoration}
                     <button
                       type="button"
                       disabled={isDefault || busy}
@@ -1267,7 +1323,6 @@ export function ChatEngineModelPicker({
                         <Star className="h-3.5 w-3.5" fill={isDefault ? 'currentColor' : 'none'} aria-hidden />
                       )}
                     </button>
-                    {option.decoration}
                     {selected ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden /> : null}
                   </div>
                 );

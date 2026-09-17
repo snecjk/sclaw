@@ -92,6 +92,21 @@ function attachEventSink(ctx: EngineAdapterContext): void {
   });
 }
 
+/**
+ * Parse the gateway model's maxContextWindow (stored as string) into a number.
+ * Returns null if the value is missing or invalid.
+ */
+function resolveGatewayContextWindow(
+  customModelDetails: Record<string, { maxContextWindow?: string }> | undefined,
+  modelId: string,
+): number | null {
+  if (!customModelDetails) return null;
+  const detail = customModelDetails[modelId];
+  if (!detail?.maxContextWindow) return null;
+  const parsed = Number(detail.maxContextWindow);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 async function resolvePiModel(
   agentId: string,
   entry: EngineSessionRegistryEntry | null,
@@ -116,6 +131,10 @@ async function resolvePiModel(
   if (account.authMode !== 'local' && !apiKey) {
     throw new Error(`PI_CREDENTIAL_UNAVAILABLE: account ${accountId} has no API key`);
   }
+
+  // Resolve real contextWindow from gateway model metadata (stored as string).
+  const gatewayContextWindow = resolveGatewayContextWindow(account.metadata?.customModelDetails, model);
+
   return {
     accountId,
     model: {
@@ -126,6 +145,7 @@ async function resolvePiModel(
       baseUrl: account.baseUrl,
       apiProtocol: account.apiProtocol,
       headers: account.headers,
+      ...(gatewayContextWindow != null ? { contextWindow: gatewayContextWindow } : {}),
     },
   };
 }
