@@ -6,6 +6,7 @@ import {
   resolveSharedHubRefreshToken,
   revokeDingTalkHubBind,
   syncSharedHubRefreshToken,
+  type ChannelConnection,
 } from './binding-service';
 import { hubBindStatus, hubSyncChannels } from './hub-api';
 import { getSclawHubClient } from './hub-client';
@@ -14,6 +15,19 @@ import { handleSclawInbound, setChannelGatewayManager } from './ingress';
 
 let inboundWired = false;
 let bindReplacedWired = false;
+
+export type ChannelRuntimePlan = {
+  hub: {
+    shouldAttempt: boolean;
+    dingtalkBound: boolean;
+    mobileBound: boolean;
+    dingtalkRow: ChannelConnection | null;
+    mobileRow: ChannelConnection | null;
+  };
+  weixin: {
+    shouldStartWorker: boolean;
+  };
+};
 
 async function notifyRendererBindReplaced(reason: string): Promise<void> {
   try {
@@ -99,12 +113,91 @@ function wireSclawBindReplacedListener(): void {
 }
 
 /**
- * 若已绑定钉钉或已开启 App：挂入站监听并用共用 refreshToken 确保 Desktop Hub WS 在线。
- * App / 钉钉共用一条 WS + 心跳（hub-client ping），不各起一套。
- *
- * 建连前用当前登录重新 register，避免换账号后仍连旧 token。
+ * 轻量探测（微信侧可能触发一次凭证迁移写盘）。不含可 connect 的最终 refreshToken。
  */
-export async function ensureSclawHubConnected(
+export async function probeChannelRuntimeNeeds(): Promise<ChannelRuntimePlan> {
+  const [dingtalkRow, mobileRow] = await Promise.all([
+    getChannelConnection('dingtalk'),
+    getChannelConnection('mobile'),
+  ]);
+
+  const hasHubBaseUrl = Boolean(resolveSclawHubBaseUrl());
+  const mobileHasToken = Boolean(
+    mobileRow?.bindStatus === 'bound'
+    && mobileRow.enabled
+    && mobileRow.refreshToken,
+  );
+  const dingtalkHasToken = Boolean(
+    dingtalkRow?.bindStatus === 'bound'
+    && dingtalkRow.refreshToken,
+  );
+
+  let shouldStartWorker = false;
+  try {
+    const { hasWeixinBotBound } = await import('../weixin/binding');
+    shouldStartWorker = hasWeixinBotBound();
+  } catch (error) {
+    logger.warn('[ChannelRuntime] weixin probe failed', error);
+  }
+
+  return {
+    hub: {
+      shouldAttempt: hasHubBaseUrl && (mobileHasToken || dingtalkHasToken),
+      dingtalkBound: dingtalkRow?.bindStatus === 'bound',
+      mobileBound: Boolean(mobileRow?.bindStatus === 'bound' && mobileRow.enabled !== false),
+      dingtalkRow,
+      mobileRow,
+    },
+    weixin: { shouldStartWorker },
+  };
+}
+
+async function syncHubChannelStatesAndConnect(input: {
+  refreshToken: string;
+  plan: ChannelRuntimePlan;
+}): Promise<void> {
+  const { refreshToken, plan } = input;
+  let token = refreshToken;
+  const dingtalk = plan.hub.dingtalkRow;
+  const mobile = plan.hub.mobileRow;
+
+  try {
+    const synced = await hubSyncChannels([
+      {
+        channelType: 'dingtalk',
+        status: dingtalk?.bindStatus === 'bound' ? 'bound' : 'revoked',
+        externalUserId: dingtalk?.externalUserId ?? null,
+      },
+      {
+        channelType: 'mobile',
+        status: mobile?.bindStatus === 'bound' ? 'bound' : 'revoked',
+      },
+    ]);
+    if (synced.refreshToken) {
+      token = synced.refreshToken;
+      await syncSharedHubRefreshToken({
+        refreshToken: token,
+        dingUserId: dingtalk?.externalUserId ?? null,
+        endpointBaseUrl: resolveSclawHubBaseUrl() || null,
+      });
+    }
+  } catch (error) {
+    logger.warn('[SclawHub] channel state sync failed; fallback to existing token', error);
+  }
+
+  const hub = getSclawHubClient();
+  if (hub.getStatus().connected) {
+    hub.disconnect();
+  }
+  await hub.connect(token);
+  logger.info('[SclawHub] reconnect ok (fresh register)');
+}
+
+/**
+ * 渠道运行时按需拉起：有凭证才起微信 Worker / Hub WS。
+ * token 必须在 syncDingTalkBindWithRemote 之后再取。
+ */
+export async function ensureChannelRuntimesReady(
   gatewayManager?: GatewayManager | null,
 ): Promise<void> {
   try {
@@ -114,77 +207,53 @@ export async function ensureSclawHubConnected(
     wireSclawInboundListener();
     wireSclawBindReplacedListener();
 
-    // Phase 1: start Weixin Host Worker when credentials exist (independent of Hub).
-    void import('../weixin/service').then(({ getWeixinChannelService }) => {
-      const svc = getWeixinChannelService();
-      if (gatewayManager) svc.setGatewayManager(gatewayManager);
-      return svc.start(gatewayManager ?? null);
-    }).catch((error) => {
-      logger.warn('[Weixin] channel service start failed', error);
-    });
+    const plan = await probeChannelRuntimeNeeds();
 
-    if (!resolveSclawHubBaseUrl()) {
-      logger.info('[SclawHub] skip connect: hub base URL not configured');
+    if (plan.weixin.shouldStartWorker) {
+      void import('../weixin/service').then(({ getWeixinChannelService }) => {
+        const svc = getWeixinChannelService();
+        if (gatewayManager) svc.setGatewayManager(gatewayManager);
+        return svc.start(gatewayManager ?? null);
+      }).catch((error) => {
+        logger.warn('[ChannelRuntime] weixin start failed', error);
+      });
+    } else {
+      logger.info('[ChannelRuntime] skip Weixin worker: no local credentials');
+    }
+
+    if (!plan.hub.shouldAttempt) {
+      logger.info('[ChannelRuntime] skip Hub path: no baseUrl or usable bound token');
       return;
     }
 
     const sync = await syncDingTalkBindWithRemote();
     if (sync === 'replaced' || sync === 'unbound') {
-      logger.info(`[SclawHub] skip connect after sync=${sync}`);
+      logger.info(`[ChannelRuntime] skip Hub connect after sync=${sync}`);
       return;
     }
 
-    // 本地持有任一通道凭证时，把两条通道的真实状态同步到 Hub，再复用共享 token 建连。
-    const existing = await resolveSharedHubRefreshToken();
-    if (!existing) {
-      logger.info('[SclawHub] skip connect: no shared hub refreshToken (dingtalk/mobile)');
+    const refreshToken = await resolveSharedHubRefreshToken();
+    if (!refreshToken) {
+      logger.info('[ChannelRuntime] skip Hub connect: no shared refreshToken after sync');
       return;
     }
 
-    const [dingtalk, mobile] = await Promise.all([
-      getChannelConnection('dingtalk'),
-      getChannelConnection('mobile'),
-    ]);
-    let refreshToken = existing;
-    try {
-      const synced = await hubSyncChannels([
-        {
-          channelType: 'dingtalk',
-          status: dingtalk?.bindStatus === 'bound' ? 'bound' : 'revoked',
-          externalUserId: dingtalk?.externalUserId ?? null,
-        },
-        {
-          channelType: 'mobile',
-          status: mobile?.bindStatus === 'bound' ? 'bound' : 'revoked',
-        },
-      ]);
-      if (synced.refreshToken) {
-        refreshToken = synced.refreshToken;
-        await syncSharedHubRefreshToken({
-          refreshToken,
-          dingUserId: dingtalk?.externalUserId ?? null,
-          endpointBaseUrl: resolveSclawHubBaseUrl() || null,
-        });
-      }
-    } catch (error) {
-      // Hub 先发、Desktop 后发的兼容窗口：同步失败时仍用旧共享凭证，不反向误开 Mobile。
-      logger.warn('[SclawHub] channel state sync failed; fallback to existing token', error);
-    }
-
-    const hub = getSclawHubClient();
-    if (hub.getStatus().connected) {
-      hub.disconnect();
-    }
-    await hub.connect(refreshToken);
-    logger.info('[SclawHub] reconnect ok (fresh register)');
+    await syncHubChannelStatesAndConnect({ refreshToken, plan });
   } catch (error) {
-    logger.warn('[SclawHub] reconnect failed', error);
+    logger.warn('[ChannelRuntime] ensureChannelRuntimesReady failed', error);
   }
 }
 
-/** @deprecated 语义保留：启动时调用 ensureSclawHubConnected */
+/** @deprecated 使用 ensureChannelRuntimesReady */
+export async function ensureSclawHubConnected(
+  gatewayManager?: GatewayManager | null,
+): Promise<void> {
+  return ensureChannelRuntimesReady(gatewayManager);
+}
+
+/** @deprecated 语义保留：启动时调用 ensureChannelRuntimesReady */
 export async function maybeConnectSclawHubOnStartup(
   gatewayManager?: GatewayManager | null,
 ): Promise<void> {
-  return ensureSclawHubConnected(gatewayManager);
+  return ensureChannelRuntimesReady(gatewayManager);
 }

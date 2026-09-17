@@ -52,22 +52,25 @@ vi.mock('@electron/message-channel/hub/startup', () => ({
   ensureSclawHubConnected: vi.fn().mockResolvedValue(undefined),
 }));
 
+const weixinServiceMock = vi.hoisted(() => ({
+  isMonitorRunning: () => false,
+  isReady: () => false,
+  setGatewayManager: vi.fn(),
+  applyLoginSuccess: vi.fn(),
+  ensureReady: vi.fn().mockResolvedValue(undefined),
+  stopMonitor: vi.fn().mockResolvedValue(undefined),
+  sendCommand: vi.fn(),
+  shutdown: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@electron/message-channel/weixin/binding', () => ({
   getWeixinBinding: vi.fn().mockResolvedValue(null),
   getBoundWeixinAccountId: vi.fn().mockReturnValue(null),
-  unbindWeixinBot: vi.fn(),
+  unbindWeixinBot: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@electron/message-channel/weixin/service', () => ({
-  getWeixinChannelService: vi.fn(() => ({
-    isMonitorRunning: () => false,
-    isReady: () => false,
-    setGatewayManager: vi.fn(),
-    applyLoginSuccess: vi.fn(),
-    ensureReady: vi.fn().mockResolvedValue(undefined),
-    stopMonitor: vi.fn(),
-    sendCommand: vi.fn(),
-  })),
+  getWeixinChannelService: vi.fn(() => weixinServiceMock),
 }));
 
 vi.mock('@electron/api/route-utils', () => ({
@@ -378,5 +381,35 @@ describe('handleChannelRoutes', () => {
     expect(handled).toBe(true);
     expect(debouncedReload).toHaveBeenCalled();
     expect(debouncedRestart).not.toHaveBeenCalled();
+  });
+
+  it('shuts down Weixin worker when deleting wechat channel config', async () => {
+    const { getBoundWeixinAccountId, unbindWeixinBot } = await import(
+      '@electron/message-channel/weixin/binding'
+    );
+    vi.mocked(getBoundWeixinAccountId).mockReturnValue('wx-bot-1');
+
+    const { handleChannelRoutes } = await import('@electron/api/routes/channels');
+    const handled = await handleChannelRoutes(
+      { method: 'DELETE' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/channels/config/wechat'),
+      {
+        gatewayManager: {
+          getStatus: () => ({ state: 'running' }),
+          debouncedReload: vi.fn(),
+          debouncedRestart: vi.fn(),
+        },
+      } as never,
+    );
+
+    expect(handled).toBe(true);
+    expect(weixinServiceMock.stopMonitor).toHaveBeenCalled();
+    expect(weixinServiceMock.sendCommand).toHaveBeenCalledWith({
+      type: 'account.remove',
+      accountId: 'wx-bot-1',
+    });
+    expect(unbindWeixinBot).toHaveBeenCalled();
+    expect(weixinServiceMock.shutdown).toHaveBeenCalled();
   });
 });

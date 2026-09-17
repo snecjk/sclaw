@@ -283,9 +283,12 @@ export async function handleChannelRoutes(
           || 'default';
         const { unbindWeixinBot } = await import('../../message-channel/weixin/binding');
         const { getWeixinChannelService } = await import('../../message-channel/weixin/service');
-        await getWeixinChannelService().stopMonitor();
-        getWeixinChannelService().sendCommand({ type: 'account.remove', accountId: removeId });
+        const weixin = getWeixinChannelService();
+        await weixin.stopMonitor();
+        weixin.sendCommand({ type: 'account.remove', accountId: removeId });
         await unbindWeixinBot();
+        // 与按需拉起对称：无凭证后销毁 Worker，避免空进程常驻
+        await weixin.shutdown();
       }
       sendJson(res, 200, { success: true });
     } catch (error) {

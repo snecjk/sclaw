@@ -232,7 +232,11 @@ export async function touchSharedHubOnline(): Promise<void> {
   }
 }
 
-/** 解析共用 Hub 凭证：mobile 与 dingtalk 任一持有 refreshToken 即可 */
+/**
+ * 解析共用 Hub 凭证：仅「仍有效绑定」行上的 refreshToken。
+ * mobile：bound + enabled + token；dingtalk：bound + token。
+ * 不含 revoked/disabled 行残留 token（避免误连）。
+ */
 export async function resolveSharedHubRefreshToken(): Promise<string | null> {
   const mobile = await getChannelConnection('mobile');
   if (mobile?.bindStatus === 'bound' && mobile.enabled && mobile.refreshToken) {
@@ -242,7 +246,7 @@ export async function resolveSharedHubRefreshToken(): Promise<string | null> {
   if (dingTalk?.bindStatus === 'bound' && dingTalk.refreshToken) {
     return dingTalk.refreshToken;
   }
-  return mobile?.refreshToken || dingTalk?.refreshToken || null;
+  return null;
 }
 
 export async function updateDingTalkBindingAgent(input: {

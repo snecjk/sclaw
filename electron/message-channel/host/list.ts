@@ -17,10 +17,9 @@ import {
   UI_WECHAT_CHANNEL_TYPE,
   toUiChannelType,
 } from '../../utils/channel-alias';
-import type { HostApiContext } from '../../api/context';
 import { getChannelConnection } from '../hub/binding-service';
 import { getSclawHubClient } from '../hub/hub-client';
-import { ensureSclawHubConnected } from '../hub/startup';
+import type { HostApiContext } from '../../api/context';
 
 interface GatewayChannelStatusPayload {
   channelOrder?: string[];
@@ -207,7 +206,7 @@ export async function mergeHubDingTalkChannel(
     if (!hubConn || hubConn.bindStatus !== 'bound') {
       return channels;
     }
-    await ensureSclawHubConnected();
+    // 列表只读运行时状态；建连由启动/登录 ensureChannelRuntimesReady 负责。
     const ws = getSclawHubClient().getStatus();
     const status: ChannelAccountsView['status'] = ws.connected
       ? 'connected'
