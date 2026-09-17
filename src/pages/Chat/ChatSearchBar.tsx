@@ -133,7 +133,7 @@ export function ChatSearchBar({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={t('toolbar.searchPlaceholder')}
-          className="h-full min-w-0 border-0 bg-transparent px-0 text-[13px] shadow-none placeholder:text-[13px] focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="sto-control--search-input h-full min-w-0 border-0 bg-transparent px-0 text-[13px] shadow-none placeholder:text-[13px] focus-visible:ring-0 focus-visible:ring-offset-0"
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
