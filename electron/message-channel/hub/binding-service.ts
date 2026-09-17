@@ -179,7 +179,8 @@ export async function upsertDingTalkHubBind(input: {
       .execute();
     const created = await getChannelConnection('dingtalk');
     if (!created) throw new Error('Failed to create dingtalk channel connection');
-    return created;
+    await setChannelReplaceReason('dingtalk', null);
+    return (await getChannelConnection('dingtalk'))!;
   }
 
   await db
@@ -199,7 +200,37 @@ export async function upsertDingTalkHubBind(input: {
 
   const updated = await getChannelConnection('dingtalk');
   if (!updated) throw new Error('Failed to update dingtalk channel connection');
-  return updated;
+  await setChannelReplaceReason('dingtalk', null);
+  return (await getChannelConnection('dingtalk'))!;
+}
+
+export async function setChannelReplaceReason(
+  channelType: ChannelType,
+  reason: 'unbound' | 'other_device' | null,
+): Promise<void> {
+  const existing = await getChannelConnection(channelType);
+  if (!existing) return;
+
+  const nextExtras: Record<string, unknown> = { ...(existing.extras ?? {}) };
+  if (reason == null) {
+    delete nextExtras.replaceReason;
+  } else {
+    nextExtras.replaceReason = reason;
+  }
+
+  const extrasJson = Object.keys(nextExtras).length > 0
+    ? JSON.stringify(nextExtras)
+    : null;
+
+  const db = getKyselyDatabase();
+  await db
+    .updateTable('channel_connections')
+    .set({
+      extras_json: extrasJson,
+      updated_at: nowIso(),
+    })
+    .where('id', '=', existing.id)
+    .execute();
 }
 
 export async function revokeDingTalkHubBind(): Promise<void> {
@@ -215,6 +246,7 @@ export async function revokeDingTalkHubBind(): Promise<void> {
     })
     .where('id', '=', existing.id)
     .execute();
+  await setChannelReplaceReason('dingtalk', null);
 }
 
 export async function touchDingTalkOnline(): Promise<void> {
@@ -318,7 +350,8 @@ export async function enableMobileAppBind(input?: {
       .execute();
     const created = await getChannelConnection('mobile');
     if (!created) throw new Error('Failed to create mobile channel connection');
-    return created;
+    await setChannelReplaceReason('mobile', null);
+    return (await getChannelConnection('mobile'))!;
   }
 
   await db
@@ -344,7 +377,8 @@ export async function enableMobileAppBind(input?: {
 
   const updated = await getChannelConnection('mobile');
   if (!updated) throw new Error('Failed to enable mobile channel connection');
-  return updated;
+  await setChannelReplaceReason('mobile', null);
+  return (await getChannelConnection('mobile'))!;
 }
 
 /** 将 Hub refreshToken 同步到钉钉/移动端本地行（共用一条设备凭证） */
@@ -405,6 +439,7 @@ export async function disableMobileAppBind(): Promise<void> {
     })
     .where('id', '=', existing.id)
     .execute();
+  await setChannelReplaceReason('mobile', null);
 }
 
 export async function updateMobileBindingAgent(_input: {

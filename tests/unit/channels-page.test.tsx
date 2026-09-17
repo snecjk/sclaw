@@ -205,4 +205,196 @@ describe('Channels page status refresh', () => {
       expect(screen.getByText('dialog.configureTitle')).toBeInTheDocument();
     });
   });
+
+  it('does not show mobile unbound hint from DingTalk remote.bound=false', async () => {
+    subscribeHostEventMock.mockImplementation(() => vi.fn());
+    localStorage.setItem('sclaw.mobile.configured', '1');
+    hostApiFetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/channels/accounts') {
+        return { success: true, channels: [] };
+      }
+      if (path === '/api/channels/hub/dingtalk/status') {
+        return {
+          success: true,
+          local: { bindStatus: 'revoked' },
+          remote: { bound: false },
+          deviceId: 'device-1',
+        };
+      }
+      if (path === '/api/channels/hub/mobile/status') {
+        return {
+          success: true,
+          local: {
+            bindStatus: 'bound',
+            enabled: true,
+            extras: null,
+          },
+          ws: { connected: true },
+          canConnectWs: true,
+        };
+      }
+      if (path === '/api/settings') {
+        return { channelSessionIdleEnabled: true, channelSessionIdleHours: 24 };
+      }
+      throw new Error(`Unexpected host API path: ${path}`);
+    });
+
+    render(<Channels />);
+
+    await waitFor(() => {
+      expect(screen.getByText('hub.mobile.title')).toBeInTheDocument();
+    });
+    expect(screen.getByText('hub.mobile.cardDesc')).toBeInTheDocument();
+    expect(screen.queryByText('hub.mobile.replacedUnbound')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('hub.mobile.toggleLabel')).toBeInTheDocument();
+  });
+
+  it('shows configure after steal using extras.replaceReason, not localStorage', async () => {
+    subscribeHostEventMock.mockImplementation(() => vi.fn());
+    localStorage.removeItem('sclaw.mobile.configured');
+    hostApiFetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/channels/accounts') {
+        return { success: true, channels: [] };
+      }
+      if (path === '/api/channels/hub/dingtalk/status') {
+        return { success: true, local: null, remote: null };
+      }
+      if (path === '/api/channels/hub/mobile/status') {
+        return {
+          success: true,
+          local: {
+            bindStatus: 'revoked',
+            enabled: false,
+            extras: { replaceReason: 'other_device' },
+          },
+          ws: { connected: false },
+          canConnectWs: false,
+        };
+      }
+      if (path === '/api/settings') {
+        return { channelSessionIdleEnabled: true, channelSessionIdleHours: 24 };
+      }
+      throw new Error(`Unexpected host API path: ${path}`);
+    });
+
+    render(<Channels />);
+
+    await waitFor(() => {
+      expect(screen.getByText('hub.mobile.replacedByOtherDevice')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'hub.mobile.configure' })).toBeInTheDocument();
+  });
+
+  it('shows bind when revoked without replaceReason even if localStorage is stale', async () => {
+    subscribeHostEventMock.mockImplementation(() => vi.fn());
+    localStorage.setItem('sclaw.mobile.configured', '1');
+    hostApiFetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/channels/accounts') {
+        return { success: true, channels: [] };
+      }
+      if (path === '/api/channels/hub/dingtalk/status') {
+        return { success: true, local: null, remote: null };
+      }
+      if (path === '/api/channels/hub/mobile/status') {
+        return {
+          success: true,
+          local: {
+            bindStatus: 'revoked',
+            enabled: false,
+            extras: null,
+          },
+          ws: { connected: false },
+          canConnectWs: false,
+        };
+      }
+      if (path === '/api/settings') {
+        return { channelSessionIdleEnabled: true, channelSessionIdleHours: 24 };
+      }
+      throw new Error(`Unexpected host API path: ${path}`);
+    });
+
+    render(<Channels />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'account.bind' })).toBeInTheDocument();
+    });
+    expect(localStorage.getItem('sclaw.mobile.configured')).toBe('1');
+  });
+
+  it('keeps newer fetch result when an older request finishes later', async () => {
+    let channelStatusHandler: (() => void) | undefined;
+    subscribeHostEventMock.mockImplementation((eventName: string, handler: () => void) => {
+      if (eventName === 'gateway:channel-status') {
+        channelStatusHandler = handler;
+      }
+      return vi.fn();
+    });
+
+    let resolveFirstMobile: ((value: unknown) => void) | undefined;
+    let mobileCalls = 0;
+
+    hostApiFetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/channels/accounts') {
+        return { success: true, channels: [] };
+      }
+      if (path === '/api/channels/hub/dingtalk/status') {
+        return { success: true, local: null, remote: null };
+      }
+      if (path === '/api/channels/hub/mobile/status') {
+        mobileCalls += 1;
+        if (mobileCalls === 1) {
+          return await new Promise((resolve) => {
+            resolveFirstMobile = resolve;
+          });
+        }
+        return {
+          success: true,
+          local: {
+            bindStatus: 'revoked',
+            enabled: false,
+            extras: { replaceReason: 'unbound' },
+          },
+          ws: { connected: false },
+          canConnectWs: false,
+        };
+      }
+      if (path === '/api/settings') {
+        return { channelSessionIdleEnabled: true, channelSessionIdleHours: 24 };
+      }
+      throw new Error(`Unexpected host API path: ${path}`);
+    });
+
+    render(<Channels />);
+
+    await waitFor(() => {
+      expect(mobileCalls).toBe(1);
+      expect(channelStatusHandler).toBeTypeOf('function');
+    });
+
+    await act(async () => {
+      channelStatusHandler?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('hub.mobile.replacedUnbound')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      resolveFirstMobile?.({
+        success: true,
+        local: {
+          bindStatus: 'bound',
+          enabled: true,
+          extras: null,
+        },
+        ws: { connected: true },
+        canConnectWs: true,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('hub.mobile.replacedUnbound')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText('hub.mobile.toggleLabel')).not.toBeInTheDocument();
+  });
 });

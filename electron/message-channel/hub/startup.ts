@@ -8,6 +8,7 @@ import {
   resolveSharedHubRefreshToken,
   revokeDingTalkHubBind,
   disableMobileAppBind,
+  setChannelReplaceReason,
   syncSharedHubRefreshToken,
   type ChannelConnection,
 } from './binding-service';
@@ -18,6 +19,10 @@ import { handleSclawInbound, setChannelGatewayManager } from './ingress';
 
 let inboundWired = false;
 let bindReplacedWired = false;
+
+function mapHubBindReplaceReason(reason: string): 'unbound' | 'other_device' {
+  return reason === 'unbound' ? 'unbound' : 'other_device';
+}
 
 export type ChannelRuntimePlan = {
   hub: {
@@ -53,6 +58,9 @@ export async function handleDingTalkBindReplaced(reason = 'bound_on_another_devi
     getSclawHubClient().disconnectPermanently();
     await revokeDingTalkHubBind();
     await disableMobileAppBind();
+    const mapped = mapHubBindReplaceReason(reason);
+    await setChannelReplaceReason('dingtalk', mapped);
+    await setChannelReplaceReason('mobile', mapped);
     logger.info(`[SclawHub] local bind revoked reason=${reason}`);
     await notifyRendererBindReplaced(reason);
   } catch (error) {

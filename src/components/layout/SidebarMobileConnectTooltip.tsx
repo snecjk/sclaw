@@ -79,6 +79,9 @@ export function SidebarMobileConnectTooltip({
         if (next && typeof localStorage !== 'undefined') {
           localStorage.setItem('sclaw.mobile.configured', '1');
         }
+        if (!next && typeof localStorage !== 'undefined') {
+          localStorage.removeItem('sclaw.mobile.configured');
+        }
         setEnabled(next);
         toast.success(
           next

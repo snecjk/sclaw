@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   syncSharedHubRefreshToken: vi.fn(),
   revokeDingTalkHubBind: vi.fn(),
   disableMobileAppBind: vi.fn(),
+  setChannelReplaceReason: vi.fn(),
   getLocalDeviceId: vi.fn().mockResolvedValue('device-1'),
   ensureFixedChannelBindings: vi.fn().mockResolvedValue({ normalized: 0 }),
   hubBindStatus: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@electron/message-channel/hub/binding-service', () => ({
   syncSharedHubRefreshToken: mocks.syncSharedHubRefreshToken,
   revokeDingTalkHubBind: mocks.revokeDingTalkHubBind,
   disableMobileAppBind: mocks.disableMobileAppBind,
+  setChannelReplaceReason: mocks.setChannelReplaceReason,
   getLocalDeviceId: mocks.getLocalDeviceId,
   ensureFixedChannelBindings: mocks.ensureFixedChannelBindings,
 }));
@@ -213,5 +215,38 @@ describe('channel runtime bootstrap', () => {
     expect(mocks.connect).not.toHaveBeenCalled();
     expect(mocks.revokeDingTalkHubBind).toHaveBeenCalled();
     expect(mocks.disableMobileAppBind).toHaveBeenCalled();
+    expect(mocks.setChannelReplaceReason.mock.calls).toEqual([
+      ['dingtalk', 'unbound'],
+      ['mobile', 'unbound'],
+    ]);
+  });
+
+  it('handleDingTalkBindReplaced writes replaceReason after clearers', async () => {
+    const order: string[] = [];
+    mocks.revokeDingTalkHubBind.mockImplementation(async () => {
+      order.push('revoke');
+    });
+    mocks.disableMobileAppBind.mockImplementation(async () => {
+      order.push('disable');
+    });
+    mocks.setChannelReplaceReason.mockImplementation(async (channelType: string) => {
+      order.push(`set:${channelType}`);
+    });
+
+    const { handleDingTalkBindReplaced } = await import(
+      '@electron/message-channel/hub/startup'
+    );
+    await handleDingTalkBindReplaced('bound_on_another_device');
+
+    expect(order).toEqual([
+      'revoke',
+      'disable',
+      'set:dingtalk',
+      'set:mobile',
+    ]);
+    expect(mocks.revokeDingTalkHubBind).toHaveBeenCalledWith();
+    expect(mocks.disableMobileAppBind).toHaveBeenCalledWith();
+    expect(mocks.setChannelReplaceReason).toHaveBeenNthCalledWith(1, 'dingtalk', 'other_device');
+    expect(mocks.setChannelReplaceReason).toHaveBeenNthCalledWith(2, 'mobile', 'other_device');
   });
 });

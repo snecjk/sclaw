@@ -48,7 +48,10 @@ export type DingTalkBindingState = {
 
 export type MobileBindingState = {
   enabled: boolean;
+  /** Legacy flag; button label must use bindStatus + replaceReason, not this. */
   configured: boolean;
+  bindStatus?: string | null;
+  replaceReason?: 'other_device' | 'unbound' | null;
   engineType: AgentEngineType;
   agentId: string | null;
   wsConnected: boolean;

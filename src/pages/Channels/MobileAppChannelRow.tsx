@@ -3,6 +3,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import sclawAppLogo from '@/assets/logo.png';
+import { mobileBindButtonKind } from './binding-hint';
 import { channelOutlineBtnClass, MOBILE_APP_BRAND_COLOR } from './styles';
 import type { MobileBindingState } from './types';
 
@@ -21,7 +22,12 @@ export function MobileAppChannelRow({
 }) {
   const { t } = useTranslation(['channels', 'common']);
   const mobileEnabled = Boolean(mobileBinding?.enabled);
-  const mobileConfigured = Boolean(mobileBinding?.configured);
+  const displayHint = mobileEnabled ? null : (mobileBinding?.replaceHint ?? null);
+  const buttonKind = mobileBindButtonKind({
+    bindStatus: mobileBinding?.bindStatus,
+    enabled: mobileEnabled,
+    replaceReason: mobileBinding?.replaceReason,
+  });
 
   return (
     <div className="flex items-center justify-between gap-3">
@@ -56,11 +62,11 @@ export function MobileAppChannelRow({
             {t('hub.mobile.title')}
           </h3>
           <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground">
-            {mobileBinding?.replaceHint === 'other_device'
+            {displayHint === 'other_device'
               ? t('hub.mobile.replacedByOtherDevice', {
                   defaultValue: '已在其它设备绑定，请重新绑定',
                 })
-              : mobileBinding?.replaceHint === 'unbound'
+              : displayHint === 'unbound'
                 ? t('hub.mobile.replacedUnbound', {
                     defaultValue: '已解绑，请重新绑定',
                   })
@@ -68,7 +74,7 @@ export function MobileAppChannelRow({
                     defaultValue: '通过移动端操作本地 agent',
                   })}
           </p>
-          {mobileEnabled && !mobileBinding?.wsConnected && !mobileBinding?.replaceHint ? (
+          {mobileEnabled && !mobileBinding?.wsConnected ? (
             <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
               {t('hub.mobile.hubOfflineHint')}
             </p>
@@ -96,7 +102,7 @@ export function MobileAppChannelRow({
             disabled={mobileToggleBusy || loading}
             onClick={onOpenConfig}
           >
-            {mobileConfigured
+            {buttonKind === 'configure'
               ? t('hub.mobile.configure', { defaultValue: '配置' })
               : t('account.bind', { defaultValue: '绑定' })}
           </Button>

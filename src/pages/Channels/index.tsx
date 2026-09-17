@@ -14,6 +14,12 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { AvailableChannelRow } from './AvailableChannelRow';
+import {
+  dingTalkReplaceHint,
+  mobileBindButtonKind,
+  mobileReplaceHint,
+  parseReplaceReason,
+} from './binding-hint';
 import { ChannelConfigModal } from './ChannelConfigModal';
 import { ConfiguredChannelRow } from './ConfiguredChannelRow';
 import { DingTalkHubBindModal } from './DingTalkHubBindModal';
@@ -28,10 +34,13 @@ import type {
   MobileBindingState,
 } from './types';
 
+const MOBILE_CONFIGURED_STORAGE_KEY = 'sclaw.mobile.configured';
+
 export function Channels() {
   const { t } = useTranslation(['channels', 'common']);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const lastGatewayStateRef = useRef(gatewayStatus.state);
+  const fetchSeqRef = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +66,7 @@ export function Channels() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchPageData = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     try {
       const [
         channelsRes,
@@ -82,6 +92,7 @@ export function Channels() {
             engineType?: string | null;
             agentId?: string | null;
             enabled?: boolean;
+            extras?: { replaceReason?: string } | null;
           } | null;
           ws?: { connected?: boolean };
           canConnectWs?: boolean;
@@ -91,6 +102,8 @@ export function Channels() {
           channelSessionIdleHours?: number;
         }>('/api/settings').catch(() => null),
       ]);
+
+      if (seq !== fetchSeqRef.current) return;
 
       if (!channelsRes.success) {
         throw new Error(channelsRes.error || 'Failed to load channels');
@@ -111,20 +124,11 @@ export function Channels() {
       const local = dingTalkStatusRes?.success ? dingTalkStatusRes.local : null;
       const remote = dingTalkStatusRes?.success ? dingTalkStatusRes.remote : null;
       const localDeviceId = dingTalkStatusRes?.success ? dingTalkStatusRes.deviceId : undefined;
-      let replaceHint: 'other_device' | 'unbound' | null = null;
-      const remoteOk = Boolean(remote && !('error' in remote && remote.error));
-      if (remoteOk && remote) {
-        if (remote.bound === false) {
-          replaceHint = 'unbound';
-        } else if (
-          remote.bound
-          && remote.deviceId
-          && localDeviceId
-          && remote.deviceId !== localDeviceId
-        ) {
-          replaceHint = 'other_device';
-        }
-      }
+      const replaceHint = dingTalkReplaceHint({
+        local,
+        remote,
+        deviceId: localDeviceId,
+      });
       setDingTalkBinding(
         local
           ? {
@@ -140,27 +144,39 @@ export function Channels() {
       const mobileEnabled = Boolean(
         mobileBound && mobileLocal?.enabled !== false,
       );
-      const storedConfigured =
-        typeof localStorage !== 'undefined'
-        && localStorage.getItem('sclaw.mobile.configured') === '1';
-      const mobileConfigured = mobileBound || mobileEnabled || storedConfigured;
-      if (mobileConfigured && typeof localStorage !== 'undefined') {
-        localStorage.setItem('sclaw.mobile.configured', '1');
+      const mobileReplaceReason = parseReplaceReason(mobileLocal?.extras?.replaceReason);
+      const mobileHint = mobileReplaceHint({
+        bindStatus: mobileLocal?.bindStatus,
+        enabled: mobileEnabled,
+        replaceReason: mobileReplaceReason,
+      });
+      const buttonKind = mobileBindButtonKind({
+        bindStatus: mobileLocal?.bindStatus,
+        enabled: mobileEnabled,
+        replaceReason: mobileReplaceReason,
+      });
+      // Only persist configured marker while actively bound; never re-write from stale localStorage.
+      if (mobileBound && mobileEnabled && typeof localStorage !== 'undefined') {
+        localStorage.setItem(MOBILE_CONFIGURED_STORAGE_KEY, '1');
       }
       setMobileBinding({
         enabled: mobileEnabled,
-        configured: mobileConfigured,
+        configured: buttonKind === 'configure' || mobileEnabled,
+        bindStatus: mobileLocal?.bindStatus ?? null,
+        replaceReason: mobileReplaceReason,
         engineType: 'pi',
         agentId: 'main',
         wsConnected: Boolean(mobileStatusRes?.ws?.connected),
         canConnectWs: Boolean(mobileStatusRes?.canConnectWs),
-        // Hub is device-level: DingTalk replace also invalidates Mobile.
-        replaceHint,
+        replaceHint: mobileHint,
       });
     } catch (fetchError: unknown) {
+      if (seq !== fetchSeqRef.current) return;
       setError(String(fetchError));
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -183,6 +199,10 @@ export function Channels() {
     const unsubscribe = subscribeHostEvent<{ reason?: string }>(
       'channel:dingtalk-bind-replaced',
       () => {
+        // Optional residue cleanup only; button copy is driven by replaceReason.
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(MOBILE_CONFIGURED_STORAGE_KEY);
+        }
         void fetchPageData();
       },
     );
@@ -265,12 +285,16 @@ export function Channels() {
         ? '/api/channels/hub/mobile/bind/enable'
         : '/api/channels/hub/mobile/bind/disable';
       await hostApiFetch<{ success: boolean; error?: string }>(path, { method: 'POST' });
-      if (enabled && typeof localStorage !== 'undefined') {
-        localStorage.setItem('sclaw.mobile.configured', '1');
+      if (typeof localStorage !== 'undefined') {
+        if (enabled) {
+          localStorage.setItem(MOBILE_CONFIGURED_STORAGE_KEY, '1');
+        } else {
+          localStorage.removeItem(MOBILE_CONFIGURED_STORAGE_KEY);
+        }
       }
-      await fetchPageData();
       const successKey = enabled ? 'hub.mobile.enableSuccess' : 'hub.mobile.disableSuccess';
       toast.success(t(successKey));
+      await fetchPageData();
     } catch (toggleError) {
       toast.error(
         t('hub.mobile.toggleFailed', { error: String(toggleError) }),
