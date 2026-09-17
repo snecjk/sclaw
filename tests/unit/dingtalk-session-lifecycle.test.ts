@@ -121,11 +121,22 @@ describe('DingTalk session lifecycle', () => {
   it('forces a new session when registered engine differs from binding', () => {
     expect(shouldForceNewDingTalkSessionForEngine({
       boundEngineType: 'claude',
+      registeredEngineType: 'pi',
+    })).toBe(true);
+    expect(shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: 'pi',
+      registeredEngineType: 'claude',
+    })).toBe(true);
+  });
+
+  it('forces a new session when registry still has legacy openclaw', () => {
+    expect(shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: 'pi',
       registeredEngineType: 'openclaw',
     })).toBe(true);
     expect(shouldForceNewDingTalkSessionForEngine({
-      boundEngineType: 'openclaw',
-      registeredEngineType: 'claude',
+      boundEngineType: 'claude',
+      registeredEngineType: 'openclaw',
     })).toBe(true);
   });
 
@@ -135,7 +146,7 @@ describe('DingTalk session lifecycle', () => {
       registeredEngineType: 'claude',
     })).toBe(false);
     expect(shouldForceNewDingTalkSessionForEngine({
-      boundEngineType: 'openclaw',
+      boundEngineType: 'pi',
       registeredEngineType: null,
     })).toBe(false);
     expect(shouldForceNewDingTalkSessionForEngine({

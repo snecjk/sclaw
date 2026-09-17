@@ -154,10 +154,12 @@ export async function mergeWeixinHostChannel(
   channels: ChannelAccountsView[],
 ): Promise<ChannelAccountsView[]> {
   try {
-    const { getWeixinBinding, getBoundWeixinAccountId } = await import('../weixin/binding');
+    const { getWeixinBinding } = await import('../weixin/binding');
     const { getWeixinChannelService } = await import('../weixin/service');
+    // Prefer getWeixinBinding only — do not OR getBoundWeixinAccountId(), which
+    // ignores revoked DB rows and would keep showing「解除绑定」after unbind.
     const binding = await getWeixinBinding();
-    const accountId = binding?.accountId || getBoundWeixinAccountId();
+    const accountId = binding?.accountId;
     if (!accountId) return channels;
 
     const svc = getWeixinChannelService();

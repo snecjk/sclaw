@@ -124,7 +124,18 @@ export async function getMobileHistory(input: {
   }
 
   const registry = await getEngineSessionRegistryEntry(sessionKey);
-  const engineType = registry?.engineType === 'openclaw' ? 'openclaw' : 'claude';
+  // Channel 运行时不再兼容 openclaw 引擎：历史只走 claude | pi。
+  let engineType: 'claude' | 'pi' = 'pi';
+  if (registry?.engineType === 'claude') {
+    engineType = 'claude';
+  } else if (registry?.engineType === 'pi') {
+    engineType = 'pi';
+  } else if (registry?.engineType === 'openclaw') {
+    logger.warn('[HistoryFacade] openclaw session history no longer supported; using pi adapter', {
+      sessionKey,
+    });
+    engineType = 'pi';
+  }
   const adapter = getAdapter(engineType);
   // 多取一些再按 cursor 切，避免引擎无 offset
   const fetchLimit = Math.min(500, limit * 5);

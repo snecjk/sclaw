@@ -6459,30 +6459,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/Channels/ChannelInlineSelect.tsx::pageDarkUtility::dark:text-::-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focus:bg-white/[0.06]', isSelected &&::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/ChannelInlineSelect.tsx::pageDarkUtility::dark:bg-::k:focus:bg-white/[0.06]', isSelected && 'bg-[#F7F8FA] dark:bg-white/[0.06]', )} onSelect={() => onChan::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#86909C::—'}</span> <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden strokeWidth={2} /> </button> </DropdownMenu::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#1D2129::center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focu::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#F7F8FA::px-2.5 py-1.5 text-[12px] text-[#1D2129]', 'focus:bg-[#F7F8FA] dark:text-foreground dark:focus:bg-white/[0.06]', is::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
-    "key": "src/pages/Channels/ChannelInlineSelect.tsx::rawColor::#F7F8FA::round dark:focus:bg-white/[0.06]', isSelected && 'bg-[#F7F8FA] dark:bg-white/[0.06]', )} onSelect={()::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
     "key": "src/pages/Channels/ChannelLogo.tsx::pageDarkUtility::dark:border-::? 'border-transparent' : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40', )} style={ tinted::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -6759,22 +6735,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:border-::enter gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-900/20"> <AlertCircle className="::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:bg-::border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-900/20"> <AlertCircle className="h-4 w-4 shrink-0 text::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::0"> <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" /> <span className="text-[13px] font-medium text-::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
-    "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::/> <span className="text-[13px] font-medium text-amber-800 dark:text-amber-300"> {t('gatewayWarning')} </span>::1",
-    "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
-  },
-  {
     "key": "src/pages/Channels/index.tsx::pageDarkUtility::dark:text-::<h2 className="text-[16px] font-semibold tracking-tight text-[#1D2129] dark:text-foreground"> {t('supportedMobile', { defaultValue: '支持的移动端'::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },
@@ -6819,7 +6779,7 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {
-    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::e !== 'running'} className="h-8 shrink-0 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover::1",
+    "key": "src/pages/Channels/index.tsx::rawColor::#E5E6EB::led={refreshing} className="h-8 shrink-0 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover::1",
     "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
   },
   {

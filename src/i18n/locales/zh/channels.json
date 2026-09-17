@@ -33,7 +33,7 @@
     "showAll": "显示全部",
     "toast": {
         "qrConnected": "{{name}} 连接成功",
-        "wechatAutoBoundMain": "已自动绑定到 Main Agent，可在频道页修改",
+        "wechatAutoBoundMain": "绑定成功",
         "qrFailed": "{{name}} 连接失败: {{error}}",
         "channelSaved": "频道 {{name}} 已保存",
         "channelConnecting": "正在连接 {{name}}...",
@@ -43,12 +43,17 @@
         "bindingUpdated": "账号绑定已更新",
         "defaultUpdated": "默认账号已更新",
         "accountDeleted": "账号已删除",
-        "channelDeleted": "频道已删除"
+        "channelDeleted": "频道已删除",
+        "unbindSuccess": "已解除绑定"
     },
     "account": {
         "add": "添加账号",
         "edit": "编辑",
         "bind": "绑定",
+        "scanBind": "扫码绑定",
+        "unbind": "解除绑定",
+        "unbinding": "解除中…",
+        "unbindConfirm": "确定要解除该频道的绑定吗？",
         "delete": "删除账号",
         "deleteChannel": "删除频道",
         "deleteConfirm": "确定要删除该账号吗？",

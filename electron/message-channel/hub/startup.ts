@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger';
 import {
   getChannelConnection,
   getLocalDeviceId,
+  ensureFixedChannelBindings,
   resolveSharedHubRefreshToken,
   revokeDingTalkHubBind,
   syncSharedHubRefreshToken,
@@ -206,6 +207,13 @@ export async function ensureChannelRuntimesReady(
     }
     wireSclawInboundListener();
     wireSclawBindReplacedListener();
+
+    // Normalize bound rows to pi+main before probe/skip — must not hang on connect/start.
+    try {
+      await ensureFixedChannelBindings();
+    } catch (error) {
+      logger.warn('[ChannelRuntime] ensureFixedChannelBindings failed', error);
+    }
 
     const plan = await probeChannelRuntimeNeeds();
 

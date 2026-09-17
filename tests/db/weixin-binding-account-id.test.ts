@@ -37,7 +37,7 @@ describe('Weixin binding with real account_id', () => {
     mem.teardown();
   });
 
-  it('updates engine/agent without UNIQUE conflict when account_id is not default', async () => {
+  it('clamps binding agent update to pi+main without UNIQUE conflict', async () => {
     const now = '2026-09-16T00:00:00.000Z';
     await mem.kysely
       .insertInto('channel_connections')
@@ -75,8 +75,8 @@ describe('Weixin binding with real account_id', () => {
     expect(binding).toMatchObject({
       channelType: 'wechat',
       accountId: 'wx-bot-1',
-      engineType: 'claude',
-      agentId: 'agent-2',
+      engineType: 'pi',
+      agentId: 'main',
     });
 
     const rows = await mem.kysely
@@ -87,8 +87,8 @@ describe('Weixin binding with real account_id', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       account_id: 'wx-bot-1',
-      engine_type: 'claude',
-      agent_id: 'agent-2',
+      engine_type: 'pi',
+      agent_id: 'main',
     });
   });
 
@@ -141,7 +141,8 @@ describe('Weixin binding with real account_id', () => {
       id: 'wechat-row-1',
       account_id: 'wx-bot-new',
       provider_account_id: 'wx-bot-new',
-      engine_type: 'claude',
+      engine_type: 'pi',
+      agent_id: 'main',
     });
   });
 });

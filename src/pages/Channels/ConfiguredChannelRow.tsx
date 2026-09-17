@@ -1,165 +1,57 @@
 import type { ReactNode } from 'react';
-import { Trash2, Pencil } from 'lucide-react';
+import { QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { stoSettingsSectionCardClass } from '@/lib/surfaces';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-import type { AgentEngineType } from '../../../shared/agent-engine';
-import { ChannelInlineSelect } from './ChannelInlineSelect';
 import { ChannelIconBubble, ChannelLogo } from './ChannelLogo';
 import {
   accountDisplayName,
-  agentsForEngine,
   channelStatusDotClass,
   channelTitle,
   configuredChannelSubtitle,
   normalizeLogoType,
-  parseStoredEngineType,
-  pickSelectedAgentId,
-  resolveNextAgentForEngine,
-  toBindingEngine,
 } from './helpers';
-import {
-  channelBindOutlineBtnClass,
-  channelDeleteIconBtnClass,
-  channelIconBtnClass,
-} from './styles';
+import { channelBindOutlineBtnClass, channelOutlineBtnClass } from './styles';
 import type {
-  AgentItem,
-  BindingChangeHandler,
   ChannelAccountItem,
   ChannelGroupItem,
   DingTalkBindingState,
-  InlineSelectOption,
 } from './types';
 
-function ChannelEditOrBindButton({
-  isBound,
-  onEdit,
-  onBind,
-  editLabel,
-  bindLabel,
+function ScanBindButton({
+  onClick,
+  label,
 }: {
-  isBound: boolean;
-  onEdit: () => void;
-  onBind: () => void;
-  editLabel: string;
-  bindLabel: string;
+  onClick: () => void;
+  label: string;
 }) {
-  if (isBound) {
-    return (
-      <Button
-        size="icon"
-        variant="ghost"
-        className={channelIconBtnClass}
-        onClick={onEdit}
-        title={editLabel}
-        aria-label={editLabel}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-    );
-  }
-
   return (
     <Button
       size="sm"
       variant="outline"
       className={channelBindOutlineBtnClass}
-      onClick={onBind}
+      onClick={onClick}
     >
-      {bindLabel}
+      <QrCode className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+      {label}
     </Button>
-  );
-}
-
-function EngineAgentSelects({
-  engine,
-  selectedAgentId,
-  agentOptions,
-  channelEngineOptions,
-  engineAriaLabel,
-  agentAriaLabel,
-  noAgentsMessage,
-  preferredAgentId,
-  agents,
-  onBindingChange,
-}: {
-  engine: AgentEngineType;
-  selectedAgentId: string | undefined;
-  agentOptions: AgentItem[];
-  channelEngineOptions: InlineSelectOption[];
-  engineAriaLabel: string;
-  agentAriaLabel: string;
-  noAgentsMessage: string;
-  preferredAgentId: string | null | undefined;
-  agents: AgentItem[];
-  onBindingChange: BindingChangeHandler;
-}) {
-  return (
-    <>
-      <ChannelInlineSelect
-        className="w-[120px]"
-        value={engine}
-        ariaLabel={engineAriaLabel}
-        options={channelEngineOptions}
-        onChange={(nextValue) => {
-          const nextEngine = nextValue as AgentEngineType;
-          const nextAgentId = resolveNextAgentForEngine(agents, nextEngine, preferredAgentId);
-          if (!nextAgentId) {
-            toast.error(noAgentsMessage);
-            return;
-          }
-          void onBindingChange({
-            engineType: nextEngine,
-            agentId: nextAgentId,
-          });
-        }}
-      />
-      <ChannelInlineSelect
-        className="w-[140px]"
-        value={selectedAgentId || ''}
-        ariaLabel={agentAriaLabel}
-        options={agentOptions.map((agent) => ({
-          value: agent.id,
-          label: agent.name,
-        }))}
-        onChange={(nextAgentId) => {
-          if (!nextAgentId) return;
-          void onBindingChange({
-            engineType: engine,
-            agentId: nextAgentId,
-          });
-        }}
-      />
-    </>
   );
 }
 
 export function ConfiguredChannelRow({
   group,
   recommended,
-  agents,
   dingTalkBinding,
-  channelEngineOptions,
-  onDingTalkBindingChange,
-  onWeChatBindingChange,
-  onBindAgent,
   onOpenDingTalkHub,
-  onRequestDelete,
+  onRequestUnbind,
   onOpenAccountEdit,
 }: {
   group: ChannelGroupItem;
   recommended?: boolean;
-  agents: AgentItem[];
   dingTalkBinding: DingTalkBindingState;
-  channelEngineOptions: InlineSelectOption[];
-  onDingTalkBindingChange: BindingChangeHandler;
-  onWeChatBindingChange: BindingChangeHandler;
-  onBindAgent: (channelType: string, accountId: string, agentId: string) => void | Promise<void>;
   onOpenDingTalkHub: () => void;
-  onRequestDelete: (channelType: string) => void;
+  onRequestUnbind: (channelType: string) => void;
   onOpenAccountEdit: (channelType: string, account?: ChannelAccountItem) => void;
 }) {
   const { t } = useTranslation(['channels', 'common']);
@@ -170,28 +62,6 @@ export function ConfiguredChannelRow({
   const weChatAccount = isWeChat ? primaryAccount : undefined;
   const pluginAccount = !isDingTalk && !isWeChat ? primaryAccount : undefined;
 
-  const boundAgentId =
-    (isDingTalk ? dingTalkBinding?.agentId : null) ||
-    (isWeChat ? weChatAccount?.agentId : null) ||
-    pluginAccount?.agentId ||
-    group.accounts.find((account) => account.agentId)?.agentId;
-  const boundAgent = boundAgentId
-    ? agents.find((agent) => agent.id === boundAgentId)
-    : undefined;
-
-  let boundEngineType: string | null | undefined;
-  if (isWeChat) {
-    boundEngineType = parseStoredEngineType(weChatAccount?.engineType, 'pi');
-  } else {
-    boundEngineType =
-      (isDingTalk ? dingTalkBinding?.engineType : null) ||
-      boundAgent?.engineType ||
-      null;
-  }
-
-  const channelEngine = toBindingEngine(boundEngineType);
-  const channelAgentOptions = agentsForEngine(agents, channelEngine);
-  const selectedAgentId = pickSelectedAgentId(channelAgentOptions, boundAgentId);
   const mainAccountLabel = t('account.mainAccount');
   const weChatDisplayName = accountDisplayName(weChatAccount, mainAccountLabel);
   const pluginDisplayName = accountDisplayName(pluginAccount, mainAccountLabel);
@@ -214,95 +84,53 @@ export function ConfiguredChannelRow({
     channelActive = Boolean(weChatAccount);
   }
 
-  const dingTalkNoAgentsMessage = t('hub.dingtalk.noAgentsForEngine', {
-    defaultValue: '该引擎下暂无 Agent，请先创建后再切换',
-  });
-  const weChatNoAgentsMessage = t('hub.wechat.noAgentsForEngine', {
-    defaultValue: '该引擎下暂无 Agent，请先创建后再切换',
-  });
-  const editLabel = t('account.edit');
-  const bindLabel = t('account.bind', { defaultValue: '绑定' });
+  const scanBindLabel = t('account.scanBind', { defaultValue: '扫码绑定' });
+  const unbindLabel = t('account.unbind', { defaultValue: '解除绑定' });
 
-  let bindingControls: ReactNode = (
-    <ChannelInlineSelect
-      className="w-[140px]"
-      value={pluginAccount?.agentId || ''}
-      ariaLabel={t('account.bindAgentLabel')}
-      options={[
-        { value: '', label: t('account.unassigned') },
-        ...agents.map((agent) => ({
-          value: agent.id,
-          label: agent.name,
-        })),
-      ]}
-      onChange={(nextAgentId) => {
-        if (!pluginAccount) return;
-        void onBindAgent(group.channelType, pluginAccount.accountId, nextAgentId);
-      }}
-    />
-  );
-
+  let actionControls: ReactNode;
   if (isDingTalk) {
-    bindingControls = (
-      <EngineAgentSelects
-        engine={channelEngine}
-        selectedAgentId={selectedAgentId}
-        agentOptions={channelAgentOptions}
-        channelEngineOptions={channelEngineOptions}
-        engineAriaLabel={t('hub.dingtalk.engineLabel')}
-        agentAriaLabel={t('hub.dingtalk.agentLabel')}
-        noAgentsMessage={dingTalkNoAgentsMessage}
-        preferredAgentId={boundAgentId}
-        agents={agents}
-        onBindingChange={onDingTalkBindingChange}
-      />
+    actionControls = channelActive ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className={channelOutlineBtnClass}
+        onClick={() => onRequestUnbind(group.channelType)}
+      >
+        {unbindLabel}
+      </Button>
+    ) : (
+      <ScanBindButton onClick={onOpenDingTalkHub} label={scanBindLabel} />
     );
   } else if (isWeChat) {
-    bindingControls = (
-      <EngineAgentSelects
-        engine={channelEngine}
-        selectedAgentId={selectedAgentId}
-        agentOptions={channelAgentOptions}
-        channelEngineOptions={channelEngineOptions}
-        engineAriaLabel={t('hub.wechat.engineLabel')}
-        agentAriaLabel={t('account.bindAgentLabel')}
-        noAgentsMessage={weChatNoAgentsMessage}
-        preferredAgentId={boundAgentId}
-        agents={agents}
-        onBindingChange={onWeChatBindingChange}
-      />
-    );
-  }
-
-  let editOrBindButton: ReactNode;
-  if (isDingTalk) {
-    editOrBindButton = (
-      <ChannelEditOrBindButton
-        isBound={dingTalkBinding?.bindStatus === 'bound'}
-        onEdit={onOpenDingTalkHub}
-        onBind={onOpenDingTalkHub}
-        editLabel={editLabel}
-        bindLabel={bindLabel}
-      />
-    );
-  } else if (isWeChat) {
-    editOrBindButton = (
-      <ChannelEditOrBindButton
-        isBound={Boolean(weChatAccount)}
-        onEdit={() => onOpenAccountEdit(group.channelType, weChatAccount)}
-        onBind={() => onOpenAccountEdit(group.channelType, undefined)}
-        editLabel={editLabel}
-        bindLabel={bindLabel}
+    actionControls = channelActive ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className={channelOutlineBtnClass}
+        onClick={() => onRequestUnbind(group.channelType)}
+      >
+        {unbindLabel}
+      </Button>
+    ) : (
+      <ScanBindButton
+        onClick={() => onOpenAccountEdit(group.channelType, undefined)}
+        label={scanBindLabel}
       />
     );
   } else {
-    editOrBindButton = (
-      <ChannelEditOrBindButton
-        isBound={Boolean(pluginAccount)}
-        onEdit={() => onOpenAccountEdit(group.channelType, pluginAccount)}
-        onBind={() => onOpenAccountEdit(group.channelType, undefined)}
-        editLabel={editLabel}
-        bindLabel={bindLabel}
+    actionControls = channelActive ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className={channelOutlineBtnClass}
+        onClick={() => onRequestUnbind(group.channelType)}
+      >
+        {unbindLabel}
+      </Button>
+    ) : (
+      <ScanBindButton
+        onClick={() => onOpenAccountEdit(group.channelType, undefined)}
+        label={scanBindLabel}
       />
     );
   }
@@ -342,20 +170,7 @@ export function ConfiguredChannelRow({
         </div>
 
         <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
-          {bindingControls}
-          <div className="flex items-center gap-0.5">
-            {editOrBindButton}
-            <Button
-              size="icon"
-              variant="ghost"
-              className={channelDeleteIconBtnClass}
-              onClick={() => onRequestDelete(group.channelType)}
-              title={t('account.deleteChannel')}
-              aria-label={t('account.deleteChannel')}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+          {actionControls}
         </div>
       </div>
     </section>

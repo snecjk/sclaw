@@ -4,9 +4,10 @@
 
 import { randomUUID } from 'node:crypto';
 import { getKyselyDatabase } from '../../db/connection';
-import { parseAgentEngineType, type AgentEngineType } from '../../../shared/agent-engine';
+import { parseAgentEngineType } from '../../../shared/agent-engine';
 import type { ChannelConnection } from '../hub/binding-service';
 import { findChannelConnectionByType, getLocalDeviceId } from '../hub/binding-service';
+import type { ChannelRuntimeEngine } from '../common/session-lifecycle';
 import {
   listIndexedAccountIds,
   loadAccount,
@@ -15,18 +16,22 @@ import {
 import { migrateLegacyCredentials } from './runtime/transport/migrate-credentials';
 import { resolveWeixinStateDir } from './runtime/transport/state-dir';
 
-const DEFAULT_WEIXIN_ENGINE: AgentEngineType = 'pi';
+export type { ChannelRuntimeEngine };
+
+const DEFAULT_WEIXIN_ENGINE: ChannelRuntimeEngine = 'pi';
 
 export type WeixinBinding = {
   channelType: 'wechat';
   accountId: string;
   agentId: string;
-  engineType: AgentEngineType;
+  engineType: ChannelRuntimeEngine;
   enabled: boolean;
 };
 
-export function normalizeWeixinEngineType(value: unknown): AgentEngineType {
-  return parseAgentEngineType(value) ?? DEFAULT_WEIXIN_ENGINE;
+export function normalizeWeixinEngineType(value: unknown): ChannelRuntimeEngine {
+  const parsed = parseAgentEngineType(value);
+  if (parsed === 'claude' || parsed === 'pi') return parsed;
+  return DEFAULT_WEIXIN_ENGINE;
 }
 
 function nowIso(): string {
@@ -55,7 +60,12 @@ export function getBoundWeixinAccountId(): string | null {
 
 export async function getWeixinBinding(): Promise<WeixinBinding | null> {
   const conn = await getWeixinConnectionRow();
-  if (!conn || conn.bindStatus !== 'bound') {
+  // Explicitly unbound/revoked: do not resurrect from leftover credential files.
+  if (conn && conn.bindStatus !== 'bound') {
+    return null;
+  }
+  if (!conn) {
+    // Migration / first-bind window: credential files may exist before DB row.
     const primary = resolvePrimaryAccount();
     if (!primary) return null;
     return {
@@ -66,11 +76,13 @@ export async function getWeixinBinding(): Promise<WeixinBinding | null> {
       enabled: true,
     };
   }
+  // Product turn: inbound/list consumers that need bound engine get fixed pi+main.
+  // DB may still lag until ensureFixedChannelBindings; do not write here.
   return {
     channelType: 'wechat',
     accountId: conn.accountId,
-    agentId: conn.agentId || 'main',
-    engineType: normalizeWeixinEngineType(conn.engineType),
+    agentId: 'main',
+    engineType: DEFAULT_WEIXIN_ENGINE,
     enabled: conn.enabled,
   };
 }
@@ -82,7 +94,7 @@ export async function getWeixinBinding(): Promise<WeixinBinding | null> {
 export async function upsertWeixinBinding(input: {
   accountId: string;
   agentId?: string;
-  engineType?: AgentEngineType;
+  engineType?: ChannelRuntimeEngine;
   token?: string;
   baseUrl?: string;
   userId?: string;
@@ -117,8 +129,9 @@ export async function upsertWeixinBinding(input: {
   const now = nowIso();
   const deviceId = await getLocalDeviceId();
   const existing = await getWeixinConnectionRow();
-  const agentId = (input.agentId?.trim() || existing?.agentId || 'main').trim() || 'main';
-  const engineType = normalizeWeixinEngineType(input.engineType ?? existing?.engineType);
+  // Product turn: always persist fixed SAgent + Main.
+  const agentId = 'main';
+  const engineType = DEFAULT_WEIXIN_ENGINE;
 
   if (!existing) {
     await db
@@ -171,12 +184,13 @@ export async function upsertWeixinBinding(input: {
   return binding;
 }
 
-export async function updateWeixinBindingAgent(input: {
+export async function updateWeixinBindingAgent(_input: {
   engineType: string;
   agentId: string;
 }): Promise<WeixinBinding> {
-  const engineType = normalizeWeixinEngineType(input.engineType);
-  const agentId = input.agentId.trim() || 'main';
+  // Product turn: clamp to fixed SAgent + Main regardless of request body.
+  const engineType = DEFAULT_WEIXIN_ENGINE;
+  const agentId = 'main';
   const existing = await getWeixinConnectionRow();
   if (!existing || existing.bindStatus !== 'bound') {
     const accountId = getBoundWeixinAccountId();

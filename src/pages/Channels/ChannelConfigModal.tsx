@@ -3,8 +3,6 @@ import {
   X,
   Loader2,
   QrCode,
-  ExternalLink,
-  BookOpen,
   Eye,
   EyeOff,
   Check,
@@ -271,9 +269,11 @@ export function ChannelConfigModal({
       const data = args[0] as { accountId?: string } | undefined;
       void data?.accountId;
       qrConnectedRef.current = true;
-      toast.success(translateRef.current('toast.qrConnected', { name: CHANNEL_NAMES[channelType] }));
+      // 成功只提示一条：微信用「绑定成功」；其它扫码渠道用「{{name}} 连接成功」
       if (channelType === 'wechat') {
         toast.success(translateRef.current('toast.wechatAutoBoundMain'));
+      } else {
+        toast.success(translateRef.current('toast.qrConnected', { name: CHANNEL_NAMES[channelType] }));
       }
       try {
         try {
@@ -459,20 +459,6 @@ export function ChannelConfigModal({
     }
   };
 
-  const openDocs = () => {
-    if (!meta?.docsUrl) return;
-    const url = t(meta.docsUrl);
-    try {
-      if (window.electron?.openExternal) {
-        window.electron.openExternal(url);
-      } else {
-        window.open(url, '_blank');
-      }
-    } catch {
-      window.open(url, '_blank');
-    }
-  };
-
   const isFormValid = () => {
     if (!meta) return false;
     return meta.configFields
@@ -622,22 +608,11 @@ export function ChannelConfigModal({
               )}
 
               <div className={cn(insetCardClass, 'space-y-3 p-4')}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className={labelClasses}>{t('dialog.howToConnect')}</p>
-                    <p className="mt-1 text-[12px] text-[#86909C] dark:text-muted-foreground">
-                      {meta ? t(meta.description.replace('channels:', '')) : ''}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className={cn(outlineButtonClasses, 'shrink-0')}
-                    onClick={openDocs}
-                  >
-                    <BookOpen className="mr-1 h-3.5 w-3.5" />
-                    {t('dialog.viewDocs')}
-                    <ExternalLink className="ml-1 h-3.5 w-3.5" />
-                  </Button>
+                <div className="min-w-0">
+                  <p className={labelClasses}>{t('dialog.howToConnect')}</p>
+                  <p className="mt-1 text-[12px] text-[#86909C] dark:text-muted-foreground">
+                    {meta ? t(meta.description.replace('channels:', '')) : ''}
+                  </p>
                 </div>
                 <ol className="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
                   {meta?.instructions.map((instruction, index) => (

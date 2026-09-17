@@ -12,13 +12,6 @@ import { stoSettingsSectionCardClass } from '@/lib/surfaces';
 import type { ChannelType } from '@/types/channel';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import {
-  getAgentEnginePolicyOptionLabel,
-  useAgentEnginePolicyStore,
-} from '@/stores/agent-engine-policy';
-import { useAuthStore } from '@/stores/auth';
-import type { AgentEngineType } from '../../../shared/agent-engine';
-import { isProjectAgentId } from '../../../shared/project-agent';
 
 import { AvailableChannelRow } from './AvailableChannelRow';
 import { ChannelConfigModal } from './ChannelConfigModal';
@@ -26,9 +19,8 @@ import { ConfiguredChannelRow } from './ConfiguredChannelRow';
 import { DingTalkHubBindModal } from './DingTalkHubBindModal';
 import { MobileAppChannelRow } from './MobileAppChannelRow';
 import { MobileAppConfigModal } from './MobileAppConfigModal';
-import { normalizeLogoType, removeDeletedTarget, toBindingEngine } from './helpers';
+import { normalizeLogoType, removeDeletedTarget } from './helpers';
 import type {
-  AgentItem,
   ChannelAccountItem,
   ChannelGroupItem,
   DeleteTarget,
@@ -44,7 +36,6 @@ export function Channels() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [channelGroups, setChannelGroups] = useState<ChannelGroupItem[]>([]);
-  const [agents, setAgents] = useState<AgentItem[]>([]);
   const [dingTalkBinding, setDingTalkBinding] = useState<DingTalkBindingState>(null);
   const [mobileBinding, setMobileBinding] = useState<MobileBindingState>(null);
   const [mobileToggleBusy, setMobileToggleBusy] = useState(false);
@@ -53,8 +44,6 @@ export function Channels() {
   const [sessionIdleBusy, setSessionIdleBusy] = useState(false);
   /** Last value successfully persisted; blur commit must compare against this, not live input state. */
   const persistedSessionIdleHoursRef = useRef(24);
-  /** 切换引擎后若当前 Agent 不兼容，先本地记下引擎，等用户显式选 Agent 再保存 */
-  const [, setPendingDingTalkEngine] = useState<AgentEngineType | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showDingTalkHubModal, setShowDingTalkHubModal] = useState(false);
   const [showMobileConfigModal, setShowMobileConfigModal] = useState(false);
@@ -65,66 +54,50 @@ export function Channels() {
   const [existingAccountIdsForModal, setExistingAccountIdsForModal] = useState<string[]>([]);
   const [initialConfigValuesForModal, setInitialConfigValuesForModal] = useState<Record<string, string> | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
-  const authUserKey = useAuthStore((state) => (
-    state.user?.code || state.user?.empCode || state.user?.id || ''
-  ));
-  const policyEngines = useAgentEnginePolicyStore((state) => state.engines);
-  const fetchEnginePolicy = useAgentEnginePolicyStore((state) => state.fetchPolicy);
-  const channelEngineOptions = useMemo(
-    () => policyEngines.map((engine) => ({
-      value: engine.code,
-      label: getAgentEnginePolicyOptionLabel(engine),
-    })),
-    [policyEngines],
-  );
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchPageData = useCallback(() => {
-    void Promise.all([
-      hostApiFetch<{ success: boolean; channels?: ChannelGroupItem[]; error?: string }>('/api/channels/accounts'),
-      hostApiFetch<{ success: boolean; agents?: AgentItem[]; error?: string }>('/api/agents'),
-      hostApiFetch<{
-        success: boolean;
-        local?: {
-          engineType?: string | null;
-          agentId?: string | null;
-          bindStatus?: string | null;
-        } | null;
-        remote?: { bound?: boolean; deviceId?: string; error?: string } | null;
-        deviceId?: string;
-      }>('/api/channels/hub/dingtalk/status').catch(() => null),
-      hostApiFetch<{
-        success: boolean;
-        local?: {
-          bindStatus?: string | null;
-          engineType?: string | null;
-          agentId?: string | null;
-          enabled?: boolean;
-        } | null;
-        ws?: { connected?: boolean };
-        canConnectWs?: boolean;
-      }>('/api/channels/hub/mobile/status').catch(() => null),
-      hostApiFetch<{
-        channelSessionIdleEnabled?: boolean;
-        channelSessionIdleHours?: number;
-      }>('/api/settings').catch(() => null),
-    ]).then(([
-      channelsRes,
-      agentsRes,
-      dingTalkStatusRes,
-      mobileStatusRes,
-      settingsRes,
-    ]) => {
+  const fetchPageData = useCallback(async () => {
+    try {
+      const [
+        channelsRes,
+        dingTalkStatusRes,
+        mobileStatusRes,
+        settingsRes,
+      ] = await Promise.all([
+        hostApiFetch<{ success: boolean; channels?: ChannelGroupItem[]; error?: string }>('/api/channels/accounts'),
+        hostApiFetch<{
+          success: boolean;
+          local?: {
+            engineType?: string | null;
+            agentId?: string | null;
+            bindStatus?: string | null;
+          } | null;
+          remote?: { bound?: boolean; deviceId?: string; error?: string } | null;
+          deviceId?: string;
+        }>('/api/channels/hub/dingtalk/status').catch(() => null),
+        hostApiFetch<{
+          success: boolean;
+          local?: {
+            bindStatus?: string | null;
+            engineType?: string | null;
+            agentId?: string | null;
+            enabled?: boolean;
+          } | null;
+          ws?: { connected?: boolean };
+          canConnectWs?: boolean;
+        }>('/api/channels/hub/mobile/status').catch(() => null),
+        hostApiFetch<{
+          channelSessionIdleEnabled?: boolean;
+          channelSessionIdleHours?: number;
+        }>('/api/settings').catch(() => null),
+      ]);
+
       if (!channelsRes.success) {
         throw new Error(channelsRes.error || 'Failed to load channels');
       }
 
-      if (!agentsRes.success) {
-        throw new Error(agentsRes.error || 'Failed to load agents');
-      }
-
       setError(null);
       setChannelGroups(channelsRes.channels || []);
-      setAgents((agentsRes.agents || []).filter((agent) => !isProjectAgentId(agent.id)));
       if (settingsRes) {
         setSessionIdleEnabled(settingsRes.channelSessionIdleEnabled !== false);
         const hours = Number(settingsRes.channelSessionIdleHours);
@@ -138,10 +111,6 @@ export function Channels() {
       const local = dingTalkStatusRes?.success ? dingTalkStatusRes.local : null;
       const remote = dingTalkStatusRes?.success ? dingTalkStatusRes.remote : null;
       const localDeviceId = dingTalkStatusRes?.success ? dingTalkStatusRes.deviceId : undefined;
-      const engineType =
-        local?.engineType === 'openclaw' || local?.engineType === 'claude' || local?.engineType === 'pi'
-          ? local.engineType
-          : null;
       let replaceHint: 'other_device' | 'unbound' | null = null;
       const remoteOk = Boolean(remote && !('error' in remote && remote.error));
       if (remoteOk && remote) {
@@ -159,14 +128,13 @@ export function Channels() {
       setDingTalkBinding(
         local
           ? {
-              engineType,
-              agentId: local.agentId ?? null,
+              engineType: 'pi',
+              agentId: 'main',
               bindStatus: local.bindStatus ?? null,
               replaceHint,
             }
           : null,
       );
-      setPendingDingTalkEngine(null);
       const mobileLocal = mobileStatusRes?.success ? mobileStatusRes.local : null;
       const mobileBound = mobileLocal?.bindStatus === 'bound';
       const mobileEnabled = Boolean(
@@ -179,33 +147,24 @@ export function Channels() {
       if (mobileConfigured && typeof localStorage !== 'undefined') {
         localStorage.setItem('sclaw.mobile.configured', '1');
       }
-      const mobileEngineType: AgentEngineType =
-        mobileLocal?.engineType === 'openclaw' || mobileLocal?.engineType === 'pi'
-          ? mobileLocal.engineType
-          : 'claude';
       setMobileBinding({
         enabled: mobileEnabled,
         configured: mobileConfigured,
-        engineType: mobileEngineType,
-        agentId: mobileLocal?.agentId ?? 'main',
+        engineType: 'pi',
+        agentId: 'main',
         wsConnected: Boolean(mobileStatusRes?.ws?.connected),
         canConnectWs: Boolean(mobileStatusRes?.canConnectWs),
       });
-    }).catch((fetchError: unknown) => {
+    } catch (fetchError: unknown) {
       setError(String(fetchError));
-    }).finally(() => {
+    } finally {
       setLoading(false);
-    });
+    }
   }, []);
 
   useEffect(() => {
     void fetchPageData();
   }, [fetchPageData]);
-
-  useEffect(() => {
-    if (!authUserKey) return;
-    void fetchEnginePolicy(authUserKey);
-  }, [authUserKey, fetchEnginePolicy]);
 
   useEffect(() => {
     const unsubscribe = subscribeHostEvent('gateway:channel-status', () => {
@@ -280,60 +239,21 @@ export function Channels() {
   }, [channelGroups, groupedByType]);
 
   const handleRefresh = () => {
-    void fetchPageData();
+    if (refreshing) return;
+    setRefreshing(true);
+    // Keep spinner visible for at least 1s so quick local fetches still feel intentional.
+    void Promise.all([
+      fetchPageData(),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, 1000);
+      }),
+    ]).finally(() => {
+      setRefreshing(false);
+    });
   };
 
   const openDingTalkHub = () => {
     setShowDingTalkHubModal(true);
-  };
-
-  const handleWeChatBindingChange = async (next: {
-    engineType: AgentEngineType;
-    agentId: string;
-  }) => {
-    if (!next.agentId) {
-      toast.error(
-        t('hub.dingtalk.agentRequired', {
-          defaultValue: '请先创建或选择要绑定的 Agent',
-        }),
-      );
-      return;
-    }
-    try {
-      await hostApiFetch<{ success: boolean; error?: string }>('/api/channels/wechat/binding/agent', {
-        method: 'POST',
-        body: JSON.stringify(next),
-      });
-      await fetchPageData();
-      toast.success(t('toast.bindingUpdated'));
-    } catch (bindError) {
-      toast.error(t('toast.configFailed', { error: String(bindError) }));
-    }
-  };
-
-  const handleDingTalkBindingChange = async (next: {
-    engineType: 'claude' | 'openclaw' | 'pi';
-    agentId: string;
-  }) => {
-    if (!next.agentId) {
-      toast.error(
-        t('hub.dingtalk.agentRequired', {
-          defaultValue: '请先创建或选择要绑定的 Agent',
-        }),
-      );
-      return;
-    }
-    try {
-      await hostApiFetch<{ success: boolean; error?: string }>('/api/channels/hub/dingtalk/binding/agent', {
-        method: 'POST',
-        body: JSON.stringify(next),
-      });
-      setDingTalkBinding(next);
-      await fetchPageData();
-      toast.success(t('toast.bindingUpdated'));
-    } catch (bindError) {
-      toast.error(t('toast.configFailed', { error: String(bindError) }));
-    }
   };
 
   const handleMobileToggle = async (enabled: boolean) => {
@@ -358,63 +278,7 @@ export function Channels() {
     }
   };
 
-  const handleMobileBindingChange = async (next: {
-    engineType: AgentEngineType;
-    agentId: string;
-  }) => {
-    if (!next.agentId) {
-      toast.error(t('hub.mobile.agentRequired'));
-      return;
-    }
-    try {
-      await hostApiFetch<{ success: boolean; error?: string }>('/api/channels/hub/mobile/binding/agent', {
-        method: 'POST',
-        body: JSON.stringify(next),
-      });
-      await fetchPageData();
-      toast.success(t('toast.bindingUpdated'));
-    } catch (bindError) {
-      toast.error(t('toast.configFailed', { error: String(bindError) }));
-    }
-  };
-
-  const handleBindAgent = async (channelType: string, accountId: string, agentId: string) => {
-    try {
-      if (channelType === 'dingtalk') {
-        const agent = agents.find((item) => item.id === agentId);
-        await handleDingTalkBindingChange({
-          engineType: toBindingEngine(agent?.engineType),
-          agentId,
-        });
-        return;
-      }
-      if (channelType === 'wechat' || channelType === 'openclaw-weixin') {
-        const agent = agents.find((item) => item.id === agentId);
-        await handleWeChatBindingChange({
-          engineType: toBindingEngine(agent?.engineType),
-          agentId,
-        });
-        return;
-      }
-      if (!agentId) {
-        await hostApiFetch<{ success: boolean; error?: string }>('/api/channels/binding', {
-          method: 'DELETE',
-          body: JSON.stringify({ channelType, accountId }),
-        });
-      } else {
-        await hostApiFetch<{ success: boolean; error?: string }>('/api/channels/binding', {
-          method: 'PUT',
-          body: JSON.stringify({ channelType, accountId, agentId }),
-        });
-      }
-      await fetchPageData();
-      toast.success(t('toast.bindingUpdated'));
-    } catch (bindError) {
-      toast.error(t('toast.configFailed', { error: String(bindError) }));
-    }
-  };
-
-  const handleDelete = async () => {
+  const handleUnbind = async () => {
     if (!deleteTarget) return;
     try {
       if (deleteTarget.channelType === 'dingtalk') {
@@ -428,12 +292,8 @@ export function Channels() {
         });
       }
       setChannelGroups((prev) => removeDeletedTarget(prev, deleteTarget));
-      toast.success(deleteTarget.accountId ? t('toast.accountDeleted') : t('toast.channelDeleted'));
-      // Channel reload is debounced in main process; pull again shortly to
-      // converge with runtime state without flashing deleted rows back in.
-      window.setTimeout(() => {
-        void fetchPageData();
-      }, 1200);
+      toast.success(t('toast.unbindSuccess', { defaultValue: '已解除绑定' }));
+      await fetchPageData();
     } catch (deleteError) {
       toast.error(t('toast.configFailed', { error: String(deleteError) }));
     } finally {
@@ -544,25 +404,16 @@ export function Channels() {
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            disabled={gatewayStatus.state !== 'running'}
+            disabled={refreshing}
             className="h-8 shrink-0 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"
           >
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             {t('refresh')}
           </Button>
         </div>
       </header>
 
       <div className="flex flex-col gap-6">
-        {gatewayStatus.state !== 'running' && (
-          <div className="flex items-center gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-900/20">
-            <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <span className="text-[13px] font-medium text-amber-800 dark:text-amber-300">
-              {t('gatewayWarning')}
-            </span>
-          </div>
-        )}
-
         {error && (
           <div className="flex items-center gap-3 rounded-[8px] border border-destructive/30 bg-destructive/5 px-4 py-3">
             <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
@@ -576,12 +427,9 @@ export function Channels() {
           </h2>
           <section className={stoSettingsSectionCardClass}>
             <MobileAppChannelRow
-              agents={agents}
               mobileBinding={mobileBinding}
-              channelEngineOptions={channelEngineOptions}
               mobileToggleBusy={mobileToggleBusy}
               loading={loading}
-              onMobileBindingChange={handleMobileBindingChange}
               onMobileToggle={handleMobileToggle}
               onOpenConfig={() => setShowMobileConfigModal(true)}
             />
@@ -600,14 +448,9 @@ export function Channels() {
                     key={item.group.channelType}
                     group={item.group}
                     recommended={item.recommended}
-                    agents={agents}
                     dingTalkBinding={dingTalkBinding}
-                    channelEngineOptions={channelEngineOptions}
-                    onDingTalkBindingChange={handleDingTalkBindingChange}
-                    onWeChatBindingChange={handleWeChatBindingChange}
-                    onBindAgent={handleBindAgent}
                     onOpenDingTalkHub={openDingTalkHub}
-                    onRequestDelete={(channelType) => setDeleteTarget({ channelType })}
+                    onRequestUnbind={(channelType) => setDeleteTarget({ channelType })}
                     onOpenAccountEdit={openConfiguredAccountEdit}
                   />
                 );
@@ -761,14 +604,15 @@ export function Channels() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title={t('common:actions.confirm')}
-        message={deleteTarget?.accountId ? t('account.deleteConfirm') : t('deleteConfirm')}
-        confirmLabel={t('common:actions.delete')}
+        title={t('account.unbind', { defaultValue: '解除绑定' })}
+        message={t('account.unbindConfirm', {
+          defaultValue: '确定要解除该频道的绑定吗？',
+        })}
+        confirmLabel={t('account.unbind', { defaultValue: '解除绑定' })}
+        confirmingLabel={t('account.unbinding', { defaultValue: '解除中…' })}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"
-        onConfirm={() => {
-          void handleDelete();
-        }}
+        onConfirm={() => handleUnbind()}
         onCancel={() => setDeleteTarget(null)}
       />
     </>

@@ -17,6 +17,10 @@
 | 标题旁圆点 | **运行时连接**（WS / Worker 是否在跑） | `/api/channels/accounts` 合并视图里的 `group.status` |
 | Logo 是否高亮 | 渠道是否视为「已配置可用」 | 钉钉看 `bindStatus`；微信看是否有 account |
 
+微信绑定判定以 [`getWeixinBinding`](../../../electron/message-channel/weixin/binding.ts) 为准：`bind_status === 'bound'` 才视为已绑定；DB 已 `revoked` 时**不再**用本地凭证文件「复活」列表行。列表合并 [`mergeWeixinHostChannel`](../../../electron/message-channel/host/list.ts) 也不得再 `OR getBoundWeixinAccountId()`。
+
+频道页**不展示**「网关未运行」黄条，刷新也不因 gateway 禁用：钉钉 Hub / 微信 Host Worker / Mobile 不依赖 OC Gateway。微信解绑只走 Host 路径，不 `debouncedRestart` 网关。
+
 ```mermaid
 flowchart TD
   page[Channels fetchPageData] --> accounts["GET /api/channels/accounts"]
@@ -128,7 +132,7 @@ Logo 高亮：`Boolean(weChatAccount)`。
 
 | | 钉钉 | 微信 | 移动端 |
 | --- | --- | --- | --- |
-| 绑定判定 | DB `bind_status === 'bound'` | DB bound **或** 本地凭证有 token | DB `bind_status === 'bound'` |
+| 绑定判定 | DB `bind_status === 'bound'` | DB `bind_status === 'bound'`（无行时才可回落本地凭证）；`revoked` 不复活 | DB `bind_status === 'bound'` |
 | 远程校验 | 会问 Hub 是否仍绑本机 | 无 | 无（与钉钉共用设备凭证） |
 | 副标题 | 「已绑定」等状态文案 | bot `accountId` | 产品说明文案 |
 | 圆点 / 在线 | Hub WebSocket | Worker ready + monitor | 行内 WS offline 提示（非同款圆点） |

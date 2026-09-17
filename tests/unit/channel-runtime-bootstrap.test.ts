@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   syncSharedHubRefreshToken: vi.fn(),
   revokeDingTalkHubBind: vi.fn(),
   getLocalDeviceId: vi.fn().mockResolvedValue('device-1'),
+  ensureFixedChannelBindings: vi.fn().mockResolvedValue({ normalized: 0 }),
   hubBindStatus: vi.fn(),
   hubSyncChannels: vi.fn().mockResolvedValue({ refreshToken: null }),
   connect: vi.fn().mockResolvedValue(undefined),
@@ -23,6 +24,7 @@ vi.mock('@electron/message-channel/hub/binding-service', () => ({
   syncSharedHubRefreshToken: mocks.syncSharedHubRefreshToken,
   revokeDingTalkHubBind: mocks.revokeDingTalkHubBind,
   getLocalDeviceId: mocks.getLocalDeviceId,
+  ensureFixedChannelBindings: mocks.ensureFixedChannelBindings,
 }));
 
 vi.mock('@electron/message-channel/hub/hub-api', () => ({
@@ -150,6 +152,7 @@ describe('channel runtime bootstrap', () => {
     await vi.waitFor(() => {
       expect(mocks.weixinStart).toHaveBeenCalled();
     });
+    expect(mocks.ensureFixedChannelBindings).toHaveBeenCalled();
     expect(mocks.connect).not.toHaveBeenCalled();
   });
 

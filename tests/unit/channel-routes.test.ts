@@ -388,6 +388,7 @@ describe('handleChannelRoutes', () => {
       '@electron/message-channel/weixin/binding'
     );
     vi.mocked(getBoundWeixinAccountId).mockReturnValue('wx-bot-1');
+    const debouncedRestart = vi.fn();
 
     const { handleChannelRoutes } = await import('@electron/api/routes/channels');
     const handled = await handleChannelRoutes(
@@ -398,7 +399,7 @@ describe('handleChannelRoutes', () => {
         gatewayManager: {
           getStatus: () => ({ state: 'running' }),
           debouncedReload: vi.fn(),
-          debouncedRestart: vi.fn(),
+          debouncedRestart,
         },
       } as never,
     );
@@ -411,5 +412,7 @@ describe('handleChannelRoutes', () => {
     });
     expect(unbindWeixinBot).toHaveBeenCalled();
     expect(weixinServiceMock.shutdown).toHaveBeenCalled();
+    // Host Weixin unbind must not restart OC gateway
+    expect(debouncedRestart).not.toHaveBeenCalled();
   });
 });

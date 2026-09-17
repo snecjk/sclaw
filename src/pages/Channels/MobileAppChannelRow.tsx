@@ -2,46 +2,24 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-import type { AgentEngineType } from '../../../shared/agent-engine';
 import sclawAppLogo from '@/assets/logo.png';
-import { ChannelInlineSelect } from './ChannelInlineSelect';
-import {
-  agentsForEngine,
-  pickSelectedAgentId,
-  resolveNextAgentForEngine,
-} from './helpers';
 import { channelOutlineBtnClass, MOBILE_APP_BRAND_COLOR } from './styles';
-import type {
-  AgentItem,
-  BindingChangeHandler,
-  InlineSelectOption,
-  MobileBindingState,
-} from './types';
+import type { MobileBindingState } from './types';
 
 export function MobileAppChannelRow({
-  agents,
   mobileBinding,
-  channelEngineOptions,
   mobileToggleBusy,
   loading,
-  onMobileBindingChange,
   onMobileToggle,
   onOpenConfig,
 }: {
-  agents: AgentItem[];
   mobileBinding: MobileBindingState;
-  channelEngineOptions: InlineSelectOption[];
   mobileToggleBusy: boolean;
   loading: boolean;
-  onMobileBindingChange: BindingChangeHandler;
   onMobileToggle: (enabled: boolean) => void | Promise<void>;
   onOpenConfig: () => void;
 }) {
   const { t } = useTranslation(['channels', 'common']);
-  const mobileEngine = mobileBinding?.engineType ?? 'claude';
-  const mobileAgentOptions = agentsForEngine(agents, mobileEngine);
-  const mobileSelectedAgentId = pickSelectedAgentId(mobileAgentOptions, mobileBinding?.agentId);
   const mobileEnabled = Boolean(mobileBinding?.enabled);
   const mobileConfigured = Boolean(mobileBinding?.configured);
 
@@ -91,57 +69,17 @@ export function MobileAppChannelRow({
       </div>
       <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
         {mobileEnabled ? (
-          <>
-            <ChannelInlineSelect
-              className="w-[120px]"
-              value={mobileEngine}
-              ariaLabel={t('hub.mobile.engineLabel')}
-              options={channelEngineOptions}
-              onChange={(nextValue) => {
-                const nextEngine = nextValue as AgentEngineType;
-                const nextAgentId = resolveNextAgentForEngine(
-                  agents,
-                  nextEngine,
-                  mobileBinding?.agentId,
-                );
-                if (!nextAgentId) {
-                  toast.error(t('hub.mobile.noAgentsForEngine'));
-                  return;
-                }
-                void onMobileBindingChange({
-                  engineType: nextEngine,
-                  agentId: nextAgentId,
-                });
-              }}
-            />
-            <ChannelInlineSelect
-              className="w-[140px]"
-              value={mobileSelectedAgentId || ''}
-              ariaLabel={t('hub.mobile.agentLabel')}
-              options={mobileAgentOptions.map((agent) => ({
-                value: agent.id,
-                label: agent.name,
-              }))}
-              onChange={(nextAgentId) => {
-                if (!nextAgentId) return;
-                void onMobileBindingChange({
-                  engineType: mobileEngine,
-                  agentId: nextAgentId,
-                });
-              }}
-            />
-            <Switch
-              size="compact"
-              checked
-              disabled={mobileToggleBusy || loading}
-              onCheckedChange={(checked) => {
-                if (!checked) {
-                  void onMobileToggle(false);
-                }
-              }}
-              aria-label={t('hub.mobile.toggleLabel')}
-            />
-          </>
+          <Switch
+            size="compact"
+            checked
+            disabled={mobileToggleBusy || loading}
+            onCheckedChange={(checked) => {
+              if (!checked) {
+                void onMobileToggle(false);
+              }
+            }}
+            aria-label={t('hub.mobile.toggleLabel')}
+          />
         ) : (
           <Button
             size="sm"

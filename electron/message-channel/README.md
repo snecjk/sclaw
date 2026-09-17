@@ -45,7 +45,7 @@ IM 渠道子系统（Host 编排 + 各渠道传输）。
 | --- | --- |
 | 解绑钉钉 | revoke 钉钉行；若 Mobile 未 bound → `disconnect` WS；否则保持 |
 | 关 Mobile | revoke/disable Mobile 行；若钉钉未 bound → `disconnect`；否则保持 |
-| 解绑微信 | 清凭证 / stop monitor / **`shutdown()` 销毁 Worker** |
+| 解绑微信 | 清凭证 / stop monitor / **`shutdown()` 销毁 Worker**；**不** restart OC Gateway |
 | 远程抢绑钉钉 | `disconnectPermanently` + 清本机钉钉 bound |
 
 归属在 `hub/routes` / 换绑处理，不在 ensure 里重复。

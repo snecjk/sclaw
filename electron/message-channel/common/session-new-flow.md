@@ -138,7 +138,7 @@ getSetting('channelSessionIdleHours')  // 默认 24，钳制 1–168
 ## 4. 之后才交给引擎
 
 `sendViaFacade` → 按 `engineType` 选 adapter → `runMainChatSend`。  
-此时才进入 Claude / Pi / OpenClaw 执行路径；它们**不参与**「要不要新开」的决策。
+此时才进入 Claude / Pi 执行路径；它们**不参与**「要不要新开」的决策。渠道侧不再走 OpenClaw 引擎。
 
 ---
 
@@ -158,7 +158,7 @@ getSetting('channelSessionIdleHours')  // 默认 24，钳制 1–168
                   ├─ 是 → 新 sessionKey
                   └─ 否 → 复用旧 sessionKey
   →（指令命中且微信等短路）直接回提示，不进模型
-  → 否则 sendViaFacade（Claude / Pi / OpenClaw）
+  → 否则 sendViaFacade（Claude / Pi）
 ```
 
 ---

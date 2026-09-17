@@ -29,61 +29,47 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: (selector: (state: { user: null }) => unknown) => selector({ user: null }),
-}));
-
-vi.mock('@/stores/agent-engine-policy', () => ({
-  getAgentEnginePolicyOptionLabel: (engine: { code: string }) => engine.code,
-  useAgentEnginePolicyStore: (selector: (state: {
-    engines: Array<{ code: string }>;
-    fetchPolicy: () => Promise<void>;
-  }) => unknown) => selector({
-    engines: [{ code: 'openclaw' }, { code: 'claude' }, { code: 'pi' }],
-    fetchPolicy: async () => undefined,
-  }),
-}));
+function mockDefaultApis(channels: unknown[] = []) {
+  hostApiFetchMock.mockImplementation(async (path: string) => {
+    if (path === '/api/channels/accounts') {
+      return { success: true, channels };
+    }
+    if (path === '/api/channels/hub/dingtalk/status') {
+      return { success: true, local: null, remote: null };
+    }
+    if (path === '/api/channels/hub/mobile/status') {
+      return { success: true, local: null, ws: { connected: false } };
+    }
+    if (path === '/api/settings') {
+      return { channelSessionIdleEnabled: true, channelSessionIdleHours: 24 };
+    }
+    if (path.startsWith('/api/channels/config/')) {
+      return { success: true, values: {} };
+    }
+    throw new Error(`Unexpected host API path: ${path}`);
+  });
+}
 
 describe('Channels page status refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     gatewayState.status = { state: 'running', port: 18789 };
-    hostApiFetchMock.mockImplementation(async (path: string) => {
-      if (path === '/api/channels/accounts') {
-        return {
-          success: true,
-          channels: [
-            {
-              channelType: 'dingtalk',
-              defaultAccountId: 'default',
-              status: 'connected',
-              accounts: [
-                {
-                  accountId: 'default',
-                  name: 'Primary Account',
-                  configured: true,
-                  status: 'connected',
-                  isDefault: true,
-                },
-              ],
-            },
-          ],
-        };
-      }
-
-      if (path === '/api/agents') {
-        return {
-          success: true,
-          agents: [],
-        };
-      }
-
-      if (path.startsWith('/api/channels/config/')) {
-        return { success: true, values: {} };
-      }
-
-      throw new Error(`Unexpected host API path: ${path}`);
-    });
+    mockDefaultApis([
+      {
+        channelType: 'dingtalk',
+        defaultAccountId: 'default',
+        status: 'connected',
+        accounts: [
+          {
+            accountId: 'default',
+            name: 'Primary Account',
+            configured: true,
+            status: 'connected',
+            isDefault: true,
+          },
+        ],
+      },
+    ]);
   });
 
   it('refetches channel accounts when gateway channel-status events arrive', async () => {
@@ -99,7 +85,6 @@ describe('Channels page status refresh', () => {
 
     await waitFor(() => {
       expect(hostApiFetchMock).toHaveBeenCalledWith('/api/channels/accounts');
-      expect(hostApiFetchMock).toHaveBeenCalledWith('/api/agents');
     });
     expect(subscribeHostEventMock).toHaveBeenCalledWith('gateway:channel-status', expect.any(Function));
 
@@ -109,9 +94,7 @@ describe('Channels page status refresh', () => {
 
     await waitFor(() => {
       const channelFetchCalls = hostApiFetchMock.mock.calls.filter(([path]) => path === '/api/channels/accounts');
-      const agentFetchCalls = hostApiFetchMock.mock.calls.filter(([path]) => path === '/api/agents');
       expect(channelFetchCalls).toHaveLength(2);
-      expect(agentFetchCalls).toHaveLength(2);
     });
   });
 
@@ -122,7 +105,6 @@ describe('Channels page status refresh', () => {
 
     await waitFor(() => {
       expect(hostApiFetchMock).toHaveBeenCalledWith('/api/channels/accounts');
-      expect(hostApiFetchMock).toHaveBeenCalledWith('/api/agents');
     });
 
     gatewayState.status = { state: 'running', port: 18789 };
@@ -132,14 +114,30 @@ describe('Channels page status refresh', () => {
 
     await waitFor(() => {
       const channelFetchCalls = hostApiFetchMock.mock.calls.filter(([path]) => path === '/api/channels/accounts');
-      const agentFetchCalls = hostApiFetchMock.mock.calls.filter(([path]) => path === '/api/agents');
       expect(channelFetchCalls).toHaveLength(2);
-      expect(agentFetchCalls).toHaveLength(2);
     });
   });
 
-  it('treats WeChat accounts as plugin-managed QR accounts', async () => {
+  it('shows unbind for bound WeChat and no engine selects', async () => {
     subscribeHostEventMock.mockImplementation(() => vi.fn());
+    mockDefaultApis([
+      {
+        channelType: 'wechat',
+        defaultAccountId: 'wx-bot-im-bot',
+        status: 'connected',
+        accounts: [
+          {
+            accountId: 'wx-bot-im-bot',
+            name: 'WeChat ClawBot',
+            configured: true,
+            status: 'connected',
+            isDefault: true,
+            agentId: 'main',
+            engineType: 'pi',
+          },
+        ],
+      },
+    ]);
     hostApiFetchMock.mockImplementation(async (path: string) => {
       if (path === '/api/channels/accounts') {
         return {
@@ -156,65 +154,7 @@ describe('Channels page status refresh', () => {
                   configured: true,
                   status: 'connected',
                   isDefault: true,
-                },
-              ],
-            },
-          ],
-        };
-      }
-
-      if (path === '/api/agents') {
-        return {
-          success: true,
-          agents: [],
-        };
-      }
-
-      if (path === '/api/channels/wechat/cancel') {
-        return { success: true };
-      }
-
-      if (path.startsWith('/api/channels/config/')) {
-        return { success: true, values: {} };
-      }
-
-      throw new Error(`Unexpected host API path: ${path}`);
-    });
-
-    render(<Channels />);
-
-    await waitFor(() => {
-      expect(screen.getByText('微信')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'account.edit' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('dialog.configureTitle')).toBeInTheDocument();
-    });
-
-    expect(screen.queryByLabelText('account.customIdLabel')).not.toBeInTheDocument();
-  });
-
-  it('lets WeChat switch between Claude Agent and SAgent', async () => {
-    subscribeHostEventMock.mockImplementation(() => vi.fn());
-    hostApiFetchMock.mockImplementation(async (path: string) => {
-      if (path === '/api/channels/accounts') {
-        return {
-          success: true,
-          channels: [
-            {
-              channelType: 'wechat',
-              defaultAccountId: 'wx-bot-im-bot',
-              status: 'connected',
-              accounts: [
-                {
-                  accountId: 'wx-bot-im-bot',
-                  name: 'WeChat ClawBot',
-                  configured: true,
-                  status: 'connected',
-                  isDefault: true,
-                  agentId: 'sagent-1',
+                  agentId: 'main',
                   engineType: 'pi',
                 },
               ],
@@ -222,21 +162,15 @@ describe('Channels page status refresh', () => {
           ],
         };
       }
-
-      if (path === '/api/agents') {
-        return {
-          success: true,
-          agents: [
-            { id: 'sagent-1', name: 'SAgent One', engineType: 'pi' },
-            { id: 'main', name: 'Main', engineType: 'claude' },
-          ],
-        };
+      if (path === '/api/channels/hub/dingtalk/status') {
+        return { success: true, local: null, remote: null };
       }
-
-      if (path.startsWith('/api/channels/config/')) {
-        return { success: true, values: {} };
+      if (path === '/api/channels/hub/mobile/status') {
+        return { success: true, local: null, ws: { connected: false } };
       }
-
+      if (path === '/api/settings') {
+        return { channelSessionIdleEnabled: true, channelSessionIdleHours: 24 };
+      }
       throw new Error(`Unexpected host API path: ${path}`);
     });
 
@@ -246,9 +180,29 @@ describe('Channels page status refresh', () => {
       expect(screen.getByText('微信')).toBeInTheDocument();
     });
 
-    const engineSelect = screen.getByLabelText('hub.wechat.engineLabel');
-    expect(engineSelect).not.toBeDisabled();
-    expect(engineSelect).toHaveTextContent('pi');
-    expect(screen.getByLabelText('account.bindAgentLabel')).toHaveTextContent('SAgent One');
+    expect(screen.getByRole('button', { name: 'account.unbind' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('hub.wechat.engineLabel')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'account.edit' })).not.toBeInTheDocument();
+  });
+
+  it('shows scan bind for available WeChat row', async () => {
+    subscribeHostEventMock.mockImplementation(() => vi.fn());
+    mockDefaultApis([]);
+
+    render(<Channels />);
+
+    await waitFor(() => {
+      expect(screen.getByText('微信')).toBeInTheDocument();
+    });
+
+    const scanButtons = screen.getAllByRole('button', { name: 'account.scanBind' });
+    expect(scanButtons.length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(scanButtons.find((btn) => btn.closest('section')?.textContent?.includes('微信'))
+      ?? scanButtons[scanButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(screen.getByText('dialog.configureTitle')).toBeInTheDocument();
+    });
   });
 });

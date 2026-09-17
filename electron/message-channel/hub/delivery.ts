@@ -113,18 +113,18 @@ function pushReply(
  *    - Claude：顶层 phase=completed（adapter 在 result 后发出）
  *    - OpenClaw：data.phase=end|error（stream=lifecycle）；工具事件也有 data.phase，
  *      但 stream=tool，必须先过滤，不能把 tool end 当成整轮结束。
- * 3) OpenClaw 常先广播 lifecycle end、再 emit 尾部 chat；终态后短暂延期再 finalize，
+ * 3) 部分引擎会先广播 lifecycle end、再 emit 尾部 chat；终态后短暂延期再 finalize，
  *    避免听筒已卸、丢最后一段正文。
  */
 export function attachStreamingDelivery(input: {
   gatewayManager: GatewayManager;
   sessionKey: string;
   chatUid: string;
-  engineType?: 'claude' | 'openclaw' | 'pi';
+  engineType?: 'claude' | 'pi';
   timeoutMs?: number;
 }): () => void {
   const { gatewayManager, sessionKey, chatUid } = input;
-  const engineType = input.engineType === 'openclaw' ? 'openclaw' : 'claude';
+  const engineType: 'claude' | 'pi' = input.engineType === 'claude' ? 'claude' : 'pi';
   const timeoutMs = input.timeoutMs ?? 10 * 60 * 1000;
   let lastAnswer = '';
   let lastStatus = '正在分析你的问题...';
@@ -134,7 +134,7 @@ export function attachStreamingDelivery(input: {
   let cleaned = false;
   let pendingTimer: NodeJS.Timeout | null = null;
   let finalizeTimer: NodeJS.Timeout | null = null;
-  /** OpenClaw lifecycle end → 尾部 chat 的缓冲窗 */
+  /** lifecycle end → 尾部 chat 的缓冲窗 */
   const FINALIZE_DEFER_MS = 150;
 
   const visibleContent = (finalize: boolean): string => {
@@ -245,7 +245,7 @@ export function attachStreamingDelivery(input: {
       return;
     }
 
-    // OpenClaw lifecycle 后偶发 state=done（与 agent end 同源终态）
+    // lifecycle 后偶发 state=done（与 agent end 同源终态）
     if (payload.state === 'done') {
       scheduleFinalize();
       return;
@@ -274,7 +274,7 @@ export function attachStreamingDelivery(input: {
     const params = notification.params;
     if (!params || !sameSessionKey(params.sessionKey, sessionKey)) return;
 
-    // 与页面 gateway.ts 一致：OpenClaw phase 在 data.phase；Claude 在顶层 phase
+    // 与页面 gateway.ts 一致：phase 可能在 data.phase 或顶层 phase
     const data = params.data && typeof params.data === 'object' ? params.data : undefined;
     const phase = String(data?.phase ?? params.phase ?? '').toLowerCase();
     const stream = String(params.stream ?? '').toLowerCase();

@@ -149,7 +149,7 @@ export async function handleChannelHubRoutes(
     }
 
     if (url.pathname === '/api/channels/hub/dingtalk/binding/agent' && req.method === 'POST') {
-      const body = await parseJsonBody<{ engineType?: 'claude' | 'openclaw' | 'pi'; agentId?: string }>(req);
+      const body = await parseJsonBody<{ engineType?: 'claude' | 'pi'; agentId?: string }>(req);
       if (!body.engineType || !body.agentId) {
         sendJson(res, 400, { success: false, error: 'engineType and agentId required' });
         return true;
@@ -234,7 +234,7 @@ export async function handleChannelHubRoutes(
     }
 
     if (url.pathname === '/api/channels/hub/mobile/binding/agent' && req.method === 'POST') {
-      const body = await parseJsonBody<{ engineType?: 'claude' | 'openclaw' | 'pi'; agentId?: string }>(req);
+      const body = await parseJsonBody<{ engineType?: 'claude' | 'pi'; agentId?: string }>(req);
       if (!body.engineType || !body.agentId) {
         sendJson(res, 400, { success: false, error: 'engineType and agentId required' });
         return true;

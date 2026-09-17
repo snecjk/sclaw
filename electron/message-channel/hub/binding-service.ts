@@ -6,6 +6,7 @@ import type {
   ChannelType,
 } from '../../db/models/tables/channel-connection-table';
 import { loadOrCreateDeviceIdentity } from '../../utils/device-identity';
+import { logger } from '../../utils/logger';
 import { app } from 'electron';
 import path from 'node:path';
 import { resolveSclawHubBaseUrl } from './hub-config';
@@ -16,6 +17,12 @@ import { resolveSclawHubBaseUrl } from './hub-config';
  */
 export const MOBILE_DB_CHANNEL_TYPE = 'sto-mobile';
 export const MOBILE_LOGICAL_CHANNEL_TYPE = 'mobile';
+
+/** Channel rows are fixed to SAgent + Main Agent (product turn). */
+export const FIXED_CHANNEL_BINDING = {
+  engineType: 'pi',
+  agentId: 'main',
+} as const;
 
 function toDbChannelType(channelType: ChannelType): ChannelType {
   return channelType === MOBILE_LOGICAL_CHANNEL_TYPE ? MOBILE_DB_CHANNEL_TYPE : channelType;
@@ -163,8 +170,8 @@ export async function upsertDingTalkHubBind(input: {
         refresh_token: input.refreshToken,
         credential_token: null,
         endpoint_base_url: input.endpointBaseUrl ?? null,
-        engine_type: 'claude',
-        agent_id: 'main',
+        engine_type: FIXED_CHANNEL_BINDING.engineType,
+        agent_id: FIXED_CHANNEL_BINDING.agentId,
         extras_json: null,
         created_at: now,
         updated_at: now,
@@ -185,7 +192,7 @@ export async function upsertDingTalkHubBind(input: {
       bound_at: now,
       endpoint_base_url: input.endpointBaseUrl ?? existing.endpointBaseUrl,
       updated_at: now,
-      // 选脑不变：不改 engine_type / agent_id
+      // 选脑不变：不改 engine_type / agent_id（启动 ensureFixedChannelBindings 纠历史）
     })
     .where('id', '=', existing.id)
     .execute();
@@ -249,18 +256,19 @@ export async function resolveSharedHubRefreshToken(): Promise<string | null> {
   return null;
 }
 
-export async function updateDingTalkBindingAgent(input: {
+export async function updateDingTalkBindingAgent(_input: {
   engineType: ChannelEngineType;
   agentId: string;
 }): Promise<ChannelConnection> {
   const existing = await getChannelConnection('dingtalk');
   if (!existing) throw new Error('DingTalk channel not bound');
   const db = getKyselyDatabase();
+  // Product turn: clamp to fixed SAgent + Main regardless of request body.
   await db
     .updateTable('channel_connections')
     .set({
-      engine_type: input.engineType,
-      agent_id: input.agentId,
+      engine_type: FIXED_CHANNEL_BINDING.engineType,
+      agent_id: FIXED_CHANNEL_BINDING.agentId,
       updated_at: nowIso(),
     })
     .where('id', '=', existing.id)
@@ -302,8 +310,8 @@ export async function enableMobileAppBind(input?: {
         refresh_token: refreshToken,
         credential_token: null,
         endpoint_base_url: resolveSclawHubBaseUrl() || null,
-        engine_type: 'claude',
-        agent_id: 'main',
+        engine_type: FIXED_CHANNEL_BINDING.engineType,
+        agent_id: FIXED_CHANNEL_BINDING.agentId,
         extras_json: null,
         created_at: now,
         updated_at: now,
@@ -323,8 +331,8 @@ export async function enableMobileAppBind(input?: {
       bound_at: existing.bindStatus === 'bound' ? existing.boundAt : now,
       last_online_at: now,
       updated_at: now,
-      engine_type: existing.engineType ?? 'claude',
-      agent_id: existing.agentId ?? 'main',
+      engine_type: existing.engineType ?? FIXED_CHANNEL_BINDING.engineType,
+      agent_id: existing.agentId ?? FIXED_CHANNEL_BINDING.agentId,
       ...(input?.refreshToken !== undefined
         ? {
             refresh_token: refreshToken,
@@ -399,7 +407,7 @@ export async function disableMobileAppBind(): Promise<void> {
     .execute();
 }
 
-export async function updateMobileBindingAgent(input: {
+export async function updateMobileBindingAgent(_input: {
   engineType: ChannelEngineType;
   agentId: string;
 }): Promise<ChannelConnection> {
@@ -408,11 +416,12 @@ export async function updateMobileBindingAgent(input: {
     throw new Error('Mobile channel not bound');
   }
   const db = getKyselyDatabase();
+  // Product turn: clamp to fixed SAgent + Main regardless of request body.
   await db
     .updateTable('channel_connections')
     .set({
-      engine_type: input.engineType,
-      agent_id: input.agentId,
+      engine_type: FIXED_CHANNEL_BINDING.engineType,
+      agent_id: FIXED_CHANNEL_BINDING.agentId,
       updated_at: nowIso(),
     })
     .where('id', '=', existing.id)
@@ -420,4 +429,70 @@ export async function updateMobileBindingAgent(input: {
   const updated = await getChannelConnection('mobile');
   if (!updated) throw new Error('Failed to update mobile agent binding');
   return updated;
+}
+
+/**
+ * Idempotent startup normalization: bound channel rows → pi + main.
+ * Must query both `sto-mobile` and legacy `mobile`. Do not call from inbound read path.
+ */
+export async function ensureFixedChannelBindings(): Promise<{ normalized: number }> {
+  const db = getKyselyDatabase();
+  const now = nowIso();
+  const rows = await db
+    .selectFrom('channel_connections')
+    .selectAll()
+    .where('bind_status', '=', 'bound')
+    .where('channel_type', 'in', [
+      'dingtalk',
+      'wechat',
+      MOBILE_DB_CHANNEL_TYPE,
+      MOBILE_LOGICAL_CHANNEL_TYPE,
+    ])
+    .execute();
+
+  let normalized = 0;
+  const samples: string[] = [];
+
+  for (const raw of rows) {
+    const row = mapRow(raw as unknown as Record<string, unknown>);
+    const fromEngine = row.engineType ?? null;
+    const fromAgent = row.agentId ?? null;
+    if (
+      fromEngine === FIXED_CHANNEL_BINDING.engineType
+      && fromAgent === FIXED_CHANNEL_BINDING.agentId
+    ) {
+      continue;
+    }
+
+    const extras: Record<string, unknown> = { ...(row.extras ?? {}) };
+    extras.preFixedBinding = {
+      engineType: fromEngine,
+      agentId: fromAgent,
+      at: now,
+    };
+
+    await db
+      .updateTable('channel_connections')
+      .set({
+        engine_type: FIXED_CHANNEL_BINDING.engineType,
+        agent_id: FIXED_CHANNEL_BINDING.agentId,
+        extras_json: JSON.stringify(extras),
+        updated_at: now,
+      })
+      .where('id', '=', row.id)
+      .execute();
+
+    normalized += 1;
+    const sample = `${row.channelType}:${fromEngine ?? 'null'}→${FIXED_CHANNEL_BINDING.engineType}`;
+    if (samples.length < 8) samples.push(sample);
+  }
+
+  if (normalized > 0) {
+    logger.info('[ChannelBinding] ensureFixedChannelBindings', {
+      normalized,
+      samples,
+    });
+  }
+
+  return { normalized };
 }

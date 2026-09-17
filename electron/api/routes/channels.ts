@@ -264,19 +264,12 @@ export async function handleChannelRoutes(
       const channelType = decodeURIComponent(url.pathname.slice('/api/channels/config/'.length));
       const accountId = url.searchParams.get('accountId') || undefined;
       const storedChannelType = resolveStoredChannelType(channelType);
-      if (accountId) {
-        await deleteChannelAccountConfig(channelType, accountId);
-        await clearChannelBinding(storedChannelType, accountId);
-        scheduleGatewayChannelSaveRefresh(ctx, storedChannelType, `channel:deleteAccount:${storedChannelType}`);
-      } else {
-        await deleteChannelConfig(channelType);
-        await clearAllBindingsForChannel(storedChannelType);
-        scheduleGatewayChannelRestart(ctx, `channel:deleteConfig:${storedChannelType}`);
-      }
-      if (
+      const isWeixinHost =
         toUiChannelType(channelType) === UI_WECHAT_CHANNEL_TYPE
-        || storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE
-      ) {
+        || storedChannelType === OPENCLAW_WECHAT_CHANNEL_TYPE;
+
+      // Host Weixin 不依赖 OC Gateway：只停 Worker / 清凭证，禁止 deleteConfig → restart
+      if (isWeixinHost) {
         const removeId =
           accountId?.trim()
           || (await import('../../message-channel/weixin/binding')).getBoundWeixinAccountId()
@@ -287,8 +280,19 @@ export async function handleChannelRoutes(
         await weixin.stopMonitor();
         weixin.sendCommand({ type: 'account.remove', accountId: removeId });
         await unbindWeixinBot();
-        // 与按需拉起对称：无凭证后销毁 Worker，避免空进程常驻
         await weixin.shutdown();
+        sendJson(res, 200, { success: true });
+        return true;
+      }
+
+      if (accountId) {
+        await deleteChannelAccountConfig(channelType, accountId);
+        await clearChannelBinding(storedChannelType, accountId);
+        scheduleGatewayChannelSaveRefresh(ctx, storedChannelType, `channel:deleteAccount:${storedChannelType}`);
+      } else {
+        await deleteChannelConfig(channelType);
+        await clearAllBindingsForChannel(storedChannelType);
+        scheduleGatewayChannelRestart(ctx, `channel:deleteConfig:${storedChannelType}`);
       }
       sendJson(res, 200, { success: true });
     } catch (error) {

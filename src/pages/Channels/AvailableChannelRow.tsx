@@ -1,3 +1,4 @@
+import { QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CHANNEL_META, type ChannelType } from '@/types/channel';
@@ -67,7 +68,8 @@ export function AvailableChannelRow({
           className={channelOutlineBtnClass}
           onClick={openAvailable}
         >
-          {t('account.bind', { defaultValue: '绑定' })}
+          <QrCode className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+          {t('account.scanBind', { defaultValue: '扫码绑定' })}
         </Button>
       </div>
     </section>

@@ -8,7 +8,7 @@ const SUPPORTED_CHANNEL_TYPES = new Set<PlatformChannelType>(['dingtalk', 'mobil
  * 平台 Channel 会话键：
  * agent:{agentId}:{channelType}:{peerId}:{yyyyMMddHHmmss}:{nonce}
  *
- * OpenClaw Gateway 会对 sessionKey 做小写归一；peerId 也必须小写，
+ * Gateway 事件会对 sessionKey 做小写归一；peerId 也必须小写，
  * 否则 delivery 监听的 key 与 gateway-event 对不上，回程对不上。
  */
 export function buildChannelSessionKey(

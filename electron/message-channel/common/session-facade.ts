@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { getAdapter } from '../../engines/manager';
 import { rememberSessionEngineType } from '../../engines/session-engine';
 import { getEngineSessionRegistryEntry } from '../../engines/session-registry';
-import type { AgentEngineType } from '../../engines/types';
 import type { GatewayManager } from '../../gateway/manager';
 import { DEFAULT_WORKSPACE_ID } from '../../db/models/domain/session-catalog';
 import { runMainChatSend } from '../../services/chat-send-service';
@@ -12,12 +11,16 @@ import {
   upsertCatalogSession,
 } from '../../services/session-catalog-service';
 import { getCatalogSessionRepository } from '../../db/repositories/catalog-session-repository';
-import { getChannelConnection } from '../hub/binding-service';
+import {
+  FIXED_CHANNEL_BINDING,
+  getChannelConnection,
+} from '../hub/binding-service';
 import {
   resolveChannelBaseAgentId,
   resolveChannelIdleTtlMs,
   resolveChannelSessionKey,
   shouldForceNewDingTalkSessionForEngine,
+  type ChannelRuntimeEngine,
 } from './session-lifecycle';
 import { parseChannelSessionKey, type PlatformChannelType } from './session-key';
 import { logger } from '../../utils/logger';
@@ -28,7 +31,8 @@ export interface SessionFacadeCreateParams {
   channelType: PlatformChannelType;
   accountId?: string;
   peerId: string;
-  engineType?: AgentEngineType;
+  /** 渠道运行时仅 claude | pi；openclaw 会被忽略并回落到固定绑定 */
+  engineType?: ChannelRuntimeEngine | 'openclaw';
   forceNew?: boolean;
   /** App 续聊：有值则优先复用；无效则策略 B 静默新建 */
   sessionKey?: string | null;
@@ -36,7 +40,7 @@ export interface SessionFacadeCreateParams {
 
 export interface SessionFacadeHandle {
   sessionKey: string;
-  engineType: AgentEngineType;
+  engineType: ChannelRuntimeEngine;
   agentId: string;
   /** 是否因无效 sessionKey 被忽略并新建 */
   sessionKeyIgnored?: boolean;
@@ -56,8 +60,38 @@ async function findUsableSessionKey(input: {
   return input.sessionKey;
 }
 
+function isChannelRuntimeEngine(value: unknown): value is ChannelRuntimeEngine {
+  return value === 'claude' || value === 'pi';
+}
+
+async function reuseRequestedSession(input: {
+  usable: string;
+  engineType: ChannelRuntimeEngine;
+  agentId: string;
+  channelType: PlatformChannelType;
+  peerId: string;
+  now: Date;
+}): Promise<SessionFacadeHandle> {
+  await rememberSessionEngineType(input.usable, input.engineType);
+  await ensureCatalogSessionInDefaultWorkspace(input.usable);
+  await upsertCatalogSession({
+    workspaceId: DEFAULT_WORKSPACE_ID,
+    sessionKey: input.usable,
+    sessionType: 'channel',
+    channelType: input.channelType,
+    channelId: input.peerId,
+    lastActivityAt: input.now.toISOString(),
+  });
+  return {
+    sessionKey: input.usable,
+    engineType: input.engineType,
+    agentId: input.agentId,
+  };
+}
+
 /**
- * 双引擎 Session 桥：createOrGet → getAdapter → 页面对话同链。
+ * Channel Session 桥：createOrGet → getAdapter（仅 claude | pi）→ 页面对话同链。
+ * 不再兼容 openclaw 引擎执行路径。
  */
 export async function createOrGetSession(
   params: SessionFacadeCreateParams,
@@ -65,13 +99,15 @@ export async function createOrGetSession(
   // Channel 会话只用 base agent，避免 sessionKey / currentAgentId 带上 proj-… 从而命中输入框项目名规则
   const agentId = resolveChannelBaseAgentId(params.agentId);
   const channelType = params.channelType;
-  const engineType: AgentEngineType =
-    params.engineType === 'openclaw' || params.engineType === 'claude' || params.engineType === 'pi'
-      ? params.engineType
-      : 'claude';
+  const engineType: ChannelRuntimeEngine = isChannelRuntimeEngine(params.engineType)
+    ? params.engineType
+    : FIXED_CHANNEL_BINDING.engineType;
   const now = new Date();
 
-  const requestedKey = params.sessionKey?.trim() || '';
+  const requestedKeyInitial = params.sessionKey?.trim() || '';
+  let requestedKey = requestedKeyInitial;
+  let forceNew = !!params.forceNew;
+
   if (requestedKey) {
     const usable = await findUsableSessionKey({
       sessionKey: requestedKey,
@@ -79,22 +115,47 @@ export async function createOrGetSession(
       agentId,
     });
     if (usable) {
-      await rememberSessionEngineType(usable, engineType);
-      await ensureCatalogSessionInDefaultWorkspace(usable);
-      await upsertCatalogSession({
-        workspaceId: DEFAULT_WORKSPACE_ID,
-        sessionKey: usable,
-        sessionType: 'channel',
+      if (channelType === 'mobile') {
+        const registered = await getEngineSessionRegistryEntry(usable);
+        // openclaw / 未知 / 与绑定不一致 → 不可续聊
+        const engineOk = isChannelRuntimeEngine(registered?.engineType)
+          ? registered.engineType === engineType
+          : false;
+
+        if (!engineOk) {
+          forceNew = true;
+          requestedKey = '';
+          logger.warn('[SessionFacade] mobile sessionKey engine gate failed, forceNew', {
+            requestedKey: requestedKeyInitial,
+            boundEngineType: engineType,
+            registeredEngineType: registered?.engineType ?? null,
+          });
+        } else {
+          return reuseRequestedSession({
+            usable,
+            engineType,
+            agentId,
+            channelType,
+            peerId: params.peerId,
+            now,
+          });
+        }
+      } else {
+        return reuseRequestedSession({
+          usable,
+          engineType,
+          agentId,
+          channelType,
+          peerId: params.peerId,
+          now,
+        });
+      }
+    } else {
+      logger.info('[SessionFacade] sessionKeyIgnored, creating new', {
         channelType,
-        channelId: params.peerId,
-        lastActivityAt: now.toISOString(),
+        requestedKey: requestedKeyInitial,
       });
-      return { sessionKey: usable, engineType, agentId };
     }
-    logger.info('[SessionFacade] sessionKeyIgnored, creating new', {
-      channelType,
-      requestedKey,
-    });
   }
 
   const latestSession = await getLatestChannelCatalogSession({
@@ -102,18 +163,37 @@ export async function createOrGetSession(
     channelId: params.peerId,
     agentId,
   });
-  // 改选脑（策略 C）：同 agentId 的旧 channel session 若已登记为另一引擎，强制新 key
-  let forceNew = !!params.forceNew || (channelType === 'mobile' && !requestedKey);
   // mobile：无 sessionKey = 显式新建；有 peer 也不复用 latest（App 清空字段即新对话）
+  // 引擎门禁失败时已清空 requestedKey，同样走这条路径
   if (channelType === 'mobile' && !requestedKey) {
     forceNew = true;
   }
   if (!forceNew && latestSession?.sessionKey) {
     const registered = await getEngineSessionRegistryEntry(latestSession.sessionKey);
-    forceNew = shouldForceNewDingTalkSessionForEngine({
+    const registeredEngineType =
+      registered?.engineType === 'claude'
+      || registered?.engineType === 'openclaw'
+      || registered?.engineType === 'pi'
+        ? registered.engineType
+        : null;
+    const nextForceNew = shouldForceNewDingTalkSessionForEngine({
       boundEngineType: engineType,
-      registeredEngineType: registered?.engineType,
+      registeredEngineType,
     });
+    if (
+      !nextForceNew
+      && registeredEngineType === null
+      && (channelType === 'dingtalk' || channelType === 'wechat')
+    ) {
+      // 策略 C 盲区：registry 缺失仍复用旧 key 并挂 pi → 同一聊天 AI 失忆（产品接受）
+      logger.warn('[SessionFacade] strategy-C blind spot: reuse key with missing registry', {
+        sessionKey: latestSession.sessionKey,
+        channelType,
+        boundEngineType: engineType,
+        registeredEngineType: registered?.engineType ?? null,
+      });
+    }
+    forceNew = nextForceNew;
   }
   const [idleEnabled, idleHours] = await Promise.all([
     getSetting('channelSessionIdleEnabled'),
@@ -147,14 +227,15 @@ export async function createOrGetSession(
     sessionKey,
     engineType,
     agentId,
-    sessionKeyIgnored: !!requestedKey,
+    sessionKeyIgnored: !!requestedKeyInitial && sessionKey !== requestedKeyInitial,
   };
 }
 
 export async function resolveChannelBinding(channelType: PlatformChannelType): Promise<{
   agentId: string;
-  engineType: AgentEngineType;
+  engineType: ChannelRuntimeEngine;
 }> {
+  // Product turn: inbound always uses fixed SAgent + Main (no DB write).
   if (channelType === 'wechat') {
     const { getWeixinBinding } = await import('../weixin/binding');
     const binding = await getWeixinBinding();
@@ -162,8 +243,8 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
       throw new Error('wechat bot not bound');
     }
     return {
-      agentId: resolveChannelBaseAgentId(binding.agentId),
-      engineType: binding.engineType,
+      agentId: FIXED_CHANNEL_BINDING.agentId,
+      engineType: FIXED_CHANNEL_BINDING.engineType,
     };
   }
   const conn = await getChannelConnection(channelType);
@@ -171,16 +252,15 @@ export async function resolveChannelBinding(channelType: PlatformChannelType): P
     throw new Error(`${channelType} hub not bound`);
   }
   return {
-    agentId: resolveChannelBaseAgentId(conn.agentId),
-    engineType: conn.engineType === 'openclaw' || conn.engineType === 'pi'
-      ? conn.engineType
-      : 'claude',
+    agentId: FIXED_CHANNEL_BINDING.agentId,
+    // Dead after constant return; keep pi as defensive fallback if structure changes.
+    engineType: FIXED_CHANNEL_BINDING.engineType,
   };
 }
 
 export async function resolveDingTalkBinding(): Promise<{
   agentId: string;
-  engineType: AgentEngineType;
+  engineType: ChannelRuntimeEngine;
 }> {
   return resolveChannelBinding('dingtalk');
 }
