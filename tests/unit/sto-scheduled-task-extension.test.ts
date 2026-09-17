@@ -67,6 +67,13 @@ describe('sto scheduled-task activation matcher', () => {
     '每天九点生成日报',
     '工作日下班前发送汇总',
     '用 cron 每周跑一次检查',
+    '创建一个自动化任务',
+    '以上的逻辑给我创建一个定时任务',
+    '把这个任务设成定时执行',
+    '每小时检查一次库存',
+    '定期抓取 GitHub 热门项目',
+    '给我建个任务',
+    'schedule this task for me',
   ])('activates for %s', (prompt) => {
     expect(matchesIntent(prompt)).toBe(true);
   });
