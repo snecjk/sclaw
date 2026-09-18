@@ -668,9 +668,17 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   background: transparent;
   border: none;
   border-radius: 0;
-  overflow: visible;
+  overflow-x: auto;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.prose-chat-reply pre > code {
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .prose-chat-reply code {

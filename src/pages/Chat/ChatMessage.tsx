@@ -1433,11 +1433,9 @@ function MessageBubble({
                   );
                 }
                 return (
-                  <pre className="overflow-x-auto rounded-lg border border-border bg-[var(--sto-chat-code-background)] p-4">
-                    <code className={cn('text-[13px] leading-5 font-mono text-foreground', className)} {...props}>
-                      {children}
-                    </code>
-                  </pre>
+                  <code className={cn('text-[13px] leading-5 font-mono text-foreground', className)} {...props}>
+                    {children}
+                  </code>
                 );
               },
               a({ href, children }) {
