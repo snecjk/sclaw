@@ -81,7 +81,7 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(runtime.mcpServers?.['sto-workflow-tool']).toBeDefined();
   });
 
-  it('activates the migrated user-skill extension only for creation intent', async () => {
+  it('activates user-skill management on matching turns', async () => {
     const unrelated = await buildClaudeRuntimeOptions(
       'agent:main:user-skill-unrelated',
       '分析一下这个项目',

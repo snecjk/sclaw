@@ -599,7 +599,8 @@ async function ensureSession(config: PiSessionConfig): Promise<PiSession> {
     });
     await disposeSessionEntry(existing, {
       type: 'session_shutdown',
-      reason: existing.sessionFile ? 'resume' : 'new',
+      // Configuration replacement keeps the same logical chat and activation state.
+      reason: 'reload',
       targetSessionFile: existing.sessionFile,
     });
     sessions.delete(config.sessionKey);

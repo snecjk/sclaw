@@ -11,7 +11,7 @@ import { getAgentWorkspacePath } from '../../utils/agent-config';
 import { getCurrentActiveUserCode } from '../user-skill-workspace';
 import { getSkillEntry, resolvePackageDir } from './canonical-store';
 import { isOpenClawProjectionManaged } from './adapters/openclaw-skill-adapter';
-import { parseSkillFrontmatter } from '../../utils/skill-frontmatter';
+import { normalizeSkillMarkdown, parseSkillFrontmatter } from '../../utils/skill-frontmatter';
 import { getSkillManager } from './skill-manager';
 import { slugFromFrontmatterName } from './skill-package';
 
@@ -30,7 +30,7 @@ export type OrphanImportResult = {
 
 function readSkillMeta(skillMdPath: string): { name?: string; description?: string; version?: string } {
   try {
-    const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
+    const raw = normalizeSkillMarkdown(fs.readFileSync(skillMdPath, 'utf8'));
     const match = raw.match(/^---\s*\n([\s\S]*?)\n---/);
     if (!match) return {};
     const meta = parseSkillFrontmatter(match[1]);

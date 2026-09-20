@@ -385,6 +385,17 @@ export async function buildClaudeAgentExtensions(
           version: definition.version,
           tools: sdkTools,
         });
+        // Claude uses qualified MCP names; only describe tools configured this turn.
+        if (definition.id === 'sto-skill-runtime') {
+          mergeOptions(options, {
+            systemPromptAppend: [
+              '本轮已配置的技能工具（使用完整名称调用）：',
+              ...sdkTools.map((tool) => `- ${tool.name}: mcp__${definition.id}__${tool.name}`),
+              '以本轮实际工具列表为准，不要沿用历史回复中“工具不可用”的结论。',
+              'search_skills 用于搜索技能内容，不用于查找或加载 MCP 工具。',
+            ].join('\n'),
+          });
+        }
         usedMcpServers.add(definition.id);
       }
 

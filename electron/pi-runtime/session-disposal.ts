@@ -61,7 +61,9 @@ export async function disposePiSession(
 
   cleanup('unsubscribe', target.unsubscribe);
   cleanup('session_dispose', () => target.session.dispose());
-  cleanup('extension_state_clear', target.clearExtensionSessionState);
+  if (event.reason !== 'reload') {
+    cleanup('extension_state_clear', target.clearExtensionSessionState);
+  }
 
   return { shutdownEmitted, failures };
 }

@@ -51,6 +51,24 @@ describe('user-skill-write-guard', () => {
     expect(decision.blocked).toBe(true);
   });
 
+  it.each([
+    'Set-Content -Path "C:\\Users\\demo\\skills\\foo\\SKILL.md" -Value $content -Encoding UTF8',
+    '$content | Out-File .\\SKILL.md -Encoding UTF8',
+    '[System.IO.File]::WriteAllText("C:\\skills-store\\foo\\SKILL.md", $content)',
+    'Add-Content .\\SKILL.md $content',
+  ])('blocks PowerShell skill writes: %s', (command) => {
+    for (const toolName of ['exec', 'powershell', 'pwsh']) {
+      expect(evaluateUserSkillWriteGuard({ toolName, params: { command } }).blocked).toBe(true);
+    }
+  });
+
+  it.each([
+    'Get-Content "C:\\skills\\foo\\SKILL.md"',
+    'Set-Content "C:\\reports\\notes.md" -Value $content',
+  ])('allows PowerShell reads and unrelated writes: %s', (command) => {
+    expect(evaluateUserSkillWriteGuard({ toolName: 'powershell', params: { command } }).blocked).toBe(false);
+  });
+
   it('allows listing skill dirs', () => {
     expect(
       evaluateUserSkillWriteGuard({

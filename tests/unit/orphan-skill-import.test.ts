@@ -88,12 +88,12 @@ describe('orphan-skill-import', () => {
     await rm(tempRoot, { recursive: true, force: true });
   });
 
-  it('imports unmanaged openclaw skill missing from skills-store', async () => {
+  it.each(['', '\uFEFF'])('imports unmanaged openclaw skill with BOM prefix %j', async (bom) => {
     const dir = join(openclawSkillsRef.current, 'orphan-demo');
     await mkdir(dir, { recursive: true });
     await writeFile(
       join(dir, 'SKILL.md'),
-      '---\nname: orphan-demo\ndescription: orphan\n---\n\n# Orphan\n',
+      bom + '---\r\nname: orphan-demo\r\ndescription: 中文说明\r\n---\r\n\r\n# Orphan\r\n',
       'utf8',
     );
 
@@ -108,6 +108,7 @@ describe('orphan-skill-import', () => {
         scope: 'user',
         source: 'local',
         sourceDir: dir,
+        description: '中文说明',
       }),
     );
   });

@@ -262,6 +262,19 @@ export async function buildPiAgentExtensions(
                 input: inputRecord,
               }, contextFor());
               if (decision.action === 'deny') {
+                // A policy may discover intent that the user's wording did not express.
+                // Update Pi's executable tool list before the model retries.
+                const evaluateActivation = createSclawActivationEvaluator({
+                  extensionId: definition.id,
+                  activations: definition.activations,
+                  context: contextFor(),
+                  diagnostics,
+                });
+                const enabled = new Set(pi.getActiveTools());
+                for (const tool of tools) {
+                  if ((await evaluateActivation(tool.activation)).active) enabled.add(tool.name);
+                }
+                pi.setActiveTools([...enabled]);
                 return { block: true, reason: decision.reason, terminate: decision.terminate };
               }
               if (decision.action === 'patch') replaceInput(inputRecord, decision.input);
@@ -417,6 +430,7 @@ export async function buildPiAgentExtensions(
         // session-scoped activation/state across reloads and only clear it
         // when Pi is actually leaving or replacing the session.
         if (event.reason !== 'reload') stateManager.clearSession(input.sessionKey);
+        else stateManager.endTurn(input.sessionKey);
       });
     },
   });

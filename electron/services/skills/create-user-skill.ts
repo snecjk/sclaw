@@ -5,7 +5,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { parseSkillFrontmatter } from '../../utils/skill-frontmatter';
+import { normalizeSkillMarkdown, parseSkillFrontmatter } from '../../utils/skill-frontmatter';
 import { readPreinstalledManifestSlugs } from '../../utils/skill-config';
 import { getSkillsStoreUserSkillsDir } from '../../utils/paths';
 import { getCurrentActiveUserCode } from '../user-skill-workspace';
@@ -70,8 +70,8 @@ export function normalizeSkillSlug(raw: string): string {
   return slug;
 }
 
-function parseSkillMdMeta(skillMd: string): { name: string; description: string; version?: string } {
-  const normalized = skillMd.replace(/\r\n/g, '\n');
+function parseSkillMdMeta(skillMd: string): { name: string; title?: string; description: string; version?: string } {
+  const normalized = normalizeSkillMarkdown(skillMd);
   const match = normalized.match(/^---\s*\n([\s\S]*?)\n---/);
   if (!match) {
     throw new SaveUserSkillError('INVALID_SKILL_MD', 'SKILL.md 缺少 YAML frontmatter');
@@ -87,6 +87,7 @@ function parseSkillMdMeta(skillMd: string): { name: string; description: string;
   }
   return {
     name,
+    title: meta.title?.trim() || undefined,
     description,
     version: meta.version?.trim() || undefined,
   };
@@ -108,7 +109,7 @@ async function writeStagingDir(
 ): Promise<string> {
   const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), `stoclaw-save-skill-${slug}-`));
   try {
-    fs.writeFileSync(path.join(stagingDir, 'SKILL.md'), skillMd.replace(/\r\n/g, '\n'), 'utf8');
+    fs.writeFileSync(path.join(stagingDir, 'SKILL.md'), normalizeSkillMarkdown(skillMd), 'utf8');
     ensureSkillFrontmatter(stagingDir, slug, {
       name: meta.name,
       description: meta.description,
@@ -173,7 +174,7 @@ export async function saveUserSkill(input: SaveUserSkillInput): Promise<SaveUser
     throw new SaveUserSkillError('ALREADY_EXISTS', `用户技能 ${slug} 已存在`);
   }
 
-  const displayName = input.name?.trim() || parsed.name;
+  const displayName = input.name?.trim() || parsed.title || parsed.name;
   const description = input.description?.trim() || parsed.description;
   const version = parsed.version || '1.0.0';
 

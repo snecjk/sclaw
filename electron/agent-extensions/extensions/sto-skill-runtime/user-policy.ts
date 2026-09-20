@@ -3,6 +3,7 @@ import {
   evaluateUserSkillWriteGuard,
   shouldScheduleOrphanImportAfterTool,
 } from '../../../../shared/user-skill-write-guard';
+import { USER_SKILL_WRITE_ATTEMPT } from './activation';
 import { STO_SKILL_RUNTIME_CAPABILITY } from './capability';
 
 export const userSkillWritePolicy: SclawToolPolicy = {
@@ -13,6 +14,7 @@ export const userSkillWritePolicy: SclawToolPolicy = {
       params: event.input,
     });
     if (!decision.blocked) return { action: 'allow' };
+    context.state.session.set(USER_SKILL_WRITE_ATTEMPT, true);
     context.logger.warn('[agent-extension] user-skill.write.denied', {
       engine: context.engine,
       extensionId: 'sto-skill-runtime',
@@ -20,7 +22,10 @@ export const userSkillWritePolicy: SclawToolPolicy = {
       toolName: event.toolName,
       matchedPath: decision.matchedPath,
     });
-    return { action: 'deny', reason: decision.reason };
+    const reason = context.engine === 'claude'
+      ? decision.reason.replaceAll('save_user_skill', 'mcp__sto-skill-runtime__save_user_skill')
+      : decision.reason;
+    return { action: 'deny', reason };
   },
   async afterTool(event, context) {
     if (!shouldScheduleOrphanImportAfterTool({

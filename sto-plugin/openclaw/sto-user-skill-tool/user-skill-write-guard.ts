@@ -30,6 +30,8 @@ const SHELL_TOOL_NAMES = new Set([
   'system.exec',
   'system.run',
   'process.exec',
+  'powershell',
+  'pwsh',
 ]);
 
 /** Path segments / absolute patterns that indicate a skill package write. */
@@ -142,6 +144,16 @@ export function evaluateUserSkillWriteGuard(input: {
   if (SHELL_TOOL_NAMES.has(toolName)) {
     const command = readShellCommand(input.params);
     if (!command) return { blocked: false };
+    // Windows agents commonly use these instead of Unix shell redirection.
+    const powershellWrite = /\b(?:Set-Content|Add-Content|Out-File|sc|ac|New-Item|Copy-Item|Move-Item)\b|\b(?:WriteAllText|WriteAllLines|WriteAllBytes|AppendAllText|AppendAllLines)\s*\(/i;
+    if (powershellWrite.test(command)
+      && (isSkillPackagePath(command) || /\bSKILL\.md\b/i.test(command))) {
+      return {
+        blocked: true,
+        reason: SAVE_USER_SKILL_BLOCK_REASON,
+        matchedPath: command.slice(0, 200),
+      };
+    }
     if (SHELL_SKILL_WRITE_RE.test(command) || isSkillPackagePath(command)) {
       // Avoid blocking pure reads like `ls ~/.stoclaw/openclaw/skills`
       if (/^\s*(ls|find|tree|cat|head|tail|less|rg|grep)\b/i.test(command.trim())

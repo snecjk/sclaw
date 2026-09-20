@@ -18,6 +18,8 @@ export const USER_SKILL_SYSTEM_PROMPT = [
   '用户技能保存（save_user_skill，硬性规则）：',
   '- 在会话中**创建或更新用户技能**时，必须调用 `save_user_skill`，传入完整 `skillMd`（含 YAML frontmatter 的 name + description）与 `slug`。',
   '- ⛔ **禁止**用 Write / Edit / apply_patch / Bash 把技能写到 openclaw/skills、workspace/skills、skills-store——系统会拦截；那样也不会进入「我的技能」。',
+  '- 改显示名称时保留原 slug 和完整正文，用 name 参数传入新显示名；先读取原文件，不要凭记忆重写。',
+  '- 只有用户要求创建或修改技能时才保存；查询、讨论、执行技能不要调用保存工具。',
   '- 可选 `assets` 附加相对技能根的文件；禁止路径穿越（`..`）。',
   '- 同 slug 默认覆盖已有用户技能；系统预装白名单 slug 会被拒绝。',
 ].join('\n');

@@ -25,6 +25,14 @@ function target(options: {
 }
 
 describe('Pi session disposal', () => {
+  it('preserves chat activation state when only the runtime is reloaded', async () => {
+    const subject = target();
+    await disposePiSession(subject, { type: 'session_shutdown', reason: 'reload' });
+    expect(subject.session.extensionRunner.emit).toHaveBeenCalledWith({ type: 'session_shutdown', reason: 'reload' });
+    expect(subject.session.dispose).toHaveBeenCalledOnce();
+    expect(subject.clearExtensionSessionState).not.toHaveBeenCalled();
+  });
+
   it('awaits extension shutdown before releasing the AgentSession and framework state', async () => {
     const order: string[] = [];
     const deferred = Promise.withResolvers<void>();

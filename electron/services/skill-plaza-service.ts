@@ -19,7 +19,7 @@ import {
   resolveInstalledVersionForCompare,
 } from '../utils/skill-version';
 import { PREINSTALLED_MARKER_NAME, USER_UPLOAD_MARKER_NAME } from './sto-skill-service';
-import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
+import { normalizeSkillMarkdown, parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 import { pickNavCategoryFromApiSkill } from '../../shared/skill-plaza-category-resolve';
 import { KeyedTtlCache, mapWithConcurrency } from './skill-plaza-cache';
 import { schedulePlazaSkillAutoSync } from './plaza-skill-auto-sync';
@@ -763,7 +763,7 @@ function readLocalSkillSummary(skillsDir: string, slug: string): Partial<SkillSu
   const skillMdPath = path.join(skillDir, 'SKILL.md');
   if (fs.existsSync(skillMdPath)) {
     try {
-      const content = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
+      const content = normalizeSkillMarkdown(fs.readFileSync(skillMdPath, 'utf8'));
       const frontMatterMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
       if (frontMatterMatch) {
         const meta = parseSkillFrontmatter(frontMatterMatch[1]);

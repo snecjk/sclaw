@@ -1,8 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SaveUserSkillError } from '../../electron/services/skills/create-user-skill';
 
 const {
   storeRootRef,
@@ -93,7 +94,7 @@ describe('saveUserSkill / normalizeSkillSlug', () => {
 
   it('returns NOT_LOGGED_IN when no userCode', async () => {
     userCodeRef.current = null;
-    const { saveUserSkill, SaveUserSkillError } = await import(
+    const { saveUserSkill } = await import(
       '../../electron/services/skills/create-user-skill'
     );
     await expect(
@@ -155,6 +156,20 @@ describe('saveUserSkill / normalizeSkillSlug', () => {
       version: '1.2.0',
     });
     expect(existsSync(join(call.sourceDir, 'SKILL.md'))).toBe(false); // cleaned in finally
+  });
+
+  it('accepts BOM + CRLF from Windows and stages BOM-free UTF-8', async () => {
+    let staged = '';
+    installFromLocalDirMock.mockImplementationOnce(async (...args: unknown[]) => {
+      const { sourceDir } = args[0] as { sourceDir: string };
+      staged = readFileSync(join(sourceDir, 'SKILL.md'), 'utf8');
+    });
+    const { saveUserSkill } = await import('../../electron/services/skills/create-user-skill');
+    await saveUserSkill({
+      slug: 'demo-skill',
+      skillMd: '\uFEFF---\r\nname: demo-skill\r\ntitle: 中文技能\r\ndescription: 中文说明\r\n---\r\n\r\n正文\r\n',
+    });
+    expect(staged).toBe('---\nname: demo-skill\ntitle: "中文技能"\ndescription: 中文说明\n---\n\n正文\n');
   });
 
   it('ALREADY_EXISTS when force=false and user entry present', async () => {

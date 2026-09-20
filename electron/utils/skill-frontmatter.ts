@@ -1,6 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
+/** Normalize UTF-8 text from Windows editors without changing body whitespace. */
+export function normalizeSkillMarkdown(content: string): string {
+  return content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+}
+
 /**
  * Parse simple YAML frontmatter text from SKILL.md.
  *
@@ -85,14 +90,14 @@ export function parseSkillFrontmatter(frontmatter: string): Record<string, strin
 
 /**
  * Read and parse SKILL.md frontmatter from a skill directory.
- * Normalizes CRLF to LF before parsing.
+ * Removes a leading UTF-8 BOM and normalizes CRLF to LF before parsing.
  * Returns null if the file doesn't exist or has no frontmatter.
  */
 export function readSkillMdFrontmatter(skillDir: string): Record<string, string> | null {
   try {
     const skillMdPath = path.join(skillDir, 'SKILL.md');
     if (!fs.existsSync(skillMdPath)) return null;
-    const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
+    const raw = normalizeSkillMarkdown(fs.readFileSync(skillMdPath, 'utf8'));
     const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
     if (!frontmatterMatch) return null;
     return parseSkillFrontmatter(frontmatterMatch[1]);

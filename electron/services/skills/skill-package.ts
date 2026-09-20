@@ -12,7 +12,7 @@ import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { logger } from '../../utils/logger';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { TIMEOUTS } from '../../utils/config';
-import { readSkillMdFrontmatter } from '../../utils/skill-frontmatter';
+import { normalizeSkillMarkdown, readSkillMdFrontmatter } from '../../utils/skill-frontmatter';
 import { safeRemoveDir } from '../../utils/fs-retry';
 
 export async function downloadSkillZipToFile(slug: string, destZipPath: string): Promise<void> {
@@ -127,7 +127,8 @@ export function ensureSkillFrontmatter(
   const gatewayName = slug.toLowerCase();
 
   try {
-    const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
+    const original = fs.readFileSync(skillMdPath, 'utf8');
+    const raw = normalizeSkillMarkdown(original);
     const hasFrontmatter = /^---\s*\n/.test(raw);
 
     if (hasFrontmatter) {
@@ -144,15 +145,21 @@ export function ensureSkillFrontmatter(
         patched += `\nname: ${gatewayName}`;
       }
 
-      if (meta.name && meta.name !== gatewayName && !/^\s*title\s*:/m.test(patched)) {
-        patched += `\ntitle: ${meta.name}`;
+      if (meta.name) {
+        // Keep display metadata in the file consistent with the canonical manifest.
+        const title = JSON.stringify(meta.name);
+        if (/^title[ \t]*:/m.test(patched)) {
+          patched = patched.replace(/^title[ \t]*:.*(?:\n[ \t]+[^\n]*)*/m, () => `title: ${title}`);
+        } else if (meta.name !== gatewayName) {
+          patched += `\ntitle: ${title}`;
+        }
       }
 
       if (meta.description && !/^\s*description\s*:/m.test(patched)) {
         patched += `\ndescription: ${meta.description}`;
       }
 
-      if (patched !== fmBlock) {
+      if (patched !== fmBlock || raw !== original) {
         fs.writeFileSync(skillMdPath, patched + rest);
       }
     } else if (meta.name || meta.description) {
@@ -239,7 +246,7 @@ export function readSkillName(skillDir: string): string | null {
     const fm = readSkillMdFrontmatter(skillDir);
     if (fm?.name) return fm.name;
     const skillMdPath = path.join(skillDir, 'SKILL.md');
-    const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
+    const raw = normalizeSkillMarkdown(fs.readFileSync(skillMdPath, 'utf8'));
     const h1Match = raw.match(/^#\s+(.+)$/m);
     if (h1Match) return h1Match[1].trim();
   } catch {

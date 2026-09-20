@@ -1035,6 +1035,14 @@ export async function consumeClaudeQuery(
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
 
       if (message.type === 'system') {
+        if (message.subtype === 'init') {
+          logger.info('[claude-adapter] sdk.tools-ready', {
+            sessionKey,
+            sessionId: messageSessionId,
+            tools: message.tools,
+            mcpServers: message.mcp_servers,
+          });
+        }
         const taskMessage = message as {
           subtype?: string;
           status?: string | null;

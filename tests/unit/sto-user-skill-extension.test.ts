@@ -1,4 +1,7 @@
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
   SclawCapabilityRegistry,
@@ -59,7 +62,75 @@ function preToolInput(toolCallId: string, toolName: string, toolInput: Record<st
 }
 
 describe('sto-skill-runtime user-skill contributions', () => {
-  it('activates the Claude tool and prompt only for user-skill intent', async () => {
+  it('exposes an executable Claude MCP save tool with its qualified name on rename', async () => {
+    const deps = dependencies();
+    const result = await buildClaudeAgentExtensions({
+      sessionKey: 'claude-rename-wire', mode: 'interactive',
+      userPrompt: '这个技能名称改成：上海天气',
+      entries: [{ common: stoSkillRuntimeDefinition }], ...deps,
+    });
+    expect(result.options.systemPromptAppend).toContain('mcp__sto-skill-runtime__save_user_skill');
+    const server = result.options.mcpServers?.['sto-skill-runtime'];
+    if (!server || server.type !== 'sdk') throw new Error('missing SDK MCP server');
+    const client = new Client({ name: 'regression', version: '1.0.0' });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([server.instance.connect(serverTransport), client.connect(clientTransport)]);
+      const listed = await client.listTools();
+      expect(listed.tools.map((tool) => tool.name)).toContain('save_user_skill');
+      const response = await client.callTool({
+        name: 'save_user_skill', arguments: {
+          slug: 'demo-skill', name: '上海天气',
+          skillMd: '---\nname: demo-skill\ndescription: demo\n---\n',
+        },
+      });
+      expect(response.isError).not.toBe(true);
+      expect(deps.port.save).toHaveBeenCalledWith(expect.objectContaining({ name: '上海天气' }));
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  });
+
+  it.each(['帮我改这个技能', '这个技能帮我改个名字', '帮我改下天气技能的名称', '把这个技能的名称改成上海天气', '重命名天气技能', '技能名字换成上海天气'])('activates for natural rename wording: %s', async (userPrompt) => {
+    const result = await buildClaudeAgentExtensions({
+      sessionKey: 'rename', mode: 'interactive', userPrompt,
+      entries: [{ common: stoSkillRuntimeDefinition }], ...dependencies(),
+    });
+    expect(result.options.systemPromptAppend).toContain(USER_SKILL_SYSTEM_PROMPT);
+  });
+
+  it('enables the Pi save tool after a blocked write without enabling it in another chat', async () => {
+    const deps = dependencies();
+    const result = await buildPiAgentExtensions({
+      sessionKey: 'blocked-write', mode: 'interactive',
+      entries: [{ common: stoSkillRuntimeDefinition }], ...deps,
+    });
+    const activeTools = [...result.initiallyActiveToolNames];
+    const handlers = new Map<string, (event: Record<string, unknown>) => unknown>();
+    for (const extension of result.extensions) {
+      if (typeof extension === 'function' || extension.name !== 'sto-skill-runtime') continue;
+      await extension.factory({
+        registerTool() {},
+        on(event: string, handler: (event: Record<string, unknown>) => unknown) { handlers.set(event, handler); },
+        getActiveTools() { return activeTools; },
+        setActiveTools(names: string[]) { activeTools.splice(0, activeTools.length, ...names); },
+      } as never);
+    }
+    expect(activeTools).not.toContain('save_user_skill');
+    const denied = await handlers.get('tool_call')?.({
+      toolName: 'edit', toolCallId: 'edit-1', input: { path: 'D:/skills/demo/SKILL.md' },
+    });
+    expect(denied).toMatchObject({ block: true });
+    expect(activeTools).toContain('save_user_skill');
+    const other = await buildClaudeAgentExtensions({
+      sessionKey: 'another-chat', mode: 'interactive', userPrompt: '名字换成上海天气',
+      entries: [{ common: stoSkillRuntimeDefinition }], ...deps,
+    });
+    expect(other.options.systemPromptAppend).not.toContain(USER_SKILL_SYSTEM_PROMPT);
+  });
+
+  it('activates the Claude save tool and guidance on skill intent', async () => {
     const deps = dependencies();
     const entries = [{ common: stoSkillRuntimeDefinition }];
     expect(stoSkillRuntimeDefinition.tools).toHaveLength(2);
@@ -98,36 +169,50 @@ describe('sto-skill-runtime user-skill contributions', () => {
     expect(followUp.options.mcpServers?.['sto-skill-runtime']).toBeDefined();
   });
 
-  it('registers a lazy PI tool and activates it from before_agent_start', async () => {
+  it('keeps the Pi save tool executable after the runtime is rebuilt for the same chat', async () => {
     const deps = dependencies();
-    const result = await buildPiAgentExtensions({
-      sessionKey: 'pi-user-skill',
-      mode: 'interactive',
-      entries: [{ common: stoSkillRuntimeDefinition }],
-      ...deps,
-    });
-    expect(result.initiallyActiveToolNames).not.toContain('save_user_skill');
-
-    const handlers = new Map<string, (event: Record<string, unknown>) => unknown>();
-    const activeTools: string[] = [];
-    const extension = result.extensions.find(
-      (item) => typeof item !== 'function' && item.name === 'sto-skill-runtime',
-    );
-    if (!extension || typeof extension === 'function') throw new Error('missing extension');
-    await extension.factory({
-      registerTool() {},
-      on(event, handler) { handlers.set(event, handler as never); },
-      getActiveTools() { return activeTools; },
-      setActiveTools(names) { activeTools.splice(0, activeTools.length, ...names); },
-    } as never);
-
-    const prompt = await handlers.get('before_agent_start')?.({
-      prompt: '帮我创建一个技能',
-      systemPrompt: 'base',
-      systemPromptOptions: {},
-    }) as { systemPrompt?: string } | undefined;
-    expect(activeTools).toContain('save_user_skill');
-    expect(prompt?.systemPrompt).toContain(USER_SKILL_SYSTEM_PROMPT);
+    for (const userPrompt of ['帮我生成一个技能', '名字换成上海天气']) {
+      const result = await buildPiAgentExtensions({
+        sessionKey: 'pi-user-skill',
+        mode: 'interactive',
+        entries: [{ common: stoSkillRuntimeDefinition }],
+        ...deps,
+      });
+      const activeTools = [...result.initiallyActiveToolNames];
+      expect(activeTools).not.toContain('save_user_skill');
+      const registered = new Map<string, Parameters<ExtensionAPI['registerTool']>[0]>();
+      const handlers = new Map<string, (event: Record<string, unknown>) => unknown>();
+      const extension = result.extensions.find(
+        (item) => typeof item !== 'function' && item.name === 'sto-skill-runtime',
+      );
+      if (!extension || typeof extension === 'function') throw new Error('missing extension');
+      await extension.factory({
+        registerTool(tool: Parameters<ExtensionAPI['registerTool']>[0]) { registered.set(tool.name, tool); },
+        on(event: string, handler: (event: Record<string, unknown>) => unknown) { handlers.set(event, handler); },
+        getActiveTools() { return activeTools; },
+        setActiveTools(names: string[]) { activeTools.splice(0, activeTools.length, ...names); },
+      } as never);
+      const prompt = await handlers.get('before_agent_start')?.({
+        prompt: userPrompt,
+        systemPrompt: 'base',
+        systemPromptOptions: {},
+      }) as { systemPrompt?: string } | undefined;
+      expect(prompt?.systemPrompt).toContain(USER_SKILL_SYSTEM_PROMPT);
+      expect(activeTools).toContain('save_user_skill');
+      const save = registered.get('save_user_skill');
+      expect(save).toBeDefined();
+      const response = await save!.execute('save-call', {
+        slug: 'demo-skill',
+        name: '上海天气',
+        skillMd: '---\nname: demo-skill\ndescription: demo\n---\n',
+      }, undefined, undefined, {} as never);
+      expect(response.isError).not.toBe(true);
+      expect(deps.port.save).toHaveBeenCalledWith(expect.objectContaining({ name: '上海天气' }));
+      // Runtime replacement discards extension state even for the same chat key.
+      // A resource/config reload preserves session-scoped activation state.
+      deps.stateManager.endTurn('pi-user-skill');
+    }
+    expect(deps.port.save).toHaveBeenCalledTimes(2);
   });
 
   it('returns the common success envelope and preserves Host API error codes', async () => {
