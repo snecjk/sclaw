@@ -67,7 +67,15 @@ export class StoSkillRuntimePortError extends Error {
   }
 }
 
+export interface DeleteUserSkillResponse {
+  ok: true;
+  slug: string;
+  scope: 'user';
+  userCode: string;
+}
+
 export interface StoSkillRuntimePort {
+  delete(input: { slug: string }): Promise<DeleteUserSkillResponse>;
   search(input: RuntimeSkillSearchRequest): Promise<RuntimeSkillSearchResponse>;
   recordRead(input: RuntimeSkillReadRequest): Promise<{ slug: string; recorded: true }>;
   save(input: SaveUserSkillRequest): Promise<SaveUserSkillResponse>;

@@ -1,6 +1,7 @@
 import { PORTS } from '../../../utils/config';
 import {
   StoSkillRuntimePortError,
+  type DeleteUserSkillResponse,
   type RuntimeSkillReadRequest,
   type RuntimeSkillSearchRequest,
   type RuntimeSkillSearchResponse,
@@ -58,6 +59,7 @@ async function request<T>(
 
 export function createHostApiSkillRuntimePort(): StoSkillRuntimePort {
   return {
+    delete: (input) => request<DeleteUserSkillResponse>('/api/skills/delete-user', input),
     search: (input: RuntimeSkillSearchRequest) => request<RuntimeSkillSearchResponse>(
       '/api/skills/runtime/search', input as unknown as Record<string, unknown>,
     ),

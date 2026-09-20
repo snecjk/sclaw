@@ -3,7 +3,7 @@ import { STO_USER_SKILL_ACTIVATION, userSkillActivation } from './activation';
 import { STO_SKILL_RUNTIME_CAPABILITY } from './capability';
 import { searchSkillsTool } from './operations';
 import { runtimeSkillReadPolicy } from './policy';
-import { saveUserSkillTool } from './user-operations';
+import { saveUserSkillTool, deleteUserSkillTool } from './user-operations';
 import { userSkillWritePolicy } from './user-policy';
 
 const SKILL_RUNTIME_PROMPT = [
@@ -21,6 +21,7 @@ export const USER_SKILL_SYSTEM_PROMPT = [
   '- 改显示名称时保留原 slug 和完整正文，用 name 参数传入新显示名；先读取原文件，不要凭记忆重写。',
   '- 只有用户要求创建或修改技能时才保存；查询、讨论、执行技能不要调用保存工具。',
   '- 可选 `assets` 附加相对技能根的文件；禁止路径穿越（`..`）。',
+  '- 用户明确要求删除技能时调用 delete_user_skill，先确定准确 slug；目标不明时询问，不要使用文件或 Shell 删除。',
   '- 同 slug 默认覆盖已有用户技能；系统预装白名单 slug 会被拒绝。',
 ].join('\n');
 
@@ -30,7 +31,7 @@ export const stoSkillRuntimeDefinition: SclawAgentExtensionDefinition = {
   engines: ['claude', 'pi'],
   requiredCapabilities: [STO_SKILL_RUNTIME_CAPABILITY],
   activations: [userSkillActivation],
-  tools: [searchSkillsTool, saveUserSkillTool],
+  tools: [searchSkillsTool, saveUserSkillTool, deleteUserSkillTool],
   policies: [runtimeSkillReadPolicy, userSkillWritePolicy],
   prompts: [{
     id: 'skill-runtime-guidance',

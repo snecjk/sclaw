@@ -26,11 +26,18 @@
       }
     }
   },
-  "tools": ["save_user_skill"],
+  "tools": [
+    "save_user_skill",
+    "delete_user_skill"
+  ],
   "toolConfig": {
     "save_user_skill": {
       "label": "保存用户技能",
       "help": "将 SKILL.md（及可选资产）写入当前登录用户的 skills-store，使其出现在「我的技能」"
+    },
+    "delete_user_skill": {
+      "label": "删除用户技能",
+      "help": "删除当前用户指定 slug 的技能并同步引擎副本，保护预装技能"
     }
   }
 }

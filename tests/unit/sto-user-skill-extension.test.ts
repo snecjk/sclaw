@@ -27,6 +27,7 @@ const logger: SclawExtensionLogger = {
 
 function dependencies() {
   const port: StoSkillRuntimePort = {
+    delete: vi.fn(async ({ slug }) => ({ ok: true, slug, scope: 'user', userCode: 'u-1' })),
     search: vi.fn(async () => ({
       query: 'demo', items: [], totalEnabled: 0, degraded: false,
     })),
@@ -78,6 +79,10 @@ describe('sto-skill-runtime user-skill contributions', () => {
       await Promise.all([server.instance.connect(serverTransport), client.connect(clientTransport)]);
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name)).toContain('save_user_skill');
+      expect(listed.tools.map((tool) => tool.name)).toContain('delete_user_skill');
+      const deleted = await client.callTool({ name: 'delete_user_skill', arguments: { slug: 'demo-skill' } });
+      expect(deleted.isError).not.toBe(true);
+      expect(deps.port.delete).toHaveBeenCalledWith({ slug: 'demo-skill' });
       const response = await client.callTool({
         name: 'save_user_skill', arguments: {
           slug: 'demo-skill', name: '上海天气',
@@ -92,7 +97,7 @@ describe('sto-skill-runtime user-skill contributions', () => {
     }
   });
 
-  it.each(['帮我改这个技能', '这个技能帮我改个名字', '帮我改下天气技能的名称', '把这个技能的名称改成上海天气', '重命名天气技能', '技能名字换成上海天气'])('activates for natural rename wording: %s', async (userPrompt) => {
+  it.each(['删除这个技能', '把天气技能删掉', '卸载天气技能', '移除这个技能', '帮我改这个技能', '这个技能帮我改个名字', '帮我改下天气技能的名称', '把这个技能的名称改成上海天气', '重命名天气技能', '技能名字换成上海天气'])('activates for natural rename wording: %s', async (userPrompt) => {
     const result = await buildClaudeAgentExtensions({
       sessionKey: 'rename', mode: 'interactive', userPrompt,
       entries: [{ common: stoSkillRuntimeDefinition }], ...dependencies(),
@@ -133,7 +138,7 @@ describe('sto-skill-runtime user-skill contributions', () => {
   it('activates the Claude save tool and guidance on skill intent', async () => {
     const deps = dependencies();
     const entries = [{ common: stoSkillRuntimeDefinition }];
-    expect(stoSkillRuntimeDefinition.tools).toHaveLength(2);
+    expect(stoSkillRuntimeDefinition.tools).toHaveLength(3);
     const saveTool = stoSkillRuntimeDefinition.tools?.find((tool) => tool.name === 'save_user_skill');
     expect(saveTool?.parameters).toBeDefined();
     typeBoxObjectToZodRawShape(saveTool!.parameters);

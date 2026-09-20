@@ -1,3 +1,4 @@
+import { deleteUserSkill, DeleteUserSkillError } from '../../services/skills/delete-user-skill';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getAllSkillConfigs, updateSkillConfig } from '../../utils/skill-config';
 import {
@@ -71,6 +72,19 @@ export async function handleSkillRoutes(
         code: error instanceof SkillRuntimeError ? error.code : 'SKILL_READ_RECORD_FAILED',
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/skills/delete-user' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ slug: string }>(req);
+      sendJson(res, 200, { success: true, data: await deleteUserSkill(body) });
+    } catch (error) {
+      const code = error instanceof DeleteUserSkillError ? error.code : 'DELETE_FAILED';
+      const status = code === 'NOT_LOGGED_IN' ? 401 : code === 'INVALID_SLUG' ? 400
+        : code === 'PREINSTALL_PROTECTED' ? 403 : code === 'SKILL_NOT_FOUND' ? 404 : 500;
+      sendJson(res, status, { success: false, code, error: error instanceof Error ? error.message : String(error) });
     }
     return true;
   }

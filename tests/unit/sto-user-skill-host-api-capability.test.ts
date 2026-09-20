@@ -58,4 +58,17 @@ describe('sto-skill-runtime user-skill Host API capability', () => {
     expect(error).toMatchObject({ code: 'PREINSTALL_PROTECTED', message: '不能覆盖预装技能' });
     expect(STO_SKILL_RUNTIME_CAPABILITY.id).toBe('sto.skill-runtime');
   });
+
+  it('posts an exact delete target and unwraps the response', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ success: true, data: { ok: true, slug: 'demo', scope: 'user', userCode: 'u-1' } }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(createHostApiSkillRuntimePort().delete({ slug: 'demo' }))
+      .resolves.toMatchObject({ ok: true, slug: 'demo' });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/skills/delete-user'), expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ slug: 'demo' }),
+    }));
+  });
 });

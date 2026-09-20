@@ -3,6 +3,7 @@ import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 import { defineStoTool } from "./define-sto-tool.js";
 import {
 	postSaveUserSkill,
+	postDeleteUserSkill,
 	scheduleOrphanSkillImportViaHost,
 	type UserSkillToolPluginConfig,
 } from "./host-api-client.js";
@@ -18,6 +19,7 @@ const USER_SKILL_SYSTEM_PROMPT = [
 	"- 在会话中**创建或更新用户技能**时，必须调用 `save_user_skill`，传入完整 `skillMd`（含 YAML frontmatter 的 name + description）与 `slug`。",
 	"- ⛔ **禁止**用 write / edit / apply_patch / Bash 把技能写到 `openclaw/skills`、`workspace/skills`、`skills-store`——系统会拦截；那样也不会进入「我的技能」。",
 	"- 可选 `assets` 附加相对技能根的文件；禁止路径穿越（`..`）。",
+	"- 用户明确要求删除技能时调用 delete_user_skill，传入准确 slug；目标不明时询问，禁止直接删除技能目录。",
 	"- 同 slug 默认覆盖已有用户技能；系统预装白名单 slug 会被拒绝。",
 ].join("\n");
 
@@ -76,6 +78,16 @@ export default definePluginEntry({
 			{ priority: 120 },
 		);
 
+		defineStoTool(api, {
+      id: "delete_user_skill", domain: "user-skill", resultType: "user_skill_deleted",
+      label: "删除用户技能",
+      description: "仅当用户明确要求删除技能时调用，传入准确 slug；目标不明时询问。只删除当前用户技能，保护预装和共享技能。",
+      parameters: Type.Object({ slug: Type.String({ minLength: 1 }) }),
+      execute: async (params) => {
+        const payload = await postDeleteUserSkill(cfg, { slug: params.slug });
+        return payload.data ?? payload;
+      },
+    });
 		defineStoTool(api, {
 			id: "save_user_skill",
 			domain: "user-skill",

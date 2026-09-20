@@ -75,3 +75,25 @@ export const saveUserSkillTool: SclawToolDefinition<
     }
   },
 };
+
+
+const deleteUserSkillSchema = Type.Object({
+  slug: Type.String({ minLength: 1, description: '待删除的当前用户技能的准确 slug，不是显示名或文件路径' }),
+});
+
+export const deleteUserSkillTool: SclawToolDefinition<typeof deleteUserSkillSchema> = {
+  name: 'delete_user_skill',
+  label: '删除用户技能',
+  description: '仅当用户明确要求删除或卸载技能时调用。删除当前用户的技能及其引擎副本；不删除共享或预装技能。先确定准确 slug；多个候选时询问用户，不得猜测。',
+  parameters: deleteUserSkillSchema,
+  modes: ['interactive'],
+  activation: STO_USER_SKILL_ACTIVATION,
+  async execute(input, context) {
+    try {
+      const data = await context.capabilities.require(STO_SKILL_RUNTIME_CAPABILITY).delete(input);
+      return { success: true, type: 'user_skill_deleted', domain: 'user-skill', message: `已删除用户技能 ${data.slug}`, data };
+    } catch (error) {
+      return sclawToolFailure('user-skill', error instanceof StoSkillRuntimePortError ? error.code : 'DELETE_USER_SKILL_ERROR', error instanceof Error ? error.message : String(error));
+    }
+  },
+};

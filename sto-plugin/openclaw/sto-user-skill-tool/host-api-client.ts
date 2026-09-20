@@ -83,3 +83,9 @@ export async function scheduleOrphanSkillImportViaHost(
 		body: JSON.stringify({ reason }),
 	});
 }
+
+export async function postDeleteUserSkill(cfg: UserSkillToolPluginConfig, body: { slug: string }): Promise<Record<string, unknown>> {
+  return fetchJson(cfg, "/api/skills/delete-user", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+}
