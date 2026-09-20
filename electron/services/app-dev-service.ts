@@ -39,7 +39,7 @@ import { KeyedGenerationTracker, OperationCanceledError } from './keyed-single-f
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
 import { cloneStoApp } from './sto-app-service';
-import { archiveSiteApp, enrichSiteAppRecord, getSiteApp, listSiteApps } from './site-app-api';
+import { archiveSiteApp, enrichSiteAppRecord, getSiteApp, listSiteApps, updateSiteApp } from './site-app-api';
 import {
   getStoAppBindingByWorkspaceId,
   listStoAppBindings,
@@ -120,6 +120,8 @@ export interface AppDevMarker {
   /** `imported` = local folder import; `created` = 新建站 / clone from cloud. */
   source?: AppDevSource;
   pageType?: SiteAppPageType;
+  /** User-authored app summary. Missing means a legacy marker; empty means explicitly cleared. */
+  description?: string;
   templateId?: string;
   templateVersion?: string;
   packageOssKey?: string;
@@ -540,13 +542,14 @@ function buildAppTemplateAgentsContextBlock(vars: { name: string; pageType: Site
 <!-- /sclaw-app-dev-context -->`;
 }
 
-async function writeAppDevBootstrap(
+export async function writeAppDevBootstrap(
   appPath: string,
   vars: {
     name: string;
     projectType: string;
     source?: AppDevSource;
     pageType?: SiteAppPageType;
+    description?: string;
     templateId?: string;
     templateVersion?: string;
     packageOssKey?: string;
@@ -565,6 +568,7 @@ async function writeAppDevBootstrap(
     createdAt: new Date().toISOString(),
     source: vars.source,
     pageType: vars.pageType,
+    description: vars.description,
     templateId: vars.templateId,
     templateVersion: vars.templateVersion,
     packageOssKey: vars.packageOssKey,
@@ -581,6 +585,9 @@ async function writeAppDevBootstrap(
       }
       if (!marker.pageType && existing.pageType) {
         marker.pageType = normalizeSiteAppPageType(existing.pageType);
+      }
+      if (vars.description === undefined && typeof existing.description === 'string') {
+        marker.description = existing.description;
       }
       if (!marker.templateId && typeof existing.templateId === 'string') {
         marker.templateId = existing.templateId;
@@ -806,6 +813,7 @@ export async function isGitAvailable(): Promise<boolean> {
 
 export interface CreateUserAppInput {
   name: string;
+  description?: string;
   /** Parent directory; the app folder `<parent>/<name>` is created inside. Defaults to ~/SClawApps. */
   parentDir?: string;
   /** 'frontend' | 'fullstack' — fullstack uses site-fullstack + dual-process runtime. */
@@ -1083,6 +1091,7 @@ export async function publishAppTemplateWorkspace(input: {
 export async function createUserApp(input: CreateUserAppInput): Promise<CreateUserAppResult> {
   const name = input.name.trim();
   if (!name) throw new Error('应用名称不能为空');
+  const description = normalizeAppDescription(input.description);
   const pageType = normalizeSiteAppPageType(input.pageType);
   const templateId = input.templateId?.trim();
   const templateVersion = input.templateVersion?.trim();
@@ -1137,6 +1146,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
 
   await writeAppDevBootstrap(appPath, {
     name,
+    description,
     projectType: input.projectType ?? 'frontend',
     source: 'created',
     pageType,
@@ -1182,6 +1192,88 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   });
 
   return { workspaceId, appPath, workspaceName: workspace.name ?? name };
+}
+
+const APP_DESCRIPTION_MAX_LENGTH = 200;
+
+export function normalizeAppDescription(value: unknown): string {
+  if (value !== undefined && typeof value !== 'string') {
+    throw new Error('应用描述格式不正确');
+  }
+  const description = typeof value === 'string' ? value.trim() : '';
+  if (description.length > APP_DESCRIPTION_MAX_LENGTH) {
+    throw new Error(`应用描述不能超过 ${APP_DESCRIPTION_MAX_LENGTH} 个字符`);
+  }
+  return description;
+}
+
+async function resolveAppMarkerByWorkspaceId(workspaceId: string): Promise<{
+  appPath: string;
+  marker: AppDevMarker;
+}> {
+  const id = workspaceId.trim();
+  if (!id) throw new Error('缺少 workspaceId');
+  const appPath = await getWorkspaceRootPath(id);
+  if (!appPath) throw new Error('应用工作区不存在');
+  const marker = await readAppDevMarker(appPath);
+  if (!marker || marker.kind !== 'app-dev') throw new Error('当前工作区不是开发应用');
+  return { appPath, marker };
+}
+
+async function writeAppDescriptionToMarker(
+  appPath: string,
+  marker: AppDevMarker,
+  description: string,
+): Promise<void> {
+  await writeFile(appDevMarkerPath(appPath), `${JSON.stringify({ ...marker, description }, null, 2)}\n`, 'utf8');
+}
+
+export interface AppDescriptionResult {
+  description: string;
+  bound: boolean;
+  source: 'remote' | 'local';
+  stale?: boolean;
+}
+
+export async function getUserAppDescription(workspaceId: string): Promise<AppDescriptionResult> {
+  const { appPath, marker } = await resolveAppMarkerByWorkspaceId(workspaceId);
+  const localDescription = typeof marker.description === 'string' ? marker.description : '';
+  const binding = await getStoAppBindingByWorkspaceId(workspaceId);
+  const appCode = marker.appCode?.trim() || await readBoundAppCode(appPath) || binding?.appCode?.trim();
+  if (!appCode) return { description: localDescription, bound: false, source: 'local' };
+
+  try {
+    const remote = await getSiteApp(appCode);
+    const description = typeof remote.description === 'string' ? remote.description.trim() : '';
+    await writeAppDescriptionToMarker(appPath, marker, description);
+    return { description, bound: true, source: 'remote' };
+  } catch (error) {
+    if (typeof marker.description === 'string') {
+      logger.warn(`[app-dev] remote description unavailable appCode=${appCode}; using local cache:`, error);
+      return { description: localDescription, bound: true, source: 'local', stale: true };
+    }
+    throw error;
+  }
+}
+
+export async function updateUserAppDescription(input: {
+  workspaceId: string;
+  description: unknown;
+}): Promise<{ description: string; bound: boolean }> {
+  if (typeof input.description !== 'string') throw new Error('应用描述格式不正确');
+  const description = normalizeAppDescription(input.description);
+  const { appPath, marker } = await resolveAppMarkerByWorkspaceId(input.workspaceId);
+  const binding = await getStoAppBindingByWorkspaceId(input.workspaceId);
+  const appCode = marker.appCode?.trim() || await readBoundAppCode(appPath) || binding?.appCode?.trim();
+  if (!appCode) {
+    await writeAppDescriptionToMarker(appPath, marker, description);
+    return { description, bound: false };
+  }
+
+  const remote = await updateSiteApp(appCode, { description: description || null });
+  const savedDescription = typeof remote.description === 'string' ? remote.description.trim() : '';
+  await writeAppDescriptionToMarker(appPath, marker, savedDescription);
+  return { description: savedDescription, bound: true };
 }
 
 /**

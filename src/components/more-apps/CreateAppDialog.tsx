@@ -38,6 +38,7 @@ export interface CreateAppDialogProps {
 
 export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [pageType, setPageType] = useState<CodeApplicationPageType>('site');
   const [parentDir, setParentDir] = useState('');
   const [defaultParentDir, setDefaultParentDir] = useState('');
@@ -52,6 +53,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   useEffect(() => {
     if (!open) {
       setName('');
+      setDescription('');
       setParentDir('');
       setPageType('site');
       setTemplates([]);
@@ -140,6 +142,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
       }
       const result = await createUserApp({
         name: trimmed,
+        description: description.trim(),
         parentDir: resolvedParentDir,
         projectType: 'frontend',
         pageType,
@@ -171,7 +174,8 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-[22px] bg-background p-6 shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-[22px] bg-background shadow-xl">
+        <div className="min-h-0 overflow-y-auto p-6 pb-0">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">创建应用</h2>
           <button type="button" onClick={onClose} aria-label="关闭" className="text-muted-foreground hover:text-foreground">
@@ -194,6 +198,33 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
             formFieldFocusClass,
           )}
         />
+
+        <div className="mb-5">
+          <label htmlFor="create-app-description" className="mb-2 block text-sm font-medium text-foreground">
+            应用描述<span className="ml-1 text-xs font-normal text-muted-foreground">（选填）</span>
+          </label>
+          <textarea
+            id="create-app-description"
+            value={description}
+            maxLength={200}
+            rows={3}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="例如：帮助网点查询快递物流、跟踪异常件，提高日常查询效率。"
+            className={cn(
+              'w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground',
+              'placeholder:text-muted-foreground transition-colors',
+              formFieldFocusClass,
+            )}
+          />
+          <div className="mt-1 flex justify-between gap-3 text-xs text-muted-foreground">
+            <span className={cn(description.length > 200 && 'text-[var(--sto-functional-error)]')}>
+              {description.length > 200 ? '应用描述不能超过 200 个字符' : '简要介绍应用的用途和主要功能。'}
+            </span>
+            <span className={cn('shrink-0', description.length > 200 && 'text-[var(--sto-functional-error)]')}>
+              {description.length}/200
+            </span>
+          </div>
+        </div>
 
         <label className="mb-2 block text-sm font-medium text-foreground">应用类型</label>
         <div className="mb-5 grid grid-cols-2 gap-2">
@@ -283,13 +314,14 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
         <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
           创建后即可在对话里描述需求，页面会实时更新。
         </p>
+        </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border p-6 pt-4">
           <Button type="button" variant="ghost" onClick={onClose}>取消</Button>
           <Button
             type="button"
             className={cn(modalPrimarySubmitButtonClass, 'min-w-[88px]')}
-            disabled={submitting || loadingTemplates || !selectedTemplate || !name.trim() || !parentDir.trim()}
+            disabled={submitting || loadingTemplates || !selectedTemplate || !name.trim() || !parentDir.trim() || description.length > 200}
             onClick={() => void handleSubmit()}
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '创建应用'}

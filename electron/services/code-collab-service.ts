@@ -202,6 +202,7 @@ async function requireWorkspace(
 
 async function readMarkerForFirstPush(appPath: string): Promise<{
   applicationName: string;
+  description?: string;
   pageType: SiteAppPageType;
   source?: 'created' | 'imported';
   appCode?: string;
@@ -220,8 +221,12 @@ async function readMarkerForFirstPush(appPath: string): Promise<{
     const appCode = typeof raw.appCode === 'string' && raw.appCode.trim()
       ? raw.appCode.trim()
       : undefined;
+    const description = typeof raw.description === 'string'
+      ? raw.description.trim()
+      : undefined;
     return {
       applicationName,
+      description,
       pageType: normalizeSiteAppPageType(raw.pageType),
       source,
       appCode,
@@ -229,6 +234,14 @@ async function readMarkerForFirstPush(appPath: string): Promise<{
   } catch {
     return { applicationName: fallbackName, pageType: 'site' };
   }
+}
+
+export function resolveFirstPushAppDescription(
+  applicationName: string,
+  description: string | undefined,
+): string | null {
+  if (description === undefined) return `${applicationName} 应用`;
+  return description.trim() || null;
 }
 
 async function summarizePendingRegistrationStatus(cwd: string): Promise<CodeCollabStatusSummary> {
@@ -349,7 +362,7 @@ async function ensureWorkspaceForPush(
     );
     cloud = await createSiteApp({
       name: applicationName,
-      description: `${applicationName} 应用`,
+      description: resolveFirstPushAppDescription(applicationName, marker.description),
       pageType,
     });
     appCode = cloud.appCode;

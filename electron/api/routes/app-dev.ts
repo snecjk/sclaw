@@ -48,6 +48,8 @@ import {
   type CreateUserAppInput,
   isFullstackAppMarker,
   readAppDevMarker,
+  getUserAppDescription,
+  updateUserAppDescription,
 } from '../../services/app-dev-service';
 import { getDevServerLogs, drainDevServerErrors } from '../../services/app-dev-server-manager';
 import {
@@ -243,6 +245,23 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/apps/ids' && req.method === 'GET') {
       const ids = await listDevAppWorkspaceIds();
       sendJson(res, 200, { success: true, ids });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/apps/description' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const result = await getUserAppDescription(workspaceId);
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/apps/description' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId?: string; description?: unknown }>(req);
+      const result = await updateUserAppDescription({
+        workspaceId: body.workspaceId ?? '',
+        description: body.description,
+      });
+      sendJson(res, 200, { success: true, ...result });
       return true;
     }
 

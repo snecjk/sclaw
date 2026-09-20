@@ -368,6 +368,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
 
 export async function createUserApp(input: {
   name: string;
+  description?: string;
   parentDir?: string;
   projectType?: string;
   pageType?: CodeApplicationPageType;
@@ -380,6 +381,30 @@ export async function createUserApp(input: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
     ...APP_DEV_LONG_RUNNING,
+  });
+}
+
+export interface AppDescriptionResult {
+  description: string;
+  bound: boolean;
+  source: 'remote' | 'local';
+  stale?: boolean;
+}
+
+export async function getAppDescription(workspaceId: string): Promise<AppDescriptionResult> {
+  return hostApiFetch(
+    `/api/app-dev/apps/description?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+}
+
+export async function updateAppDescription(input: {
+  workspaceId: string;
+  description: string;
+}): Promise<{ description: string; bound: boolean }> {
+  return hostApiFetch('/api/app-dev/apps/description', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
   });
 }
 

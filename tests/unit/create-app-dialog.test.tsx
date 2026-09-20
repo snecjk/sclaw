@@ -83,6 +83,7 @@ describe('CreateAppDialog application type', () => {
     await waitFor(() => {
       expect(createUserAppMock).toHaveBeenCalledWith({
         name: '资源应用',
+        description: '',
         parentDir: '/tmp/SClawApps',
         projectType: 'frontend',
         pageType: 'assets',
@@ -91,6 +92,31 @@ describe('CreateAppDialog application type', () => {
         templateSource: 'memory-center',
       });
     });
+  });
+
+  it('normalizes and submits an optional application description', async () => {
+    render(<CreateAppDialog open onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByPlaceholderText('比如：快递查询助手'), { target: { value: '查询助手' } });
+    fireEvent.change(screen.getByLabelText(/应用描述/), { target: { value: '  查询快递状态  ' } });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '创建应用' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '创建应用' }));
+
+    await waitFor(() => expect(createUserAppMock).toHaveBeenCalledWith(expect.objectContaining({
+      name: '查询助手',
+      description: '查询快递状态',
+    })));
+  });
+
+  it('prevents submission when the description exceeds 200 characters', async () => {
+    render(<CreateAppDialog open onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByPlaceholderText('比如：快递查询助手'), { target: { value: '查询助手' } });
+    fireEvent.change(screen.getByLabelText(/应用描述/), { target: { value: '描'.repeat(201) } });
+
+    expect(screen.getByText('应用描述不能超过 200 个字符')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建应用' })).toBeDisabled();
   });
 
   it('does not silently select another template when minimal is not initialized', async () => {

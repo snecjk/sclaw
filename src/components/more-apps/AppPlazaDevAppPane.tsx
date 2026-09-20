@@ -87,6 +87,7 @@ import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
 import { StoAppDeployHistoryDialog } from '@/components/app-dev/StoAppDeployHistoryDialog';
 import { StoAppMenuPublishDialog } from '@/components/app-dev/StoAppMenuPublishDialog';
 import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
+import { AppDescriptionPopover } from '@/components/app-dev/AppDescriptionPopover';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useAppDevVersionsStore } from '@/stores/app-dev-versions';
 import { useAppDevWorkbenchStore } from '@/stores/app-dev-workbench';
@@ -982,7 +983,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           返回
         </button>
         <div className="h-4 w-px bg-border" aria-hidden />
-        <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">{appName}</h1>
+        {isTemplateWorkspace ? (
+          <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">{appName}</h1>
+        ) : (
+          <AppDescriptionPopover key={workspaceId} workspaceId={workspaceId} appName={appName} />
+        )}
         {isTemplateWorkspace ? (
           <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[11px] text-violet-600 dark:text-violet-300">
             应用模板
