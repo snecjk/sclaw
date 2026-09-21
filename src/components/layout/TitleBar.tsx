@@ -15,6 +15,13 @@ import logoSvg from '@/assets/logo.svg';
 const TITLEBAR_SHELL_CLASS =
   'drag-region flex h-[var(--sto-header-h)] w-full shrink-0 items-center border-b glass-chrome';
 
+interface TitleBarProps {
+  /** Overlay the title bar without tinting or blurring the content underneath. */
+  transparent?: boolean;
+  /** Whether to render the logo, product name, and environment badge. */
+  showBrand?: boolean;
+}
+
 function TitleBarBrandLogo() {
   return (
     <div className="flex items-center gap-2 px-3">
@@ -25,15 +32,20 @@ function TitleBarBrandLogo() {
   );
 }
 
-export function TitleBar() {
+export function TitleBar({ transparent = false, showBrand = true }: TitleBarProps) {
   const platform = window.electron?.platform;
+  const transparentClass = transparent
+    ? '!border-transparent !bg-transparent !shadow-none !backdrop-blur-none'
+    : undefined;
 
   if (platform === 'darwin') {
     return (
-      <div className={cn(TITLEBAR_SHELL_CLASS, 'pl-20 pr-3')}>
-        <div className="no-drag shrink-0">
-          <TitleBarBrandLogo />
-        </div>
+      <div className={cn(TITLEBAR_SHELL_CLASS, 'pl-20 pr-3', transparentClass)}>
+        {showBrand ? (
+          <div className="no-drag shrink-0">
+            <TitleBarBrandLogo />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -42,10 +54,16 @@ export function TitleBar() {
     return null;
   }
 
-  return <WindowsTitleBar />;
+  return <WindowsTitleBar transparentClass={transparentClass} showBrand={showBrand} />;
 }
 
-function WindowsTitleBar() {
+function WindowsTitleBar({
+  transparentClass,
+  showBrand,
+}: {
+  transparentClass?: string;
+  showBrand: boolean;
+}) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -55,10 +73,12 @@ function WindowsTitleBar() {
   }, []);
 
   return (
-    <div className={cn(TITLEBAR_SHELL_CLASS, 'justify-between')}>
-      <div className="no-drag shrink-0">
-        <TitleBarBrandLogo />
-      </div>
+    <div className={cn(TITLEBAR_SHELL_CLASS, 'justify-between', transparentClass)}>
+      {showBrand ? (
+        <div className="no-drag shrink-0">
+          <TitleBarBrandLogo />
+        </div>
+      ) : <div />}
 
       <div className="no-drag flex h-full">
         <button
