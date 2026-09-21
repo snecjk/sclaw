@@ -24,6 +24,14 @@ export function normalizeSiteappMenuItem(item: SiteappMenuItemInput): SiteappMen
   };
 }
 
+/** Defaults for `sai-cli siteapp menu sync` apply, also used by HTTP menus/replace. */
+export const SITEAPP_MENU_SYNC_APPLY_DEFAULTS = {
+  mode: 'apply',
+  confirm: true,
+  allow_empty: false,
+  skip_preview: true,
+} as const;
+
 export function buildSiteappMenuSyncParams(input: {
   appCode: string;
   menus: SiteappMenuItemInput[];
@@ -32,8 +40,18 @@ export function buildSiteappMenuSyncParams(input: {
   if (!appCode) throw new Error('缺少 app_code');
   return {
     app_code: appCode,
+    ...SITEAPP_MENU_SYNC_APPLY_DEFAULTS,
     menus: input.menus.map(normalizeSiteappMenuItem),
   };
+}
+
+export function formatSiteappMenuSyncCliExample(appCode?: string): string {
+  const code = appCode?.trim() || '<app_code>';
+  const params = JSON.stringify({
+    app_code: code,
+    ...SITEAPP_MENU_SYNC_APPLY_DEFAULTS,
+  }).replace(/\}$/, ',"menus":[...]}');
+  return `sai-cli siteapp menu sync --params '${params}' -f json`;
 }
 
 export function buildPostPublishMenuSyncPrompt(input: {
@@ -71,7 +89,7 @@ export function buildPostPublishMenuSyncPrompt(input: {
     '我同意之后调用：',
     '',
     '```bash',
-    `sai-cli siteapp menu sync --params '{"app_code":"${appCode || '<app_code>'}","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json`,
+    formatSiteappMenuSyncCliExample(appCode),
     '```',
     '',
     '可先对照现有菜单：',

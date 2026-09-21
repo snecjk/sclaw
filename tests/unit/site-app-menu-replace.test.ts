@@ -9,6 +9,7 @@ vi.mock('@electron/services/sto-memory-api-fetch', () => ({
 }));
 
 import { syncSiteAppMenus } from '@electron/services/site-app-api';
+import { buildSiteappMenuSyncParams } from '../../shared/siteapp-menu-sync';
 
 describe('syncSiteAppMenus', () => {
   beforeEach(() => {
@@ -17,15 +18,15 @@ describe('syncSiteAppMenus', () => {
   });
 
   it('posts to /api/v1/cli/site-app/menus/replace', async () => {
-    const params = {
-      app_code: 'app_test',
+    const params = buildSiteappMenuSyncParams({
+      appCode: 'app_test',
       menus: [{
         menu_code: 'home',
         parent_code: null,
         menu_name: '首页',
         menu_type: 'page',
       }],
-    };
+    });
 
     await syncSiteAppMenus(params);
 
@@ -36,5 +37,14 @@ describe('syncSiteAppMenus', () => {
         body: JSON.stringify(params),
       }),
     );
+    expect(JSON.parse(String(
+      memoryCenterFetchForSessionMock.mock.calls[0]?.[1]?.body,
+    ))).toMatchObject({
+      app_code: 'app_test',
+      mode: 'apply',
+      confirm: true,
+      allow_empty: false,
+      skip_preview: true,
+    });
   });
 });

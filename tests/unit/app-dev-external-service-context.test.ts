@@ -60,6 +60,10 @@ describe('应用开发外部服务上下文', () => {
 
     expect(agents).toContain('sai-cli siteapp menu sync');
     expect(agents).toContain('sai-cli siteapp menu list');
+    expect(agents).toContain('"mode":"apply"');
+    expect(agents).toContain('"confirm":true');
+    expect(agents).toContain('"allow_empty":false');
+    expect(agents).toContain('"skip_preview":true');
     expect(agents).toContain('一级目录 + 二级页面');
     expect(agents).toContain('未同意禁止 apply');
 

@@ -53,6 +53,7 @@ import {
   type SiteAppPageType,
   type SiteAppRecord,
 } from '../../shared/site-app-catalog';
+import { formatSiteappMenuSyncCliExample } from '../../shared/siteapp-menu-sync';
 import {
   STO_WORKSPACE_RELATIVE,
   siteAppToWorkspaceFields,
@@ -507,7 +508,7 @@ ${pagePriorityBlock}
 - ${menuShape}
 - 发布成功或用户要求同步菜单时：扫描本应用源码中的导航、路由和权限配置（含当前不展示的权限页），整理菜单树后**展示并询问是否同步**；未同意禁止 apply
 - 查询：\`sai-cli siteapp menu list --params '{"app_code":"<app_code>"}' -f json\`
-- 同意后：\`sai-cli siteapp menu sync --params '{"app_code":"<app_code>","mode":"apply","confirm":true,"skip_preview":true,"menus":[...]}' -f json\`
+- 同意后：\`${formatSiteappMenuSyncCliExample('<app_code>')}\`
 - 菜单项字段：\`menu_code\` / \`parent_code\`（一级为 null） / \`menu_name\` / \`menu_type\`（directory 或 page，不要用 menu）
 - 不要同步 404、redirect、\`developerOnly\`；\`app_code\` 以 \`.sto/workspace.json\` 为准
 

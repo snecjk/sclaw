@@ -10,41 +10,56 @@
       "repo": "DingTalk-Real-AI/dingtalk-workspace-cli"
     }
   },
-  "releaseUrl": "https://gitee.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/tag/v1.0.60",
+  "releaseUrl": null,
+  "resolvedFrom": "gitee",
   "platforms": {
     "darwin-arm64": {
       "assetName": "dws-darwin-arm64.tar.gz",
       "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-darwin-arm64.tar.gz",
-      "archive": "tar.gz"
+      "sha256": null,
+      "archive": "tar.gz",
+      "githubSha256": "4ed89f8a6f8341f83c78b48ce765fd18b1d7a305499aea78dfc16c6c5fecff68"
     },
     "darwin-x64": {
       "assetName": "dws-darwin-amd64.tar.gz",
       "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-darwin-amd64.tar.gz",
-      "archive": "tar.gz"
+      "sha256": null,
+      "archive": "tar.gz",
+      "githubSha256": "53c569e2c713a8a2a0f73114068669e87d3a5fa78ec2bbeca5e19e49442adb37"
     },
     "win32-x64": {
       "assetName": "dws-windows-amd64.zip",
       "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-windows-amd64.zip",
-      "archive": "zip"
+      "sha256": null,
+      "archive": "zip",
+      "githubSha256": "cce1cb02fece17443957441207849f3dd465bb3261377dedc349d27046cedcb6"
     },
     "win32-arm64": {
       "assetName": "dws-windows-arm64.zip",
       "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-windows-arm64.zip",
-      "archive": "zip"
+      "sha256": null,
+      "archive": "zip",
+      "githubSha256": "9aff0ff67df946e1c552c999e3ac594eb5b2159922aaf0472dec671796f3ec1f"
     },
     "linux-x64": {
       "assetName": "dws-linux-amd64.tar.gz",
       "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-linux-amd64.tar.gz",
-      "archive": "tar.gz"
+      "sha256": null,
+      "archive": "tar.gz",
+      "githubSha256": "2d9158a2e67ef4eb193bb04a226d1360973c214cd781b3dab0099a214600f1a2"
     },
     "linux-arm64": {
       "assetName": "dws-linux-arm64.tar.gz",
       "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-linux-arm64.tar.gz",
-      "archive": "tar.gz"
+      "sha256": null,
+      "archive": "tar.gz",
+      "githubSha256": "e6676617ff4f813907632a0848a34b45ea210776c0cc415fbe978f6ea626b2a6"
     }
   },
   "skillsZip": {
     "assetName": "dws-skills.zip",
-    "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-skills.zip"
+    "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.60/dws-skills.zip",
+    "sha256": null,
+    "githubSha256": "422b8e3353609850faf050007762598a438404156e65ad2585104944a3562591"
   }
 }

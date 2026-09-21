@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPostPublishMenuSyncPrompt,
   buildSiteappMenuSyncParams,
+  formatSiteappMenuSyncCliExample,
 } from '../../shared/siteapp-menu-sync';
 
 describe('siteapp menu sync', () => {
-  it('builds replace params with app_code and menus only', () => {
+  it('builds replace params with the same CLI apply defaults', () => {
     expect(buildSiteappMenuSyncParams({
       appCode: 'app_test',
       menus: [{
@@ -16,6 +17,10 @@ describe('siteapp menu sync', () => {
       }],
     })).toEqual({
       app_code: 'app_test',
+      mode: 'apply',
+      confirm: true,
+      allow_empty: false,
+      skip_preview: true,
       menus: [{
         menu_code: 'home',
         parent_code: null,
@@ -55,6 +60,8 @@ describe('siteapp menu sync', () => {
     expect(prompt).toContain('是否把以上菜单同步到云端');
     expect(prompt).toContain('sai-cli siteapp menu sync');
     expect(prompt).toContain('sai-cli siteapp menu list');
+    expect(prompt).toContain(formatSiteappMenuSyncCliExample('app_site'));
+    expect(prompt).toContain('"allow_empty":false');
     expect(prompt).toContain('我同意之前，不要执行 apply');
     expect(prompt).toContain('运行时按权限隐藏的页面也要列入');
   });
