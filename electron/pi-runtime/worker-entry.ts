@@ -538,6 +538,10 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
             durationMs,
           });
         }
+        activeCompaction = null;
+        const contextUsage = entry.session.getContextUsage();
+        const resolvedContextWindow = contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null;
+        const resolvedPercent = contextUsage?.percent ?? computeFallbackPercent(contextUsage?.tokens, resolvedContextWindow);
         logPiCore('event.compaction-end', {
           sessionKey: config.sessionKey,
           runId,
@@ -552,10 +556,6 @@ async function createSession(config: PiSessionConfig): Promise<PiSession> {
           contextWindow: entry.session.model?.contextWindow ?? null,
           contextPercentAfter: resolvedPercent,
         });
-        activeCompaction = null;
-        const contextUsage = entry.session.getContextUsage();
-        const resolvedContextWindow = contextUsage?.contextWindow ?? entry.session.model?.contextWindow ?? null;
-        const resolvedPercent = contextUsage?.percent ?? computeFallbackPercent(contextUsage?.tokens, resolvedContextWindow);
         emit(config.sessionKey, {
           type: 'context.usage.updated',
           sessionKey: config.sessionKey,

@@ -61,6 +61,16 @@ describe('host-events', () => {
     expect(handler).toHaveBeenCalledWith({ preference: 'system', appearance: 'dark' });
   });
 
+  it('maps skills:changed through IPC so session renames refresh the picker', async () => {
+    const onMock = vi.mocked(window.electron.ipcRenderer.on);
+    onMock.mockImplementation(() => vi.fn());
+
+    const { subscribeHostEvent } = await import('@/lib/host-events');
+    subscribeHostEvent('skills:changed', vi.fn());
+
+    expect(onMock).toHaveBeenCalledWith('skills:changed', expect.any(Function));
+  });
+
   it('falls back to off when an older IPC bridge returns no cleanup function', async () => {
     const onMock = vi.mocked(window.electron.ipcRenderer.on);
     const offMock = vi.mocked(window.electron.ipcRenderer.off);

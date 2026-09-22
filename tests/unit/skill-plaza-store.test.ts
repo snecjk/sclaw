@@ -37,9 +37,10 @@ vi.mock('@/lib/skill-plaza-api', () => {
 });
 
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
-import { fetchSkillPlazaList, SkillPlazaAuthNotReadyError } from '@/lib/skill-plaza-api';
+import { fetchSkillPlazaList, fetchLocalSkills, SkillPlazaAuthNotReadyError } from '@/lib/skill-plaza-api';
 
 const mockedList = vi.mocked(fetchSkillPlazaList);
+const mockedLocal = vi.mocked(fetchLocalSkills);
 
 function makeSkill(slug: string) {
   return {
@@ -185,5 +186,50 @@ describe('skill-plaza store request coordination', () => {
       vi.clearAllTimers();
       vi.useRealTimers();
     }
+  });
+
+  it('keeps local skill titles from the API instead of plaza meta overrides', async () => {
+    useSkillPlazaStore.setState({
+      plazaSkills: [{
+        ...makeSkill('qpath'),
+        title: 'QPath 项目分析',
+        description: 'plaza desc',
+        installCount: 9,
+        useCount: 3,
+      }],
+      plazaSkillMetaMap: {
+        qpath: {
+          title: 'QPath 项目分析',
+          description: 'cached desc',
+          icon: undefined,
+          category: null,
+          categoryCode: null,
+          installCount: 9,
+          useCount: 3,
+        },
+      },
+    });
+    mockedLocal.mockResolvedValueOnce({
+      skills: [{
+        ...makeSkill('qpath'),
+        title: 'Qpath技能',
+        description: 'local desc',
+        source: 'mine',
+        installed: true,
+      }],
+      categoryCounts: {},
+      hasMore: false,
+      page: 1,
+      pageSize: 1,
+      total: 1,
+    });
+
+    await useSkillPlazaStore.getState().fetchLocalSkills({ forceRefresh: true });
+
+    const skill = useSkillPlazaStore.getState().mySkills.find((item) => item.slug === 'qpath');
+    expect(skill?.title).toBe('Qpath技能');
+    expect(skill?.description).toBe('local desc');
+    expect(skill?.installCount).toBe(9);
+    expect(skill?.useCount).toBe(3);
   });
 });

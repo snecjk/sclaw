@@ -92,16 +92,17 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     }, [open]);
 
     // 仅在 picker 打开瞬间兜底重拉一次，避免「空列表 + loading 落定」形成自激重拉死循环。
+    // Skills always force-refresh: session renames leave mySkills titles stale.
     const prevOpenRef = useRef(false);
     useEffect(() => {
       if (open && !prevOpenRef.current) {
         void refetch();
-        if (isSlashMode && mySkills.length === 0 && !skillsLoading) {
-          void fetchLocalSkills({ reset: true });
+        if (isSlashMode) {
+          void fetchLocalSkills({ reset: true, forceRefresh: true });
         }
       }
       prevOpenRef.current = open;
-    }, [fetchLocalSkills, isSlashMode, mySkills.length, open, refetch, skillsLoading]);
+    }, [fetchLocalSkills, isSlashMode, open, refetch]);
 
     useLayoutEffect(() => {
       if (!open) {
