@@ -1,3 +1,7 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { app } from 'electron';
 import { getAppPlazaService } from './app-plaza-service';
 import {
   getFinanceBiApiBase,
@@ -467,6 +471,78 @@ export function clearFinanceBiAuth(): void {
   cachedAuth = null;
   inflight = null;
   console.info('[finance-bi][我的报表1][auth] cleared（对齐 preview clearAuth）');
+}
+
+/** 给 preview 嵌入页写入 localStorage 的凭证（对齐 saveAuthToLocalStorage） */
+export type FinanceBiPreviewEmbedAuth = {
+  token: string;
+  sid?: string;
+  userInfo: Record<string, unknown>;
+  stoBiUserInfo: Record<string, unknown>;
+  exp: number;
+  time: number;
+  /** webview preload file://，保证页面脚本读 token 之前已写入 */
+  preloadUrl?: string;
+};
+
+const PREVIEW_EMBED_BRIDGE_CJS = `'use strict';
+const { ipcRenderer } = require('electron');
+window.addEventListener('message', (event) => {
+  const data = event && event.data;
+  if (data && data.type === 'sclaw-finance-bi-embed') {
+    ipcRenderer.sendToHost('sclaw-finance-bi-embed', data);
+  }
+});
+`;
+
+function writeFinanceBiPreviewPreload(fileName: string, source: string): string {
+  const dir = join(app.getPath('userData'), 'finance-bi');
+  mkdirSync(dir, { recursive: true });
+  const filePath = join(dir, fileName);
+  writeFileSync(filePath, source, 'utf8');
+  return pathToFileURL(filePath).href;
+}
+
+export function getFinanceBiPreviewBridgePreloadUrl(): string {
+  return writeFinanceBiPreviewPreload('preview-bridge-preload.cjs', PREVIEW_EMBED_BRIDGE_CJS);
+}
+
+function writeFinanceBiPreviewAuthPreload(auth: FinanceBiPreviewEmbedAuth): string {
+  const inject = `(() => {
+    try {
+      localStorage.setItem('auth.token', ${JSON.stringify(auth.token)});
+      localStorage.setItem('auth.userInfo', ${JSON.stringify(JSON.stringify(auth.userInfo ?? {}))});
+      localStorage.setItem('stoBiUserInfo', ${JSON.stringify(JSON.stringify(auth.stoBiUserInfo ?? {}))});
+      localStorage.setItem('auth.exp', ${JSON.stringify(String(auth.exp || ''))});
+      localStorage.setItem('auth.time', ${JSON.stringify(String(auth.time || Date.now()))});
+      ${auth.sid ? `localStorage.setItem('auth.sid', ${JSON.stringify(auth.sid)});` : ''}
+    } catch (error) {}
+  })()`;
+  const cjs = `'use strict';
+const { ipcRenderer, webFrame } = require('electron');
+webFrame.executeJavaScript(${JSON.stringify(inject)});
+${PREVIEW_EMBED_BRIDGE_CJS.replace("'use strict';\nconst { ipcRenderer } = require('electron');\n", '')}
+`;
+  return writeFinanceBiPreviewPreload('preview-auth-preload.cjs', cjs);
+}
+
+/** 缓存有效则直接返回；过期则后台重新换票，不打开 SSO 页面。 */
+export async function getFinanceBiPreviewEmbedAuth(): Promise<FinanceBiPreviewEmbedAuth> {
+  const auth = await ensureFinanceBiAuth();
+  const payload: FinanceBiPreviewEmbedAuth = {
+    token: auth.token,
+    sid: auth.sid,
+    userInfo: auth.userInfo,
+    stoBiUserInfo: auth.stoBiUserInfo,
+    exp: auth.expiresAt,
+    time: auth.savedAt,
+  };
+  try {
+    payload.preloadUrl = writeFinanceBiPreviewAuthPreload(payload);
+  } catch (error) {
+    logger.warn('[finance-bi] preview auth preload write failed', error);
+  }
+  return payload;
 }
 
 /**

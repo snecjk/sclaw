@@ -873,6 +873,13 @@ export const stoMainCardBodyHomeClass = cn(
 );
 
 /**
+ * 数据管理新建等全高嵌入：贴齐窗口，不滚动、不预留 scrollbar gutter。
+ */
+export const stoMainCardBodyEmbedClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
+);
+
+/**
  * 三栏预览展开时 body 槽：display:contents，子项直接参与 main 统一 grid。
  * 与 {@link stoMainCardBodyClass} 互斥使用。
  */
@@ -886,6 +893,14 @@ export const contentHeaderBarClass = cn(
   'drag-region flex shrink-0 items-center justify-between gap-2 overflow-hidden',
   'box-border h-[var(--sto-content-header-h,44px)] min-h-[var(--sto-content-header-h,44px)] max-h-[var(--sto-content-header-h,44px)]',
   'rounded-t-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+  'pl-[var(--sto-content-header-pad-start)] pr-[var(--sto-content-header-pad-end)]',
+);
+
+/** 全屏嵌入页顶栏：贴齐窗口边缘，取消主卡片顶圆角。 */
+export const contentHeaderBarFlushClass = cn(
+  'drag-region flex shrink-0 items-center justify-between gap-2 overflow-hidden',
+  'box-border h-[var(--sto-content-header-h,44px)] min-h-[var(--sto-content-header-h,44px)] max-h-[var(--sto-content-header-h,44px)]',
+  'rounded-none bg-[var(--sto-main-card-bg)]',
   'pl-[var(--sto-content-header-pad-start)] pr-[var(--sto-content-header-pad-end)]',
 );
 

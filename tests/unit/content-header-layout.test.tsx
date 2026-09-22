@@ -177,6 +177,7 @@ describe('ContentHeader vertical pixel contract', () => {
     expect(globals).toMatch(/--sto-sidebar-chrome-toggle-inset-top:\s*16px/);
     expect(globals).toMatch(/--sto-sidebar-chrome-toggle-size:\s*28px/);
     expect(globals).toMatch(/--sto-chrome-traffic-light-pad:\s*76px/);
+    expect(globals).toContain("[data-page-embed='true']");
   });
 
   it('keeps mode-owned Header-to-Surface gaps without stacking Split padding', () => {

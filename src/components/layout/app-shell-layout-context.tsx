@@ -18,6 +18,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import {
   computeAppShellSnapshot,
+  isDataManageCreateRoute,
   resolveEffectiveSidebarMaxForViewport,
   type AppShellLayoutSnapshot,
 } from '@/lib/app-shell-metrics';
@@ -54,11 +55,12 @@ export function AppShellLayoutProvider({ children }: { children: ReactNode }) {
   const preferredWidth = useSettingsStore((s) => s.sidebarPreferredWidth);
   const setSidebarPreferredWidth = useSettingsStore((s) => s.setSidebarPreferredWidth);
   const workflowEditorCollapsed = useWorkflowUiStore((s) => s.editorActive);
+  const dataManageCreateCollapsed = isDataManageCreateRoute(pathname);
   const layoutVariant = getSidebarLayoutVariant();
 
   const [viewportWidth, setViewportWidth] = useState(readViewportWidth);
   const [previewContextCollapsed, setPreviewContextCollapsed] = useState(false);
-  const contextCollapsed = workflowEditorCollapsed || previewContextCollapsed;
+  const contextCollapsed = workflowEditorCollapsed || previewContextCollapsed || dataManageCreateCollapsed;
 
   useEffect(() => {
     const onResize = () => {

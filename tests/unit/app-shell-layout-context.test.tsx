@@ -104,4 +104,14 @@ describe('AppShellLayoutProvider', () => {
     expect(probe.getAttribute('data-has-sidebar')).toBe('0');
     expect(probe.getAttribute('data-width')).toBe('0');
   });
+
+  it('collapses the provincial sidebar on the data-manage create embed route', () => {
+    renderAt('/data-center/data-manage/create');
+    const probe = screen.getByTestId('app-shell-probe');
+    expect(probe.getAttribute('data-width')).toBe('0');
+    expect(probe.getAttribute('data-context')).toBe('1');
+    expect(probe.getAttribute('data-user')).toBe('0');
+    expect(probe.getAttribute('data-has-sidebar')).toBe('1');
+    expect(useSettingsStore.getState().sidebarCollapsed).toBe(false);
+  });
 });

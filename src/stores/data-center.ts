@@ -21,7 +21,7 @@ import type {
 } from '@/types/data-center';
 import type { ScheduleTask } from '@/types/scheduled-task';
 
-export type DataCenterSection = 'qa_artifact' | 'drive' | 'data_source';
+export type DataCenterSection = 'qa_artifact' | 'drive' | 'data_source' | 'data_manage';
 
 interface DataCenterStoreState {
   section: DataCenterSection;
@@ -274,7 +274,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
 
   load: async (options) => {
     const state = get();
-    if (state.section === 'data_source') return;
+    if (state.section === 'data_source' || state.section === 'data_manage') return;
     if (state.spaceType === 'site_shared_artifact' && !state.spaceId) {
       set({
         items: [],
@@ -322,7 +322,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
 
   loadMore: async () => {
     const state = get();
-    if (state.section === 'data_source') return;
+    if (state.section === 'data_source' || state.section === 'data_manage') return;
     if (state.loading || state.loadingMore) return;
     if (state.spaceType === 'site_shared_artifact' && !state.spaceId) return;
     if (!state.hasMore) return;
