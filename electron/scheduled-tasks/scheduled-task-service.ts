@@ -20,6 +20,7 @@ import type {
 import {
   buildDingTalkMentionSystemContextForScheduledTask,
 } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
+import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
 import {
   buildScheduledTaskDingTalkPromptAppend,
   SCHEDULED_TASK_DINGTALK_RULES,
@@ -52,6 +53,7 @@ import {
   type TaskComposerAttachmentRecord,
 } from './scheduled-task-attachments';
 import { mergeScheduledTaskExtra } from '../../shared/scheduled-task-extra';
+import { reconstructComposerSegmentsFromPrompt } from '../../shared/scheduled-task-composer-segments';
 import { alignScheduledTaskCreateToComposerModel } from './scheduled-task-nl-create';
 import {
   mergeComposerHintsIntoCreateInput,
@@ -113,6 +115,88 @@ function isTaskOwnedBy(task: ScheduleTask, actor: string | null): boolean {
   const owner = normalizeUserCode(task.createdBy);
   if (!owner) return true;
   return owner === code;
+}
+
+/**
+ * 对话更新通常只传 prompt。composerSegments 是执行期真源，必须同步替换其中的
+ * 文本，同时保留原任务的附件、技能、收件人和工作流结构化引用。
+ */
+function rebuildComposerSegmentsForPrompt(
+  extra: Record<string, unknown> | null,
+  prompt: string,
+): Record<string, unknown> | null {
+  if (!extra || !Array.isArray(extra.composerSegments)) return extra;
+
+  const segments = extra.composerSegments.filter(
+    (segment): segment is Record<string, unknown> => Boolean(segment && typeof segment === 'object'),
+  );
+  if (segments.length === 0) return extra;
+
+  const attachments = segments.flatMap((segment) => {
+    if (segment.type !== 'file' || typeof segment.fileName !== 'string') return [];
+    const filePath = typeof segment.filePath === 'string' ? segment.filePath : '';
+    const stagedPath = typeof segment.stagedPath === 'string' ? segment.stagedPath : '';
+    return [{
+      fileName: segment.fileName,
+      mimeType: typeof segment.mimeType === 'string'
+        ? segment.mimeType
+        : 'application/octet-stream',
+      sourcePath: stagedPath || filePath,
+      persistentPath: filePath || stagedPath,
+      provenance: segment.provenance && typeof segment.provenance === 'object'
+        ? segment.provenance as { kind: string; [key: string]: unknown }
+        : undefined,
+    }];
+  });
+  const skills = segments.flatMap((segment) => (
+    segment.type === 'skill' && typeof segment.slug === 'string'
+      ? [{
+        slug: segment.slug,
+        title: typeof segment.title === 'string' ? segment.title : undefined,
+      }]
+      : []
+  ));
+  const mentions = segments.flatMap((segment) => (
+    segment.type === 'mention'
+      && segment.mention
+      && typeof segment.mention === 'object'
+      && typeof (segment.mention as { displayName?: unknown }).displayName === 'string'
+      ? [segment.mention as DingTalkMention]
+      : []
+  ));
+  const workflows = segments.filter((segment) => (
+    segment.type === 'workflow'
+      && typeof segment.id === 'string'
+      && typeof segment.name === 'string'
+  ));
+  const primaryWorkflow = workflows[0];
+  const rebuilt = reconstructComposerSegmentsFromPrompt({
+    prompt,
+    attachments,
+    skills,
+    mentions,
+    workflowCode: typeof primaryWorkflow?.id === 'string' ? primaryWorkflow.id : null,
+    workflowName: typeof primaryWorkflow?.name === 'string' ? primaryWorkflow.name : null,
+  }) as Array<Record<string, unknown>>;
+
+  // reconstruct 的 fallback 只接收一个 workflow；把其余既有 workflow 原样补回，
+  // 并用原 segment 恢复 source 等扩展字段。
+  const workflowById = new Map(workflows.map((workflow) => [String(workflow.id), workflow]));
+  const restored = rebuilt.map((segment) => (
+    segment.type === 'workflow' && typeof segment.id === 'string' && workflowById.has(segment.id)
+      ? { ...segment, ...workflowById.get(segment.id) }
+      : segment
+  ));
+  const restoredWorkflowIds = new Set(
+    restored
+      .filter((segment) => segment.type === 'workflow' && typeof segment.id === 'string')
+      .map((segment) => String(segment.id)),
+  );
+  for (const workflow of workflows) {
+    if (!restoredWorkflowIds.has(String(workflow.id))) restored.push(workflow);
+  }
+
+  return { ...extra, composerSegments: restored };
 }
 /**
  * 引擎无关的定时报表层。在 `ScheduledTaskScheduler`（触发 + claim 单飞）之上，
@@ -265,6 +349,13 @@ export class ScheduledTaskService {
     if (input.extra !== undefined && input.extra !== null) {
       updatePayload.extra = mergeScheduledTaskExtra(existing.extra, input.extra);
     }
+    const shouldRebuildComposerText = input.prompt !== undefined
+      && input.extra === undefined
+      && Array.isArray(existing.extra?.composerSegments);
+    if (shouldRebuildComposerText) {
+      // 给附件整理阶段完整的既有 extra；否则只传 prompt 会丢失执行期真源。
+      updatePayload.extra = existing.extra;
+    }
     // 3. 整理附件元数据（尚未 copyFile）
     const prepared = (updatePayload.extra !== undefined || input.prompt !== undefined)
       ? prepareScheduledTaskAttachmentsForSave({
@@ -281,6 +372,12 @@ export class ScheduledTaskService {
       if (input.extra !== undefined || (input.prompt !== undefined && prepared.extra)) {
         updatePayload.extra = prepared.extra;
       }
+    }
+    if (shouldRebuildComposerText && updatePayload.prompt !== undefined) {
+      updatePayload.extra = rebuildComposerSegmentsForPrompt(
+        updatePayload.extra ?? existing.extra,
+        updatePayload.prompt,
+      );
     }
     if (engineCapabilities.enforcedPermissionProfile) {
       updatePayload.permissionProfile = engineCapabilities.enforcedPermissionProfile;

@@ -238,6 +238,44 @@ describe('ScheduledTaskService', () => {
       expect(updated?.extra?.createdVia).toBe('nl');
       expect(updated?.extra?.composerSegments).toEqual([{ type: 'text', text: 'new' }]);
     });
+
+    it('rebuilds composer text when a prompt-only update preserves structured references', async () => {
+      getAuthState.mockResolvedValue({ user: { code: '1165828' } });
+      const mention: DingTalkMention = {
+        type: 'user', displayName: 'Lei', userId: 'u-lei',
+      };
+      const created = await svc.createTask({
+        ...baseCreateInput,
+        extra: {
+          createdVia: 'nl',
+          composerSegments: [
+            { type: 'text', text: 'old instruction ' },
+            { type: 'skill', slug: 'daily-report', title: '日报技能' },
+            { type: 'text', text: ' old tail' },
+            { type: 'mention', mention },
+            { type: 'workflow', id: 'wf-daily', name: '日报工作流', source: 'mine' },
+          ],
+        },
+      });
+
+      const updated = await svc.updateTask(created.id, { prompt: 'new instruction' });
+      const segments = updated?.extra?.composerSegments as Array<Record<string, unknown>>;
+      const text = segments
+        .filter((segment) => segment.type === 'text')
+        .map((segment) => String(segment.text ?? ''))
+        .join('');
+
+      expect(updated?.prompt).toBe('new instruction');
+      expect(text).toContain('new instruction');
+      expect(text).not.toContain('old instruction');
+      expect(text).not.toContain('old tail');
+      expect(segments).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'skill', slug: 'daily-report' }),
+        expect.objectContaining({ type: 'mention', mention }),
+        expect.objectContaining({ type: 'workflow', id: 'wf-daily' }),
+      ]));
+      expect(updated?.extra?.createdVia).toBe('nl');
+    });
   });
 
   describe('setEnabled / deleteTask', () => {
