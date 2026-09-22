@@ -3375,10 +3375,6 @@ exports[`repository-wide theme source audit > rejects changes outside the exact 
     "reason": "Semantic reference exception: the broad raw-color regex sees a CSS color function whose value comes from a theme variable.",
   },
   {
-    "key": "src/components/more-apps/more-apps.css::rawColor::#eceef2::ps .more-apps-card--menu-open .more-apps-card__more-btn { background: #eceef2; color: var(--ma-text); } .page-more-apps .app-plaza-recommended {::1",
-    "reason": "Migration debt: this exact raw color occurrence must be classified or replaced by a semantic token in Tasks 4-10.",
-  },
-  {
     "key": "src/components/more-apps/TemplateProjectUploadDialog.tsx::pageDarkUtility::dark:border-::= 'delete' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300' : 'bor::1",
     "reason": "Migration debt: local color-bearing dark utility must move to semantic recipes in Tasks 6-8.",
   },

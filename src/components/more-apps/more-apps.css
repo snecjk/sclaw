@@ -1003,15 +1003,15 @@
   height: 30px;
   border: 0;
   border-radius: 8px;
-  background: var(--ma-surface-ghost-hover);
-  color: var(--ma-icon-muted);
+  background: transparent;
+  color: var(--sto-icon-tertiary);
   cursor: pointer;
 }
 
 .page-more-apps .more-apps-card__more-btn:hover,
 .page-more-apps .more-apps-card--menu-open .more-apps-card__more-btn {
-  background: #eceef2;
-  color: var(--ma-text);
+  background: var(--sto-control-hover-bg);
+  color: var(--sto-text-primary);
 }
 
 .page-more-apps .app-plaza-recommended {

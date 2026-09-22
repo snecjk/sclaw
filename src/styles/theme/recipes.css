@@ -465,6 +465,12 @@
 
   .sto-navigation-item--feature-tab { background-color: transparent; border-color: transparent; color: var(--sto-text-tertiary); }
   .sto-navigation-item.sto-navigation-item--feature-tab:is(:hover, [data-sto-state='hover'], [aria-selected='true']) { background: transparent; color: var(--sto-segment-plain-selected-foreground); }
+  /* Plain text tabs: no brand focus ring — selection weight/color is the affordance. */
+  .sto-navigation-item.sto-navigation-item--feature-tab:is(:focus, :focus-visible, :has(:focus-visible), [data-sto-state='focus']) {
+    background: transparent;
+    outline: none;
+    box-shadow: none;
+  }
   .sto-navigation-item--feature-filter { background-color: transparent; border-color: transparent; color: var(--sto-markdown-code-muted); }
   .sto-navigation-item--feature-filter .sto-navigation-item__count { color: var(--sto-metadata-count-foreground); }
   .sto-navigation-item--feature-filter:is(:hover, [data-sto-state='hover'], [aria-pressed='true']) { background-color: var(--sto-control-active-bg); color: var(--sto-quick-input-content-foreground); }
