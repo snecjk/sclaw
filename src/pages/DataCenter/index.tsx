@@ -5,6 +5,7 @@ import {
   AlertCircle,
   BarChart3,
   ChevronDown,
+  Database,
   Folder,
   FolderPlus,
   Grid2X2,
@@ -62,6 +63,7 @@ import type { DataCenterTempUrl } from '@/types/data-center';
 import type { LocalAuthorizeSelectionType } from '@/types/local-authorized-file';
 import { getAppEnv } from '../../../shared/env-config';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
+import { DataManagePage } from './data-manage/DataManagePage';
 import { ReportListPage } from './reports/ReportListPage';
 import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import {
@@ -125,6 +127,8 @@ export function DataCenter() {
   const qrCodeContentRef = useRef<HTMLDivElement>(null);
   const isDriveSection = store.section === 'drive';
   const isFinanceReportSection = store.section === 'data_source';
+  const isDataManageSection = store.section === 'data_manage';
+  const isHostedBiSection = isFinanceReportSection || isDataManageSection;
   const isLocalDriveTab = isDriveSection && driveTab === 'local';
   const isUploadDriveTab = isDriveSection && driveTab === 'upload';
   const isSharedArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'site_shared_artifact';
@@ -204,7 +208,7 @@ export function DataCenter() {
   }, [searchParams, setSearchParams, store.section]);
 
   useEffect(() => {
-    if (store.section === 'data_source') return;
+    if (store.section === 'data_source' || store.section === 'data_manage') return;
     if (store.section === 'drive') {
       if (driveTab === 'local') {
         void localStore.load();
@@ -613,6 +617,16 @@ export function DataCenter() {
               <button
                 type="button"
                 role="tab"
+                aria-selected={isDataManageSection}
+                onClick={() => handleSectionChange('data_manage')}
+                className={myTaskSectionTabClass(isDataManageSection)}
+              >
+                <Database className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                {t('dataCenterPage.sections.dataManage')}
+              </button>
+              <button
+                type="button"
+                role="tab"
                 aria-selected={store.section === 'drive'}
                 onClick={() => handleSectionChange('drive')}
                 className={myTaskSectionTabClass(store.section === 'drive')}
@@ -629,20 +643,28 @@ export function DataCenter() {
                 ? t('dataCenterPage.sections.qaArtifact')
                 : isFinanceReportSection
                   ? t('dataCenterPage.sections.financeReport')
-                  : t('dataCenterPage.sections.drive')}
+                  : isDataManageSection
+                    ? t('dataCenterPage.sections.dataManage')
+                    : t('dataCenterPage.sections.drive')}
             </h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-muted-foreground">
               {store.section === 'qa_artifact'
                 ? t('dataCenterPage.sectionDescriptions.qaArtifact')
                 : isFinanceReportSection
                   ? t('dataCenterPage.sectionDescriptions.financeReport')
-                  : t('dataCenterPage.sectionDescriptions.drive')}
+                  : isDataManageSection
+                    ? t('dataCenterPage.sectionDescriptions.dataManage')
+                    : t('dataCenterPage.sectionDescriptions.drive')}
             </p>
           </header>
 
           {isFinanceReportSection ? (
             <section className="flex min-h-0 flex-1 flex-col">
               <ReportListPage />
+            </section>
+          ) : isDataManageSection ? (
+            <section className="flex min-h-0 flex-1 flex-col">
+              <DataManagePage />
             </section>
           ) : store.section === 'drive' ? (
             <div className="mb-[18px] shrink-0">
@@ -760,7 +782,7 @@ export function DataCenter() {
                 )}
               </div>
 
-              {!isFinanceReportSection ? (
+              {!isHostedBiSection ? (
                 <div className="flex min-w-0 items-center gap-2">
                   <DataCenterToolbarSearch
                     value={store.keyword}
@@ -838,7 +860,7 @@ export function DataCenter() {
           </div>
         ) : null}
 
-        {!isFinanceReportSection ? (
+        {!isHostedBiSection ? (
           <>
             {currentParentEntryId !== ROOT_ENTRY_ID ? (
               <FolderBreadcrumbBar

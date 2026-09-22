@@ -294,6 +294,39 @@ export function isFinanceBiProductRecordReady(
   return Boolean(record && record.execStatus === 'done' && record.tableName);
 }
 
+export interface FinanceBiPreviewEmbedAuth {
+  token: string;
+  sid?: string;
+  userInfo: Record<string, unknown>;
+  stoBiUserInfo: Record<string, unknown>;
+  exp: number;
+  time: number;
+  preloadUrl?: string;
+}
+
+export async function fetchFinanceBiPreviewEmbedAuth(): Promise<FinanceBiPreviewEmbedAuth> {
+  const data = await postFinanceBi<FinanceBiPreviewEmbedAuth>(
+    '/api/finance-bi/preview-embed-auth',
+    {},
+  );
+  if (!data?.token?.trim()) {
+    throw new Error('财务 BI 登录态无效');
+  }
+  return data;
+}
+
+export async function fetchFinanceBiPreviewEmbedBridge(): Promise<string | undefined> {
+  try {
+    const data = await postFinanceBi<{ preloadUrl?: string }>(
+      '/api/finance-bi/preview-embed-bridge',
+      {},
+    );
+    return data?.preloadUrl?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function postFinanceBi<T>(path: string, body: unknown = {}): Promise<T> {
   const res = await hostApiFetch<ApiEnvelope<T>>(path, {
     method: 'POST',
@@ -379,4 +412,79 @@ export function financeBiFieldKey(
   index: number,
 ): string {
   return (field.originName || field.fieldName || `col_${index}`).trim() || `col_${index}`;
+}
+
+/** —— 数据源管理（对齐 preview /data-model/datasources） —— */
+
+export type FinanceBiDatasourcePlatformType = 'platform' | 'user';
+
+export interface FinanceBiDatasourceSonListParams {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  type?: string;
+  platformType?: FinanceBiDatasourcePlatformType | string;
+  publishStatus?: string;
+  status?: string;
+}
+
+export interface FinanceBiDatasourceSonModelRef {
+  code?: string;
+  name?: string;
+  createBy?: string;
+  createByName?: string;
+}
+
+export interface FinanceBiDatasourceSonDTO {
+  id?: string | number;
+  code?: string;
+  name?: string;
+  description?: string;
+  type?: string;
+  tableName?: string;
+  platformType?: string;
+  group?: string;
+  publishStatus?: string;
+  configuration?: string;
+  status?: string;
+  statusName?: string;
+  statusLabel?: string;
+  msg?: string;
+  frequency?: string;
+  executeTime?: string;
+  executeDay?: string;
+  models?: FinanceBiDatasourceSonModelRef[];
+  usageCount?: number;
+  createBy?: string;
+  createByName?: string;
+  createTime?: number | string;
+  updateTime?: number | string;
+}
+
+export interface FinanceBiDatasourceSonPageResult {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages?: number;
+  list: FinanceBiDatasourceSonDTO[];
+}
+
+export async function listFinanceBiDatasourceSon(
+  params: FinanceBiDatasourceSonListParams = {},
+): Promise<FinanceBiDatasourceSonPageResult> {
+  const data = await postFinanceBi<FinanceBiDatasourceSonPageResult>(
+    '/api/finance-bi/datasource-son/list',
+    params,
+  );
+  return {
+    page: data?.page || params.page || 1,
+    pageSize: data?.pageSize || params.pageSize || 20,
+    total: data?.total || 0,
+    totalPages: data?.totalPages,
+    list: data?.list || [],
+  };
+}
+
+export async function deleteFinanceBiDatasourceSon(code: string): Promise<void> {
+  await postFinanceBi('/api/finance-bi/datasource-son/delete', { code });
 }

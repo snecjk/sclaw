@@ -12,6 +12,7 @@ import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   stoAppShellGridProvincialClass,
   stoMainCardBodyClass,
+  stoMainCardBodyEmbedClass,
   stoMainCardBodyHomeClass,
   stoMainCardBodySplitClass,
   stoMainCardShellClass,
@@ -19,7 +20,7 @@ import {
   stoSplitUnifiedMainClass,
   stoWorkspaceWrapClass,
 } from '@/lib/surfaces';
-import { formatCssPx, WORKSPACE_FRAME_PX } from '@/lib/app-shell-metrics';
+import { formatCssPx, isDataManageCreateRoute, WORKSPACE_FRAME_PX } from '@/lib/app-shell-metrics';
 import { SIDEBAR_MIN_WIDTH } from '@/lib/sidebar-resize-metrics';
 import { AppShellChromeOverlay } from '@/components/layout/app-shell-chrome-overlay';
 import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
@@ -166,6 +167,7 @@ export function MainLayout() {
   }, [pathname, currentSessionKey, switchToAgentMainSession]);
 
   const onSettingsRoute = isSettingsRoute(pathname);
+  const onDataManageCreate = isDataManageCreateRoute(pathname);
   const showSidebarResize =
     isProvincialSidebar && !onSettingsRoute && !snapshot.effectiveCollapsed && snapshot.hasSidebar;
 
@@ -204,6 +206,29 @@ export function MainLayout() {
           <AppShellChromeOverlay />
           <ContentHeaderProvider>
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <Outlet />
+              <AppPlazaShell />
+              <SclawBrowserHost />
+            </div>
+          </ContentHeaderProvider>
+          <SidebarDeleteConfirmPortal />
+        </div>
+      );
+    }
+
+    if (onDataManageCreate) {
+      return (
+        <div
+          data-app-shell="provincial"
+          data-page-embed="true"
+          data-sidebar-collapsed="true"
+          data-platform={window.electron?.platform ?? 'unknown'}
+          className="relative flex h-screen flex-col overflow-hidden bg-[var(--sto-main-card-bg)]"
+        >
+          <AppShellChromeOverlay />
+          <ContentHeaderProvider>
+            <ContentHeader />
+            <div className={stoMainCardBodyEmbedClass}>
               <Outlet />
               <AppPlazaShell />
               <SclawBrowserHost />
@@ -256,12 +281,14 @@ export function MainLayout() {
     >
       <TitleBar />
       <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden">
-        {!onSettingsRoute ? <Sidebar /> : null}
+        {!onSettingsRoute && !onDataManageCreate ? <Sidebar /> : null}
         <main
           className={cn(
             'relative min-h-0 min-w-0 flex-1 [overflow-anchor:none] dark:bg-background',
             onSettingsRoute
               ? 'flex flex-col overflow-hidden bg-[#F1F1F3] dark:bg-background'
+              : onDataManageCreate
+                ? 'flex flex-col overflow-hidden bg-[var(--sto-main-card-bg)]'
               : isHome
                 ? 'flex flex-col overflow-hidden bg-[var(--sto-page-bg)] py-5'
                 : 'overflow-auto overscroll-y-contain bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 [scrollbar-gutter:stable]',

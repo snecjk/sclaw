@@ -47,6 +47,17 @@ describe('app shell layout surfaces', () => {
     expect(src).not.toContain('stoMainCardWrapClass(sidebarCollapsed)');
   });
 
+  it('data-manage create embed uses a flush fullscreen shell without workspace frame', () => {
+    const src = readFileSync(
+      resolve(process.cwd(), 'src/components/layout/MainLayout.tsx'),
+      'utf8',
+    );
+    expect(src).toContain('data-page-embed="true"');
+    expect(src).toContain('data-sidebar-collapsed="true"');
+    expect(src).toContain('onDataManageCreate');
+    expect(src).toContain('stoMainCardBodyEmbedClass');
+  });
+
   it('App toast consumer has no hard-coded 72/260 branch', () => {
     const src = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     expect(src).toContain('AppShellLayoutProvider');

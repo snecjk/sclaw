@@ -4,6 +4,8 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import {
   financeBiFetchJson,
+  getFinanceBiPreviewBridgePreloadUrl,
+  getFinanceBiPreviewEmbedAuth,
   getLastFinanceBiExchangeDebug,
   getLastFinanceBiListCallDebug,
 } from '../../services/finance-bi-auth-service';
@@ -93,6 +95,41 @@ export async function handleFinanceBiRoutes(
         method: 'POST',
         body,
       });
+      sendJson(res, 200, { success: true, data });
+      return true;
+    }
+
+    if (url.pathname === '/api/finance-bi/preview-embed-auth' && req.method === 'POST') {
+      const data = await getFinanceBiPreviewEmbedAuth();
+      sendJson(res, 200, { success: true, data });
+      return true;
+    }
+
+    if (url.pathname === '/api/finance-bi/preview-embed-bridge' && req.method === 'POST') {
+      sendJson(res, 200, { success: true, data: { preloadUrl: getFinanceBiPreviewBridgePreloadUrl() } });
+      return true;
+    }
+
+    // 数据管理页：对齐 preview POST /bi/datasourceSon/list
+    if (url.pathname === '/api/finance-bi/datasource-son/list' && req.method === 'POST') {
+      const body = await parseJsonBody<Record<string, unknown>>(req);
+      const data = await financeBiFetchJson('/bi/datasourceSon/list', { method: 'POST', body });
+      sendJson(res, 200, { success: true, data });
+      return true;
+    }
+
+    // 对齐 preview POST /bi/datasourceSon/delete/:code
+    if (url.pathname === '/api/finance-bi/datasource-son/delete' && req.method === 'POST') {
+      const body = await parseJsonBody<{ code?: string }>(req);
+      const code = String(body.code || '').trim();
+      if (!code) {
+        sendJson(res, 200, { success: false, error: '缺少数据源编码', data: null });
+        return true;
+      }
+      const data = await financeBiFetchJson(
+        `/bi/datasourceSon/delete/${encodeURIComponent(code)}`,
+        { method: 'POST', body: {} },
+      );
       sendJson(res, 200, { success: true, data });
       return true;
     }

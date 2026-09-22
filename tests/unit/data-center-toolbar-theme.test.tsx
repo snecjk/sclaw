@@ -19,6 +19,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
         'dataCenterPage.toolbar.listView': '列表视图',
         'dataCenterPage.toolbar.createFolder': '新建文件夹',
         'dataCenterPage.sections.financeReport': '我的报表',
+        'dataCenterPage.sections.dataManage': '数据管理',
       };
       if (key === 'dataCenterPage.toolbar.associationLabel') return `关联：${options?.value ?? ''}`;
       return labels[key] ?? key;
@@ -120,6 +121,12 @@ describe('data center toolbar theme', () => {
     renderToolbar();
 
     expect(screen.getByRole('tab', { name: '我的报表' })).toBeTruthy();
+  });
+
+  it('shows the data management tab', () => {
+    renderToolbar();
+
+    expect(screen.getByRole('tab', { name: '数据管理' })).toBeTruthy();
   });
 
   it('uses one dark resting surface for search, filter, view switch, and create action', () => {

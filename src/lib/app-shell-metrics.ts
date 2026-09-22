@@ -71,6 +71,12 @@ export function resolveHasSidebar(pathname: string): boolean {
   return true;
 }
 
+/** 数据管理新建嵌入页：与工作流编辑一样走 context collapse，隐藏省区侧栏。 */
+export function isDataManageCreateRoute(pathname: string): boolean {
+  return pathname === '/data-center/data-manage/create'
+    || pathname.startsWith('/data-center/data-manage/create/');
+}
+
 export function collapsedTrackWidth(layoutVariant: AppShellLayoutVariant): number {
   return layoutVariant === 'provincial' ? 0 : SIDEBAR_FULL_COLLAPSED_RAIL;
 }

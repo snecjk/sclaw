@@ -11,8 +11,10 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MessageSquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isDataManageCreateRoute } from '@/lib/app-shell-metrics';
 import {
   contentHeaderBarClass,
+  contentHeaderBarFlushClass,
   contentHeaderPreviewExpandedStartClass,
   contentHeaderSplitBarClass,
   contentHeaderSplitChatZoneClass,
@@ -51,6 +53,7 @@ export function ContentHeader() {
   const sidebarCollapsed = snapshot.effectiveCollapsed;
   const canUserRestoreSidebar = snapshot.canUserRestoreSidebar;
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
+  const pageEmbedActive = isDataManageCreateRoute(location.pathname);
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
   const windowsChromeOwner = useWindowsChromeOwner();
@@ -74,7 +77,7 @@ export function ContentHeader() {
         // 三栏只允许继续收缩，不得取消 max-w-[min(34vw,280px)]（与两栏一致）
         isSplitLayout && 'min-w-0 shrink',
         isSplitLayout && 'overflow-hidden',
-        workflowEditorActive && showTitle && 'max-w-none min-w-0 flex-1',
+        (workflowEditorActive || pageEmbedActive) && showTitle && 'max-w-none min-w-0 flex-1',
         !showTitle && !sidebarCollapsed && 'min-w-0',
         isPreviewExpanded && 'min-w-0 max-w-none',
         isPreviewExpanded && !canUserRestoreSidebar && 'w-0 gap-0',
@@ -206,7 +209,11 @@ export function ContentHeader() {
     <header
       data-layout-mode={layoutMode}
       className={cn(
-        isSplitLayout ? contentHeaderSplitBarClass : contentHeaderBarClass,
+        isSplitLayout
+          ? contentHeaderSplitBarClass
+          : pageEmbedActive
+            ? contentHeaderBarFlushClass
+            : contentHeaderBarClass,
         isPreviewExpanded && !sidebarCollapsed && contentHeaderPreviewExpandedStartClass,
         isPreviewExpanded && !canUserRestoreSidebar && 'gap-0',
       )}

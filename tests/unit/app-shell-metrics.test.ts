@@ -5,6 +5,7 @@ import {
   WORKSPACE_FRAME_PX,
   computeAppShellSnapshot,
   computeToastLayoutOffsetPx,
+  isDataManageCreateRoute,
   resolveHasSidebar,
 } from '@/lib/app-shell-metrics';
 import {
@@ -28,6 +29,15 @@ describe('resolveHasSidebar', () => {
     expect(resolveHasSidebar('/')).toBe(true);
     expect(resolveHasSidebar('/workflow')).toBe(true);
     expect(resolveHasSidebar('/my-tasks')).toBe(true);
+  });
+});
+
+describe('isDataManageCreateRoute', () => {
+  it('matches the owned-datasource embed page only', () => {
+    expect(isDataManageCreateRoute('/data-center/data-manage/create')).toBe(true);
+    expect(isDataManageCreateRoute('/data-center/data-manage/create/extra')).toBe(true);
+    expect(isDataManageCreateRoute('/data-center')).toBe(false);
+    expect(isDataManageCreateRoute('/data-center?section=data_manage')).toBe(false);
   });
 });
 
