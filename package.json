@@ -1,6 +1,6 @@
 {
   "name": "stoclaw",
-  "version": "2026.9.17-GA.2",
+  "version": "2026.9.22-GA.2",
   "pnpm": {
     "onlyBuiltDependencies": [
       "better-sqlite3",
