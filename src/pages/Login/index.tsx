@@ -43,16 +43,19 @@ const DEV_SSO_ENV_OPTIONS: SsoEnvironment[] = [
   'production-external',
 ];
 
+const PAGE_STATUS_ITEMS = ['连接：正常', '服务：就绪', '登录：安全'];
+
 const artworkButtonClass = [
   'no-drag absolute z-10 rounded-[12px] bg-transparent text-transparent',
   'border-0 p-0 outline-none shadow-none focus:outline-none focus-visible:outline-none',
   'disabled:cursor-wait',
 ].join(' ');
 
-// 1440x900 设计稿按原始 8:5 比例 cover 窗口，只裁切超出边缘，不拉伸内容。
+// 1440x900 设计稿按原始 8:5 比例 contain 在窗口内，始终保留完整内容。
 const artworkStageStyle = {
-  width: 'max(100vw, 160vh)',
-  height: 'max(100vh, 62.5vw)',
+  width: 'min(100vw, 160vh)',
+  height: 'min(100vh, 62.5vw)',
+  containerType: 'inline-size',
 } satisfies CSSProperties;
 
 export function Login() {
@@ -140,7 +143,23 @@ export function Login() {
       : 'SClaw 登录';
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-white dark:bg-[#111318]">
+    <main className="relative h-screen w-screen overflow-hidden bg-[#F7F8FA] dark:bg-[#171A1F]">
+      {/* 只延展设计稿的底色、点阵和光晕，避免背景副本重复渲染文字与控件。 */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: [
+            'radial-gradient(600px 600px at 78.5% 11.4%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.55) 52%, rgb(var(--sto-login-glow) / 0) 90%)',
+            'radial-gradient(500px 500px at 5.3% 67.6%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.55) 52%, rgb(var(--sto-login-glow) / 0) 90%)',
+            'radial-gradient(400px 400px at 29.9% 6%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.92) 16%, rgb(var(--sto-login-glow) / 0.5) 46%, rgb(var(--sto-login-glow) / 0.18) 68%, rgb(var(--sto-login-glow) / 0.06) 84%, rgb(var(--sto-login-glow) / 0) 96%)',
+            'radial-gradient(500px 500px at 61.5% 87.1%, rgb(var(--sto-login-glow) / 1) 0%, rgb(var(--sto-login-glow) / 0.92) 16%, rgb(var(--sto-login-glow) / 0.5) 46%, rgb(var(--sto-login-glow) / 0.18) 68%, rgb(var(--sto-login-glow) / 0.06) 84%, rgb(var(--sto-login-glow) / 0) 96%)',
+            'radial-gradient(circle, var(--sto-login-dot) 0.84px, transparent 0.92px)',
+          ].join(','),
+          backgroundSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%, 13.93px 13.93px',
+        }}
+      />
+
       <div
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={artworkStageStyle}
@@ -186,12 +205,8 @@ export function Login() {
         )}
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-20 opacity-0 transition-opacity hover:opacity-100 focus-within:opacity-100">
-        <TitleBar />
-      </div>
-
       {isLocalDevelopment && !showDeniedArtwork && (
-        <div className="no-drag absolute bottom-[2.8%] left-1/2 z-30 w-[280px] max-w-[calc(100vw-32px)] -translate-x-1/2">
+        <div className="no-drag absolute bottom-[81px] left-1/2 z-30 h-9 w-[280px] max-w-[calc(100vw-32px)] -translate-x-1/2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild disabled={isLoggingIn}>
               <Button
@@ -201,7 +216,7 @@ export function Login() {
                 size="sm"
                 aria-label="SSO 环境"
                 disabled={isLoggingIn}
-                className="h-9 w-full justify-between rounded-full border border-white/40 !bg-white/[0.14] px-4 text-[12px] font-medium !text-[#4E5969] shadow-[0_6px_20px_rgba(29,33,41,0.035),inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-xl hover:border-white/60 hover:!bg-white/[0.24] focus-visible:!bg-white/[0.28] dark:border-white/10 dark:!bg-white/[0.06] dark:!text-[#C9CDD4] dark:shadow-[0_8px_24px_rgba(0,0,0,0.18)] dark:hover:border-white/20 dark:hover:!bg-white/[0.10]"
+                className="h-full w-full justify-between rounded-full border border-white/40 !bg-white/[0.14] px-4 text-[12px] font-medium !text-[#4E5969] shadow-[0_6px_20px_rgba(29,33,41,0.035),inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-xl hover:border-white/60 hover:!bg-white/[0.24] focus-visible:!bg-white/[0.28] dark:border-white/10 dark:!bg-white/[0.06] dark:!text-[#C9CDD4] dark:shadow-[0_8px_24px_rgba(0,0,0,0.18)] dark:hover:border-white/20 dark:hover:!bg-white/[0.10]"
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#86909C]/70" aria-hidden />
@@ -242,6 +257,23 @@ export function Login() {
           </DropdownMenu>
         </div>
       )}
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-[43px] z-20 flex justify-center">
+        <div className="flex items-center text-[13px] leading-4 text-[#4E5969] dark:text-[#AEB8C4]">
+          {PAGE_STATUS_ITEMS.map((item, index) => (
+            <span
+              key={item}
+              className={index === 0 ? 'px-[18px]' : 'border-l border-[#C9CDD4] px-[18px] dark:border-white/15'}
+            >
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="absolute inset-x-0 top-0 z-20">
+        <TitleBar transparent showBrand={false} />
+      </div>
 
     </main>
   );
