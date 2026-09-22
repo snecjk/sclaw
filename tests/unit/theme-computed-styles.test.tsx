@@ -877,6 +877,27 @@ describe('card cascade combinations', () => {
     dispose();
   });
 
+  it.each(themes)('keeps focused App Plaza feature tabs free of brand focus rings in %s', (theme) => {
+    const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
+    const result = render(
+      <button
+        data-testid="focused-feature-tab"
+        data-sto-state="focus"
+        className="sto-navigation-item sto-navigation-item--feature-tab more-apps-tab"
+      />,
+      { container },
+    );
+    const style = container.ownerDocument.defaultView?.getComputedStyle(
+      result.getByTestId('focused-feature-tab'),
+    );
+
+    expect(style?.boxShadow).toBe('none');
+    expect(style?.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+
+    result.unmount();
+    dispose();
+  });
+
   it.each(themes)('matches Skill Plaza category tab sizing in App Plaza in %s', (theme) => {
     const { container, dispose } = createFeatureCascadeRoot(theme, moreAppsCss, 'page-more-apps');
     const result = render(
