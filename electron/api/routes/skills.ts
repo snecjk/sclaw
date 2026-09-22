@@ -1,5 +1,6 @@
 import { deleteUserSkill, DeleteUserSkillError } from '../../services/skills/delete-user-skill';
 import type { IncomingMessage, ServerResponse } from 'http';
+import { BrowserWindow } from 'electron';
 import { getAllSkillConfigs, updateSkillConfig } from '../../utils/skill-config';
 import {
   saveUserSkill,
@@ -13,6 +14,20 @@ import {
   searchRuntimeSkills,
   SkillRuntimeError,
 } from '../../services/skills/skill-runtime-service';
+
+function notifySkillsChanged(
+  ctx: HostApiContext,
+  payload: { reason: 'save-user' | 'delete-user'; slug?: string },
+): void {
+  ctx.skillPlazaService.invalidateLocalSkillCaches();
+  ctx.eventBus.emit('skills:changed', payload);
+  const windows = BrowserWindow.getAllWindows();
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('skills:changed', payload);
+    }
+  }
+}
 
 function statusForSkillRuntimeError(code: SkillRuntimeError['code']): number {
   switch (code) {
@@ -79,7 +94,9 @@ export async function handleSkillRoutes(
   if (url.pathname === '/api/skills/delete-user' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ slug: string }>(req);
-      sendJson(res, 200, { success: true, data: await deleteUserSkill(body) });
+      const data = await deleteUserSkill(body);
+      notifySkillsChanged(ctx, { reason: 'delete-user', slug: data.slug });
+      sendJson(res, 200, { success: true, data });
     } catch (error) {
       const code = error instanceof DeleteUserSkillError ? error.code : 'DELETE_FAILED';
       const status = code === 'NOT_LOGGED_IN' ? 401 : code === 'INVALID_SLUG' ? 400
@@ -93,6 +110,7 @@ export async function handleSkillRoutes(
     try {
       const body = await parseJsonBody<SaveUserSkillInput>(req);
       const data = await saveUserSkill(body);
+      notifySkillsChanged(ctx, { reason: 'save-user', slug: data.slug });
       sendJson(res, 200, { success: true, data });
     } catch (error) {
       if (error instanceof SaveUserSkillError) {

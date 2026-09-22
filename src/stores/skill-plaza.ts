@@ -393,16 +393,8 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         let merged: SkillSummary = { ...skill };
 
         if (plazaSkill || meta) {
-          if (plazaSkill?.title) {
-            merged.title = plazaSkill.title;
-          } else if (meta?.title) {
-            merged.title = meta.title;
-          }
-          if (plazaSkill?.description) {
-            merged.description = plazaSkill.description;
-          } else if (meta?.description) {
-            merged.description = meta.description;
-          }
+          // Keep local SKILL.md title/description from the API response. Plaza
+          // meta only enriches marketplace stats/icons so session renames stick.
           if (plazaSkill?.icon) {
             merged.icon = plazaSkill.icon;
           } else if (meta?.icon) {
@@ -636,3 +628,13 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     set({ skillDetailsCache: new Map() });
   },
 }));
+
+// Session save/delete mutations write SKILL.md outside this store; refresh mine
+// list so the composer skill picker picks up renamed titles immediately.
+if (typeof window !== 'undefined') {
+  void import('@/lib/host-events').then(({ subscribeHostEvent }) => {
+    subscribeHostEvent<{ reason?: string; slug?: string }>('skills:changed', () => {
+      void useSkillPlazaStore.getState().fetchLocalSkills({ forceRefresh: true });
+    });
+  }).catch(() => {});
+}

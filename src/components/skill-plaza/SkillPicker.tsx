@@ -93,14 +93,14 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
       return undefined;
     }, [open]);
 
+    // Always re-scan on open: conversation renames update SKILL.md on disk but
+    // leave the Zustand mySkills cache stale until the next forced fetch.
     useEffect(() => {
       if (open && !prevOpenRef.current) {
-        if (mySkills.length === 0 && !loading) {
-          void fetchLocalSkills({ reset: true });
-        }
+        void fetchLocalSkills({ reset: true, forceRefresh: true });
       }
       prevOpenRef.current = open;
-    }, [fetchLocalSkills, loading, mySkills.length, open]);
+    }, [fetchLocalSkills, open]);
 
     useLayoutEffect(() => {
       if (!open) return;

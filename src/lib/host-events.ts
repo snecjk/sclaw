@@ -18,6 +18,7 @@ const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'oauth:error': 'oauth:error',
   'sto:models-synced': 'sto:models-synced',
   'sto:appearance-state': 'sto:appearance-state',
+  'skills:changed': 'skills:changed',
   'turn-token:updated': 'turn-token:updated',
   'channel:wechat-qr': 'channel:wechat-qr',
   'channel:wechat-success': 'channel:wechat-success',

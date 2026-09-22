@@ -829,6 +829,11 @@ export class SkillPlazaService {
     this.enrichmentIndexCache.invalidate();
   }
 
+  /** Public hook for save/delete-user-skill routes after disk mutations. */
+  invalidateLocalSkillCaches(): void {
+    this.invalidateLocalCaches();
+  }
+
   /**
    * Guard plaza reads on STO token availability. Without a token the backend
    * cannot apply the Apollo category filter and would return an unfiltered set,
@@ -1470,11 +1475,16 @@ export class SkillPlazaService {
           finalCategory = resolvedLabel;
           finalCategoryCode = resolvedCode;        }
 
-        // 技能广场目录中存在该 slug 时，展示 title/description 以 plaza 为准（与技能广场 tab 一致）
-        const displayTitle = plazaSkill?.title ? plazaSkill.title : summary.title || slug;
-        const displayDescription = plazaSkill?.description
-          ? plazaSkill.description
-          : summary.description || '';
+        // User/local packages keep SKILL.md display metadata after session rename.
+        // Marketplace installs still prefer plaza catalog titles for consistency.
+        const preferLocalDisplay =
+          lockInfo?.source === 'local' || lockInfo?.source === 'user-upload';
+        const displayTitle = preferLocalDisplay
+          ? (summary.title || plazaSkill?.title || slug)
+          : (plazaSkill?.title ? plazaSkill.title : summary.title || slug);
+        const displayDescription = preferLocalDisplay
+          ? (summary.description || plazaSkill?.description || '')
+          : (plazaSkill?.description ? plazaSkill.description : summary.description || '');
 
         const baseSkill: SkillSummary = {
           slug: summary.slug || slug,
